@@ -13,8 +13,8 @@ import type { Character } from '../characters/Character';
  */
 
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
-// DEBUG: large scale to see clearly what the model looks like
-const MODEL_SCALE = 200;
+// Model is 0.86 units tall. Target ~48px screen height for normal zoom.
+const MODEL_SCALE = 56;
 
 /**
  * Subset indices from .brig (Citizen_Base) by category.
@@ -211,18 +211,21 @@ export class CharacterRenderer {
     const clone = cachedGLTF!.clone(true);
     clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
 
-    // No rotation for debug — see the raw model orientation
-    // Camera looks along -Z, model Y is up.
+    // Rotate for isometric camera view.
+    // Camera looks along -Z. Model stands Y-up.
+    // Tilt forward slightly and rotate for 3/4 view.
+    clone.rotation.x = -0.4;
+    clone.rotation.y = 0.6;
 
-    // DEBUG: show ALL subsets to see full model
+    // Subset visibility
+    const visibleSet = this.getVisibleSubsets(char);
     let meshIdx = 0;
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.visible = true;
+        child.visible = visibleSet.has(meshIdx);
         meshIdx++;
       }
     });
-    console.log(`[CharRenderer] 3D model: ${meshIdx} meshes, all visible, scale=${MODEL_SCALE}`);
 
     group.add(clone);
     return group;
