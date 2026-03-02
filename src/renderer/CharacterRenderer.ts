@@ -13,7 +13,8 @@ import type { Character } from '../characters/Character';
  */
 
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
-const MODEL_SCALE = 74;
+// Model is 0.86 units tall. Target ~48px screen height.
+const MODEL_SCALE = 56;
 
 /**
  * Subset indices from .brig (Citizen_Base) by category.
@@ -185,6 +186,13 @@ export class CharacterRenderer {
     // Use SkeletonUtils.clone for proper skinned mesh cloning
     const clone = SkeletonUtils.clone(cachedGLTF!) as THREE.Group;
     clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+
+    // Rotate to face the isometric camera.
+    // Camera looks along -Z at XY plane. Model stands Y-up.
+    // Tilt forward ~30° so we see it from slightly above (isometric),
+    // and rotate ~45° around Y for a 3/4 view.
+    clone.rotation.x = -0.5;  // tilt toward camera
+    clone.rotation.y = 0.75;  // 3/4 turn
 
     // Subset visibility: show only the parts for this character's appearance
     const visibleSet = this.getVisibleSubsets(char);
