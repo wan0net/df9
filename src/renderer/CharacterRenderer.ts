@@ -15,16 +15,61 @@ import type { Character } from '../characters/Character';
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
 const MODEL_SCALE = 74;
 
-/** Correct subset indices from .brig for a default human male. */
-const DEFAULT_VISIBLE_SUBSETS = new Set([
-  7,   // Male01_Head
-  12,  // Male01_Body
-  18,  // Short01 hair
-  26,  // Belt01
-  33,  // M_LegPouch01
-  52,  // M_Collar01
-  62,  // TouristShirt_M
-]);
+/**
+ * Subset indices from .brig (Citizen_Base) by category.
+ * Full list from extract_brig.py output.
+ */
+const SUBSETS = {
+  // Heads (pick one)
+  heads: {
+    male:       [7],   // Male01_Head
+    maleFat:    [6],   // Male01_FatHead
+    maleThin:   [8],   // Male01_ThinHead
+    female:     [4],   // Female01_Head
+    femaleFat:  [3],   // Female01_FatHead
+    bird:       [1],   // Bird01_Head
+    cat:        [2],   // Cat01_Head
+    jelly:      [5],   // Jelly01_Head
+    shamon:     [9],   // Shamon01_Head
+  },
+  // Bodies (pick one)
+  bodies: {
+    male:       [12],  // Male01_Body
+    maleFat:    [13],  // Male01_FatBody
+    maleThin:   [15],  // Male01_ThinBody
+    female:     [10],  // Female01_Body
+    femaleFat:  [11],  // Female01_FatBody
+    shamon:     [14],  // Male01_ShamonBody
+  },
+  // Hair (pick one)
+  hair: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25],
+  // Cat01, Long01, Short01-08
+
+  // Lower body accessories
+  belt_m: [26],        // Belt01
+  belt_f: [26],        // same belt
+  legPouch_m: [33],    // M_LegPouch01
+  legPouch_f: [28],    // F_LegPouch01
+  shorts_m: [37],      // TouristShorts_M
+  shorts_f: [36],      // TouristShorts_F
+
+  // Upper body
+  collar_m: [52],      // M_Collar01
+  collar_f: [44],      // F_Collar01
+  shirt_m: [62],       // TouristShirt_M
+  shirt_f: [61],       // TouristShirt_F
+
+  // Job uniforms (pick one based on job)
+  jobs: {
+    builder:   [68],   // Builder_Suit02
+    bartender: [67],   // Bartender_Suit02_M
+    doctor:    [72],   // Doctor_Suit02
+    emergency: [74],   // Emergency_Suit02
+    miner:     [77],   // Miner_Suit02
+    raider:    [80],   // Raider_Suit02
+    tech:      [82],   // Tech_Suit02
+  },
+};
 
 const JOB_COLORS: Record<number, number> = {
   2: 0xffcc44,   // BUILDER - yellow
@@ -141,12 +186,66 @@ export class CharacterRenderer {
     const clone = SkeletonUtils.clone(cachedGLTF!) as THREE.Group;
     clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
 
-    // Show all subsets for now — TODO: per-character subset selection
-    // (Hiding subsets requires matching the original CharacterConstants.lua
-    //  appearance system which maps race/gender/job to visible subsets)
+    // Subset visibility: show only the parts for this character's appearance
+    const visibleSet = this.getVisibleSubsets(char);
+    let meshIdx = 0;
+    clone.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.visible = visibleSet.has(meshIdx);
+        meshIdx++;
+      }
+    });
+    console.log(`[CharRenderer] 3D model: ${meshIdx} meshes, ${visibleSet.size} visible`);
 
     group.add(clone);
     return group;
+  }
+
+  /** Pick which subsets to show based on character traits. */
+  private getVisibleSubsets(char: Character): Set<number> {
+    const visible = new Set<number>();
+
+    // Pick head + body based on character ID (deterministic variety)
+    const isMale = char.id % 2 === 0;
+    if (isMale) {
+      visible.add(SUBSETS.heads.male[0]);
+      visible.add(SUBSETS.bodies.male[0]);
+      visible.add(SUBSETS.collar_m[0]);
+      visible.add(SUBSETS.belt_m[0]);
+      visible.add(SUBSETS.legPouch_m[0]);
+    } else {
+      visible.add(SUBSETS.heads.female[0]);
+      visible.add(SUBSETS.bodies.female[0]);
+      visible.add(SUBSETS.collar_f[0]);
+      visible.add(SUBSETS.belt_m[0]); // same belt
+      visible.add(SUBSETS.legPouch_f[0]);
+    }
+
+    // Pick hair based on char ID
+    const hairIdx = char.id % SUBSETS.hair.length;
+    visible.add(SUBSETS.hair[hairIdx]);
+
+    // Pick job uniform
+    const job = char.getJob();
+    const jobMap: Record<number, number[]> = {
+      2: SUBSETS.jobs.builder,
+      3: SUBSETS.jobs.tech,
+      4: SUBSETS.jobs.miner,
+      5: SUBSETS.jobs.emergency,
+      7: SUBSETS.jobs.bartender,
+      9: SUBSETS.jobs.tech,     // scientist uses tech suit
+      12: SUBSETS.jobs.doctor,
+      13: SUBSETS.jobs.tech,    // janitor uses tech suit
+    };
+    const jobSubsets = jobMap[job];
+    if (jobSubsets) {
+      for (const s of jobSubsets) visible.add(s);
+    } else {
+      // Default: tourist shirt
+      visible.add(isMale ? SUBSETS.shirt_m[0] : SUBSETS.shirt_f[0]);
+    }
+
+    return visible;
   }
 
   private positionCharacter(object: THREE.Object3D, char: Character) {
