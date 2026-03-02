@@ -12,6 +12,7 @@ import { SleepOnFloor } from '../utility/tasks/SleepOnFloor';
 import { Chat } from '../utility/tasks/Chat';
 import type { Task } from '../utility/Task';
 import type { CharacterRenderer } from '../renderer/CharacterRenderer';
+import type { CrewSpawnPoint } from '../world/WorldGen';
 
 /** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
 const UPDATES_PER_TICK = 10;
@@ -46,15 +47,20 @@ export class CharacterManager {
     return this.characters.length;
   }
 
-  update(delta: number) {
-    // Try to spawn initial crew when first room exists
-    if (!this.spawned) {
-      const rooms = this.roomManager.getRooms();
-      if (rooms.length > 0 && rooms[0].tiles.length >= INITIAL_CREW) {
-        this.spawnInitialCrew(rooms[0]);
-        this.spawned = true;
-      }
+  /**
+   * Spawn the initial crew at given positions (from WorldGen).
+   * Original: 3 SpacewalkingSettlers in open space near the seed pod.
+   */
+  spawnInitialCrew(spawns: CrewSpawnPoint[]) {
+    for (const spawn of spawns) {
+      const char = new Character(this.nextId++, spawn.x, spawn.y);
+      this.characterRenderer?.createCharacter(char);
+      this.characters.push(char);
     }
+    this.spawned = true;
+  }
+
+  update(delta: number) {
 
     // Update characters
     const dtSec = delta / 1000;
@@ -99,15 +105,6 @@ export class CharacterManager {
         this.characters.push(char);
         return;
       }
-    }
-  }
-
-  private spawnInitialCrew(room: Room) {
-    for (let i = 0; i < INITIAL_CREW && i < room.tiles.length; i++) {
-      const tile = room.tiles[i];
-      const char = new Character(this.nextId++, tile.x, tile.y);
-      this.characterRenderer?.createCharacter(char);
-      this.characters.push(char);
     }
   }
 

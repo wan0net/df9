@@ -170,10 +170,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Generate world ────────────────────────────────────────
   const landingZone = initData.landingZone as { x: number; y: number; density: number } | undefined;
-  generateWorld(grid, wallAutoGen, landingZone);
+  const worldResult = generateWorld(grid, wallAutoGen, landingZone);
 
   roomManager.markDirty([]);
   roomManager.update();
+
+  // Spawn the initial 3 spacewalking settlers
+  characterManager.spawnInitialCrew(worldResult.crewSpawns);
 
   const cx = Math.floor(grid.width / 2);
   const cy = Math.floor(grid.height / 2);

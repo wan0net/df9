@@ -1,17 +1,16 @@
 /**
  * WorldGen.ts — Procedural world generation.
  *
- * Original flow (GameRules.randomSetup):
+ * Original flow (GameRules.randomSetup + ModuleData "emptySpace"):
  *  1. Player picks landing zone on galaxy map
- *  2. A starting module (.sav) loads at center — small pressurized station
- *  3. 3 crew spawn inside
- *  4. Asteroids scatter (16-40 based on galaxy seed)
- *  5. Derelicts placed at edges (7-9)
+ *  2. "DeepSpace" module loads — NO room, just open space
+ *  3. A BaseSeed (seed pod) object placed at center
+ *  4. 3 spacewalking settlers spawn near center in open space
+ *  5. Asteroids scatter (16-40 based on galaxy seed)
+ *  6. Player must build their first room from scratch
  *
- * Since we don't have the .sav module files, we procedurally generate
- * a small starting module that matches the original starting modules:
- * a single sealed room (about 4x4 floor) with a reactor and O2 recycler inside.
- * The BaseSeed object sits outside the room as a landmark.
+ * The starting module "emptySpace" from ModuleData.lua:
+ *   filename="DeepSpace", crew={Citizen1-3: SpacewalkingSettler}
  */
 
 import { TileGrid } from './TileGrid';
@@ -26,49 +25,53 @@ export interface LandingZoneData {
   density: number;
 }
 
+/** Spawn point for a crew member in world-grid coords. */
+export interface CrewSpawnPoint {
+  x: number;
+  y: number;
+}
+
+/** Result of world generation — includes crew spawn locations. */
+export interface WorldGenResult {
+  /** Seed pod position (center of map). */
+  seedPodX: number;
+  seedPodY: number;
+  /** Spawn points for the initial 3 settlers (in open space near center). */
+  crewSpawns: CrewSpawnPoint[];
+}
+
 /**
  * Generate the starting world.
+ * Returns spawn data so CharacterManager can place crew.
  */
 export function generateWorld(
   grid: TileGrid,
   wallAutoGen: WallAutoGen,
   landingZone?: LandingZoneData,
-) {
+): WorldGenResult {
   const cx = Math.floor(GRID_W / 2);
   const cy = Math.floor(GRID_H / 2);
 
-  // Place starting module at center
-  placeStartingModule(grid, wallAutoGen, cx, cy);
+  // NO starting room — the original "emptySpace" / DeepSpace.sav is all open space.
+  // The player must construct their first room.
 
   // Scatter asteroids based on landing zone density
   const asteroidSeed = landingZone?.density ?? 0.5;
   spawnAsteroids(grid, cx, cy, asteroidSeed);
-}
 
-/**
- * Place a small starting module — sealed room with basic equipment.
- * Matches the original starting modules: a 4x4 room sealed with walls.
- */
-function placeStartingModule(
-  grid: TileGrid,
-  wallAutoGen: WallAutoGen,
-  cx: number,
-  cy: number,
-) {
-  const placed: { x: number; y: number }[] = [];
+  // Crew spawn points spread around center (matching DeepSpace.sav Spawner positions).
+  // Original .sav has spawners at varied distances; we place 3 near the seed pod.
+  const crewSpawns: CrewSpawnPoint[] = [
+    { x: cx + 1, y: cy - 1 },
+    { x: cx - 2, y: cy + 1 },
+    { x: cx + 2, y: cy + 2 },
+  ];
 
-  // 4x4 floor for the starting room
-  for (let dy = 0; dy < 4; dy++) {
-    for (let dx = 0; dx < 4; dx++) {
-      const tx = cx - 2 + dx;
-      const ty = cy - 2 + dy;
-      grid.set(tx, ty, TileType.FLOOR);
-      placed.push({ x: tx, y: ty });
-    }
-  }
-
-  // Auto-generate walls around the module
-  wallAutoGen.update(placed);
+  return {
+    seedPodX: cx,
+    seedPodY: cy,
+    crewSpawns,
+  };
 }
 
 /**
