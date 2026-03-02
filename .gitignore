@@ -4,4 +4,6 @@ dist/
 *.log
 extracted_assets/
 spacebase-v2-updated-code-master/
-public/assets/models/
+# GLB models are tracked; ignore only intermediate pipeline outputs
+public/assets/models/*.obj
+public/assets/models/*.json
