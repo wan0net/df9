@@ -38,6 +38,7 @@ import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
 import { tileToScreen } from './world/IsometricUtils';
 import { TileType } from './world/TileTypes';
+import { isAsteroid, getMiningYield } from './world/Asteroid';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
 
@@ -316,6 +317,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       } else if (buildMode === 'object') {
         const objName = uiManager.selectedObjectName;
         if (objName) objectPlacement.placeObject(objName, tile.x, tile.y);
+      } else if (buildMode === 'mine') {
+        const tileVal = grid.get(tile.x, tile.y);
+        if (isAsteroid(tileVal)) {
+          const yield_ = getMiningYield();
+          GameRules.nMatter += yield_;
+          grid.set(tile.x, tile.y, TileType.SPACE);
+          onTilesChanged([tile]);
+          Base.addAlert('mining', `Mined asteroid: +${yield_} matter`);
+        }
       } else if (isDragMode) {
         buildCursor.startDrag(tile.x, tile.y);
         buildCursor.updateDrag(tile.x, tile.y, buildMode as 'floor' | 'demolish');
