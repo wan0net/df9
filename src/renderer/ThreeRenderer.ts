@@ -39,6 +39,16 @@ export class ThreeRenderer {
     // Main scene
     this.scene = new THREE.Scene();
 
+    // Scene lighting — the original MOAI engine uses per-zone ambient color
+    // tinting plus a directional fill. We approximate with:
+    //   - Ambient light for base illumination (space station interior feel)
+    //   - Directional light from upper-left for form definition on 3D models
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    this.scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.position.set(-1, 2, 3); // upper-left, slightly in front
+    this.scene.add(dirLight);
+
     // Overlay scene (for CSS2D objects)
     this.overlayScene = new THREE.Scene();
 

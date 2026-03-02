@@ -50,25 +50,15 @@ function loadModel(): Promise<void> {
       (gltf) => {
         cachedGLTF = gltf.scene;
 
-        // Convert all materials from PBR (MeshStandardMaterial) to unlit
-        // (MeshBasicMaterial). GLTF defaults to PBR which needs scene lights;
-        // the original game uses flat/unlit shading.
+        // Collect material names and ensure double-sided rendering
         cachedGLTF.traverse((child) => {
           if (child instanceof THREE.Mesh) {
-            const oldMat = child.material as THREE.MeshStandardMaterial;
-            subsetMaterialNames.push(oldMat.name || '');
-
-            const newMat = new THREE.MeshBasicMaterial({
-              map: oldMat.map ?? undefined,
-              color: oldMat.color,
-              transparent: oldMat.transparent || (oldMat.opacity < 1),
-              alphaTest: oldMat.alphaTest || 0.01,
-              side: THREE.DoubleSide,
-            });
-            newMat.name = oldMat.name;
-            child.material = newMat;
-
-            oldMat.dispose();
+            const mat = child.material as THREE.Material;
+            subsetMaterialNames.push(mat.name || '');
+            mat.side = THREE.DoubleSide;
+            if (mat instanceof THREE.MeshStandardMaterial) {
+              mat.alphaTest = 0.01;
+            }
           }
         });
 
