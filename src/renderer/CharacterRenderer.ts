@@ -214,7 +214,7 @@ export class CharacterRenderer {
     // Rotate for isometric camera view.
     // Camera looks along -Z. Model stands Y-up.
     // Tilt forward slightly and rotate for 3/4 view.
-    clone.rotation.x = -0.4;
+    clone.rotation.x = 0.4;
     clone.rotation.y = 0.6;
 
     // Subset visibility
