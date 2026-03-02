@@ -18,6 +18,7 @@ Usage:
 import struct
 import zlib
 import json
+import math
 import os
 import sys
 import re
@@ -55,6 +56,96 @@ GLTF_FLOAT = 5126
 
 GLTF_ARRAY_BUFFER = 34962
 GLTF_ELEMENT_ARRAY_BUFFER = 34963
+
+
+def euler_to_quaternion(rx, ry, rz):
+    """Convert Euler angles (XYZ order, radians) to quaternion (x, y, z, w)."""
+    cx, sx = math.cos(rx / 2), math.sin(rx / 2)
+    cy, sy = math.cos(ry / 2), math.sin(ry / 2)
+    cz, sz = math.cos(rz / 2), math.sin(rz / 2)
+    return (
+        sx * cy * cz + cx * sy * sz,  # qx
+        cx * sy * cz - sx * cy * sz,  # qy
+        cx * cy * sz + sx * sy * cz,  # qz
+        cx * cy * cz - sx * sy * sz,  # qw
+    )
+
+
+def mat4_from_trs(t, r_euler, s):
+    """Build a 4x4 column-major matrix from translation, euler rotation, scale."""
+    qx, qy, qz, qw = euler_to_quaternion(r_euler[0], r_euler[1], r_euler[2])
+    # Rotation matrix from quaternion
+    xx, yy, zz = qx*qx, qy*qy, qz*qz
+    xy, xz, yz = qx*qy, qx*qz, qy*qz
+    wx, wy, wz = qw*qx, qw*qy, qw*qz
+    r00 = 1 - 2*(yy+zz); r01 = 2*(xy-wz);     r02 = 2*(xz+wy)
+    r10 = 2*(xy+wz);     r11 = 1 - 2*(xx+zz); r12 = 2*(yz-wx)
+    r20 = 2*(xz-wy);     r21 = 2*(yz+wx);     r22 = 1 - 2*(xx+yy)
+    # Apply scale
+    sx, sy, sz = s
+    # Column-major for glTF
+    return [
+        r00*sx, r10*sx, r20*sx, 0,
+        r01*sy, r11*sy, r21*sy, 0,
+        r02*sz, r12*sz, r22*sz, 0,
+        t[0],   t[1],   t[2],   1,
+    ]
+
+
+def mat4_multiply(a, b):
+    """Multiply two 4x4 column-major matrices."""
+    result = [0]*16
+    for col in range(4):
+        for row in range(4):
+            s = 0
+            for k in range(4):
+                s += a[k*4 + row] * b[col*4 + k]
+            result[col*4 + row] = s
+    return result
+
+
+def mat4_inverse(m):
+    """Invert a 4x4 column-major matrix."""
+    # Cofactor expansion
+    inv = [0]*16
+    inv[0] = m[5]*m[10]*m[15] - m[5]*m[11]*m[14] - m[9]*m[6]*m[15] + m[9]*m[7]*m[14] + m[13]*m[6]*m[11] - m[13]*m[7]*m[10]
+    inv[4] = -m[4]*m[10]*m[15] + m[4]*m[11]*m[14] + m[8]*m[6]*m[15] - m[8]*m[7]*m[14] - m[12]*m[6]*m[11] + m[12]*m[7]*m[10]
+    inv[8] = m[4]*m[9]*m[15] - m[4]*m[11]*m[13] - m[8]*m[5]*m[15] + m[8]*m[7]*m[13] + m[12]*m[5]*m[11] - m[12]*m[7]*m[9]
+    inv[12] = -m[4]*m[9]*m[14] + m[4]*m[10]*m[13] + m[8]*m[5]*m[14] - m[8]*m[6]*m[13] - m[12]*m[5]*m[10] + m[12]*m[6]*m[9]
+    inv[1] = -m[1]*m[10]*m[15] + m[1]*m[11]*m[14] + m[9]*m[2]*m[15] - m[9]*m[3]*m[14] - m[13]*m[2]*m[11] + m[13]*m[3]*m[10]
+    inv[5] = m[0]*m[10]*m[15] - m[0]*m[11]*m[14] - m[8]*m[2]*m[15] + m[8]*m[3]*m[14] + m[12]*m[2]*m[11] - m[12]*m[3]*m[10]
+    inv[9] = -m[0]*m[9]*m[15] + m[0]*m[11]*m[13] + m[8]*m[1]*m[15] - m[8]*m[3]*m[13] - m[12]*m[1]*m[11] + m[12]*m[3]*m[9]
+    inv[13] = m[0]*m[9]*m[14] - m[0]*m[10]*m[13] - m[8]*m[1]*m[14] + m[8]*m[2]*m[13] + m[12]*m[1]*m[10] - m[12]*m[2]*m[9]
+    inv[2] = m[1]*m[6]*m[15] - m[1]*m[7]*m[14] - m[5]*m[2]*m[15] + m[5]*m[3]*m[14] + m[13]*m[2]*m[7] - m[13]*m[3]*m[6]
+    inv[6] = -m[0]*m[6]*m[15] + m[0]*m[7]*m[14] + m[4]*m[2]*m[15] - m[4]*m[3]*m[14] - m[12]*m[2]*m[7] + m[12]*m[3]*m[6]
+    inv[10] = m[0]*m[5]*m[15] - m[0]*m[7]*m[13] - m[4]*m[1]*m[15] + m[4]*m[3]*m[13] + m[12]*m[1]*m[7] - m[12]*m[3]*m[5]
+    inv[14] = -m[0]*m[5]*m[14] + m[0]*m[6]*m[13] + m[4]*m[1]*m[14] - m[4]*m[2]*m[13] - m[12]*m[1]*m[6] + m[12]*m[2]*m[5]
+    inv[3] = -m[1]*m[6]*m[11] + m[1]*m[7]*m[10] + m[5]*m[2]*m[11] - m[5]*m[3]*m[10] - m[9]*m[2]*m[7] + m[9]*m[3]*m[6]
+    inv[7] = m[0]*m[6]*m[11] - m[0]*m[7]*m[10] - m[4]*m[2]*m[11] + m[4]*m[3]*m[10] + m[8]*m[2]*m[7] - m[8]*m[3]*m[6]
+    inv[11] = -m[0]*m[5]*m[11] + m[0]*m[7]*m[9] + m[4]*m[1]*m[11] - m[4]*m[3]*m[9] - m[8]*m[1]*m[7] + m[8]*m[3]*m[5]
+    inv[15] = m[0]*m[5]*m[10] - m[0]*m[6]*m[9] - m[4]*m[1]*m[10] + m[4]*m[2]*m[9] + m[8]*m[1]*m[6] - m[8]*m[2]*m[5]
+
+    det = m[0]*inv[0] + m[1]*inv[4] + m[2]*inv[8] + m[3]*inv[12]
+    if abs(det) < 1e-10:
+        return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]  # identity fallback
+    det = 1.0 / det
+    return [v * det for v in inv]
+
+
+def compute_inverse_bind_matrices(bones):
+    """Compute inverse bind matrices for each bone from the bone hierarchy."""
+    identity = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
+    world_transforms = []
+
+    for i, bone in enumerate(bones):
+        local = mat4_from_trs(bone['translation'], bone['rotation'], bone['scale'])
+        if bone['parent'] >= 0 and bone['parent'] < len(world_transforms):
+            world = mat4_multiply(world_transforms[bone['parent']], local)
+        else:
+            world = local
+        world_transforms.append(world)
+
+    return [mat4_inverse(w) for w in world_transforms]
 
 
 class GLTFBuilder:
@@ -268,9 +359,9 @@ class GLTFBuilder:
 
             r = bone['rotation']
             if any(v != 0 for v in r):
-                # Convert euler to quaternion (simplified — proper conversion in production)
-                # For now, store as-is and let glTF viewers handle it
-                pass
+                # Convert Euler XYZ (radians) to quaternion for glTF
+                qx, qy, qz, qw = euler_to_quaternion(r[0], r[1], r[2])
+                node['rotation'] = [qx, qy, qz, qw]
 
             s = bone['scale']
             if not (s[0] == 1 and s[1] == 1 and s[2] == 1):
@@ -296,14 +387,18 @@ class GLTFBuilder:
 
         return roots[0] if roots else None, joint_indices
 
-    def add_skin(self, joint_indices, skeleton_root):
-        """Add a skin. Returns skin index."""
-        # Generate identity inverse bind matrices
-        ibm_count = len(joint_indices)
-        identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-        ibm_data = struct.pack(f'<{ibm_count * 16}f', *(identity * ibm_count))
+    def add_skin(self, joint_indices, skeleton_root, bones):
+        """Add a skin with proper inverse bind matrices computed from bone hierarchy."""
+        # Compute world transform for each bone, then invert for IBM
+        ibm_list = compute_inverse_bind_matrices(bones)
+
+        ibm_flat = []
+        for mat4 in ibm_list:
+            ibm_flat.extend(mat4)
+
+        ibm_data = struct.pack(f'<{len(ibm_flat)}f', *ibm_flat)
         ibm_bv = self.add_buffer_view(ibm_data)
-        ibm_acc = self.add_accessor(ibm_bv, GLTF_FLOAT, ibm_count, 'MAT4')
+        ibm_acc = self.add_accessor(ibm_bv, GLTF_FLOAT, len(joint_indices), 'MAT4')
 
         skin = {
             'joints': joint_indices,
@@ -516,7 +611,7 @@ def convert_model(brig_path, rig_path=None, tex_dirs=None, anim_dir=None, output
 
     # If skinned, attach skin to mesh node
     if brig.get('has_blend') and joint_indices:
-        skin_idx = builder.add_skin(joint_indices, root_node)
+        skin_idx = builder.add_skin(joint_indices, root_node, bones)
         builder.gltf['nodes'][mesh_node]['skin'] = skin_idx
 
     # Build bone name→index map for animations
