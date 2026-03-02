@@ -5,24 +5,16 @@ import { TILE_HALF_W, TILE_HALF_H } from '../config';
 import type { Character } from '../characters/Character';
 
 /**
- * Renders characters as 3D models loaded from Citizen_Base.glb.
+ * Renders characters in the Three.js scene.
  *
- * The model contains 89 subsets (head, body, hair, uniform variants).
- * Each character clone shows a subset selection based on their appearance.
- * For now, we show a default human male subset selection.
- *
- * The model is ~0.86 units tall in its native space.
- * A tile is 128x64 px; characters should be roughly 64px tall on screen.
- * Scale factor: 64 / 0.86 ≈ 74.
+ * Phase 1: Colored box placeholder (always visible, confirms positioning works)
+ * Phase 2: Load Citizen_Base.glb and clone per-character with subset visibility
  */
 
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
 const MODEL_SCALE = 74;
 
-/**
- * Default visible subsets for a human male citizen.
- * Indices match the .brig subset order (see extract_brig.py output).
- */
+/** Correct subset indices from .brig for a default human male. */
 const DEFAULT_VISIBLE_SUBSETS = new Set([
   7,   // Male01_Head
   12,  // Male01_Body
@@ -33,13 +25,22 @@ const DEFAULT_VISIBLE_SUBSETS = new Set([
   62,  // TouristShirt_M
 ]);
 
+const JOB_COLORS: Record<number, number> = {
+  2: 0xffcc44,   // BUILDER - yellow
+  3: 0x44aaff,   // TECHNICIAN - blue
+  4: 0xff8844,   // MINER - orange
+  5: 0xff4444,   // EMERGENCY - red
+  7: 0xcc44ff,   // BARTENDER - purple
+  8: 0x44cc44,   // BOTANIST - green
+  9: 0x44dddd,   // SCIENTIST - cyan
+  12: 0xffffff,  // DOCTOR - white
+  13: 0x888888,  // JANITOR - grey
+};
+
 /** Cached loaded GLTF scene. */
 let cachedGLTF: THREE.Group | null = null;
 let loadPromise: Promise<void> | null = null;
 let loadFailed = false;
-
-/** Subset names from the loaded model, indexed by primitive order. */
-let subsetMaterialNames: string[] = [];
 
 function loadModel(): Promise<void> {
   if (loadPromise) return loadPromise;
@@ -49,19 +50,14 @@ function loadModel(): Promise<void> {
       MODEL_PATH,
       (gltf) => {
         cachedGLTF = gltf.scene;
-
-        // Collect material names and ensure double-sided rendering
+        // Ensure double-sided rendering on all meshes
         cachedGLTF.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             const mat = child.material as THREE.Material;
-            subsetMaterialNames.push(mat.name || '');
             mat.side = THREE.DoubleSide;
-            if (mat instanceof THREE.MeshStandardMaterial) {
-              mat.alphaTest = 0.01;
-            }
           }
         });
-
+        console.log('Character model loaded:', cachedGLTF.children.length, 'children');
         resolve();
       },
       undefined,
@@ -75,89 +71,45 @@ function loadModel(): Promise<void> {
   return loadPromise;
 }
 
-// Start loading immediately on import
+// Start loading on import
 loadModel();
-
-/** Fallback: procedural sprite for when GLB hasn't loaded yet. */
-let fallbackTexture: THREE.Texture | null = null;
-function getFallbackTexture(): THREE.Texture {
-  if (fallbackTexture) return fallbackTexture;
-  const w = 32, h = 48;
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#ddbb99';
-  ctx.beginPath(); ctx.arc(w/2, 10, 7, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#665544';
-  ctx.beginPath(); ctx.ellipse(w/2, 6, 7, 4, 0, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#cccccc';
-  ctx.fillRect(w/2-8, 16, 16, 14);
-  ctx.fillRect(w/2-11, 17, 4, 10);
-  ctx.fillRect(w/2+7, 17, 4, 10);
-  ctx.fillStyle = '#ddbb99';
-  ctx.beginPath(); ctx.arc(w/2-9, 28, 2.5, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(w/2+9, 28, 2.5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#444466';
-  ctx.fillRect(w/2-6, 30, 5, 12); ctx.fillRect(w/2+1, 30, 5, 12);
-  ctx.fillStyle = '#333333';
-  ctx.fillRect(w/2-7, 41, 6, 4); ctx.fillRect(w/2+1, 41, 6, 4);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath(); ctx.ellipse(w/2, 46, 10, 3, 0, 0, Math.PI*2); ctx.fill();
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  fallbackTexture = tex;
-  return tex;
-}
 
 export interface CharacterRenderHandle {
   object: THREE.Object3D;
   needBarsEl: HTMLDivElement;
   needBarsObj: CSS2DObject;
-  isFallback: boolean;
+  is3D: boolean;
 }
 
 export class CharacterRenderer {
   private scene: THREE.Scene;
   private overlayScene: THREE.Scene;
   private handles = new Map<number, CharacterRenderHandle>();
-  /** Characters waiting for the model to load. */
-  private pending: Character[] = [];
+  private pendingUpgrade: Character[] = [];
 
   constructor(scene: THREE.Scene, overlayScene: THREE.Scene) {
     this.scene = scene;
     this.overlayScene = overlayScene;
   }
 
-  /** Create render objects for a character. */
   createCharacter(char: Character): CharacterRenderHandle {
-    const handle = this.createHandle(char);
-    this.handles.set(char.id, handle);
+    // Try 3D model first, fall back to box
+    let object: THREE.Object3D;
+    let is3D = false;
 
-    // If model not yet loaded, queue for upgrade
-    if (handle.isFallback && !loadFailed) {
-      this.pending.push(char);
+    if (cachedGLTF && !loadFailed) {
+      object = this.create3DModel(char);
+      is3D = true;
+      console.log(`[CharRenderer] Created 3D model for char ${char.id} at (${char.screenX}, ${char.screenY})`);
+    } else {
+      object = this.createBoxPlaceholder(char);
+      console.log(`[CharRenderer] Created box placeholder for char ${char.id} at (${char.screenX}, ${char.screenY})`);
+      // Queue for upgrade when model loads
+      this.pendingUpgrade.push(char);
       loadModel().then(() => this.upgradePending());
     }
 
-    return handle;
-  }
-
-  private createHandle(char: Character): CharacterRenderHandle {
-    let object: THREE.Object3D;
-    let isFallback: boolean;
-
-    if (cachedGLTF && !loadFailed) {
-      // Clone the 3D model
-      object = this.create3DCharacter(char);
-      isFallback = false;
-    } else {
-      // Fallback sprite
-      object = this.createFallbackSprite(char);
-      isFallback = true;
-    }
-
-    this.positionObject(object, char);
+    this.positionCharacter(object, char);
     this.scene.add(object);
 
     // Need bars
@@ -165,99 +117,89 @@ export class CharacterRenderer {
     needBarsEl.className = 'need-bars';
     needBarsEl.style.cssText = 'width:32px;pointer-events:none;';
     const needBarsObj = new CSS2DObject(needBarsEl);
-    needBarsObj.position.set(char.screenX, -(char.screenY - 46), 20001 + char.screenY);
+    this.positionNeedBars(needBarsObj, char);
     this.overlayScene.add(needBarsObj);
 
-    return { object, needBarsEl, needBarsObj, isFallback };
+    const handle: CharacterRenderHandle = { object, needBarsEl, needBarsObj, is3D };
+    this.handles.set(char.id, handle);
+    return handle;
   }
 
-  private create3DCharacter(char: Character): THREE.Group {
+  /** Simple colored box — guaranteed visible for debugging positioning. */
+  private createBoxPlaceholder(char: Character): THREE.Mesh {
+    const color = JOB_COLORS[char.getJob()] ?? 0xcccccc;
+    const geo = new THREE.BoxGeometry(16, 32, 8);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    return mesh;
+  }
+
+  /** Clone the GLTF model with subset visibility. */
+  private create3DModel(char: Character): THREE.Group {
     const group = new THREE.Group();
-
-    // Clone the loaded GLTF scene
     const clone = cachedGLTF!.clone(true);
-
-    // Scale: model is ~0.86 units tall, we want ~64px on screen
     clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
 
-    // The model's Y axis is up (standard), matching Three.js.
-    // Rotate to face the camera (front-facing in isometric view).
-    // The camera looks along -Z, so no rotation needed for front view.
-
-    group.add(clone);
-
-    // Subset visibility: hide all, then show only the subsets for this character
-    const visibleSet = this.getVisibleSubsets(char);
-    let subsetIdx = 0;
+    // Hide subsets not in the visible set
+    let idx = 0;
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.visible = visibleSet.has(subsetIdx);
-        subsetIdx++;
+        child.visible = DEFAULT_VISIBLE_SUBSETS.has(idx);
+        idx++;
       }
     });
 
+    group.add(clone);
     return group;
   }
 
-  /** Determine which subsets to show for a given character. */
-  private getVisibleSubsets(char: Character): Set<number> {
-    // For now use a simple selection: one head, one body, one hair, collar
-    // A more complete system would use CharacterConstants.lua race/appearance data
-    return DEFAULT_VISIBLE_SUBSETS;
+  private positionCharacter(object: THREE.Object3D, char: Character) {
+    // Place at character's screen position.
+    // screenX/screenY are in screen-space (Y-down). Negate Y for Three.js.
+    // Z uses depth ordering: characters above tiles (20000+) sorted by screenY.
+    object.position.set(
+      char.screenX,
+      -(char.screenY),
+      20000 + char.screenY,
+    );
   }
 
-  private createFallbackSprite(char: Character): THREE.Mesh {
-    const tex = getFallbackTexture();
-    const geo = new THREE.PlaneGeometry(32, 48);
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.01,
-      depthWrite: false,
-      color: 0xcccccc,
-    });
-    return new THREE.Mesh(geo, mat);
+  private positionNeedBars(obj: CSS2DObject, char: Character) {
+    obj.position.set(
+      char.screenX,
+      -(char.screenY - 40),
+      20001 + char.screenY,
+    );
   }
 
-  private positionObject(object: THREE.Object3D, char: Character) {
-    // Screen position with negated Y for Three.js Y-up
-    object.position.set(char.screenX, -(char.screenY - 16), 20000 + char.screenY);
-  }
-
-  /** Upgrade pending fallback sprites to 3D models once loaded. */
   private upgradePending() {
-    if (!cachedGLTF) return;
-
-    for (const char of this.pending) {
+    if (!cachedGLTF || loadFailed) return;
+    for (const char of this.pendingUpgrade) {
       const handle = this.handles.get(char.id);
-      if (!handle || !handle.isFallback) continue;
+      if (!handle || handle.is3D) continue;
 
-      // Remove old fallback
+      // Remove old box
       this.scene.remove(handle.object);
       if (handle.object instanceof THREE.Mesh) {
         handle.object.geometry.dispose();
       }
 
-      // Create 3D replacement
-      const newObj = this.create3DCharacter(char);
-      this.positionObject(newObj, char);
+      // Replace with 3D model
+      const newObj = this.create3DModel(char);
+      this.positionCharacter(newObj, char);
       this.scene.add(newObj);
-
       handle.object = newObj;
-      handle.isFallback = false;
+      handle.is3D = true;
     }
-    this.pending = [];
+    this.pendingUpgrade = [];
   }
 
-  /** Update character visual position and need bars. */
   updateCharacter(char: Character) {
     const handle = this.handles.get(char.id);
     if (!handle) return;
 
-    this.positionObject(handle.object, char);
-
-    // Need bars
-    handle.needBarsObj.position.set(char.screenX, -(char.screenY - 46), 20001 + char.screenY);
+    this.positionCharacter(handle.object, char);
+    this.positionNeedBars(handle.needBarsObj, char);
     this.drawNeedBars(handle.needBarsEl, char);
   }
 
@@ -278,22 +220,15 @@ export class CharacterRenderer {
     el.innerHTML = html;
   }
 
-  /** Remove render objects for a character. */
   destroyCharacter(charId: number) {
     const handle = this.handles.get(charId);
     if (!handle) return;
-
     this.scene.remove(handle.object);
-    // Dispose geometry recursively
     handle.object.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-      }
+      if (child instanceof THREE.Mesh) child.geometry.dispose();
     });
-
     this.overlayScene.remove(handle.needBarsObj);
     handle.needBarsEl.remove();
-
     this.handles.delete(charId);
   }
 }

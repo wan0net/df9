@@ -35,7 +35,8 @@ import { ProjectileManager } from './hazards/Projectile';
 import { SaveLoadSystem } from './save/SaveLoad';
 import { generateWorld } from './world/WorldGen';
 import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
-import { GRID_W, GRID_H, TILE_W, TILE_HALF_H } from './config';
+import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
+import { tileToScreen } from './world/IsometricUtils';
 import { TileType } from './world/TileTypes';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
@@ -181,6 +182,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const cx = Math.floor(grid.width / 2);
   const cy = Math.floor(grid.height / 2);
   tileRenderer.renderRegion(cx - 20, cy - 20, cx + 20, cy + 20);
+
+  // Place the seed pod (BaseSeed) at center — a visible marker
+  createSeedPod(threeRenderer, worldResult.seedPodX, worldResult.seedPodY);
 
   // ── Input system ──────────────────────────────────────────
   const inputManager = new InputManager(threeRenderer.getCanvas(), cameraController);
@@ -392,6 +396,35 @@ function createSpaceBackground(threeRenderer: ThreeRenderer) {
       threeRenderer.scene.add(mesh);
     }
   }
+}
+
+function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: number) {
+  const pos = tileToScreen(tileX, tileY);
+
+  // Seed pod: a bright octahedron at the landing spot (visible landmark)
+  const geo = new THREE.OctahedronGeometry(12, 0);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xdfa200, wireframe: false });
+  const mesh = new THREE.Mesh(geo, mat);
+  // Position at tile center, negated Y, above tiles in depth
+  mesh.position.set(
+    pos.x + TILE_HALF_W,
+    -(pos.y + TILE_HALF_H),
+    15000 + pos.y,
+  );
+  threeRenderer.scene.add(mesh);
+
+  // Pulsing glow ring around the pod
+  const ringGeo = new THREE.RingGeometry(16, 20, 16);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0xdfa200,
+    transparent: true,
+    opacity: 0.4,
+    side: THREE.DoubleSide,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.copy(mesh.position);
+  ring.position.z -= 1; // slightly behind pod
+  threeRenderer.scene.add(ring);
 }
 
 function tileName(type: number): string {
