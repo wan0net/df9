@@ -29,7 +29,7 @@ export class EnvObjectRenderer {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(
       pos.x + TILE_HALF_W,
-      pos.y + TILE_HALF_H,
+      -(pos.y + TILE_HALF_H),
       15000 + pos.y + TILE_HALF_H,
     );
 

@@ -82,7 +82,9 @@ function getSpriteMaterial(textureKey: string): THREE.MeshBasicMaterial | null {
   return mat;
 }
 
-/** Create a PlaneGeometry quad for a sprite. */
+/** Create a PlaneGeometry quad for a sprite.
+ *  x, y are in screen-space (Y-down). We negate Y for Three.js Y-up.
+ */
 function createSpriteQuad(
   textureKey: string,
   x: number,
@@ -98,16 +100,15 @@ function createSpriteQuad(
   const h = tex.image?.height ?? TILE_H;
 
   const geo = new THREE.PlaneGeometry(w, h);
-  const mesh = new THREE.Mesh(geo, mat.clone());
+  const mesh = new THREE.Mesh(geo, mat);
 
   if (flipX) {
-    // Flip UV coordinates
     mesh.scale.x = -1;
   }
 
   // Position: origin at top-left of the quad (matching Phaser's setOrigin(0,0))
-  // Three.js PlaneGeometry is centered, so offset by half width/height
-  mesh.position.set(x + w / 2, y + h / 2, depth);
+  // Negate Y for Three.js Y-up convention.
+  mesh.position.set(x + w / 2, -(y + h / 2), depth);
 
   return mesh;
 }
@@ -244,15 +245,14 @@ export class TileRenderer3D {
     const finalY = baseY - trim.trimY - spriteH; // Y-up → top of sprite
 
     const geo = new THREE.PlaneGeometry(spriteW, spriteH);
-    const meshMat = mat.clone();
-    const mesh = new THREE.Mesh(geo, meshMat);
+    const mesh = new THREE.Mesh(geo, mat);
 
     if (flip) {
       mesh.scale.x = -1;
     }
 
-    // Position at center of quad
-    mesh.position.set(finalX + spriteW / 2, finalY + spriteH / 2, depth);
+    // Position at center of quad. Negate Y for Three.js Y-up.
+    mesh.position.set(finalX + spriteW / 2, -(finalY + spriteH / 2), depth);
 
     return mesh;
   }
@@ -361,6 +361,11 @@ export class TileRenderer3D {
       const b = (tint & 0xFF) / 255;
       for (const o of objects) {
         if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial) {
+          // Clone material on first tint to avoid affecting other tiles sharing it
+          if (!(o.userData as Record<string, boolean>).tintCloned) {
+            o.material = o.material.clone();
+            (o.userData as Record<string, boolean>).tintCloned = true;
+          }
           o.material.color.setRGB(r, g, b);
         }
       }

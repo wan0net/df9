@@ -120,7 +120,7 @@ export class BuildCursor {
       depthWrite: false,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x + w / 2, y + h / 2, depth);
+    mesh.position.set(x + w / 2, -(y + h / 2), depth);
     this.scene.add(mesh);
     this.ghosts.push(mesh);
   }

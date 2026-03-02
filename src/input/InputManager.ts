@@ -34,8 +34,9 @@ export class InputManager {
     });
 
     canvas.addEventListener('pointermove', (e) => {
-      this._pointerScreenX = e.clientX;
-      this._pointerScreenY = e.clientY;
+      const rect = canvas.getBoundingClientRect();
+      this._pointerScreenX = e.clientX - rect.left;
+      this._pointerScreenY = e.clientY - rect.top;
       this._pointerButtons = e.buttons;
     });
 
@@ -44,7 +45,8 @@ export class InputManager {
       this._pointerDownThisFrame = true;
     });
 
-    canvas.addEventListener('pointerup', (e) => {
+    // Listen on window so we catch pointerup even if cursor leaves canvas
+    window.addEventListener('pointerup', (e) => {
       this._pointerButtons = e.buttons;
       this._pointerUpThisFrame = true;
     });

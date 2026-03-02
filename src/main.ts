@@ -3,6 +3,7 @@
  * Game loop via requestAnimationFrame. Routes through scene states.
  */
 
+import * as THREE from 'three';
 import { ThreeRenderer } from './renderer/ThreeRenderer';
 import { CameraController3D } from './renderer/CameraController3D';
 import { TileRenderer3D } from './renderer/TileRenderer3D';
@@ -92,20 +93,30 @@ function startGame() {
 
   // Scene manager drives the update loop for menu states
   let lastTime = performance.now();
+  let menuLoopId = 0;
   function menuLoop() {
     const now = performance.now();
     const dt = (now - lastTime) / 1000;
     lastTime = now;
     sceneManager.update(dt);
-    requestAnimationFrame(menuLoop);
+    menuLoopId = requestAnimationFrame(menuLoop);
   }
-  requestAnimationFrame(menuLoop);
+  menuLoopId = requestAnimationFrame(menuLoop);
+
+  // Expose stop function so enterGameState can cancel the menu loop
+  (sceneManager as SceneManager & { stopMenuLoop?: () => void }).stopMenuLoop = () => {
+    cancelAnimationFrame(menuLoopId);
+  };
 }
 
 /**
  * Enter the main game state with Three.js rendering.
  */
 function enterGameState(sceneManager: SceneManager, initData: Record<string, unknown>) {
+  // Stop the menu animation loop
+  const sm = sceneManager as SceneManager & { stopMenuLoop?: () => void };
+  sm.stopMenuLoop?.();
+
   // Clean up menu overlay
   sceneManager.switchTo({
     enter() {},
@@ -374,7 +385,7 @@ function createSpaceBackground(threeRenderer: ThreeRenderer) {
     for (let x = -bgW; x < worldW + bgW; x += bgW) {
       const geo = new THREE.PlaneGeometry(bgW, bgH);
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x + bgW / 2, y + bgH / 2, -1);
+      mesh.position.set(x + bgW / 2, -(y + bgH / 2), -1);
       threeRenderer.scene.add(mesh);
     }
   }
@@ -384,6 +395,3 @@ function tileName(type: number): string {
   const names: Record<number, string> = { 1: 'Space', 4: 'Wall', 5: 'Door', 6: 'Destroyed', 8: 'Floor' };
   return names[type] || 'Unknown';
 }
-
-// Import THREE for background creation
-import * as THREE from 'three';

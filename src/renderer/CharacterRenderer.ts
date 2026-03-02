@@ -123,7 +123,8 @@ export class CharacterRenderer {
       color: getJobColor(char.getJob()),
     });
     const sprite = new THREE.Mesh(geo, mat);
-    sprite.position.set(char.screenX, char.screenY - 16, 20000 + char.screenY);
+    // Negate Y for Three.js Y-up convention
+    sprite.position.set(char.screenX, -(char.screenY - 16), 20000 + char.screenY);
     this.scene.add(sprite);
 
     // Need bars as CSS2D overlay
@@ -131,7 +132,7 @@ export class CharacterRenderer {
     needBarsEl.className = 'need-bars';
     needBarsEl.style.cssText = 'width:32px;pointer-events:none;';
     const needBarsObj = new CSS2DObject(needBarsEl);
-    needBarsObj.position.set(char.screenX, char.screenY - 30, 20001 + char.screenY);
+    needBarsObj.position.set(char.screenX, -(char.screenY - 30), 20001 + char.screenY);
     this.overlayScene.add(needBarsObj);
 
     const handle: CharacterRenderHandle = { sprite, needBarsEl, needBarsObj };
@@ -144,7 +145,7 @@ export class CharacterRenderer {
     const handle = this.handles.get(char.id);
     if (!handle) return;
 
-    handle.sprite.position.set(char.screenX, char.screenY - 16, 20000 + char.screenY);
+    handle.sprite.position.set(char.screenX, -(char.screenY - 16), 20000 + char.screenY);
 
     // Update tint
     if (handle.sprite.material instanceof THREE.MeshBasicMaterial) {
@@ -152,7 +153,7 @@ export class CharacterRenderer {
     }
 
     // Update need bars
-    handle.needBarsObj.position.set(char.screenX, char.screenY - 30, 20001 + char.screenY);
+    handle.needBarsObj.position.set(char.screenX, -(char.screenY - 30), 20001 + char.screenY);
     this.drawNeedBars(handle.needBarsEl, char);
   }
 
