@@ -19,12 +19,18 @@ import type { Character } from '../characters/Character';
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
 const MODEL_SCALE = 74;
 
-/** Subsets to show for a default human male citizen (by index in the .rig). */
+/**
+ * Default visible subsets for a human male citizen.
+ * Indices match the .brig subset order (see extract_brig.py output).
+ */
 const DEFAULT_VISIBLE_SUBSETS = new Set([
-  3,   // Human_Head_Male01 (head mesh)
-  12,  // Human_Body_Male01 (body)
-  17,  // Hair01 (a hair variant)
-  26,  // Straps_Pouches (uniform detail)
+  7,   // Male01_Head
+  12,  // Male01_Body
+  18,  // Short01 hair
+  26,  // Belt01
+  33,  // M_LegPouch01
+  52,  // M_Collar01
+  62,  // TouristShirt_M
 ]);
 
 /** Cached loaded GLTF scene. */
@@ -44,11 +50,25 @@ function loadModel(): Promise<void> {
       (gltf) => {
         cachedGLTF = gltf.scene;
 
-        // Collect material names per mesh child for subset identification
+        // Convert all materials from PBR (MeshStandardMaterial) to unlit
+        // (MeshBasicMaterial). GLTF defaults to PBR which needs scene lights;
+        // the original game uses flat/unlit shading.
         cachedGLTF.traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material) {
-            const mat = child.material as THREE.Material;
-            subsetMaterialNames.push(mat.name || '');
+          if (child instanceof THREE.Mesh) {
+            const oldMat = child.material as THREE.MeshStandardMaterial;
+            subsetMaterialNames.push(oldMat.name || '');
+
+            const newMat = new THREE.MeshBasicMaterial({
+              map: oldMat.map ?? undefined,
+              color: oldMat.color,
+              transparent: oldMat.transparent || (oldMat.opacity < 1),
+              alphaTest: oldMat.alphaTest || 0.01,
+              side: THREE.DoubleSide,
+            });
+            newMat.name = oldMat.name;
+            child.material = newMat;
+
+            oldMat.dispose();
           }
         });
 
