@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { TILE_HALF_W, TILE_HALF_H } from '../config';
 import type { Character } from '../characters/Character';
@@ -100,14 +101,13 @@ export class CharacterRenderer {
     if (cachedGLTF && !loadFailed) {
       object = this.create3DModel(char);
       is3D = true;
-      console.log(`[CharRenderer] Created 3D model for char ${char.id} at (${char.screenX}, ${char.screenY})`);
     } else {
       object = this.createBoxPlaceholder(char);
-      console.log(`[CharRenderer] Created box placeholder for char ${char.id} at (${char.screenX}, ${char.screenY})`);
-      // Queue for upgrade when model loads
       this.pendingUpgrade.push(char);
       loadModel().then(() => this.upgradePending());
     }
+
+    this.positionCharacter(object, char);
 
     this.positionCharacter(object, char);
     this.scene.add(object);
@@ -125,29 +125,25 @@ export class CharacterRenderer {
     return handle;
   }
 
-  /** Simple colored box — guaranteed visible for debugging positioning. */
+  /** Colored box placeholder — sized to be visible at isometric scale. */
   private createBoxPlaceholder(char: Character): THREE.Mesh {
     const color = JOB_COLORS[char.getJob()] ?? 0xcccccc;
-    const geo = new THREE.BoxGeometry(16, 32, 8);
+    // Tiles are 128x64 px. A character should be roughly half a tile wide, one tile tall.
+    const geo = new THREE.BoxGeometry(40, 60, 20);
     const mat = new THREE.MeshBasicMaterial({ color });
-    const mesh = new THREE.Mesh(geo, mat);
-    return mesh;
+    return new THREE.Mesh(geo, mat);
   }
 
   /** Clone the GLTF model with subset visibility. */
   private create3DModel(char: Character): THREE.Group {
     const group = new THREE.Group();
-    const clone = cachedGLTF!.clone(true);
+    // Use SkeletonUtils.clone for proper skinned mesh cloning
+    const clone = SkeletonUtils.clone(cachedGLTF!) as THREE.Group;
     clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
 
-    // Hide subsets not in the visible set
-    let idx = 0;
-    clone.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.visible = DEFAULT_VISIBLE_SUBSETS.has(idx);
-        idx++;
-      }
-    });
+    // Show all subsets for now — TODO: per-character subset selection
+    // (Hiding subsets requires matching the original CharacterConstants.lua
+    //  appearance system which maps race/gender/job to visible subsets)
 
     group.add(clone);
     return group;
