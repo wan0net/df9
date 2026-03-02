@@ -1,0 +1,145 @@
+/**
+ * EnvObjectManager.ts — Static manager for all environment objects.
+ * Mirrors EnvObjects/EnvObject.lua staticTick and query functions.
+ * Registered as GameRules tick slot 7 (EnvObject.staticTick).
+ */
+
+import { EnvObject } from './EnvObject';
+import { Door } from './Door';
+import { tObjects } from './EnvObjectData';
+import { GameRules, type TickableSystem } from '../core/GameRules';
+import type { Room } from '../rooms/Room';
+import type { RoomManager } from '../rooms/RoomManager';
+
+class EnvObjectManagerClass implements TickableSystem {
+  private objects: Map<number, EnvObject> = new Map();
+  private nextId = 1;
+  private roomManager: RoomManager | null = null;
+
+  /** Initialize and register with GameRules tick pipeline. */
+  init(roomManager: RoomManager) {
+    this.roomManager = roomManager;
+    // Register at slot 7 (EnvObject.staticTick position in Lua tick order)
+    GameRules.registerSystem(7, this);
+  }
+
+  /** Create and register an environment object. Returns null if invalid. */
+  createObject(sName: string, tileX: number, tileY: number, bFlipX = false, bFlipY = false): EnvObject | null {
+    const data = tObjects[sName];
+    if (!data) {
+      console.warn(`EnvObjectManager: unknown object type '${sName}'`);
+      return null;
+    }
+
+    let obj: EnvObject;
+    if (data.door || data.customClass === 'Door') {
+      obj = new Door(sName, tileX, tileY, bFlipX, bFlipY);
+    } else {
+      obj = new EnvObject(sName, tileX, tileY, bFlipX, bFlipY);
+    }
+
+    const id = this.nextId++;
+    this.objects.set(id, obj);
+
+    // Assign room
+    if (this.roomManager) {
+      const room = this.roomManager.getRoomAt(tileX, tileY);
+      if (room) {
+        obj.setRoom(room);
+      }
+    }
+
+    return obj;
+  }
+
+  /** Remove an object from management. */
+  removeObject(obj: EnvObject) {
+    for (const [id, o] of this.objects) {
+      if (o === obj) {
+        this.objects.delete(id);
+        obj.remove();
+        return;
+      }
+    }
+  }
+
+  /** Get all managed objects. */
+  getObjects(): EnvObject[] {
+    return Array.from(this.objects.values());
+  }
+
+  /** Get objects in a specific room. */
+  getObjectsInRoom(room: Room): EnvObject[] {
+    const result: EnvObject[] = [];
+    for (const obj of this.objects.values()) {
+      if (obj.rRoom === room) result.push(obj);
+    }
+    return result;
+  }
+
+  /** Get objects of a specific type. */
+  getObjectsByType(sName: string): EnvObject[] {
+    const result: EnvObject[] = [];
+    for (const obj of this.objects.values()) {
+      if (obj.sName === sName) result.push(obj);
+    }
+    return result;
+  }
+
+  /** Get total power output from objects in a room. */
+  getRoomPowerOutput(room: Room): number {
+    let total = 0;
+    for (const obj of this.objects.values()) {
+      if (obj.rRoom === room) {
+        total += obj.getPowerOutput();
+      }
+    }
+    return total;
+  }
+
+  /** Get total power draw from objects in a room. */
+  getRoomPowerDraw(room: Room): number {
+    let total = 0;
+    for (const obj of this.objects.values()) {
+      if (obj.rRoom === room) {
+        total += obj.getPowerDraw();
+      }
+    }
+    return total;
+  }
+
+  /** Get total oxygen output from objects in a room. */
+  getRoomOxygenOutput(room: Room): number {
+    let total = 0;
+    for (const obj of this.objects.values()) {
+      if (obj.rRoom === room) {
+        total += obj.getOxygenOutput();
+      }
+    }
+    return total;
+  }
+
+  /** Tick all objects (GameRules slot 7). */
+  onTick(dt: number) {
+    for (const obj of this.objects.values()) {
+      obj.onTick(dt);
+    }
+  }
+
+  /** Get count of objects */
+  getCount(): number {
+    return this.objects.size;
+  }
+
+  /** Update room assignments after room re-detection. */
+  updateRoomAssignments() {
+    if (!this.roomManager) return;
+    for (const obj of this.objects.values()) {
+      const room = this.roomManager.getRoomAt(obj.tileX, obj.tileY);
+      obj.setRoom(room ?? null);
+    }
+  }
+}
+
+/** Global singleton */
+export const EnvObjectManager = new EnvObjectManagerClass();

@@ -1,0 +1,251 @@
+/**
+ * EnvObject.ts — Base class for placeable environment objects.
+ * Mirrors EnvObjects/EnvObject.lua: condition, power, oxygen gen, decay, tick.
+ */
+
+import { EnvObjectDef, tObjects } from './EnvObjectData';
+import { ObjectList, OBJ_ENVOBJECT, type ObjectTag, type TaggableObject } from '../core/ObjectList';
+import type { Room } from '../rooms/Room';
+
+// ── Constants matching EnvObject.lua ────────────────────────────────────
+export const MIN_PCT_HEALED_PER_MAINTAIN = 2;
+export const MAX_PCT_HEALED_PER_MAINTAIN = 25;
+export const CONDITION_NEEDED_TO_MAINTAIN = 80;
+export const DAMAGED_CONDITION = 50;
+export const DANGER_ZONE = 20;
+export const DESTROYED_FIRE_CHECK_DELAY = 30;
+export const DESTROYED_FIRE_CHECK_INTERVAL = 60;
+export const DESTROYED_FIRE_CHANCE = 0.05;
+
+export class EnvObject implements TaggableObject {
+  // ObjectList integration
+  _ObjectList_ObjectMarker?: ObjectTag;
+
+  // Identity
+  readonly sName: string;
+  readonly tData: EnvObjectDef;
+  sUniqueName = '';
+
+  // Position
+  tileX: number;
+  tileY: number;
+  bFlipX: boolean;
+  bFlipY: boolean;
+
+  // Condition & wear
+  nCondition = 100;
+  private decayAccum = 0;
+
+  // Power
+  bActive = true;
+  bHasPower = false;
+
+  // Room assignment
+  rRoom: Room | null = null;
+
+  // Oxygen generation
+  bGeneratingOxygen = false;
+
+  // Construction state
+  bBuilt = true;
+  sBuilderName = '';
+  sBuildTime = '';
+
+  // Demolition
+  bSlatedForVaporize = false;
+
+  // Broken timer (for fire chance)
+  private nBrokenTimer = 0;
+
+  constructor(sName: string, tileX: number, tileY: number, bFlipX = false, bFlipY = false) {
+    this.sName = sName;
+    this.tData = tObjects[sName];
+    if (!this.tData) {
+      throw new Error(`EnvObject: unknown object type '${sName}'`);
+    }
+    this.tileX = tileX;
+    this.tileY = tileY;
+    this.bFlipX = bFlipX;
+    this.bFlipY = bFlipY;
+
+    // Register with ObjectList
+    ObjectList.addObject(
+      OBJ_ENVOBJECT,
+      sName,
+      this,
+      this.tData.bBlocksPathing,
+      this.tData.bBlocksOxygen,
+      tileX,
+      tileY,
+      bFlipX,
+      bFlipY,
+    );
+
+    // Start O2 generation if applicable
+    this._updateOxygenGeneration();
+  }
+
+  // ── Condition ────────────────────────────────────────────────
+
+  getCondition(): number {
+    return this.nCondition;
+  }
+
+  setCondition(c: number) {
+    this.nCondition = Math.max(0, Math.min(100, c));
+    this._updateOxygenGeneration();
+  }
+
+  damageCondition(amount: number) {
+    this.setCondition(this.nCondition - amount);
+  }
+
+  /** Repair object during maintenance task. Returns new condition. */
+  maintain(startCondition: number, competence: number): number {
+    const healPct = MIN_PCT_HEALED_PER_MAINTAIN +
+      competence * (MAX_PCT_HEALED_PER_MAINTAIN - MIN_PCT_HEALED_PER_MAINTAIN);
+    this.setCondition(Math.min(100, startCondition + healPct));
+    return this.nCondition;
+  }
+
+  isDestroyed(): boolean {
+    return this.nCondition <= 0;
+  }
+
+  isDamaged(): boolean {
+    return this.nCondition < DAMAGED_CONDITION;
+  }
+
+  needsMaintenance(): boolean {
+    return this.nCondition < CONDITION_NEEDED_TO_MAINTAIN;
+  }
+
+  // ── Power ────────────────────────────────────────────────────
+
+  hasPower(): boolean {
+    if (!this.bActive) return false;
+    if (this.tData.nPowerDraw <= 0 && this.tData.nPowerOutput <= 0) return true;
+    return this.bHasPower;
+  }
+
+  getPowerDraw(): number {
+    if (!this.bActive || this.nCondition <= 0) return 0;
+    return this.tData.nPowerDraw;
+  }
+
+  getPowerOutput(): number {
+    if (!this.bActive || this.nCondition <= 0) return 0;
+    return this.tData.nPowerOutput;
+  }
+
+  isFunctioning(): boolean {
+    return this.hasPower() && this.nCondition > 0;
+  }
+
+  // ── Oxygen generation ────────────────────────────────────────
+
+  private _updateOxygenGeneration() {
+    const shouldGenerate = this.tData.oxygenLevel > 0 &&
+      !this.isDestroyed() &&
+      this.isFunctioning();
+    this.bGeneratingOxygen = shouldGenerate;
+  }
+
+  getOxygenOutput(): number {
+    if (!this.bGeneratingOxygen) return 0;
+    return this.tData.oxygenLevel;
+  }
+
+  // ── Tick ─────────────────────────────────────────────────────
+
+  onTick(dt: number) {
+    // Apply decay
+    if (this.nCondition > 0 && this.tData.decayPerSecond > 0) {
+      this.decayAccum += dt;
+      if (this.decayAccum >= 1) {
+        const damage = this.tData.decayPerSecond * this.decayAccum;
+        this.decayAccum = 0;
+        this.damageCondition(damage);
+      }
+    }
+
+    // Broken timer (fire chance)
+    if (this.nCondition <= 0) {
+      this.nBrokenTimer += dt;
+      if (this.nBrokenTimer >= DESTROYED_FIRE_CHECK_DELAY) {
+        // Periodic fire check (handled by Fire system in Phase 10)
+      }
+    } else {
+      this.nBrokenTimer = 0;
+    }
+
+    // Update O2 generation state
+    this._updateOxygenGeneration();
+  }
+
+  // ── Room ─────────────────────────────────────────────────────
+
+  setRoom(room: Room | null) {
+    this.rRoom = room;
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────────
+
+  remove() {
+    const tag = this._ObjectList_ObjectMarker;
+    if (tag) {
+      ObjectList.removeObject(tag);
+    }
+  }
+
+  /** Get matter refund for vaporizing this object */
+  getVaporizeMatterYield(): number {
+    return Math.floor(this.tData.matterCost * 0.75);
+  }
+
+  // ── Sprite suffix for condition-based rendering ──────────────
+
+  getConditionSuffix(): string {
+    if (this.nCondition < 1) return '_destroyed';
+    if (this.nCondition < DAMAGED_CONDITION) return '_damaged';
+    return '';
+  }
+
+  /** Get the full sprite key for current condition */
+  getSpriteKey(): string {
+    return this.tData.spriteName + this.getConditionSuffix();
+  }
+
+  // ── Save data ────────────────────────────────────────────────
+
+  getSaveData(): Record<string, unknown> {
+    return {
+      sName: this.sName,
+      tileX: this.tileX,
+      tileY: this.tileY,
+      bFlipX: this.bFlipX,
+      bFlipY: this.bFlipY,
+      nCondition: this.nCondition,
+      bActive: this.bActive,
+      sUniqueName: this.sUniqueName,
+      sBuilderName: this.sBuilderName,
+      sBuildTime: this.sBuildTime,
+    };
+  }
+
+  static fromSaveData(data: Record<string, unknown>): EnvObject {
+    const obj = new EnvObject(
+      data.sName as string,
+      data.tileX as number,
+      data.tileY as number,
+      data.bFlipX as boolean,
+      data.bFlipY as boolean,
+    );
+    obj.nCondition = (data.nCondition as number) ?? 100;
+    obj.bActive = (data.bActive as boolean) ?? true;
+    obj.sUniqueName = (data.sUniqueName as string) ?? '';
+    obj.sBuilderName = (data.sBuilderName as string) ?? '';
+    obj.sBuildTime = (data.sBuildTime as string) ?? '';
+    return obj;
+  }
+}

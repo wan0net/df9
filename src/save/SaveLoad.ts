@@ -1,0 +1,125 @@
+/**
+ * SaveLoad.ts — Game persistence system.
+ * Mirrors GameRules.lua save/load: serialize grid, rooms, objects, characters, research, events.
+ */
+
+import { GameRules, SAVEGAME_VERSION } from '../core/GameRules';
+import type { TileGrid } from '../world/TileGrid';
+import type { RoomManager } from '../rooms/RoomManager';
+
+export interface SaveData {
+  version: number;
+  nMatter: number;
+  simTime: number;
+  elapsedTime: number;
+  SPACEDATE_BASE: number;
+  playerTimeScale: number;
+  // Grid is stored as compressed tile data
+  gridWidth: number;
+  gridHeight: number;
+  gridData: number[];
+  // Additional state added by entity classes
+  characters: Record<string, unknown>[];
+  objects: Record<string, unknown>[];
+  research: string[];
+}
+
+export class SaveLoadSystem {
+  private grid: TileGrid;
+  private roomManager: RoomManager;
+
+  constructor(grid: TileGrid, roomManager: RoomManager) {
+    this.grid = grid;
+    this.roomManager = roomManager;
+  }
+
+  /** Serialize the full game state to a save object. */
+  save(): SaveData {
+    // Serialize grid
+    const gridData: number[] = [];
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        gridData.push(this.grid.get(x, y));
+      }
+    }
+
+    return {
+      version: SAVEGAME_VERSION,
+      nMatter: GameRules.nMatter,
+      simTime: GameRules.simTime,
+      elapsedTime: GameRules.elapsedTime,
+      SPACEDATE_BASE: GameRules.SPACEDATE_BASE,
+      playerTimeScale: GameRules.playerTimeScale,
+      gridWidth: this.grid.width,
+      gridHeight: this.grid.height,
+      gridData,
+      characters: [], // Filled by CharacterManager.getSaveData()
+      objects: [], // Filled by EnvObjectManager.getSaveData()
+      research: [], // Filled by ResearchSystem
+    };
+  }
+
+  /** Save to localStorage. */
+  saveToStorage(slotName = 'SpacebaseDF9AutoSave') {
+    const data = this.save();
+    try {
+      localStorage.setItem(slotName, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      console.error('Save failed:', e);
+      return false;
+    }
+  }
+
+  /** Load from localStorage. Returns true if successful. */
+  loadFromStorage(slotName = 'SpacebaseDF9AutoSave'): boolean {
+    try {
+      const json = localStorage.getItem(slotName);
+      if (!json) return false;
+      const data = JSON.parse(json) as SaveData;
+      return this.load(data);
+    } catch (e) {
+      console.error('Load failed:', e);
+      return false;
+    }
+  }
+
+  /** Restore game state from save data. */
+  load(data: SaveData): boolean {
+    if (!data || data.version !== SAVEGAME_VERSION) {
+      console.warn('Incompatible save version');
+      return false;
+    }
+
+    // Restore GameRules state
+    GameRules.nMatter = data.nMatter;
+    GameRules.simTime = data.simTime;
+    GameRules.elapsedTime = data.elapsedTime;
+    GameRules.SPACEDATE_BASE = data.SPACEDATE_BASE;
+    GameRules.setTimeScale(data.playerTimeScale);
+
+    // Restore grid
+    if (data.gridData && data.gridData.length === data.gridWidth * data.gridHeight) {
+      for (let y = 0; y < data.gridHeight; y++) {
+        for (let x = 0; x < data.gridWidth; x++) {
+          this.grid.set(x, y, data.gridData[y * data.gridWidth + x]);
+        }
+      }
+    }
+
+    // Mark rooms dirty for re-detection
+    this.roomManager.markDirty([]);
+
+    return true;
+  }
+
+  /** Check if a save exists. */
+  hasSave(slotName = 'SpacebaseDF9AutoSave'): boolean {
+    return localStorage.getItem(slotName) !== null;
+  }
+
+  /** Delete a save. */
+  deleteSave(slotName = 'SpacebaseDF9AutoSave') {
+    localStorage.removeItem(slotName);
+  }
+}
