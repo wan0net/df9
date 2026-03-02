@@ -97,14 +97,38 @@ function loadModel(): Promise<void> {
       MODEL_PATH,
       (gltf) => {
         cachedGLTF = gltf.scene;
-        // Ensure double-sided rendering on all meshes
+
+        // Strip skinning — the .brig skeleton uses MOAI bone conventions
+        // that produce distorted results with glTF skinning. Convert all
+        // SkinnedMesh to plain Mesh so the model renders in its bind pose.
+        const toReplace: { skinned: THREE.SkinnedMesh; parent: THREE.Object3D }[] = [];
+        cachedGLTF.traverse((child) => {
+          if (child instanceof THREE.SkinnedMesh && child.parent) {
+            toReplace.push({ skinned: child, parent: child.parent });
+          }
+        });
+        for (const { skinned, parent } of toReplace) {
+          const mesh = new THREE.Mesh(skinned.geometry, skinned.material);
+          mesh.name = skinned.name;
+          mesh.visible = skinned.visible;
+          parent.add(mesh);
+          parent.remove(skinned);
+        }
+
+        // Ensure double-sided rendering
         cachedGLTF.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             const mat = child.material as THREE.Material;
             mat.side = THREE.DoubleSide;
           }
         });
-        console.log('Character model loaded:', cachedGLTF.children.length, 'children');
+
+        // Count meshes for debug
+        let meshCount = 0;
+        cachedGLTF.traverse((child) => {
+          if (child instanceof THREE.Mesh) meshCount++;
+        });
+        console.log('Character model loaded:', meshCount, 'meshes (unskinned)');
         resolve();
       },
       undefined,
@@ -183,8 +207,8 @@ export class CharacterRenderer {
   /** Clone the GLTF model with subset visibility. */
   private create3DModel(char: Character): THREE.Group {
     const group = new THREE.Group();
-    // Use SkeletonUtils.clone for proper skinned mesh cloning
-    const clone = SkeletonUtils.clone(cachedGLTF!) as THREE.Group;
+    // Clone the static (unskinned) model
+    const clone = cachedGLTF!.clone(true);
     clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
 
     // No rotation for debug — see the raw model orientation
