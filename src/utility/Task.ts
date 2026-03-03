@@ -83,11 +83,16 @@ export abstract class Task {
   /** Override: per-tick logic. */
   protected abstract onUpdate(dt: number): void;
 
-  /** Override: completion logic (apply need satisfaction). */
+  /** Job experience granted on completion (override in subclasses). */
+  nJobExperience = 10;
+
+  /** Override: completion logic (apply need satisfaction + XP). */
   protected onComplete() {
     if (!this.character) return;
     for (const adv of this.getAdvertisedNeeds()) {
       this.character.needs.satisfy(adv.need, adv.amount);
     }
+    // Grant job XP
+    this.character.addJobExperience(this.nJobExperience);
   }
 }

@@ -12,6 +12,8 @@ import {
   ANGER_MAX, ANGER_REDUCTION_PER_MORALE_TICK,
   MORALE_COMPETENCY_THRESHOLD, MORALE_COMPETENCY_MODIFIER,
   MORALE_SPEED_THRESHOLD, MORALE_LOW_SPEED_MODIFIER, MORALE_HIGH_SPEED_MODIFIER,
+  EXPERIENCE_PER_LEVEL, MAX_COMPETENCY,
+  MAX_CHANCE_TO_FAIL, NO_FAIL_COMPETENCY_THRESHOLD,
   STATUS_HEALTHY, STATUS_DEAD,
   CAUSE_OF_DEATH,
   SPACESUIT_MAX_OXYGEN,
@@ -138,6 +140,17 @@ export class Character {
   // ── Update ─────────────────────────────────────────────────
 
   update(delta: number) {
+    // Work shift timer
+    const dtSec = delta / 1000;
+    this.shiftTimer += dtSec;
+    if (this.bOnShift && this.shiftTimer >= Character.SHIFT_DURATION) {
+      this.bOnShift = false;
+      this.shiftTimer = 0;
+    } else if (!this.bOnShift && this.shiftTimer >= Character.SHIFT_COOLDOWN) {
+      this.bOnShift = true;
+      this.shiftTimer = 0;
+    }
+
     if (this.moving) {
       this.moveProgress += (delta / 1000) * this.getEffectiveSpeed();
       if (this.moveProgress >= 1) {
@@ -224,6 +237,29 @@ export class Character {
       speed *= (1 + MORALE_HIGH_SPEED_MODIFIER);
     }
     return speed;
+  }
+
+  // ── Job XP ────────────────────────────────────────────────
+
+  /** Add job experience. May trigger competency level-up. */
+  addJobExperience(amount: number) {
+    this.tStats.nXP += amount;
+    // Level up: every EXPERIENCE_PER_LEVEL XP → +1 competency (normalized 0-1)
+    const job = this.tStats.nJob;
+    const current = this.tStats.tCompetency[job] ?? 0;
+    const levelsEarned = Math.floor(this.tStats.nXP / EXPERIENCE_PER_LEVEL) * (1 / MAX_COMPETENCY);
+    const newComp = Math.min(1, Math.max(current, levelsEarned));
+    if (newComp > current) {
+      this.tStats.tCompetency[job] = newComp;
+    }
+  }
+
+  /** Check if a task attempt fails based on job competency. */
+  rollTaskFail(): boolean {
+    const comp = this.getEffectiveCompetency();
+    if (comp >= NO_FAIL_COMPETENCY_THRESHOLD) return false;
+    const failChance = MAX_CHANCE_TO_FAIL * (1 - comp);
+    return Math.random() < failChance;
   }
 
   /** Apply damage to HP */

@@ -1,8 +1,8 @@
 import { Character } from './Character';
 import {
-  MINER, BUILDER, TECHNICIAN,
+  MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
   CAUSE_OF_DEATH, MORALE_CITIZEN_DIES_MIN, MORALE_CITIZEN_DIES_MAX,
-  ANGER_MAX, VIOLENT_RAMPAGE_CHANCE,
+  ANGER_MAX, VIOLENT_RAMPAGE_CHANCE, HURT_THRESHOLD,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -21,6 +21,12 @@ import { BuildEnvObject } from '../utility/tasks/BuildEnvObject';
 import { GetDrink } from '../utility/tasks/GetDrink';
 import { Eat } from '../utility/tasks/Eat';
 import { MaintainEnvObject } from '../utility/tasks/MaintainEnvObject';
+import { ServeDrink } from '../utility/tasks/ServeDrink';
+import { MaintainPlants } from '../utility/tasks/MaintainPlants';
+import { ResearchInLab } from '../utility/tasks/ResearchInLab';
+import { FieldScanAndHeal } from '../utility/tasks/FieldScanAndHeal';
+import { Patrol } from '../utility/tasks/Patrol';
+import { DropOffCorpse } from '../utility/tasks/DropOffCorpse';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { Base } from '../core/Base';
@@ -360,6 +366,87 @@ export class CharacterManager {
         obj.tileX, obj.tileY,
         priority,
       ));
+    }
+
+    // ── Job-specific tasks ────────────────────────────────────
+    const shiftBoost = character.bOnShift ? 2 : 0;
+
+    // BARTENDER: Serve drink at bar
+    if (job === BARTENDER) {
+      for (const bar of EnvObjectManager.getObjectsByType('Bar')) {
+        if (!bar.bBuilt || !bar.isFunctioning()) continue;
+        options.push(new ActivityOption(
+          new ServeDrink(),
+          bar.tileX, bar.tileY,
+          6 + shiftBoost,
+        ));
+      }
+    }
+
+    // BOTANIST: Maintain garden plants
+    if (job === BOTANIST) {
+      const plantTypes = ['space_tree', 'HydroPlant', 'BulbousPlant', 'StrangePlant', 'HousePoint'];
+      for (const pType of plantTypes) {
+        for (const plant of EnvObjectManager.getObjectsByType(pType)) {
+          if (!plant.bBuilt || !plant.needsMaintenance()) continue;
+          options.push(new ActivityOption(
+            new MaintainPlants(plant),
+            plant.tileX, plant.tileY,
+            7 + shiftBoost,
+          ));
+        }
+      }
+    }
+
+    // SCIENTIST: Research at desk
+    if (job === SCIENTIST) {
+      for (const desk of EnvObjectManager.getObjectsByType('ResearchDesk')) {
+        if (!desk.bBuilt || !desk.isFunctioning()) continue;
+        options.push(new ActivityOption(
+          new ResearchInLab(),
+          desk.tileX, desk.tileY,
+          5 + shiftBoost,
+        ));
+      }
+    }
+
+    // DOCTOR: Heal wounded characters
+    if (job === DOCTOR) {
+      for (const other of this.characters) {
+        if (other === character || !other.isAlive()) continue;
+        if (other.tStats.nHP < HURT_THRESHOLD) {
+          options.push(new ActivityOption(
+            new FieldScanAndHeal(other),
+            other.tileX, other.tileY,
+            10 + shiftBoost,
+          ));
+        }
+      }
+    }
+
+    // EMERGENCY: Patrol rooms
+    if (job === EMERGENCY) {
+      if (room && room.tiles.length >= 2) {
+        const target = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+        options.push(new ActivityOption(
+          new Patrol(),
+          target.x, target.y,
+          3 + shiftBoost,
+        ));
+      }
+    }
+
+    // JANITOR: Pick up corpses
+    if (job === JANITOR) {
+      for (const pickup of this.pickups) {
+        if (pickup.sName === 'Corpse' && !pickup.bPickedUp) {
+          options.push(new ActivityOption(
+            new DropOffCorpse(),
+            pickup.tileX, pickup.tileY,
+            8 + shiftBoost,
+          ));
+        }
+      }
     }
 
     return options;
