@@ -1,5 +1,9 @@
 import { Character } from './Character';
-import { MINER, BUILDER, TECHNICIAN } from './CharacterConstants';
+import {
+  MINER, BUILDER, TECHNICIAN,
+  CAUSE_OF_DEATH, MORALE_CITIZEN_DIES_MIN, MORALE_CITIZEN_DIES_MAX,
+  ANGER_MAX, VIOLENT_RAMPAGE_CHANCE,
+} from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { RoomManager } from '../rooms/RoomManager';
@@ -19,9 +23,12 @@ import { Eat } from '../utility/tasks/Eat';
 import { MaintainEnvObject } from '../utility/tasks/MaintainEnvObject';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
+import { Base } from '../core/Base';
+import { Corpse } from '../pickups/Corpse';
 import type { Task } from '../utility/Task';
 import type { CharacterRenderer } from '../renderer/CharacterRenderer';
 import type { CrewSpawnPoint } from '../world/WorldGen';
+import type { Pickup } from '../pickups/Pickup';
 
 /** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
 const UPDATES_PER_TICK = 10;
@@ -38,6 +45,9 @@ export class CharacterManager {
 
   /** Characters needing new task decisions. */
   private decisionQueue: Character[] = [];
+
+  /** Active pickups (corpses, debris, etc.) */
+  pickups: Pickup[] = [];
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -77,7 +87,9 @@ export class CharacterManager {
     for (const char of this.characters) {
       char.update(delta);
       char.needs.decay(dtSec);
-      char.updateMorale(dtSec);
+      // Pass room morale score to character morale update
+      const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
+      char.updateMorale(dtSec, charRoom?.nMoraleScore ?? 0);
 
       // Update active task
       if (char.currentTask && char.currentTask.isActive()) {
@@ -100,6 +112,9 @@ export class CharacterManager {
       this.characterRenderer?.updateCharacter(char);
     }
 
+    // Handle dead characters → corpse conversion
+    this.processDeaths();
+
     // AI tick
     this.aiTickAccum += delta;
     if (this.aiTickAccum >= this.aiTickInterval) {
@@ -120,6 +135,50 @@ export class CharacterManager {
         return;
       }
     }
+  }
+
+  /** Convert dead characters into corpses and remove them. */
+  private processDeaths() {
+    for (let i = this.characters.length - 1; i >= 0; i--) {
+      const char = this.characters[i];
+      if (!char.isAlive()) {
+        // Create corpse pickup at death tile
+        const corpse = new Corpse(char.tileX, char.tileY, char.getName(), char.nCauseOfDeath);
+        this.pickups.push(corpse);
+
+        // Log death alert
+        const causeName = Object.entries(CAUSE_OF_DEATH).find(([, v]) => v === char.nCauseOfDeath)?.[0] ?? 'unknown';
+        Base.addAlert('death', `${char.getName()} has died (${causeName.toLowerCase()})`);
+
+        // Morale hit on all living characters
+        for (const other of this.characters) {
+          if (other === char || !other.isAlive()) continue;
+          const affinity = other.tAffinity.get(char.id) ?? 0;
+          const scale = Math.min(1, affinity / 10);
+          const hit = MORALE_CITIZEN_DIES_MIN + scale * (MORALE_CITIZEN_DIES_MAX - MORALE_CITIZEN_DIES_MIN);
+          other.nMorale = Math.max(-100, other.nMorale + hit);
+        }
+
+        // Remove from renderer and character list
+        this.characterRenderer?.destroyCharacter(char.id);
+        char.destroy();
+        this.characters.splice(i, 1);
+      }
+    }
+  }
+
+  /** Spawn a character at a specific tile position. Returns the new character. */
+  spawnCharacterAt(tileX: number, tileY: number, spacewalking = false): Character {
+    const char = new Character(this.nextId++, tileX, tileY);
+    char.bSpacewalking = spacewalking;
+    this.characterRenderer?.createCharacter(char);
+    this.characters.push(char);
+    return char;
+  }
+
+  /** Get all active pickups. */
+  getPickups(): Pickup[] {
+    return this.pickups;
   }
 
   private runAI() {
@@ -156,6 +215,19 @@ export class CharacterManager {
         this.seekNearestRoom(char);
         processed++;
         continue;
+      }
+
+      // Rampage check: anger at max triggers rampage
+      if (char.nAnger >= ANGER_MAX && !char.bRampaging) {
+        char.bRampaging = true;
+        char.bViolentRampage = Math.random() < VIOLENT_RAMPAGE_CHANCE;
+        Base.addAlert('rampage',
+          `${char.getName()} has gone on a ${char.bViolentRampage ? 'violent' : 'non-violent'} rampage!`);
+        // Rampage lasts until anger decays below 50
+      }
+      if (char.bRampaging && char.nAnger < 50) {
+        char.bRampaging = false;
+        char.bViolentRampage = false;
       }
 
       // Emergency: seek oxygen if suffocating
@@ -201,18 +273,20 @@ export class CharacterManager {
     ));
 
     // Chat (if other characters nearby in same room)
+    // Priority scaled by gregariousness personality trait
     if (room) {
       for (const other of this.characters) {
         if (other === character) continue;
         if (!other.isAlive()) continue;
         const otherRoom = this.roomManager.getRoomAt(other.tileX, other.tileY);
         if (otherRoom === room) {
+          const chatPriority = 2 + character.tStats.personality.nGregariousness * 4;
           options.push(new ActivityOption(
             new Chat(),
             other.tileX, other.tileY,
-            3,
+            chatPriority,
           ));
-          break; // One chat option is enough
+          break;
         }
       }
     }

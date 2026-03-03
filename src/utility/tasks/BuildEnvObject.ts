@@ -52,7 +52,7 @@ export class BuildEnvObject extends Task {
     super.onComplete(); // Satisfy needs
 
     // Build the object
-    this.targetObj.bBuilt = true;
+    this.targetObj.markBuilt();
     if (this.character) {
       this.targetObj.sBuilderName = this.character.getName();
     }

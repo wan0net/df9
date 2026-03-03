@@ -8,8 +8,13 @@ import {
   BUILDER, TECHNICIAN, MINER, EMERGENCY, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR,
   STARTING_HIT_POINTS, BASE_SPEED,
   MORALE_MAX, MORALE_MIN, MORALE_TICK,
+  MAX_ROOM_MORALE_BOOST, ROOM_MORALE_TICK,
   ANGER_MAX, ANGER_REDUCTION_PER_MORALE_TICK,
+  MORALE_COMPETENCY_THRESHOLD, MORALE_COMPETENCY_MODIFIER,
+  MORALE_SPEED_THRESHOLD, MORALE_LOW_SPEED_MODIFIER, MORALE_HIGH_SPEED_MODIFIER,
   STATUS_HEALTHY, STATUS_DEAD,
+  CAUSE_OF_DEATH,
+  SPACESUIT_MAX_OXYGEN,
 } from './CharacterConstants';
 import type { Task } from '../utility/Task';
 
@@ -45,6 +50,31 @@ export class Character {
 
   // Spacewalking (original: tStatus.bSpacewalking)
   bSpacewalking = false;
+
+  // ── Equipment & inventory (M5c) ──────────────────────────────
+  /** Disease tracking (wired in M10) */
+  maladies: unknown[] = [];
+  /** Items carried (MAX_INVENTORY = 5, wired in M10) */
+  inventory: unknown[] = [];
+  /** Equipped weapon name, null if unarmed */
+  weapon: string | null = null;
+  /** Whether character is wearing a spacesuit */
+  bSpacesuit = false;
+  /** Remaining suit oxygen (in O2 units) */
+  nSuitOxygen = 0;
+  /** Cause of death (0 = alive) */
+  nCauseOfDeath = 0;
+  /** Rampage state */
+  bRampaging = false;
+  bViolentRampage = false;
+
+  /** Work shift tracking */
+  bOnShift = true;
+  private shiftTimer = 0;
+  /** Shift duration in seconds */
+  static readonly SHIFT_DURATION = 270;
+  /** Rest duration in seconds */
+  static readonly SHIFT_COOLDOWN = 360;
 
   // Movement
   path: { x: number; y: number }[] = [];
@@ -109,7 +139,7 @@ export class Character {
 
   update(delta: number) {
     if (this.moving) {
-      this.moveProgress += (delta / 1000) * BASE_SPEED;
+      this.moveProgress += (delta / 1000) * this.getEffectiveSpeed();
       if (this.moveProgress >= 1) {
         this.tileX = this.moveTo.x;
         this.tileY = this.moveTo.y;
@@ -129,7 +159,7 @@ export class Character {
   }
 
   /** Update morale and anger per tick. dt in seconds (game-scaled). */
-  updateMorale(dt: number) {
+  updateMorale(dt: number, roomMoraleScore = 0) {
     this.moraleTickAccum += dt;
     if (this.moraleTickAccum >= MORALE_TICK) {
       this.moraleTickAccum -= MORALE_TICK;
@@ -144,14 +174,75 @@ export class Character {
       } else if (avgNeed > 70) {
         this.nMorale = Math.min(MORALE_MAX, this.nMorale + 1);
       }
+
+      // Room morale drift — characters drift toward the room's morale score
+      if (roomMoraleScore !== 0) {
+        const drift = Math.min(MAX_ROOM_MORALE_BOOST, Math.abs(roomMoraleScore) * 0.1);
+        if (roomMoraleScore > 0) {
+          this.nMorale = Math.min(MORALE_MAX, this.nMorale + drift);
+        } else {
+          this.nMorale = Math.max(MORALE_MIN, this.nMorale - drift);
+        }
+      }
     }
   }
 
+  /** Apply a morale change (from event, chat, etc.) */
+  addMorale(amount: number) {
+    this.nMorale = Math.max(MORALE_MIN, Math.min(MORALE_MAX, this.nMorale + amount));
+  }
+
+  /** Apply anger change (scaled by temper trait and morale). */
+  addAnger(amount: number) {
+    let scaled = amount;
+    // Temper personality trait scales anger gain
+    const temper = this.tStats.personality.nTemper ?? 0.5;
+    scaled *= 0.5 + temper;
+    // Good morale reduces anger gain, bad morale amplifies it
+    if (this.nMorale > 50) scaled *= 0.4;
+    else if (this.nMorale < -50) scaled *= 2.0;
+    this.nAnger = Math.min(ANGER_MAX, Math.max(0, this.nAnger + scaled));
+  }
+
+  /** Get effective competency for a job, modified by morale. */
+  getEffectiveCompetency(jobId?: number): number {
+    const job = jobId ?? this.tStats.nJob;
+    const base = this.tStats.tCompetency[job] ?? 0;
+    if (Math.abs(this.nMorale) > MORALE_COMPETENCY_THRESHOLD) {
+      const sign = this.nMorale > 0 ? 1 : -1;
+      return Math.max(0, Math.min(1, base + sign * MORALE_COMPETENCY_MODIFIER * base));
+    }
+    return base;
+  }
+
+  /** Get effective movement speed, modified by morale. */
+  getEffectiveSpeed(): number {
+    let speed = BASE_SPEED;
+    if (this.nMorale < -MORALE_SPEED_THRESHOLD) {
+      speed *= (1 + MORALE_LOW_SPEED_MODIFIER);
+    } else if (this.nMorale > MORALE_SPEED_THRESHOLD) {
+      speed *= (1 + MORALE_HIGH_SPEED_MODIFIER);
+    }
+    return speed;
+  }
+
   /** Apply damage to HP */
-  damage(amount: number) {
+  damage(amount: number, cause: number = CAUSE_OF_DEATH.UNSPECIFIED) {
     this.tStats.nHP = Math.max(0, this.tStats.nHP - amount);
     if (this.tStats.nHP <= 0) {
-      this.tStats.nStatus = STATUS_DEAD;
+      this.kill(cause);
+    }
+  }
+
+  /** Kill the character with a specific cause of death. */
+  kill(cause: number = CAUSE_OF_DEATH.UNSPECIFIED) {
+    this.tStats.nHP = 0;
+    this.tStats.nStatus = STATUS_DEAD;
+    this.nCauseOfDeath = cause;
+    this.moving = false;
+    this.path = [];
+    if (this.currentTask) {
+      this.currentTask = null;
     }
   }
 

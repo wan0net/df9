@@ -17,6 +17,9 @@ export abstract class Event {
   startTime = 0;
   elapsedTime = 0;
 
+  /** Callback fired when event completes. Set by EventController. */
+  onCompleteCallback: ((event: Event) => void) | null = null;
+
   /** Called when event starts. */
   start(simTime: number) {
     this.status = EVENT_STATUS.ACTIVE;
@@ -36,6 +39,7 @@ export abstract class Event {
   /** Mark event as complete. */
   complete() {
     this.status = EVENT_STATUS.COMPLETE;
+    this.onCompleteCallback?.(this);
   }
 
   isActive(): boolean {

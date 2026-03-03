@@ -17,11 +17,18 @@ export const DESTROYED_FIRE_CHECK_DELAY = 30;
 export const DESTROYED_FIRE_CHECK_INTERVAL = 60;
 export const DESTROYED_FIRE_CHANCE = 0.05;
 
+/** Static callback for renderer notifications. Set from main.ts. */
+export type EnvObjectUpdateFn = (id: number, obj: EnvObject) => void;
+
 export class EnvObject implements TaggableObject {
+  /** Static callback set by the game loop to notify renderer of visual changes. */
+  static onVisualUpdate: EnvObjectUpdateFn | null = null;
+
   // ObjectList integration
   _ObjectList_ObjectMarker?: ObjectTag;
 
   // Identity
+  id = -1; // assigned by EnvObjectManager
   readonly sName: string;
   readonly tData: EnvObjectDef;
   sUniqueName = '';
@@ -94,6 +101,7 @@ export class EnvObject implements TaggableObject {
   setCondition(c: number) {
     this.nCondition = Math.max(0, Math.min(100, c));
     this._updateOxygenGeneration();
+    this._notifyRenderer();
   }
 
   damageCondition(amount: number) {
@@ -201,6 +209,19 @@ export class EnvObject implements TaggableObject {
   /** Get matter refund for vaporizing this object */
   getVaporizeMatterYield(): number {
     return Math.floor(this.tData.matterCost * 0.75);
+  }
+
+  /** Mark object as built (ghost→solid transition). */
+  markBuilt() {
+    this.bBuilt = true;
+    this._notifyRenderer();
+  }
+
+  /** Notify the renderer of visual state changes. */
+  private _notifyRenderer() {
+    if (this.id >= 0) {
+      EnvObject.onVisualUpdate?.(this.id, this);
+    }
   }
 
   // ── Sprite suffix for condition-based rendering ──────────────

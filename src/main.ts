@@ -26,6 +26,7 @@ import { OxygenSystem } from './oxygen/OxygenSystem';
 import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
+import { EnvObject } from './envobjects/EnvObject';
 import { ObjectPlacement } from './building/ObjectPlacement';
 import { Base } from './core/Base';
 import { PowerSystem } from './power/PowerSystem';
@@ -153,12 +154,48 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const envObjRenderer = new EnvObjectRenderer(threeRenderer.scene);
 
   EnvObjectManager.init(roomManager);
+
+  // Wire EnvObjectManager lifecycle → EnvObjectRenderer
+  EnvObjectManager.onObjectCreated = (id, obj) => {
+    envObjRenderer.addObject(String(id), obj.tileX, obj.tileY, obj.sName, obj.bBuilt);
+  };
+  EnvObjectManager.onObjectRemoved = (id) => {
+    envObjRenderer.removeObject(String(id));
+  };
+  // Wire EnvObject visual updates (condition change, ghost→built) → renderer
+  EnvObject.onVisualUpdate = (id, obj) => {
+    envObjRenderer.updateObject(String(id), obj.bBuilt, obj.nCondition, obj.getSpriteKey());
+  };
   Base.init();
   const powerSystem = new PowerSystem(grid, roomManager);
   const lighting = new Lighting(roomManager);
   lighting.init();
   const eventController = new EventController();
   eventController.init();
+
+  // Wire event callbacks
+  eventController.onImmigration = (count) => {
+    for (let i = 0; i < count; i++) {
+      characterManager.spawnCharacter();
+    }
+  };
+  eventController.onMeteorLand = () => {
+    // Pick a random floor tile in a random room
+    const rooms = roomManager.getRooms();
+    if (rooms.length === 0) return;
+    const room = rooms[Math.floor(Math.random() * rooms.length)];
+    if (room.tiles.length === 0) return;
+    const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+
+    // Destroy the tile — becomes a breach point (set() auto-marks dirty)
+    grid.set(tile.x, tile.y, TileType.WALL_DESTROYED);
+
+    // Start a fire at the impact site
+    fire.startFire(tile.x, tile.y);
+
+    // Force room re-detection (breach)
+    roomManager.markDirty([tile]);
+  };
   const fire = new Fire();
   fire.init();
   const projectileManager = new ProjectileManager();
@@ -480,6 +517,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       id: c.id, x: c.tileX, y: c.tileY, moving: c.moving, spacewalking: c.bSpacewalking,
       job: c.getJob(), taskName: c.currentTask?.name ?? null,
       hunger: c.needs.hunger, energy: c.needs.energy,
+      morale: c.nMorale, anger: c.nAnger, rampaging: c.bRampaging,
     })),
     getCommands: () => CommandQueue.getAllActive().map(c => ({
       id: c.id, type: c.type, tileX: c.tileX, tileY: c.tileY,
@@ -517,8 +555,23 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     /** Create an already-built, powered object directly (bypasses placement validation). */
     createBuiltObject: (name: string, tileX: number, tileY: number) => {
       const obj = EnvObjectManager.createObject(name, tileX, tileY);
-      if (obj) { obj.bBuilt = true; obj.bHasPower = true; return true; }
+      if (obj) { obj.markBuilt(); obj.bHasPower = true; return true; }
       return false;
+    },
+    getPickups: () => characterManager.getPickups().map(p => ({
+      name: p.sName, tileX: p.tileX, tileY: p.tileY, pickedUp: p.bPickedUp,
+    })),
+    killCharacter: (charId: number, cause: number) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      if (char) { char.kill(cause); return true; }
+      return false;
+    },
+    spawnCharacterAt: (tileX: number, tileY: number) => {
+      const char = characterManager.spawnCharacterAt(tileX, tileY);
+      return char.id;
+    },
+    triggerImmigration: () => {
+      characterManager.spawnCharacter();
     },
     setZone: (roomId: number, zone: string) => {
       const room = roomManager.getRooms().find(r => r.id === roomId);
@@ -568,6 +621,7 @@ function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: numbe
     const mat = new THREE.MeshBasicMaterial({
       map: tex,
       transparent: true,
+      alphaTest: 0.01,
       depthWrite: false,
     });
     const mesh = new THREE.Mesh(geo, mat);

@@ -23,7 +23,7 @@ export class GetDrink extends Task {
     if (this.elapsedTime >= this.duration) {
       // Morale bonus for drinking
       if (this.character) {
-        this.character.nMorale = Math.min(100, this.character.nMorale + MORALE_DRANK_BASE);
+        this.character.addMorale(MORALE_DRANK_BASE);
       }
       this.complete();
     }

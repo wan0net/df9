@@ -20,7 +20,7 @@ export class Eat extends Task {
     if (this.elapsedTime >= this.duration) {
       // Morale bonus for eating
       if (this.character) {
-        this.character.nMorale = Math.min(100, this.character.nMorale + MORALE_ATE_MEAL_BASE);
+        this.character.addMorale(MORALE_ATE_MEAL_BASE);
       }
       this.complete();
     }

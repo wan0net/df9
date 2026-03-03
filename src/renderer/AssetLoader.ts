@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { SPRITE_SHEET_ENTRIES } from './SpriteAtlasData';
+import { tObjects } from '../envobjects/EnvObjectData';
+import { hasSpriteFrame } from './SpriteAtlasData';
 
 /**
  * Texture/asset loader replacing Phaser's preload system.
@@ -168,6 +171,11 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   entries.push(['ui_speed3', 'assets/ui/hud/ui_hud_speed3.png']);
   entries.push(['ui_speed3_active', 'assets/ui/hud/ui_hud_speed3_active.png']);
 
+  // Environment object sprite sheets
+  for (const [key, url] of SPRITE_SHEET_ENTRIES) {
+    entries.push([key, url]);
+  }
+
   // Load all in parallel
   const total = entries.length;
   let loaded = 0;
@@ -178,4 +186,91 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
       onProgress?.(loaded, total);
     })
   ));
+
+  // Generate placeholder textures for env objects without real sprites
+  generatePlaceholderSprites();
+}
+
+/** Zone color map for placeholder sprites */
+const ZONE_COLORS: Record<string, string> = {
+  POWER: '#cc3333',
+  LIFESUPPORT: '#33cc33',
+  GARDEN: '#228B22',
+  RESIDENCE: '#6666cc',
+  PUB: '#cc9933',
+  REFINERY: '#996633',
+  FITNESS: '#cc6600',
+  RESEARCH: '#9933cc',
+  INFIRMARY: '#cc3366',
+  AIRLOCK: '#336699',
+  BRIG: '#666666',
+};
+
+/**
+ * Generate canvas-based placeholder sprites for env objects
+ * that don't have real sprite sheet frames.
+ */
+function generatePlaceholderSprites() {
+  for (const [objName, objDef] of Object.entries(tObjects)) {
+    // Skip if a real sprite frame exists for the base sprite name
+    if (hasSpriteFrame(objDef.spriteName)) continue;
+    // Skip if we already generated one
+    const placeholderKey = `placeholder_${objDef.spriteName}`;
+    if (textureCache.has(placeholderKey)) continue;
+
+    const tileW = 128;
+    const tileH = 64;
+    const w = objDef.width * tileW;
+    const h = Math.max(objDef.height * tileH, tileH * 1.5);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+
+    // Pick zone color
+    const zoneColor = ZONE_COLORS[objDef.zoneName ?? ''] ?? '#888888';
+
+    // Draw isometric diamond shape
+    ctx.fillStyle = zoneColor;
+    ctx.globalAlpha = 0.7;
+    const cx = w / 2;
+    const cy = h / 2;
+    const dw = w * 0.45;
+    const dh = h * 0.35;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - dh);
+    ctx.lineTo(cx + dw, cy);
+    ctx.lineTo(cx, cy + dh);
+    ctx.lineTo(cx - dw, cy);
+    ctx.closePath();
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.9;
+    ctx.stroke();
+
+    // Label text
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const fontSize = Math.min(14, w / (objDef.friendlyName.length * 0.65));
+    ctx.font = `bold ${Math.max(8, fontSize)}px monospace`;
+    ctx.fillText(objDef.friendlyName, cx, cy);
+
+    // Icon symbol at top
+    const icon = objDef.door ? '🚪' : objDef.nPowerOutput > 0 ? '⚡' :
+      objDef.oxygenLevel > 0 ? '🌿' : objDef.nPowerDraw > 0 ? '⚙' : '▪';
+    ctx.font = `${Math.max(12, Math.floor(h * 0.15))}px serif`;
+    ctx.fillText(icon, cx, cy - dh * 0.6);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    textureCache.set(placeholderKey, tex);
+  }
 }

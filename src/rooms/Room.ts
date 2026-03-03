@@ -23,6 +23,9 @@ export class Room {
   nPowerDraw = 0;
   nPowerSupply = 0;
 
+  /** Room morale score: sum of object morale scores / room size. */
+  nMoraleScore = 0;
+
   constructor(id: number) {
     this.id = id;
   }

@@ -4,6 +4,7 @@
  */
 
 import { Event } from './Event';
+import { Base } from '../core/Base';
 
 export class MeteorEvent extends Event {
   readonly name = 'Meteor';
@@ -12,6 +13,9 @@ export class MeteorEvent extends Event {
   private meteorCount: number;
   private meteorsLanded = 0;
   private nextMeteorTime = 0;
+
+  /** Callback fired each time a meteor lands. */
+  onMeteorLandCallback: (() => void) | null = null;
 
   constructor() {
     super();
@@ -25,9 +29,12 @@ export class MeteorEvent extends Event {
     }
 
     if (this.elapsedTime >= this.nextMeteorTime) {
-      // Land a meteor (tile damage will be implemented with World.onTick)
       this.meteorsLanded++;
       this.nextMeteorTime = this.elapsedTime + 2 + Math.random() * 3;
+
+      // Fire meteor land callback
+      this.onMeteorLandCallback?.();
+      Base.addAlert('meteor', `Meteor impact! (${this.meteorsLanded}/${this.meteorCount})`);
     }
   }
 }

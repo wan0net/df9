@@ -20,7 +20,7 @@ export class SleepInBed extends Task {
     if (this.elapsedTime >= this.duration) {
       // Morale bonus for sleeping in bed
       if (this.character) {
-        this.character.nMorale = Math.min(100, this.character.nMorale + MORALE_WOKE_UP_BED);
+        this.character.addMorale(MORALE_WOKE_UP_BED);
       }
       this.complete();
     }

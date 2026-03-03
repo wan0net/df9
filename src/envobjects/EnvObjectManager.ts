@@ -11,10 +11,16 @@ import { GameRules, type TickableSystem } from '../core/GameRules';
 import type { Room } from '../rooms/Room';
 import type { RoomManager } from '../rooms/RoomManager';
 
+export type EnvObjectCallback = (id: number, obj: EnvObject) => void;
+
 class EnvObjectManagerClass implements TickableSystem {
   private objects: Map<number, EnvObject> = new Map();
   private nextId = 1;
   private roomManager: RoomManager | null = null;
+
+  // Renderer callbacks
+  onObjectCreated: EnvObjectCallback | null = null;
+  onObjectRemoved: ((id: number) => void) | null = null;
 
   /** Initialize and register with GameRules tick pipeline. */
   init(roomManager: RoomManager) {
@@ -39,6 +45,7 @@ class EnvObjectManagerClass implements TickableSystem {
     }
 
     const id = this.nextId++;
+    obj.id = id;
     this.objects.set(id, obj);
 
     // Assign room
@@ -49,6 +56,9 @@ class EnvObjectManagerClass implements TickableSystem {
       }
     }
 
+    // Notify renderer
+    this.onObjectCreated?.(id, obj);
+
     return obj;
   }
 
@@ -58,9 +68,15 @@ class EnvObjectManagerClass implements TickableSystem {
       if (o === obj) {
         this.objects.delete(id);
         obj.remove();
+        this.onObjectRemoved?.(id);
         return;
       }
     }
+  }
+
+  /** Find object ID by object reference. */
+  getObjectId(obj: EnvObject): number {
+    return obj.id;
   }
 
   /** Get all managed objects. */
@@ -124,6 +140,38 @@ class EnvObjectManagerClass implements TickableSystem {
     for (const obj of this.objects.values()) {
       obj.onTick(dt);
     }
+    this.updateRoomMoraleScores();
+  }
+
+  /** Recalculate morale score for each room based on its objects. */
+  private updateRoomMoraleScores() {
+    if (!this.roomManager) return;
+    // Reset all room morale scores
+    for (const room of this.roomManager.getRooms()) {
+      room.nMoraleScore = 0;
+    }
+    // Sum morale from built objects
+    for (const obj of this.objects.values()) {
+      if (!obj.bBuilt || !obj.rRoom) continue;
+      obj.rRoom.nMoraleScore += obj.tData.nMoraleScore;
+    }
+    // Normalize by room size
+    for (const room of this.roomManager.getRooms()) {
+      if (room.size > 0) {
+        room.nMoraleScore = room.nMoraleScore / room.size;
+      }
+    }
+  }
+
+  /** Get total morale score from objects in a room (raw sum). */
+  getRoomMoraleScore(room: Room): number {
+    let total = 0;
+    for (const obj of this.objects.values()) {
+      if (obj.rRoom === room && obj.bBuilt) {
+        total += obj.tData.nMoraleScore;
+      }
+    }
+    return total;
   }
 
   /** Get count of objects */

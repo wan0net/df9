@@ -48,7 +48,8 @@ src/
 ├── power/               # Power system
 ├── lighting/            # Room lighting
 ├── hazards/             # Fire, projectiles
-├── events/              # Event controller
+├── events/              # Event controller, immigration, meteor
+├── pickups/             # Corpse, debris pickups
 └── save/                # Save/load system
 e2e/
 └── game.spec.ts         # Playwright E2E tests
@@ -87,6 +88,9 @@ Walls exist as tile type `WALL=4` in the grid for room boundary logic, but rende
 - Dev server auto-starts via `webServer` config (port 5173)
 - Game state exposed via `window.__df9` in `src/main.ts` for test assertions:
   - `getPopulation()`, `getMatter()`, `getRoomCount()`, `getBuildMode()`, `getCharacters()`
+  - `getEnvObjects()`, `getPickups()`, `getRooms()`, `getCommands()`, `getWallTiles()`
+  - `placeObject()`, `createBuiltObject()`, `setZone()`
+  - `killCharacter()`, `spawnCharacterAt()`, `triggerImmigration()`
 
 ### Workflow
 **After building any new feature**, always:

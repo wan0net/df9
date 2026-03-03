@@ -15,11 +15,19 @@ const EVENT_CHECK_INTERVAL = 60;
 /** Time before first event. */
 const FIRST_EVENT_DELAY = 400;
 
+export type SpawnCharacterFn = (count: number) => void;
+export type MeteorLandFn = () => void;
+
 export class EventController implements TickableSystem {
   private activeEvents: Event[] = [];
   private tickAccum = 0;
   private lastEventTime = 0;
   private population = 0;
+
+  /** Callback to spawn immigrant characters. Set from main.ts. */
+  onImmigration: SpawnCharacterFn | null = null;
+  /** Callback when a meteor lands. Set from main.ts. */
+  onMeteorLand: MeteorLandFn | null = null;
 
   init() {
     // Register at slot 1 (EventController.onTick in Lua tick order)
@@ -85,12 +93,24 @@ export class EventController implements TickableSystem {
     let event: Event | null = null;
 
     switch (def.name) {
-      case 'Immigration':
-        event = new ImmigrationEvent();
+      case 'Immigration': {
+        const immEvent = new ImmigrationEvent();
+        immEvent.onCompleteCallback = () => {
+          const count = immEvent.getImmigrantCount();
+          this.onImmigration?.(count);
+          Base.addAlert('immigration', `${count} new crew member${count > 1 ? 's' : ''} arrived!`);
+        };
+        event = immEvent;
         break;
-      case 'Meteor Shower':
-        event = new MeteorEvent();
+      }
+      case 'Meteor Shower': {
+        const meteorEvent = new MeteorEvent();
+        meteorEvent.onMeteorLandCallback = () => {
+          this.onMeteorLand?.();
+        };
+        event = meteorEvent;
         break;
+      }
       default:
         return; // Not yet implemented
     }
