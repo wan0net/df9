@@ -11,18 +11,21 @@ export class HostileImmigrationEvent extends Event {
 
   private raiderCount: number;
 
-  constructor() {
+  /** Approach time before raiders arrive. */
+  private static readonly APPROACH_TIME = 15;
+
+  constructor(raiderCount?: number) {
     super();
-    this.raiderCount = 2 + Math.floor(Math.random() * 3); // 2-4 raiders
+    this.raiderCount = raiderCount ?? (2 + Math.floor(Math.random() * 3)); // 2-4 raiders
   }
 
   getRaiderCount(): number {
     return this.raiderCount;
   }
 
-  protected onUpdate(dt: number) {
+  protected onUpdate(_dt: number) {
     // Raiders arrive after approach period
-    if (this.elapsedTime >= 15) {
+    if (this.elapsedTime >= HostileImmigrationEvent.APPROACH_TIME) {
       this.complete();
     }
   }

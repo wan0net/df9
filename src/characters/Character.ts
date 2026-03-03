@@ -14,10 +14,12 @@ import {
   MORALE_SPEED_THRESHOLD, MORALE_LOW_SPEED_MODIFIER, MORALE_HIGH_SPEED_MODIFIER,
   EXPERIENCE_PER_LEVEL, MAX_COMPETENCY,
   MAX_CHANCE_TO_FAIL, NO_FAIL_COMPETENCY_THRESHOLD,
-  STATUS_HEALTHY, STATUS_DEAD,
+  STATUS_HEALTHY, STATUS_DEAD, STATUS_SICK, STATUS_ILL, STATUS_INCAPACITATED,
   CAUSE_OF_DEATH,
   SPACESUIT_MAX_OXYGEN,
 } from './CharacterConstants';
+import { Malady } from '../malady/Malady';
+import { Inventory } from '../inventory/Inventory';
 import type { Task } from '../utility/Task';
 
 /** Character stats block (mirrors Lua tStats) */
@@ -53,11 +55,13 @@ export class Character {
   // Spacewalking (original: tStatus.bSpacewalking)
   bSpacewalking = false;
 
-  // ── Equipment & inventory (M5c) ──────────────────────────────
-  /** Disease tracking (wired in M10) */
-  maladies: unknown[] = [];
-  /** Items carried (MAX_INVENTORY = 5, wired in M10) */
-  inventory: unknown[] = [];
+  // ── Equipment & inventory ───────────────────────────────────
+  /** Active diseases/maladies. */
+  maladies: Malady[] = [];
+  /** Items carried. */
+  inventory = new Inventory();
+  /** Max items in inventory. */
+  static readonly MAX_INVENTORY = 5;
   /** Equipped weapon name, null if unarmed */
   weapon: string | null = null;
   /** Whether character is wearing a spacesuit */
@@ -149,6 +153,26 @@ export class Character {
     } else if (!this.bOnShift && this.shiftTimer >= Character.SHIFT_COOLDOWN) {
       this.bOnShift = true;
       this.shiftTimer = 0;
+    }
+
+    // Update maladies — apply damage
+    for (let i = this.maladies.length - 1; i >= 0; i--) {
+      const malady = this.maladies[i];
+      const dmg = malady.update(dtSec);
+      if (dmg > 0) {
+        this.damage(dmg, CAUSE_OF_DEATH.DISEASE);
+      }
+      if (malady.isExpired()) {
+        this.maladies.splice(i, 1);
+      }
+    }
+
+    // Update status based on maladies
+    if (this.maladies.length > 0 && this.tStats.nStatus === STATUS_HEALTHY) {
+      const hasSevere = this.maladies.some(m => m.def.nDamagePerSecond >= 0.3);
+      this.tStats.nStatus = hasSevere ? STATUS_ILL : STATUS_SICK;
+    } else if (this.maladies.length === 0 && (this.tStats.nStatus === STATUS_SICK || this.tStats.nStatus === STATUS_ILL)) {
+      this.tStats.nStatus = STATUS_HEALTHY;
     }
 
     if (this.moving) {
@@ -295,6 +319,27 @@ export class Character {
     this.moveTo = { x: next.x, y: next.y };
     this.moveProgress = 0;
     this.moving = true;
+  }
+
+  /** Infect with a malady by name. Returns true if infected (not already infected with same). */
+  infectWith(maladyName: string): boolean {
+    if (this.maladies.some(m => m.def.sName === maladyName)) return false;
+    try {
+      this.maladies.push(new Malady(maladyName));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Check if character has a specific malady. */
+  hasMalady(maladyName: string): boolean {
+    return this.maladies.some(m => m.def.sName === maladyName);
+  }
+
+  /** Check if character can carry more items. */
+  canCarry(): boolean {
+    return this.inventory.getAll().reduce((sum, i) => sum + i.nCount, 0) < Character.MAX_INVENTORY;
   }
 
   destroy() {

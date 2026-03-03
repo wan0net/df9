@@ -6,6 +6,41 @@
 import { GameRules, SAVEGAME_VERSION } from '../core/GameRules';
 import type { TileGrid } from '../world/TileGrid';
 import type { RoomManager } from '../rooms/RoomManager';
+import type { CharacterManager } from '../characters/CharacterManager';
+import type { EnvObjectManager as EnvObjMgrType } from '../envobjects/EnvObjectManager';
+import type { EventController } from '../events/EventController';
+
+// ── Save data interfaces ────────────────────────────────────────
+
+export interface CharSaveData {
+  id: number;
+  tileX: number;
+  tileY: number;
+  name: string;
+  job: number;
+  team: number;
+  hp: number;
+  maxHP: number;
+  status: number;
+  xp: number;
+  competency: Record<number, number>;
+  morale: number;
+  anger: number;
+  bOnShift: boolean;
+  weapon: string | null;
+  bSpacesuit: boolean;
+  nSuitOxygen: number;
+  maladies: { name: string; elapsed: number }[];
+}
+
+export interface ObjSaveData {
+  name: string;
+  tileX: number;
+  tileY: number;
+  built: boolean;
+  condition: number;
+  hasPower: boolean;
+}
 
 export interface SaveData {
   version: number;
@@ -14,19 +49,30 @@ export interface SaveData {
   elapsedTime: number;
   SPACEDATE_BASE: number;
   playerTimeScale: number;
-  // Grid is stored as compressed tile data
   gridWidth: number;
   gridHeight: number;
   gridData: number[];
-  // Additional state added by entity classes
-  characters: Record<string, unknown>[];
-  objects: Record<string, unknown>[];
-  research: string[];
+  characters: CharSaveData[];
+  objects: ObjSaveData[];
+  research: { active: string | null; progress: number; completed: string[] };
+  roomZones: { roomId: number; zone: string }[];
+  events?: ReturnType<EventController['getSaveData']>;
 }
 
 export class SaveLoadSystem {
   private grid: TileGrid;
   private roomManager: RoomManager;
+
+  /** External data providers set from main.ts */
+  getCharacterData: (() => CharSaveData[]) | null = null;
+  getObjectData: (() => ObjSaveData[]) | null = null;
+  getResearchData: (() => { active: string | null; progress: number; completed: string[] }) | null = null;
+  getEventData: (() => ReturnType<EventController['getSaveData']>) | null = null;
+
+  loadCharacterData: ((data: CharSaveData[]) => void) | null = null;
+  loadObjectData: ((data: ObjSaveData[]) => void) | null = null;
+  loadResearchData: ((data: { active: string | null; progress: number; completed: string[] }) => void) | null = null;
+  loadEventData: ((data: ReturnType<EventController['getSaveData']>) => void) | null = null;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -43,6 +89,12 @@ export class SaveLoadSystem {
       }
     }
 
+    // Room zones
+    const roomZones = this.roomManager.getRooms().map(r => ({
+      roomId: r.id,
+      zone: r.zone as string,
+    }));
+
     return {
       version: SAVEGAME_VERSION,
       nMatter: GameRules.nMatter,
@@ -53,9 +105,11 @@ export class SaveLoadSystem {
       gridWidth: this.grid.width,
       gridHeight: this.grid.height,
       gridData,
-      characters: [], // Filled by CharacterManager.getSaveData()
-      objects: [], // Filled by EnvObjectManager.getSaveData()
-      research: [], // Filled by ResearchSystem
+      characters: this.getCharacterData?.() ?? [],
+      objects: this.getObjectData?.() ?? [],
+      research: this.getResearchData?.() ?? { active: null, progress: 0, completed: [] },
+      roomZones,
+      events: this.getEventData?.(),
     };
   }
 
@@ -109,6 +163,12 @@ export class SaveLoadSystem {
 
     // Mark rooms dirty for re-detection
     this.roomManager.markDirty([]);
+
+    // Restore subsystem data
+    if (data.characters) this.loadCharacterData?.(data.characters);
+    if (data.objects) this.loadObjectData?.(data.objects);
+    if (data.research) this.loadResearchData?.(data.research);
+    if (data.events) this.loadEventData?.(data.events);
 
     return true;
   }

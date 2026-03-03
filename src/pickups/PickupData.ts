@@ -28,4 +28,18 @@ export const PICKUP_DEFS: Record<string, PickupDef> = {
     bPickupable: true,
     nMatterValue: 10,
   },
+  Rock: {
+    sName: 'Rock',
+    friendlyName: 'Mined Rock',
+    spriteName: 'rock',
+    bPickupable: true,
+    nMatterValue: 50,
+  },
+  Food: {
+    sName: 'Food',
+    friendlyName: 'Food',
+    spriteName: 'food',
+    bPickupable: true,
+    nMatterValue: 5,
+  },
 };

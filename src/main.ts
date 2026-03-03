@@ -36,6 +36,11 @@ import { Fire } from './hazards/Fire';
 import { ProjectileManager } from './hazards/Projectile';
 import { SaveLoadSystem } from './save/SaveLoad';
 import { researchSystem } from './research/ResearchSystem';
+import { GoalSystem } from './goals/GoalSystem';
+import { HintSystem } from './hints/HintSystem';
+import { SoundManager } from './audio/SoundManager';
+import { MusicSystem } from './audio/MusicSystem';
+import { SpatialAudio } from './audio/SpatialAudio';
 import { generateWorld } from './world/WorldGen';
 import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
@@ -130,6 +135,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     exit() {},
   });
 
+  // ── Initialize audio ──────────────────────────────────────
+  SoundManager.init();
+  SoundManager.generateFallbackSounds();
+  const musicSystem = new MusicSystem();
+  musicSystem.startGame();
+
   // ── Initialize Three.js renderer ──────────────────────────
   const threeRenderer = new ThreeRenderer(container);
   const cameraController = new CameraController3D(threeRenderer);
@@ -197,11 +208,93 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Force room re-detection (breach)
     roomManager.markDirty([tile]);
   };
+  eventController.onHostileSpawn = (count, hp) => {
+    characterManager.spawnHostiles(count, hp);
+  };
+  eventController.onBreachWall = () => {
+    // Pick a random wall tile adjacent to a room and destroy it
+    const rooms = roomManager.getRooms();
+    if (rooms.length === 0) return;
+    const room = rooms[Math.floor(Math.random() * rooms.length)];
+    if (room.tiles.length === 0) return;
+    // Find a wall adjacent to this room
+    for (const t of room.tiles) {
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        const nx = t.x + dx, ny = t.y + dy;
+        if (grid.get(nx, ny) === TileType.WALL) {
+          grid.set(nx, ny, TileType.WALL_DESTROYED);
+          fire.startFire(nx, ny);
+          roomManager.markDirty([{ x: nx, y: ny }]);
+          return;
+        }
+      }
+    }
+  };
+  eventController.onDocking = (count) => {
+    // Friendly docking — spawn immigrants
+    for (let i = 0; i < count; i++) {
+      characterManager.spawnCharacter();
+    }
+  };
   const fire = new Fire();
   fire.init();
+  characterManager.setFire(fire);
+  fire.tileCheck = (x, y) => grid.get(x, y);
   const projectileManager = new ProjectileManager();
   projectileManager.init();
+  characterManager.setProjectileManager(projectileManager);
   const saveLoadSystem = new SaveLoadSystem(grid, roomManager);
+
+  // Goal system
+  let _hostilesDefeated = 0;
+  let _siegeSurvived = 0;
+  const goalSystem: GoalSystem = new GoalSystem({
+    getRoomCount: () => roomManager.getRooms().length,
+    getPopulation: () => characterManager.getPopulation(),
+    getResearchCompleted: () => researchSystem.getCompletedList().length,
+    getHostilesDefeated: () => _hostilesDefeated,
+    getMatter: () => GameRules.nMatter,
+    getUniqueZones: () => {
+      const zones = new Set(roomManager.getRooms().map(r => r.zone));
+      return zones.size;
+    },
+    getSiegeSurvived: () => _siegeSurvived,
+    getAllMoraleAbove: (threshold: number) => {
+      const chars = characterManager.getCharacters();
+      return chars.length > 0 && chars.every(c => c.nMorale > threshold);
+    },
+  });
+
+  // Hint system
+  const hintSystem = new HintSystem({
+    hasEnclosedRooms: () => roomManager.getRooms().length > 0,
+    hasZonedRoom: () => roomManager.getRooms().some(r => r.zone !== 'PLAIN'),
+    hasStartedResearch: () => researchSystem.getActiveResearch() !== null || researchSystem.getCompletedList().length > 0,
+    hasBuiltObject: () => EnvObjectManager.getObjects().some(o => o.bBuilt),
+    getPopulation: () => characterManager.getPopulation(),
+    hasHostiles: () => characterManager.getHostileCount() > 0,
+  });
+
+  // Wire save/load data providers
+  saveLoadSystem.getCharacterData = () => characterManager.getCharacters().map(c => ({
+    id: c.id, tileX: c.tileX, tileY: c.tileY,
+    name: c.getName(), job: c.getJob(), team: c.tStats.nTeam,
+    hp: c.getHP(), maxHP: c.tStats.nMaxHP, status: c.tStats.nStatus,
+    xp: c.tStats.nXP, competency: { ...c.tStats.tCompetency },
+    morale: c.nMorale, anger: c.nAnger, bOnShift: c.bOnShift,
+    weapon: c.weapon, bSpacesuit: c.bSpacesuit, nSuitOxygen: c.nSuitOxygen,
+    maladies: c.maladies.map(m => ({ name: m.def.sName, elapsed: m.elapsedTime })),
+  }));
+  saveLoadSystem.getObjectData = () => EnvObjectManager.getObjects().map(o => ({
+    name: o.sName, tileX: o.tileX, tileY: o.tileY,
+    built: o.bBuilt, condition: o.nCondition, hasPower: o.bHasPower,
+  }));
+  saveLoadSystem.getResearchData = () => ({
+    active: researchSystem.getActiveResearch(),
+    progress: researchSystem.getProgress(),
+    completed: researchSystem.getCompletedList(),
+  });
+  saveLoadSystem.getEventData = () => eventController.getSaveData();
 
   // Register subsystems
   GameRules.registerSystem(2, new OxygenTickAdapter(oxygenSystem));
@@ -348,6 +441,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Master tick
     GameRules.onTick(delta / 1000);
+
+    // Goal, hint, and music systems
+    const gameDt = (delta / 1000) * GameRules.playerTimeScale;
+    goalSystem.update(gameDt);
+    hintSystem.update(gameDt);
+    musicSystem.update(delta / 1000); // Music uses real time, not game time
+
+    // Update audio listener position from camera
+    SoundManager.setListenerPosition(cameraController.scrollX, cameraController.scrollY);
+    SoundManager.setZoomDepth(Math.min(1, Math.max(0, (cameraController.zoom - 0.5) / 1.5)));
 
     // O2 overlay
     if (showO2Overlay) {
@@ -519,6 +622,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       job: c.getJob(), taskName: c.currentTask?.name ?? null,
       hunger: c.needs.hunger, energy: c.needs.energy,
       morale: c.nMorale, anger: c.nAnger, rampaging: c.bRampaging,
+      team: c.tStats.nTeam, hp: c.getHP(), alive: c.isAlive(),
     })),
     getCommands: () => CommandQueue.getAllActive().map(c => ({
       id: c.id, type: c.type, tileX: c.tileX, tileY: c.tileY,
@@ -563,7 +667,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       name: p.sName, tileX: p.tileX, tileY: p.tileY, pickedUp: p.bPickedUp,
     })),
     killCharacter: (charId: number, cause: number) => {
-      const char = characterManager.getCharacters().find(c => c.id === charId);
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
       if (char) { char.kill(cause); return true; }
       return false;
     },
@@ -587,6 +691,81 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         room.zone = zone as ZoneType;
         roomManager.persistZone(room);
       }
+    },
+    // ── Milestone 9: Combat & Events ─────────────────────────
+    spawnHostiles: (count: number, hp?: number) => {
+      characterManager.spawnHostiles(count, hp);
+    },
+    spawnHostileAt: (tileX: number, tileY: number, hp?: number) => {
+      const char = characterManager.spawnCharacterAt(tileX, tileY);
+      char.tStats.nTeam = -2; // TEAM_ID_DEBUG_ENEMYGROUP
+      char.tStats.nJob = 6; // RAIDER
+      char.tStats.sName = 'Raider';
+      char.weapon = 'LaserPistol';
+      if (hp) { char.tStats.nHP = hp; char.tStats.nMaxHP = hp; }
+      return char.id;
+    },
+    getHostileCount: () => characterManager.getHostileCount(),
+    getAllCharacters: () => characterManager.getAllCharacters().map(c => ({
+      id: c.id, x: c.tileX, y: c.tileY, moving: c.moving,
+      team: c.tStats.nTeam, job: c.getJob(), hp: c.getHP(),
+      alive: c.isAlive(), taskName: c.currentTask?.name ?? null,
+      weapon: c.weapon, rampaging: c.bRampaging,
+    })),
+    getCombatEngagements: () => characterManager.combatSystem.getEngagementCount(),
+    getEventForecast: () => eventController.getForecast(),
+    getActiveEvents: () => eventController.getActiveEvents().map(e => ({
+      name: e.name, description: e.description, active: e.isActive(),
+    })),
+    getFireCount: () => fire.getFireCount(),
+    getActiveFires: () => fire.getActiveFires(),
+    startFire: (x: number, y: number) => fire.startFire(x, y),
+    infectCharacter: (charId: number, maladyName: string) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (char) return char.infectWith(maladyName);
+      return false;
+    },
+    getCharacterMaladies: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return [];
+      return char.maladies.map(m => ({ name: m.def.sName, cured: m.bCured, elapsed: m.elapsedTime }));
+    },
+    getDiseasedCount: () => {
+      return characterManager.getAllCharacters().filter(c => c.isAlive() && c.maladies.length > 0).length;
+    },
+    // ── Milestone 11: Goals, Hints, Save/Load ────────────────
+    getGoals: () => ({
+      completed: goalSystem.getCompleted(),
+      completedCount: goalSystem.getCompletedCount(),
+      totalGoals: goalSystem.getTotalGoals(),
+    }),
+    getHints: () => hintSystem.getShownHints(),
+    saveGame: () => saveLoadSystem.saveToStorage('df9_test_save'),
+    loadGame: () => saveLoadSystem.loadFromStorage('df9_test_save'),
+    hasSave: () => saveLoadSystem.hasSave('df9_test_save'),
+    deleteSave: () => saveLoadSystem.deleteSave('df9_test_save'),
+    // ── Milestone 12: Audio ──────────────────────────────────
+    getAudioState: () => ({
+      initialized: SoundManager.isInitialized(),
+      muted: SoundManager.isMuted(),
+      settings: SoundManager.getSettings(),
+    }),
+    toggleMute: () => SoundManager.toggleMute(),
+    setMasterVolume: (v: number) => SoundManager.setMasterVolume(v),
+    // ── Milestone 13: Music & Ambience ───────────────────────
+    getMusicState: () => ({
+      playing: musicSystem.isPlaying(),
+      currentTrack: musicSystem.getCurrentTrack(),
+      currentAmbience: musicSystem.getCurrentAmbience(),
+    }),
+    // ── Milestone 14: Spatial SFX ────────────────────────────
+    getSpatialLoops: () => SpatialAudio.getActiveLoops(),
+    triggerDoorSound: (tileX: number, tileY: number) => {
+      SpatialAudio.doorOpen(tileX, tileY);
+    },
+    triggerJukebox: (objectId: string, tileX: number, tileY: number, start: boolean) => {
+      if (start) SpatialAudio.jukeboxStart(objectId, tileX, tileY);
+      else SpatialAudio.jukeboxStop(objectId);
     },
   };
 

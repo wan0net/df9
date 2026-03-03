@@ -34,26 +34,49 @@ npm run test:e2e # Run Playwright E2E tests (headless Chromium)
 src/
 ├── main.ts              # Three.js entry point, game loop, scene routing
 ├── config.ts            # Constants (grid size, tile size, costs)
-├── renderer/            # ThreeRenderer, CameraController3D, TileRenderer3D, CharacterRenderer
-├── world/               # Tile grid, iso math, rendering, wall auto-gen
-├── rooms/               # Room detection (BFS flood fill)
-├── oxygen/              # Per-room O2 simulation
-├── building/            # Floor/door placement, drag cursor
-├── characters/          # Characters, needs, manager
-├── pathfinding/         # A* on diamond grid
+├── audio/               # SoundManager, MusicSystem, SpatialAudio, AudioCueData
+├── building/            # Floor/door placement, drag cursor, object placement
+├── characters/          # Characters, needs, manager, personality, citizen names
+├── combat/              # CombatSystem, Squad, SquadList, WeaponData
+├── core/                # GameRules, Base, CommandQueue, ObjectList
+├── envobjects/          # Environment object manager, door, object data
+├── events/              # EventController (forecast queue), 8 event types
+├── goals/               # GoalSystem, GoalData (12 achievements)
+├── hazards/             # Fire (iso spread), Projectile manager
+├── hints/               # HintSystem (contextual tutorials)
 ├── input/               # InputManager (keyboard, mouse, pointer)
-├── ui/                  # StartMenu, NewGameScreen, UIManager (HUD, toolbar)
-├── core/                # GameRules, Base
-├── envobjects/          # Environment object manager
-├── power/               # Power system
+├── inventory/           # Inventory system, InventoryData
 ├── lighting/            # Room lighting
-├── hazards/             # Fire, projectiles
-├── events/              # Event controller, immigration, meteor
-├── pickups/             # Corpse, debris pickups
-└── save/                # Save/load system
+├── malady/              # Malady (disease), MaladyData, contagion
+├── oxygen/              # Per-room O2 simulation
+├── pathfinding/         # A* on diamond grid
+├── pickups/             # Corpse, Debris, Rock, Food pickups
+├── power/               # Power system
+├── renderer/            # ThreeRenderer, CameraController3D, TileRenderer3D, CharacterRenderer, EnvObjectRenderer
+├── research/            # ResearchSystem, ResearchData
+├── rooms/               # Room detection (BFS flood fill)
+├── save/                # SaveLoad (full state), AutoSave
+├── ui/                  # StartMenu, NewGameScreen, UIManager, InspectorPanel, JobRoster
+├── utility/             # Task base, UtilityAI, ActivityOption, 20 task types
+├── world/               # TileGrid, TileTypes, IsometricUtils, WallAutoGen, WorldGen, ZoneType, Asteroid
+└── zones/               # Zone, BedZone, BrigZone, FitnessZone, HospitalZone, Pub, ResearchZone, Airlock
 e2e/
-└── game.spec.ts         # Playwright E2E tests
+└── game.spec.ts         # 37 Playwright E2E tests
 ```
+
+### Key Systems
+
+| System | Key Files | Description |
+|--------|-----------|-------------|
+| Events | `src/events/EventController.ts` | Forecast queue (15 events), difficulty scaling, 8 event types |
+| Combat | `src/combat/CombatSystem.ts` | Melee grapple + ranged projectiles, faction hostility checks |
+| Fire | `src/hazards/Fire.ts` | Isometric adjacency spread, wall blocking, character damage |
+| Disease | `src/malady/Malady.ts` | Contagion (range 3 tiles), incubation, doctor curing |
+| Goals | `src/goals/GoalSystem.ts` | 12 achievements, checked 1/second, alert on completion |
+| Audio | `src/audio/SoundManager.ts` | Web Audio API, 4 category gains, procedural fallback beeps |
+| Music | `src/audio/MusicSystem.ts` | 5-track rotation with gaps, exterior/interior ambience |
+| Spatial | `src/audio/SpatialAudio.ts` | 3D positioned sounds for doors, machines, combat, Jukebox |
+| Save | `src/save/SaveLoad.ts` | Full state persistence: grid, characters, objects, research, events |
 
 ### Coordinate Systems
 - **Offset coords** `(x, y)`: staggered grid positions used in `TileGrid`
@@ -67,30 +90,38 @@ Walls exist as tile type `WALL=4` in the grid for room boundary logic, but rende
 | Key | Action |
 |-----|--------|
 | B | Toggle floor build mode |
+| C | Toggle room build mode |
 | D | Toggle door placement mode |
 | X | Toggle demolish mode |
-| ESC | Cancel build mode |
-| O | Toggle O2 overlay |
-| 1/2/3 | Game speed 1x/2x/4x |
-| Arrow keys | Pan camera |
-| Scroll wheel | Zoom |
-| Right/middle drag | Pan camera |
-| C | Toggle room build mode |
 | M | Toggle mine mode |
 | Z | Toggle zone assignment mode |
 | P | Toggle object placement mode |
+| I | Inspect mode (none) |
+| R | Toggle job roster |
+| O | Toggle O2 overlay |
+| 1/2/3 | Game speed 1x/2x/4x |
+| ESC | Cancel build mode / clear selection |
+| Arrow keys | Pan camera |
+| Scroll wheel | Zoom |
+| Right/middle drag | Pan camera |
 
 ## Testing
 
 ### E2E Tests (Playwright)
 - Config: `playwright.config.ts` — Chromium only, WebGL via SwiftShader for headless
-- Tests: `e2e/game.spec.ts` — serial test suite with shared browser page
+- Tests: `e2e/game.spec.ts` — 37 serial tests with shared browser page
 - Dev server auto-starts via `webServer` config (port 5173)
 - Game state exposed via `window.__df9` in `src/main.ts` for test assertions:
-  - `getPopulation()`, `getMatter()`, `getRoomCount()`, `getBuildMode()`, `getCharacters()`
-  - `getEnvObjects()`, `getPickups()`, `getRooms()`, `getCommands()`, `getWallTiles()`
-  - `placeObject()`, `createBuiltObject()`, `setZone()`
-  - `killCharacter()`, `spawnCharacterAt()`, `triggerImmigration()`
+  - **Core**: `getPopulation()`, `getMatter()`, `getRoomCount()`, `getBuildMode()`, `getCharacters()`
+  - **Objects**: `getEnvObjects()`, `getPickups()`, `getRooms()`, `getCommands()`, `getWallTiles()`
+  - **Actions**: `placeObject()`, `createBuiltObject()`, `setZone()`, `killCharacter()`, `spawnCharacterAt()`, `triggerImmigration()`
+  - **Combat**: `spawnHostiles()`, `spawnHostileAt()`, `getHostileCount()`, `getAllCharacters()`, `getCombatEngagements()`
+  - **Events**: `getEventForecast()`, `getActiveEvents()`, `getFireCount()`, `getActiveFires()`, `startFire()`
+  - **Disease**: `infectCharacter()`, `getCharacterMaladies()`, `getDiseasedCount()`
+  - **Research**: `getResearch()`, `startResearch()`
+  - **Goals**: `getGoals()`, `getHints()`
+  - **Save**: `saveGame()`, `loadGame()`, `hasSave()`, `deleteSave()`
+  - **Audio**: `getAudioState()`, `toggleMute()`, `setMasterVolume()`, `getMusicState()`, `getSpatialLoops()`, `triggerDoorSound()`, `triggerJukebox()`
 
 ### Workflow
 **After building any new feature**, always:

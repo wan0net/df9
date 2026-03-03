@@ -1,8 +1,10 @@
 import { Character } from './Character';
 import {
   MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
+  RAIDER,
   CAUSE_OF_DEATH, MORALE_CITIZEN_DIES_MIN, MORALE_CITIZEN_DIES_MAX,
   ANGER_MAX, VIOLENT_RAMPAGE_CHANCE, HURT_THRESHOLD,
+  TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -27,14 +29,21 @@ import { ResearchInLab } from '../utility/tasks/ResearchInLab';
 import { FieldScanAndHeal } from '../utility/tasks/FieldScanAndHeal';
 import { Patrol } from '../utility/tasks/Patrol';
 import { DropOffCorpse } from '../utility/tasks/DropOffCorpse';
+import { AttackEnemy } from '../utility/tasks/AttackEnemy';
+import { Cuff } from '../utility/tasks/Cuff';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { Base } from '../core/Base';
 import { Corpse } from '../pickups/Corpse';
+import { CombatSystem, isHostile } from '../combat/CombatSystem';
+import { SquadList } from '../combat/SquadList';
+import { FIRE_DAMAGE_PER_SECOND } from '../hazards/Fire';
+import type { Fire } from '../hazards/Fire';
 import type { Task } from '../utility/Task';
 import type { CharacterRenderer } from '../renderer/CharacterRenderer';
 import type { CrewSpawnPoint } from '../world/WorldGen';
 import type { Pickup } from '../pickups/Pickup';
+import type { ProjectileManager } from '../hazards/Projectile';
 
 /** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
 const UPDATES_PER_TICK = 10;
@@ -55,13 +64,37 @@ export class CharacterManager {
   /** Active pickups (corpses, debris, etc.) */
   pickups: Pickup[] = [];
 
+  /** Combat system. */
+  readonly combatSystem = new CombatSystem();
+
+  /** Fire system reference for fire damage. */
+  private fire: Fire | null = null;
+
+  /** Malady contagion check timer. */
+  private contagionTimer = 0;
+  /** Contagion check interval in seconds. */
+  private static readonly CONTAGION_INTERVAL = 5;
+  /** Contagion range in tiles (manhattan distance). */
+  private static readonly CONTAGION_RANGE = 3;
+
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
     this.roomManager = roomManager;
+
+    // Create default security squad
+    SquadList.createSquad('Alpha Squad');
   }
 
   setRenderer(renderer: CharacterRenderer) {
     this.characterRenderer = renderer;
+  }
+
+  setProjectileManager(pm: ProjectileManager) {
+    this.combatSystem.setProjectileManager(pm);
+  }
+
+  setFire(fire: Fire) {
+    this.fire = fire;
   }
 
   getCharacters(): Character[] {
@@ -69,7 +102,12 @@ export class CharacterManager {
   }
 
   getPopulation(): number {
-    return this.characters.length;
+    return this.characters.filter(c => c.tStats.nTeam === TEAM_ID_PLAYER).length;
+  }
+
+  /** Get all characters including hostiles. */
+  getAllCharacters(): Character[] {
+    return this.characters;
   }
 
   /**
@@ -118,6 +156,28 @@ export class CharacterManager {
       this.characterRenderer?.updateCharacter(char);
     }
 
+    // Fire damage to characters on fire tiles
+    if (this.fire) {
+      const fireTiles = this.fire.getFireTiles();
+      for (const char of this.characters) {
+        if (!char.isAlive()) continue;
+        const key = `${char.tileX},${char.tileY}`;
+        if (fireTiles.has(key)) {
+          char.damage(FIRE_DAMAGE_PER_SECOND * dtSec, CAUSE_OF_DEATH.FIRE);
+        }
+      }
+    }
+
+    // Malady contagion
+    this.contagionTimer += dtSec;
+    if (this.contagionTimer >= CharacterManager.CONTAGION_INTERVAL) {
+      this.contagionTimer -= CharacterManager.CONTAGION_INTERVAL;
+      this.processContagion();
+    }
+
+    // Process combat
+    this.processCombat(dtSec);
+
     // Handle dead characters → corpse conversion
     this.processDeaths();
 
@@ -143,6 +203,42 @@ export class CharacterManager {
     }
   }
 
+  /** Spawn hostile raiders in a random room. */
+  spawnHostiles(count: number, hp: number = STARTING_HIT_POINTS) {
+    const rooms = this.roomManager.getRooms();
+    if (rooms.length === 0) return;
+
+    for (let i = 0; i < count; i++) {
+      const room = rooms[Math.floor(Math.random() * rooms.length)];
+      if (room.tiles.length === 0) continue;
+      const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+
+      const char = new Character(this.nextId++, tile.x, tile.y);
+      char.tStats.nTeam = TEAM_ID_DEBUG_ENEMYGROUP;
+      char.tStats.nJob = RAIDER;
+      char.tStats.nHP = hp;
+      char.tStats.nMaxHP = hp;
+      char.tStats.sName = `Raider ${i + 1}`;
+      char.weapon = 'LaserPistol';
+
+      this.characterRenderer?.createCharacter(char);
+      this.characters.push(char);
+    }
+  }
+
+  /** Process combat system — resolve hits. */
+  private processCombat(dt: number) {
+    const hits = this.combatSystem.update(dt, (id) => this.characters.find(c => c.id === id));
+
+    for (const hit of hits) {
+      const defender = this.characters.find(c => c.id === hit.defenderId);
+      if (defender && defender.isAlive()) {
+        const cause = CombatSystem.getCauseFromDamageType(hit.damageType);
+        defender.damage(hit.damage, cause);
+      }
+    }
+  }
+
   /** Convert dead characters into corpses and remove them. */
   private processDeaths() {
     for (let i = this.characters.length - 1; i >= 0; i--) {
@@ -152,18 +248,28 @@ export class CharacterManager {
         const corpse = new Corpse(char.tileX, char.tileY, char.getName(), char.nCauseOfDeath);
         this.pickups.push(corpse);
 
+        // Disengage from combat
+        this.combatSystem.disengage(char.id);
+
         // Log death alert
         const causeName = Object.entries(CAUSE_OF_DEATH).find(([, v]) => v === char.nCauseOfDeath)?.[0] ?? 'unknown';
         Base.addAlert('death', `${char.getName()} has died (${causeName.toLowerCase()})`);
 
-        // Morale hit on all living characters
-        for (const other of this.characters) {
-          if (other === char || !other.isAlive()) continue;
-          const affinity = other.tAffinity.get(char.id) ?? 0;
-          const scale = Math.min(1, affinity / 10);
-          const hit = MORALE_CITIZEN_DIES_MIN + scale * (MORALE_CITIZEN_DIES_MAX - MORALE_CITIZEN_DIES_MIN);
-          other.nMorale = Math.max(-100, other.nMorale + hit);
+        // Morale hit on all living player characters (not for enemy deaths)
+        if (char.tStats.nTeam === TEAM_ID_PLAYER) {
+          for (const other of this.characters) {
+            if (other === char || !other.isAlive()) continue;
+            if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+            const affinity = other.tAffinity.get(char.id) ?? 0;
+            const scale = Math.min(1, affinity / 10);
+            const hit = MORALE_CITIZEN_DIES_MIN + scale * (MORALE_CITIZEN_DIES_MAX - MORALE_CITIZEN_DIES_MIN);
+            other.nMorale = Math.max(-100, other.nMorale + hit);
+          }
         }
+
+        // Remove from squads
+        const squad = SquadList.getSquadForChar(char.id);
+        if (squad) squad.removeMember(char.id);
 
         // Remove from renderer and character list
         this.characterRenderer?.destroyCharacter(char.id);
@@ -185,6 +291,34 @@ export class CharacterManager {
   /** Get all active pickups. */
   getPickups(): Pickup[] {
     return this.pickups;
+  }
+
+  /** Get count of hostile characters currently alive. */
+  getHostileCount(): number {
+    return this.characters.filter(c => c.isAlive() && isHostile(TEAM_ID_PLAYER, c.tStats.nTeam)).length;
+  }
+
+  /** Check malady contagion between nearby characters. */
+  private processContagion() {
+    for (const carrier of this.characters) {
+      if (!carrier.isAlive() || carrier.maladies.length === 0) continue;
+
+      for (const malady of carrier.maladies) {
+        if (!malady.def.bContagious || malady.bCured) continue;
+
+        for (const other of this.characters) {
+          if (other === carrier || !other.isAlive()) continue;
+
+          const dist = Math.abs(carrier.tileX - other.tileX) + Math.abs(carrier.tileY - other.tileY);
+          if (dist > CharacterManager.CONTAGION_RANGE) continue;
+
+          // Spread chance
+          if (Math.random() < malady.def.nSpreadChance) {
+            other.infectWith(malady.def.sName);
+          }
+        }
+      }
+    }
   }
 
   private runAI() {
@@ -219,6 +353,13 @@ export class CharacterManager {
       if (!charRoom && this.grid.get(char.tileX, char.tileY) === TileType.SPACE) {
         char.bSpacewalking = true;
         this.seekNearestRoom(char);
+        processed++;
+        continue;
+      }
+
+      // Hostile AI: attack nearest player character
+      if (isHostile(TEAM_ID_PLAYER, char.tStats.nTeam)) {
+        this.runHostileAI(char);
         processed++;
         continue;
       }
@@ -259,6 +400,23 @@ export class CharacterManager {
     }
   }
 
+  /** Run hostile AI — attack nearest player character. */
+  private runHostileAI(char: Character) {
+    const target = this.combatSystem.findNearestHostile(char, this.characters);
+    if (target) {
+      const task = new AttackEnemy(target.id);
+      task.targetX = target.tileX;
+      task.targetY = target.tileY;
+      this.assignTask(char, task);
+
+      // Engage in combat system
+      this.combatSystem.engage(char, target);
+    } else {
+      // No targets — wander
+      this.wander(char);
+    }
+  }
+
   /** Gather all available activity options for a character. */
   private gatherOptions(character: Character): ActivityOption[] {
     const options: ActivityOption[] = [];
@@ -284,6 +442,7 @@ export class CharacterManager {
       for (const other of this.characters) {
         if (other === character) continue;
         if (!other.isAlive()) continue;
+        if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue; // Don't chat with hostiles
         const otherRoom = this.roomManager.getRoomAt(other.tileX, other.tileY);
         if (otherRoom === room) {
           const chatPriority = 2 + character.tStats.personality.nGregariousness * 4;
@@ -368,6 +527,34 @@ export class CharacterManager {
       ));
     }
 
+    // ── Combat response: attack hostiles ────────────────────
+    if (job === EMERGENCY || this.getHostileCount() > 0) {
+      const nearest = this.combatSystem.findNearestHostile(character, this.characters);
+      if (nearest) {
+        const combatPriority = job === EMERGENCY ? 15 : 5;
+        const attackTask = new AttackEnemy(nearest.id);
+        options.push(new ActivityOption(
+          attackTask,
+          nearest.tileX, nearest.tileY,
+          combatPriority,
+        ));
+      }
+    }
+
+    // ── Security: cuff rampaging citizens ────────────────────
+    if (job === EMERGENCY) {
+      for (const other of this.characters) {
+        if (other === character || !other.isAlive()) continue;
+        if (other.bRampaging && other.tStats.nTeam === TEAM_ID_PLAYER) {
+          options.push(new ActivityOption(
+            new Cuff(other.id),
+            other.tileX, other.tileY,
+            12,
+          ));
+        }
+      }
+    }
+
     // ── Job-specific tasks ────────────────────────────────────
     const shiftBoost = character.bOnShift ? 2 : 0;
 
@@ -414,6 +601,7 @@ export class CharacterManager {
     if (job === DOCTOR) {
       for (const other of this.characters) {
         if (other === character || !other.isAlive()) continue;
+        if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue; // Don't heal hostiles
         if (other.tStats.nHP < HURT_THRESHOLD) {
           options.push(new ActivityOption(
             new FieldScanAndHeal(other),
@@ -464,6 +652,15 @@ export class CharacterManager {
       const path = findPath(this.grid, char.tileX, char.tileY, task.targetX, task.targetY, maxNodes, filter);
       if (path && path.length > 0) {
         char.startPath(path);
+      }
+    }
+
+    // Start combat engagement if this is an AttackEnemy task
+    if (task instanceof AttackEnemy) {
+      const targetId = task.getTargetCharId();
+      const target = this.characters.find(c => c.id === targetId);
+      if (target) {
+        this.combatSystem.engage(char, target);
       }
     }
 
