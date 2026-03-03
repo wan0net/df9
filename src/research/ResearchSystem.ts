@@ -4,6 +4,7 @@
  */
 
 import { RESEARCH_DEFS, type ResearchDef } from './ResearchData';
+import { Base } from '../core/Base';
 
 export class ResearchSystem {
   /** Completed research IDs. */
@@ -44,8 +45,10 @@ export class ResearchSystem {
 
   private completeResearch(researchId: string) {
     this.completed.add(researchId);
+    const def = RESEARCH_DEFS[researchId];
     this.activeResearch = null;
     this.progress = 0;
+    Base.addAlert('research', `Research complete: ${def?.friendlyName ?? researchId}`);
   }
 
   /** Check if a research topic is completed. */
@@ -67,4 +70,8 @@ export class ResearchSystem {
   getActiveResearch(): string | null { return this.activeResearch; }
   getProgress(): number { return this.progress; }
   getCompletedCount(): number { return this.completed.size; }
+  getCompletedList(): string[] { return Array.from(this.completed); }
 }
+
+/** Global singleton */
+export const researchSystem = new ResearchSystem();

@@ -434,6 +434,27 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(popAfter).toBe(popBefore + 1);
   });
 
+  // ── Research System (Milestone 8) ──────────────────────────────
+
+  test('research system tracks available and active research', async () => {
+    // Research API should be exposed
+    const research = await page.evaluate(() => (window as any).__df9?.getResearch());
+    expect(research).toBeTruthy();
+    expect(Array.isArray(research.available)).toBe(true);
+    expect(research.available.length).toBeGreaterThan(0);
+    expect(research.completed).toEqual([]);
+
+    // Start a research topic
+    const started = await page.evaluate(() =>
+      (window as any).__df9?.startResearch('GeneratorLevel2'),
+    );
+    expect(started).toBe(true);
+
+    const afterStart = await page.evaluate(() => (window as any).__df9?.getResearch());
+    expect(afterStart.active).toBe('GeneratorLevel2');
+    expect(afterStart.progress).toBe(0);
+  });
+
   // ── Morale & Anger (Milestone 6) ───────────────────────────────
 
   test('morale is tracked and affected by room objects', async () => {

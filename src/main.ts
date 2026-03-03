@@ -35,6 +35,7 @@ import { EventController } from './events/EventController';
 import { Fire } from './hazards/Fire';
 import { ProjectileManager } from './hazards/Projectile';
 import { SaveLoadSystem } from './save/SaveLoad';
+import { researchSystem } from './research/ResearchSystem';
 import { generateWorld } from './world/WorldGen';
 import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
@@ -573,6 +574,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     triggerImmigration: () => {
       characterManager.spawnCharacter();
     },
+    getResearch: () => ({
+      active: researchSystem.getActiveResearch(),
+      progress: researchSystem.getProgress(),
+      completed: researchSystem.getCompletedList(),
+      available: researchSystem.getAvailable().map(r => r.sName),
+    }),
+    startResearch: (id: string) => researchSystem.startResearch(id),
     setZone: (roomId: number, zone: string) => {
       const room = roomManager.getRooms().find(r => r.id === roomId);
       if (room) {
