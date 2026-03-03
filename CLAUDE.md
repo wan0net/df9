@@ -1,7 +1,7 @@
 # Spacebase DF-9 Web Prototype
 
 ## Overview
-Web reimplementation of Spacebase DF-9 using TypeScript + Phaser 3. The original Lua source is the reference at `spacebase-v2-updated-code-master/`.
+Web reimplementation of Spacebase DF-9 using TypeScript + Three.js. The original Lua source is the reference at `spacebase-v2-updated-code-master/`.
 
 ## Guiding Principle
 **Adhere to the original Lua source code as closely as possible.** When implementing game mechanics (tile adjacency, room detection, oxygen, AI), always reference the original Lua files first. Do not invent new mechanics or deviate from the original game's behavior unless explicitly asked.
@@ -26,22 +26,32 @@ The original uses `xLeft = -(y % 2)` for the staggered diamond grid. Our renderi
 npm run dev      # Start Vite dev server (http://localhost:5173)
 npm run build    # TypeScript check + production build
 npx tsc --noEmit # Type-check only
+npm run test:e2e # Run Playwright E2E tests (headless Chromium)
 ```
 
 ## Architecture
 ```
 src/
-├── main.ts              # Phaser config, scene registration
+├── main.ts              # Three.js entry point, game loop, scene routing
 ├── config.ts            # Constants (grid size, tile size, costs)
-├── scenes/              # Phaser scenes (Boot, Game, UI)
+├── renderer/            # ThreeRenderer, CameraController3D, TileRenderer3D, CharacterRenderer
 ├── world/               # Tile grid, iso math, rendering, wall auto-gen
 ├── rooms/               # Room detection (BFS flood fill)
 ├── oxygen/              # Per-room O2 simulation
 ├── building/            # Floor/door placement, drag cursor
 ├── characters/          # Characters, needs, manager
 ├── pathfinding/         # A* on diamond grid
-├── camera/              # Pan + zoom controls
-└── ui/                  # HUD, toolbar, tooltips
+├── input/               # InputManager (keyboard, mouse, pointer)
+├── ui/                  # StartMenu, NewGameScreen, UIManager (HUD, toolbar)
+├── core/                # GameRules, Base
+├── envobjects/          # Environment object manager
+├── power/               # Power system
+├── lighting/            # Room lighting
+├── hazards/             # Fire, projectiles
+├── events/              # Event controller
+└── save/                # Save/load system
+e2e/
+└── game.spec.ts         # Playwright E2E tests
 ```
 
 ### Coordinate Systems
@@ -64,3 +74,28 @@ Walls exist as tile type `WALL=4` in the grid for room boundary logic, but rende
 | Arrow keys | Pan camera |
 | Scroll wheel | Zoom |
 | Right/middle drag | Pan camera |
+| C | Toggle room build mode |
+| M | Toggle mine mode |
+| Z | Toggle zone assignment mode |
+| P | Toggle object placement mode |
+
+## Testing
+
+### E2E Tests (Playwright)
+- Config: `playwright.config.ts` — Chromium only, WebGL via SwiftShader for headless
+- Tests: `e2e/game.spec.ts` — serial test suite with shared browser page
+- Dev server auto-starts via `webServer` config (port 5173)
+- Game state exposed via `window.__df9` in `src/main.ts` for test assertions:
+  - `getPopulation()`, `getMatter()`, `getRoomCount()`, `getBuildMode()`, `getCharacters()`
+
+### Workflow
+**After building any new feature**, always:
+1. Add a new E2E test covering the feature in `e2e/game.spec.ts`
+2. Run the full suite with `npm run test:e2e` to check for regressions
+
+### Running Tests
+```bash
+npm run test:e2e              # Headless (CI-friendly)
+npx playwright test --headed  # Visible browser (debugging)
+npx playwright test --ui      # Interactive trace viewer
+```

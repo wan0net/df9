@@ -15,6 +15,7 @@ import { InputManager } from './input/InputManager';
 import { StartMenuState } from './ui/StartMenu';
 import { NewGameScreenState } from './ui/NewGameScreen';
 import { UIManager } from './ui/UIManager';
+import type { SelectedEntity } from './ui/InspectorPanel';
 
 import { TileGrid } from './world/TileGrid';
 import { WallAutoGen } from './world/WallAutoGen';
@@ -38,7 +39,8 @@ import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
 import { tileToScreen } from './world/IsometricUtils';
 import { TileType } from './world/TileTypes';
-import { isAsteroid, getMiningYield } from './world/Asteroid';
+import { isAsteroid } from './world/Asteroid';
+import { CommandQueue } from './core/CommandQueue';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
 
@@ -193,6 +195,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   let buildMode: BuildMode = 'none';
   let showO2Overlay = false;
   let selectedZone: ZoneType = ZoneType.GARDEN;
+  let selectedEntity: SelectedEntity = null;
+  const prevCommandTiles = new Set<string>();
 
   // Keyboard bindings
   inputManager.onKeyPress('KeyC', () => { buildMode = buildMode === 'room' ? 'none' : 'room'; });
@@ -202,8 +206,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   inputManager.onKeyPress('KeyZ', () => { buildMode = buildMode === 'zone' ? 'none' : 'zone'; });
   inputManager.onKeyPress('KeyP', () => { buildMode = buildMode === 'object' ? 'none' : 'object'; });
   inputManager.onKeyPress('KeyM', () => { buildMode = buildMode === 'mine' ? 'none' : 'mine'; });
-  inputManager.onKeyPress('Escape', () => { buildMode = 'none'; buildCursor.cancelDrag(); });
+  inputManager.onKeyPress('Escape', () => {
+    buildMode = 'none';
+    buildCursor.cancelDrag();
+    selectedEntity = null;
+    uiManager.setSelectedEntity(null);
+  });
   inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; });
+  inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
+  inputManager.onKeyPress('KeyR', () => { uiManager.toggleJobRoster(); });
   inputManager.onKeyPress('Digit1', () => { GameRules.setTimeScale(1); });
   inputManager.onKeyPress('Digit2', () => { GameRules.setTimeScale(2); });
   inputManager.onKeyPress('Digit3', () => { GameRules.setTimeScale(4); });
@@ -222,15 +233,29 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       const room = roomManager.getRoomAt(hovered.x, hovered.y);
       let info = `(${hovered.x}, ${hovered.y})  ${tileName(tile)}`;
       if (room) {
-        info += `\nRoom #${room.id}  ${room.size} tiles`;
-        info += `\nZone: ${ZONE_SPRITES[room.zone].name}`;
-        info += `\nO2: ${room.oxygen}  ${room.sealed ? 'Sealed' : 'BREACHED'}`;
+        info += `\nRoom #${room.id}  ${room.size} tiles  Zone: ${ZONE_SPRITES[room.zone].name}`;
+        info += `\nO2: ${room.oxygen}/255  ${room.sealed ? 'Sealed' : 'BREACHED'}`;
+        info += `  Power: +${room.nPowerOutput}/-${room.nPowerDraw}`;
       }
+      // Env objects at tile
+      for (const obj of EnvObjectManager.getObjects()) {
+        if (obj.tileX === hovered.x && obj.tileY === hovered.y) {
+          const status = obj.bBuilt ? 'Built' : 'Building';
+          info += `\n\n${obj.tData.friendlyName} [${status}]  Condition: ${Math.round(obj.nCondition)}%`;
+        }
+      }
+      // Characters at tile
       for (const char of characterManager.getCharacters()) {
         if (char.tileX === hovered.x && char.tileY === hovered.y) {
-          info += `\n\n${char.getName()} [${char.getJobName()}]`;
-          info += `\nHP: ${char.getHP()}  Morale: ${char.nMorale}`;
-          break;
+          info += `\n\n${char.getName()} [${char.getJobName()}]  HP: ${char.getHP()}`;
+          info += `\n  Task: ${char.currentTask?.name ?? 'Idle'}  Morale: ${char.nMorale}`;
+          info += `\n  Energy: ${Math.round(char.needs.energy)}  Hunger: ${Math.round(char.needs.hunger)}`;
+        }
+      }
+      // Pending commands at tile
+      for (const cmd of CommandQueue.getAllActive()) {
+        if (cmd.tileX === hovered.x && cmd.tileY === hovered.y) {
+          info += `\n[${cmd.type} command pending]`;
         }
       }
       return info;
@@ -239,6 +264,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     onLoad: () => saveLoadSystem.loadFromStorage(),
     onSpawn: () => characterManager.spawnCharacter(),
     onObjectSelected: (name) => { /* placeholder */ },
+    getCharacters: () => characterManager.getCharacters(),
+    getEnvObjects: () => EnvObjectManager.getObjects(),
+    toggleO2Overlay: () => { showO2Overlay = !showO2Overlay; },
+    getRooms: () => roomManager.getRooms(),
+    onSetJob: (character, jobId) => { character.setJob(jobId); },
   });
 
   // ── Game loop ─────────────────────────────────────────────
@@ -269,6 +299,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Room updates
     roomManager.update();
 
+    // Power distribution
+    powerSystem.update();
+
+    // Pending command overlays
+    renderCommandOverlays();
+
     // Event controller
     eventController.setPopulation(characterManager.getPopulation());
 
@@ -292,6 +328,25 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     requestAnimationFrame(gameLoop);
   }
 
+  /** Render amber tint on tiles with pending commands. */
+  function renderCommandOverlays() {
+    const currentTiles = new Set<string>();
+    for (const cmd of CommandQueue.getAllActive()) {
+      const key = `${cmd.tileX},${cmd.tileY}`;
+      currentTiles.add(key);
+      tileRenderer.setTileTint(cmd.tileX, cmd.tileY, 0xDFA200);
+    }
+    // Clear tint on tiles that no longer have active commands
+    for (const key of prevCommandTiles) {
+      if (!currentTiles.has(key)) {
+        const [x, y] = key.split(',').map(Number);
+        tileRenderer.clearTileTint(x, y);
+      }
+    }
+    prevCommandTiles.clear();
+    for (const key of currentTiles) prevCommandTiles.add(key);
+  }
+
   function handleBuildInput() {
     const worldPos = inputManager.getWorldPointer();
     buildCursor.updateHover(worldPos.x, worldPos.y);
@@ -303,7 +358,44 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Left button just pressed
     if (inputManager.leftJustPressed) {
-      if (buildMode === 'zone') {
+      // Inspect mode: click to select character/object/room
+      if (buildMode === 'none') {
+        let found = false;
+        // 1. Character at tile
+        for (const char of characterManager.getCharacters()) {
+          if (char.tileX === tile.x && char.tileY === tile.y) {
+            selectedEntity = { type: 'character', data: char };
+            uiManager.setSelectedEntity(selectedEntity);
+            found = true;
+            break;
+          }
+        }
+        // 2. EnvObject at tile
+        if (!found) {
+          for (const obj of EnvObjectManager.getObjects()) {
+            if (obj.tileX === tile.x && obj.tileY === tile.y) {
+              selectedEntity = { type: 'object', data: obj };
+              uiManager.setSelectedEntity(selectedEntity);
+              found = true;
+              break;
+            }
+          }
+        }
+        // 3. Room at tile
+        if (!found) {
+          const room = roomManager.getRoomAt(tile.x, tile.y);
+          if (room) {
+            selectedEntity = { type: 'room', data: room };
+            uiManager.setSelectedEntity(selectedEntity);
+            found = true;
+          }
+        }
+        // Click on empty space clears selection
+        if (!found) {
+          selectedEntity = null;
+          uiManager.setSelectedEntity(null);
+        }
+      } else if (buildMode === 'zone') {
         const room = roomManager.getRoomAt(tile.x, tile.y);
         if (room) {
           room.zone = selectedZone;
@@ -320,21 +412,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       } else if (buildMode === 'mine') {
         const tileVal = grid.get(tile.x, tile.y);
         if (isAsteroid(tileVal)) {
-          const yield_ = getMiningYield();
-          GameRules.nMatter += yield_;
-          grid.set(tile.x, tile.y, TileType.SPACE);
-          onTilesChanged([tile]);
-          Base.addAlert('mining', `Mined asteroid: +${yield_} matter`);
+          CommandQueue.addCommand('mine', tile.x, tile.y);
+          Base.addAlert('mining', `Queued asteroid for mining at (${tile.x},${tile.y})`);
         }
       } else if (isDragMode) {
         buildCursor.startDrag(tile.x, tile.y);
-        buildCursor.updateDrag(tile.x, tile.y, buildMode as 'floor' | 'demolish');
+        buildCursor.updateDrag(tile.x, tile.y, buildMode as 'room' | 'floor' | 'wall' | 'demolish');
       }
     }
 
     // Left held — update drag
     if (inputManager.isLeftDown() && buildCursor.isDragging && isDragMode) {
-      buildCursor.updateDrag(tile.x, tile.y, buildMode as 'floor' | 'demolish');
+      buildCursor.updateDrag(tile.x, tile.y, buildMode as 'room' | 'floor' | 'wall' | 'demolish');
     }
 
     // Left released — commit drag
@@ -361,7 +450,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Hover ghost
     const noGhostModes = ['none', 'zone', 'object', 'mine'];
     if (!inputManager.isLeftDown() && !buildCursor.isDragging && !noGhostModes.includes(buildMode)) {
-      buildCursor.showHoverGhost(buildMode as 'floor' | 'door' | 'demolish');
+      buildCursor.showHoverGhost(buildMode as 'room' | 'floor' | 'wall' | 'door' | 'demolish');
     }
   }
 
@@ -380,6 +469,65 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     }
   }
+
+  // ── Expose game state for E2E test assertions ─────────────
+  (window as any).__df9 = {
+    getPopulation: () => characterManager.getPopulation(),
+    getMatter: () => GameRules.nMatter,
+    getRoomCount: () => roomManager.getRooms().length,
+    getBuildMode: () => buildMode,
+    getCharacters: () => characterManager.getCharacters().map(c => ({
+      id: c.id, x: c.tileX, y: c.tileY, moving: c.moving, spacewalking: c.bSpacewalking,
+      job: c.getJob(), taskName: c.currentTask?.name ?? null,
+      hunger: c.needs.hunger, energy: c.needs.energy,
+    })),
+    getCommands: () => CommandQueue.getAllActive().map(c => ({
+      id: c.id, type: c.type, tileX: c.tileX, tileY: c.tileY,
+      status: c.status, assignedTo: c.assignedTo,
+    })),
+    getEnvObjects: () => EnvObjectManager.getObjects().map(o => ({
+      name: o.sName, tileX: o.tileX, tileY: o.tileY,
+      built: o.bBuilt, condition: o.nCondition, functioning: o.isFunctioning(),
+    })),
+    getRooms: () => roomManager.getRooms().map(r => ({
+      id: r.id, zone: r.zone, tileCount: r.tiles.length,
+      tiles: r.tiles.slice(0, 5).map(t => ({ x: t.x, y: t.y })),
+    })),
+    /** Find wall tiles adjacent to any room. */
+    getWallTiles: () => {
+      const walls: { x: number; y: number }[] = [];
+      for (const room of roomManager.getRooms()) {
+        for (const t of room.tiles) {
+          // Check 4 cardinal neighbors for walls
+          for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+            const nx = t.x + dx, ny = t.y + dy;
+            if (grid.get(nx, ny) === TileType.WALL) {
+              if (!walls.some(w => w.x === nx && w.y === ny)) {
+                walls.push({ x: nx, y: ny });
+              }
+            }
+          }
+        }
+      }
+      return walls;
+    },
+    placeObject: (name: string, tileX: number, tileY: number) => {
+      return objectPlacement.placeObject(name, tileX, tileY);
+    },
+    /** Create an already-built, powered object directly (bypasses placement validation). */
+    createBuiltObject: (name: string, tileX: number, tileY: number) => {
+      const obj = EnvObjectManager.createObject(name, tileX, tileY);
+      if (obj) { obj.bBuilt = true; obj.bHasPower = true; return true; }
+      return false;
+    },
+    setZone: (roomId: number, zone: string) => {
+      const room = roomManager.getRooms().find(r => r.id === roomId);
+      if (room) {
+        room.zone = zone as ZoneType;
+        roomManager.persistZone(room);
+      }
+    },
+  };
 
   requestAnimationFrame(gameLoop);
 }
@@ -410,20 +558,39 @@ function createSpaceBackground(threeRenderer: ThreeRenderer) {
 
 function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: number) {
   const pos = tileToScreen(tileX, tileY);
+  const tex = getTexture('seedpod01');
 
-  // Seed pod: a bright octahedron at the landing spot (visible landmark)
-  const geo = new THREE.OctahedronGeometry(12, 0);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xdfa200, wireframe: false });
-  const mesh = new THREE.Mesh(geo, mat);
-  // Position at tile center, negated Y, above tiles in depth
-  mesh.position.set(
-    pos.x + TILE_HALF_W,
-    -(pos.y + TILE_HALF_H),
-    15000 + pos.y,
-  );
-  threeRenderer.scene.add(mesh);
+  if (tex && tex.image) {
+    // Use the actual seed pod sprite
+    const spriteW = tex.image.width || 128;
+    const spriteH = tex.image.height || 128;
+    const geo = new THREE.PlaneGeometry(spriteW, spriteH);
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(
+      pos.x + TILE_HALF_W,
+      -(pos.y + TILE_HALF_H),
+      15000 + pos.y,
+    );
+    threeRenderer.scene.add(mesh);
+  } else {
+    // Fallback: octahedron placeholder
+    const geo = new THREE.OctahedronGeometry(12, 0);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xdfa200 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(
+      pos.x + TILE_HALF_W,
+      -(pos.y + TILE_HALF_H),
+      15000 + pos.y,
+    );
+    threeRenderer.scene.add(mesh);
+  }
 
-  // Pulsing glow ring around the pod
+  // Glow ring around the pod
   const ringGeo = new THREE.RingGeometry(16, 20, 16);
   const ringMat = new THREE.MeshBasicMaterial({
     color: 0xdfa200,
@@ -432,8 +599,11 @@ function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: numbe
     side: THREE.DoubleSide,
   });
   const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.position.copy(mesh.position);
-  ring.position.z -= 1; // slightly behind pod
+  ring.position.set(
+    pos.x + TILE_HALF_W,
+    -(pos.y + TILE_HALF_H),
+    15000 + pos.y - 1,
+  );
   threeRenderer.scene.add(ring);
 }
 

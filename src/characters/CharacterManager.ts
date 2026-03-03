@@ -1,15 +1,24 @@
 import { Character } from './Character';
+import { MINER, BUILDER, TECHNICIAN } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { RoomManager } from '../rooms/RoomManager';
 import { Room } from '../rooms/Room';
-import { findPath } from '../pathfinding/AStar';
+import { findPath, WALKABLE_DEFAULT, WALKABLE_SPACEWALK } from '../pathfinding/AStar';
 import { INITIAL_CREW } from '../config';
 import { UtilityAI } from '../utility/UtilityAI';
 import { ActivityOption } from '../utility/ActivityOption';
 import { WanderAround } from '../utility/tasks/WanderAround';
 import { SleepOnFloor } from '../utility/tasks/SleepOnFloor';
+import { SleepInBed } from '../utility/tasks/SleepInBed';
 import { Chat } from '../utility/tasks/Chat';
+import { Mine } from '../utility/tasks/Mine';
+import { BuildEnvObject } from '../utility/tasks/BuildEnvObject';
+import { GetDrink } from '../utility/tasks/GetDrink';
+import { Eat } from '../utility/tasks/Eat';
+import { MaintainEnvObject } from '../utility/tasks/MaintainEnvObject';
+import { CommandQueue } from '../core/CommandQueue';
+import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import type { Task } from '../utility/Task';
 import type { CharacterRenderer } from '../renderer/CharacterRenderer';
 import type { CrewSpawnPoint } from '../world/WorldGen';
@@ -54,6 +63,7 @@ export class CharacterManager {
   spawnInitialCrew(spawns: CrewSpawnPoint[]) {
     for (const spawn of spawns) {
       const char = new Character(this.nextId++, spawn.x, spawn.y);
+      char.bSpacewalking = true; // Initial crew starts spacewalking
       this.characterRenderer?.createCharacter(char);
       this.characters.push(char);
     }
@@ -78,6 +88,10 @@ export class CharacterManager {
       const room = this.roomManager.getRoomAt(char.tileX, char.tileY);
       if (room) {
         char.needs.updateOxygen(room.oxygen);
+        // Character entered a room — stop spacewalking
+        if (char.bSpacewalking) {
+          char.bSpacewalking = false;
+        }
       } else {
         char.needs.updateOxygen(0);
       }
@@ -128,6 +142,22 @@ export class CharacterManager {
     for (const char of this.decisionQueue) {
       if (processed >= UPDATES_PER_TICK) break;
 
+      // Spacewalking characters: seek nearest room
+      if (char.bSpacewalking) {
+        this.seekNearestRoom(char);
+        processed++;
+        continue;
+      }
+
+      // Character in space (not spacewalking) but not in a room → start spacewalking to find one
+      const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
+      if (!charRoom && this.grid.get(char.tileX, char.tileY) === TileType.SPACE) {
+        char.bSpacewalking = true;
+        this.seekNearestRoom(char);
+        processed++;
+        continue;
+      }
+
       // Emergency: seek oxygen if suffocating
       if (char.needs.oxygen < 50) {
         this.seekOxygenatedRoom(char);
@@ -155,6 +185,7 @@ export class CharacterManager {
   private gatherOptions(character: Character): ActivityOption[] {
     const options: ActivityOption[] = [];
     const room = this.roomManager.getRoomAt(character.tileX, character.tileY);
+    const job = character.getJob();
 
     // Always available: wander
     if (room && room.tiles.length >= 2) {
@@ -186,6 +217,77 @@ export class CharacterManager {
       }
     }
 
+    // ── Mine commands ────────────────────────────────────────
+    for (const cmd of CommandQueue.getAvailable('mine')) {
+      const priority = job === MINER ? 8 : 3;
+      options.push(new ActivityOption(
+        new Mine(cmd.id, this.grid),
+        cmd.tileX, cmd.tileY,
+        priority,
+      ));
+    }
+
+    // ── Build object commands ────────────────────────────────
+    for (const cmd of CommandQueue.getAvailable('build_object')) {
+      const obj = EnvObjectManager.getObjects().find(
+        o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
+      );
+      if (obj) {
+        const priority = job === BUILDER ? 8 : 3;
+        options.push(new ActivityOption(
+          new BuildEnvObject(obj, cmd.id),
+          cmd.tileX, cmd.tileY,
+          priority,
+        ));
+      }
+    }
+
+    // ── Sleep in bed ─────────────────────────────────────────
+    for (const bed of EnvObjectManager.getObjectsByType('Bed')) {
+      if (!bed.bBuilt || !bed.isFunctioning()) continue;
+      options.push(new ActivityOption(
+        new SleepInBed(),
+        bed.tileX, bed.tileY,
+        2,
+      ));
+    }
+
+    // ── Get drink (bar) ──────────────────────────────────────
+    for (const bar of EnvObjectManager.getObjectsByType('Bar')) {
+      if (!bar.bBuilt || !bar.isFunctioning()) continue;
+      options.push(new ActivityOption(
+        new GetDrink(),
+        bar.tileX, bar.tileY,
+        2,
+      ));
+    }
+
+    // ── Eat (food replicator / fridge) ───────────────────────
+    const foodSources = [
+      ...EnvObjectManager.getObjectsByType('Fridge'),
+      ...EnvObjectManager.getObjectsByType('FridgeLvl2'),
+      ...EnvObjectManager.getObjectsByType('FoodReplicator'),
+    ];
+    for (const food of foodSources) {
+      if (!food.bBuilt || !food.isFunctioning()) continue;
+      options.push(new ActivityOption(
+        new Eat(),
+        food.tileX, food.tileY,
+        2,
+      ));
+    }
+
+    // ── Maintain damaged objects ─────────────────────────────
+    for (const obj of EnvObjectManager.getObjects()) {
+      if (!obj.bBuilt || !obj.needsMaintenance()) continue;
+      const priority = job === TECHNICIAN ? 10 : 2;
+      options.push(new ActivityOption(
+        new MaintainEnvObject(obj),
+        obj.tileX, obj.tileY,
+        priority,
+      ));
+    }
+
     return options;
   }
 
@@ -196,7 +298,9 @@ export class CharacterManager {
 
     // Path to task target if not already there
     if (task.targetX >= 0 && (task.targetX !== char.tileX || task.targetY !== char.tileY)) {
-      const path = findPath(this.grid, char.tileX, char.tileY, task.targetX, task.targetY);
+      const filter = char.bSpacewalking ? WALKABLE_SPACEWALK : WALKABLE_DEFAULT;
+      const maxNodes = char.bSpacewalking ? 3000 : 1000;
+      const path = findPath(this.grid, char.tileX, char.tileY, task.targetX, task.targetY, maxNodes, filter);
       if (path && path.length > 0) {
         char.startPath(path);
       }
@@ -219,7 +323,45 @@ export class CharacterManager {
 
     if (bestRoom && bestRoom.tiles.length > 0) {
       const target = bestRoom.tiles[Math.floor(Math.random() * bestRoom.tiles.length)];
-      const path = findPath(this.grid, char.tileX, char.tileY, target.x, target.y);
+      const filter = char.bSpacewalking ? WALKABLE_SPACEWALK : WALKABLE_DEFAULT;
+      const maxNodes = char.bSpacewalking ? 3000 : 1000;
+      const path = findPath(this.grid, char.tileX, char.tileY, target.x, target.y, maxNodes, filter);
+      if (path && path.length > 0) {
+        char.startPath(path);
+      }
+    }
+  }
+
+  /**
+   * Spacewalking character seeks the nearest room.
+   * Finds closest door or floor tile belonging to any room and paths through space to reach it.
+   */
+  private seekNearestRoom(char: Character) {
+    const rooms = this.roomManager.getRooms();
+    if (rooms.length === 0) return; // No rooms built yet — stay idle
+
+    // Find closest floor tile in any room
+    let bestTile: { x: number; y: number } | null = null;
+    let bestDist = Infinity;
+
+    for (const room of rooms) {
+      for (const tile of room.tiles) {
+        const dx = tile.x - char.tileX;
+        const dy = tile.y - char.tileY;
+        const dist = dx * dx + dy * dy;
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestTile = tile;
+        }
+      }
+    }
+
+    if (bestTile) {
+      const path = findPath(
+        this.grid, char.tileX, char.tileY,
+        bestTile.x, bestTile.y,
+        3000, WALKABLE_SPACEWALK,
+      );
       if (path && path.length > 0) {
         char.startPath(path);
       }

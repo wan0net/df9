@@ -43,6 +43,9 @@ export class Character {
   // ── Affinity tracking ───────────────────────────────────────
   tAffinity: Map<number, number> = new Map();
 
+  // Spacewalking (original: tStatus.bSpacewalking)
+  bSpacewalking = false;
+
   // Movement
   path: { x: number; y: number }[] = [];
   moving = false;

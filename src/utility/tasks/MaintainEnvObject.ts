@@ -3,15 +3,16 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
+import { TECHNICIAN } from '../../characters/CharacterConstants';
 import type { EnvObject } from '../../envobjects/EnvObject';
 
 export class MaintainEnvObject extends Task {
   readonly name = 'MaintainEnvObject';
-  private targetObj: EnvObject | null = null;
+  private targetObj: EnvObject;
 
-  constructor(targetObj?: EnvObject) {
+  constructor(targetObj: EnvObject) {
     super();
-    this.targetObj = targetObj ?? null;
+    this.targetObj = targetObj;
   }
 
   getAdvertisedNeeds(): NeedAdvertisement[] {
@@ -26,7 +27,7 @@ export class MaintainEnvObject extends Task {
     if (this.elapsedTime >= this.duration) {
       // Repair the object
       if (this.targetObj && this.character) {
-        const competency = this.character.tStats.tCompetency[3] ?? 0; // TECHNICIAN
+        const competency = this.character.tStats.tCompetency[TECHNICIAN] ?? 0;
         this.targetObj.maintain(this.targetObj.getCondition(), competency);
       }
       this.complete();

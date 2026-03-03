@@ -14,10 +14,22 @@ function heuristic(ax: number, ay: number, bx: number, by: number): number {
   return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
+/** Walkable filter: returns true if a tile type can be traversed. */
+export type WalkableFilter = (tileType: number) => boolean;
+
+/** Default filter: only FLOOR and DOOR tiles are walkable. */
+export const WALKABLE_DEFAULT: WalkableFilter = (t) =>
+  t === TileType.FLOOR || t === TileType.DOOR;
+
+/** Spacewalk filter: FLOOR, DOOR, and SPACE tiles are walkable. */
+export const WALKABLE_SPACEWALK: WalkableFilter = (t) =>
+  t === TileType.FLOOR || t === TileType.DOOR || t === TileType.SPACE;
+
 /**
  * A* pathfinding on the diamond isometric grid.
  * Moves through diagonal neighbors only (edge-sharing tiles).
- * Walkable tiles: FLOOR, DOOR.
+ * @param walkableFilter — controls which tile types are traversable.
+ *   Defaults to FLOOR + DOOR. Use WALKABLE_SPACEWALK for spacewalking.
  */
 export function findPath(
   grid: TileGrid,
@@ -25,12 +37,13 @@ export function findPath(
   startY: number,
   endX: number,
   endY: number,
-  maxNodes = 1000
+  maxNodes = 1000,
+  walkableFilter: WalkableFilter = WALKABLE_DEFAULT,
 ): { x: number; y: number }[] | null {
   if (startX === endX && startY === endY) return [];
 
   const endType = grid.get(endX, endY);
-  if (endType !== TileType.FLOOR && endType !== TileType.DOOR) return null;
+  if (!walkableFilter(endType)) return null;
 
   const open: Node[] = [];
   const closed = new Set<string>();
@@ -78,7 +91,7 @@ export function findPath(
       if (closed.has(nKey)) continue;
 
       const nType = grid.get(n.x, n.y);
-      if (nType !== TileType.FLOOR && nType !== TileType.DOOR) continue;
+      if (!walkableFilter(nType)) continue;
 
       const g = current.g + 1;
       const existing = open.find(o => o.x === n.x && o.y === n.y);

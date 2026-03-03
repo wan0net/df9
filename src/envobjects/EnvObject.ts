@@ -129,17 +129,17 @@ export class EnvObject implements TaggableObject {
   }
 
   getPowerDraw(): number {
-    if (!this.bActive || this.nCondition <= 0) return 0;
+    if (!this.bBuilt || !this.bActive || this.nCondition <= 0) return 0;
     return this.tData.nPowerDraw;
   }
 
   getPowerOutput(): number {
-    if (!this.bActive || this.nCondition <= 0) return 0;
+    if (!this.bBuilt || !this.bActive || this.nCondition <= 0) return 0;
     return this.tData.nPowerOutput;
   }
 
   isFunctioning(): boolean {
-    return this.hasPower() && this.nCondition > 0;
+    return this.bBuilt && this.hasPower() && this.nCondition > 0;
   }
 
   // ── Oxygen generation ────────────────────────────────────────
@@ -152,7 +152,7 @@ export class EnvObject implements TaggableObject {
   }
 
   getOxygenOutput(): number {
-    if (!this.bGeneratingOxygen) return 0;
+    if (!this.bBuilt || !this.bGeneratingOxygen) return 0;
     return this.tData.oxygenLevel;
   }
 

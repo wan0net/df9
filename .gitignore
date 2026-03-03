@@ -7,3 +7,8 @@ spacebase-v2-updated-code-master/
 # GLB models are tracked; ignore only intermediate pipeline outputs
 public/assets/models/*.obj
 public/assets/models/*.json
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

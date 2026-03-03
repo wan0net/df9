@@ -36,7 +36,7 @@ export class BuildCursor {
     this.dragTiles = [];
   }
 
-  updateDrag(endTileX: number, endTileY: number, buildMode: 'floor' | 'door' | 'demolish') {
+  updateDrag(endTileX: number, endTileY: number, buildMode: 'room' | 'floor' | 'wall' | 'door' | 'demolish') {
     if (!this.dragStartTile) return;
 
     const startIso = offsetToIso(this.dragStartTile.x, this.dragStartTile.y);
@@ -74,11 +74,15 @@ export class BuildCursor {
     this.clearGhosts();
   }
 
-  canPlace(x: number, y: number, mode: 'floor' | 'door' | 'demolish'): boolean {
+  canPlace(x: number, y: number, mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish'): boolean {
     if (!this.grid.inBounds(x, y)) return false;
     const current = this.grid.get(x, y);
     switch (mode) {
+      case 'room':
+        return current === TileType.SPACE || current === TileType.WALL;
       case 'floor':
+        return current === TileType.SPACE;
+      case 'wall':
         return current === TileType.SPACE;
       case 'door':
         return current === TileType.WALL;
@@ -89,7 +93,7 @@ export class BuildCursor {
     }
   }
 
-  private renderGhosts(buildMode: 'floor' | 'door' | 'demolish') {
+  private renderGhosts(buildMode: 'room' | 'floor' | 'wall' | 'door' | 'demolish') {
     this.clearGhosts();
 
     for (const t of this.dragTiles) {
@@ -133,7 +137,7 @@ export class BuildCursor {
     this.ghosts = [];
   }
 
-  showHoverGhost(mode: 'floor' | 'door' | 'demolish') {
+  showHoverGhost(mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish') {
     if (!this._hoveredTile || this.dragStartTile) return;
     this.clearGhosts();
     const { x, y } = this._hoveredTile;

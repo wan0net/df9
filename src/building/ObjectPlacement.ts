@@ -6,6 +6,7 @@
 import { tObjects, type EnvObjectDef, getMenuForZone } from '../envobjects/EnvObjectData';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { GameRules } from '../core/GameRules';
+import { CommandQueue } from '../core/CommandQueue';
 import { TileType } from '../world/TileTypes';
 import type { TileGrid } from '../world/TileGrid';
 import type { RoomManager } from '../rooms/RoomManager';
@@ -83,7 +84,7 @@ export class ObjectPlacement {
     return { valid: true, reason: '' };
   }
 
-  /** Place an object. Returns the cost deducted, or 0 if failed. */
+  /** Place an object as a ghost (unbuilt). Returns the cost deducted, or 0 if failed. */
   placeObject(sName: string, tileX: number, tileY: number): number {
     const check = this.canPlace(sName, tileX, tileY);
     if (!check.valid) return 0;
@@ -91,6 +92,12 @@ export class ObjectPlacement {
     const data = tObjects[sName];
     const obj = EnvObjectManager.createObject(sName, tileX, tileY);
     if (!obj) return 0;
+
+    // Start as ghost (unbuilt) — builder must construct it
+    obj.bBuilt = false;
+
+    // Queue a build command for the AI
+    CommandQueue.addCommand('build_object', tileX, tileY, sName);
 
     GameRules.nMatter -= data.matterCost;
     return data.matterCost;
