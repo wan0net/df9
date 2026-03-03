@@ -1,5 +1,6 @@
 import type { SceneContext, SceneState } from '../renderer/SceneManager';
 import { getTexture } from '../renderer/AssetLoader';
+import { SoundManager } from '../audio/SoundManager';
 
 const AMBER_HEX = '#dfa200';
 const GREEN_HEX = '#a5d318';
@@ -209,6 +210,7 @@ export class NewGameScreenState implements SceneState {
 
     this.state = 'SelectedLandingZone';
     this.helpText.textContent = 'Review region and confirm';
+    SoundManager.playUI('UI_Select');
 
     const z = this.selectedZone;
     this.infoPanel.innerHTML = `
@@ -254,6 +256,7 @@ export class NewGameScreenState implements SceneState {
 
   private onConfirm() {
     if (this.state !== 'SelectedLandingZone') return;
+    SoundManager.playUI('UI_Confirm');
     this.state = 'ConfirmedLandingZone';
     this.confirmBtn.style.display = 'none';
     this.declineBtn.style.display = 'none';
@@ -263,6 +266,7 @@ export class NewGameScreenState implements SceneState {
   }
 
   private onDecline() {
+    SoundManager.playUI('Intro_CancelButton');
     this.state = 'Initial';
     this.selectedZone = null;
     this.infoPanel.style.display = 'none';
@@ -276,6 +280,7 @@ export class NewGameScreenState implements SceneState {
 
   private onDeploy() {
     if (this.state !== 'ConfirmedLandingZone') return;
+    SoundManager.playUI('Intro_LaunchButton');
     this.state = 'Deploying';
     this.deployTime = 0;
     this.deployBtn.style.display = 'none';

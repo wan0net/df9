@@ -1,11 +1,12 @@
 import type { SceneContext, SceneState } from '../renderer/SceneManager';
 import { getTexture } from '../renderer/AssetLoader';
+import { SoundManager } from '../audio/SoundManager';
 
 const AMBER_HEX = '#dfa200';
 
 /**
  * Start menu rendered as HTML overlay.
- * Replaces StartMenuScene.ts (Phaser).
+ * Plays menu music and UI sounds on interactions.
  */
 export class StartMenuState implements SceneState {
   private ctx!: SceneContext;
@@ -26,6 +27,15 @@ export class StartMenuState implements SceneState {
 
   enter(ctx: SceneContext) {
     this.ctx = ctx;
+
+    // Initialize audio on first user interaction (menu entry)
+    if (!SoundManager.isInitialized()) {
+      SoundManager.init();
+      SoundManager.generateFallbackSounds();
+    }
+    SoundManager.resume();
+    // Play menu music
+    SoundManager.playMusic('Intro_GuitarTrack');
 
     this.overlay = document.createElement('div');
     this.overlay.id = 'start-menu';
@@ -84,12 +94,16 @@ export class StartMenuState implements SceneState {
       el.addEventListener('mouseenter', () => {
         el.style.background = AMBER_HEX;
         el.style.color = '#000';
+        SoundManager.playUI('UI_Hilight');
       });
       el.addEventListener('mouseleave', () => {
         el.style.background = 'transparent';
         el.style.color = AMBER_HEX;
       });
-      el.addEventListener('click', btn.action);
+      el.addEventListener('click', () => {
+        SoundManager.playUI('Intro_AcceptButton');
+        btn.action();
+      });
       content.appendChild(el);
     }
 
@@ -106,6 +120,7 @@ export class StartMenuState implements SceneState {
   update(_dt: number) {}
 
   exit() {
+    SoundManager.stopMusic();
     this.overlay?.remove();
   }
 }

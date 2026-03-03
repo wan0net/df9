@@ -135,9 +135,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     exit() {},
   });
 
-  // ── Initialize audio ──────────────────────────────────────
-  SoundManager.init();
-  SoundManager.generateFallbackSounds();
+  // ── Initialize audio (may already be initialized from StartMenu) ──
+  if (!SoundManager.isInitialized()) {
+    SoundManager.init();
+    SoundManager.generateFallbackSounds();
+  }
+  SoundManager.resume();
+  SoundManager.stopMusic(); // Stop menu music
   const musicSystem = new MusicSystem();
   musicSystem.startGame();
 
