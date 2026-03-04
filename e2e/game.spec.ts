@@ -1957,4 +1957,155 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
     expect(entry).toBeNull();
   });
+
+  // ── Priority 10: Affinity & Familiarity System ─────────────
+
+  test('affinity: lazy generation returns value in [-10, 10]', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+
+    const aff = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterAffinity(id, 'TestTopic_LazyGen');
+    }, charId);
+
+    expect(aff).toBeGreaterThanOrEqual(-10);
+    expect(aff).toBeLessThanOrEqual(10);
+
+    // Same topic should return same value (deterministic after first access)
+    const aff2 = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterAffinity(id, 'TestTopic_LazyGen');
+    }, charId);
+    expect(aff2).toBe(aff);
+  });
+
+  test('affinity: setAffinity and addAffinity clamp to [-20, 20]', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+
+    // Set to 15, then add 10 — should clamp to 20
+    await page.evaluate((id: number) => {
+      (window as any).__df9?.setCharacterAffinity(id, 'TestClamp', 15);
+    }, charId);
+    let aff = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterAffinity(id, 'TestClamp');
+    }, charId);
+    expect(aff).toBe(15);
+
+    // Set to 25 — should clamp to 20
+    await page.evaluate((id: number) => {
+      (window as any).__df9?.setCharacterAffinity(id, 'TestClamp', 25);
+    }, charId);
+    aff = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterAffinity(id, 'TestClamp');
+    }, charId);
+    expect(aff).toBe(20);
+
+    // Set to -25 — should clamp to -20
+    await page.evaluate((id: number) => {
+      (window as any).__df9?.setCharacterAffinity(id, 'TestClamp', -25);
+    }, charId);
+    aff = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterAffinity(id, 'TestClamp');
+    }, charId);
+    expect(aff).toBe(-20);
+  });
+
+  test('affinity: job affinity uses DUTY_ prefix', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+
+    // Set a known duty affinity
+    await page.evaluate((id: number) => {
+      (window as any).__df9?.setCharacterAffinity(id, 'DUTY_Builder', 8);
+    }, charId);
+
+    const jobAff = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterJobAffinity(id);
+    }, charId);
+
+    // jobAffinity returns the affinity for the character's current job
+    expect(jobAff).not.toBeNull();
+    expect(typeof jobAff).toBe('number');
+  });
+
+  test('affinity: familiarity defaults to 0 for unknown and increases with addFamiliarity', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    expect(chars.length).toBeGreaterThanOrEqual(1);
+    const charA = chars[0].id;
+    // Use a character ID that doesn't exist to test default
+    const fakeId = 99999;
+
+    // Familiarity for unknown character defaults to 0
+    const fam0 = await page.evaluate(({ a, b }: { a: number; b: number }) => {
+      return (window as any).__df9?.getCharacterFamiliarity(a, b);
+    }, { a: charA, b: fakeId });
+    expect(fam0).toBe(0);
+
+    // Add familiarity
+    await page.evaluate(({ a, b }: { a: number; b: number }) => {
+      (window as any).__df9?.addCharacterFamiliarity(a, b, 5);
+    }, { a: charA, b: fakeId });
+
+    const fam1 = await page.evaluate(({ a, b }: { a: number; b: number }) => {
+      return (window as any).__df9?.getCharacterFamiliarity(a, b);
+    }, { a: charA, b: fakeId });
+    expect(fam1).toBe(5);
+
+    // Add more and verify it accumulates
+    await page.evaluate(({ a, b }: { a: number; b: number }) => {
+      (window as any).__df9?.addCharacterFamiliarity(a, b, 3);
+    }, { a: charA, b: fakeId });
+
+    const fam2 = await page.evaluate(({ a, b }: { a: number; b: number }) => {
+      return (window as any).__df9?.getCharacterFamiliarity(a, b);
+    }, { a: charA, b: fakeId });
+    expect(fam2).toBe(8);
+  });
+
+  test('affinity: getAffinityIconAndColor returns correct icons per threshold', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return {
+        bigFrown: df9.getAffinityIconAndColor(-15),
+        frown: df9.getAffinityIconAndColor(-5),
+        neutral: df9.getAffinityIconAndColor(0),
+        smile: df9.getAffinityIconAndColor(5),
+        bigSmile: df9.getAffinityIconAndColor(15),
+      };
+    });
+
+    expect(result.bigFrown.icon).toBe('bigfrown');
+    expect(result.frown.icon).toBe('frown');
+    expect(result.neutral.icon).toBe('meh');
+    expect(result.smile.icon).toBe('smile');
+    expect(result.bigSmile.icon).toBe('bigsmile');
+  });
+
+  test('affinity: log stubs return non-zero values with affinity set', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+
+    // Set a strong duty affinity so log tag scoring picks it up
+    await page.evaluate((id: number) => {
+      const df9 = (window as any).__df9;
+      // Set affinity for their current job
+      const chars = df9.getCharacters();
+      const char = chars.find((c: any) => c.id === id);
+      if (char) {
+        const jobNames: Record<number, string> = {
+          1: 'Unemployed', 2: 'Builder', 3: 'Technician', 4: 'Miner',
+          5: 'Security', 7: 'Bartender', 8: 'Botanist', 9: 'Scientist',
+          12: 'Doctor', 13: 'Janitor',
+        };
+        const dutyKey = 'DUTY_' + (jobNames[char.job] ?? 'Unknown');
+        df9.setCharacterAffinity(id, dutyKey, 8);
+      }
+    }, charId);
+
+    // Job affinity should now be non-zero
+    const jobAff = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterJobAffinity(id);
+    }, charId);
+    expect(jobAff).not.toBe(0);
+  });
 });

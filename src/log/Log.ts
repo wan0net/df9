@@ -135,16 +135,10 @@ function getFavoriteFood(_char: Character): string {
  */
 function getBestFriend(char: Character): string {
   // Find highest affinity person (mirrors rChar:getFavorite('People'))
-  let bestId = -1;
-  let bestAff = -Infinity;
-  for (const [id, aff] of char.tAffinity) {
-    if (id !== char.id && aff > bestAff) {
-      bestAff = aff;
-      bestId = id;
-    }
-  }
-  if (bestId >= 0) {
-    // Would need CharacterManager ref to get name — use generic fallback.
+  // Uses getPeopleOfAffinity which returns sorted by affinity * familiarity
+  const people = char.getPeopleOfAffinity(0, true);
+  if (people.length > 0) {
+    // Would need CharacterManager ref to get actual name — use generic fallback.
     // Original Lua falls back to 'SFSECU027CITZ' ("my best friend").
     return 'my best friend';
   }
@@ -220,9 +214,8 @@ function dutyScore(char: Character, nDuty: number): number {
  * currentDutyAffScore: map job affinity to -1..1 tag score range.
  * Log.lua line 971: `rChar:getJobAffinity(rChar.tStats.nJob) / 10`
  */
-function currentDutyAffScore(_char: Character): number {
-  // TODO: Implement job affinity system (Character:getJobAffinity)
-  return 0;
+function currentDutyAffScore(char: Character): number {
+  return char.getJobAffinity() / 10;
 }
 
 /**
@@ -255,17 +248,15 @@ function moraleScore(char: Character): number {
  * Log.lua line 994: `rChar:getAffinity(rChar.tStats.sUniqueID) / Character.STARTING_AFFINITY`
  */
 function selfEsteemScore(char: Character): number {
-  const selfAff = char.tAffinity.get(char.id) ?? STARTING_AFFINITY;
-  return selfAff / STARTING_AFFINITY;
+  return char.getAffinity(String(char.id)) / STARTING_AFFINITY;
 }
 
 /**
  * activityScore: return activity affinity as a -1..1 score.
  * Log.lua line 989: `rChar:getAffinity(sActivity) / Character.STARTING_AFFINITY`
  */
-function activityScore(_char: Character, _sActivity: string): number {
-  // TODO: Implement activity affinity system (Character:getAffinity)
-  return 0;
+function activityScore(char: Character, sActivity: string): number {
+  return char.getActivityAffinity(sActivity) / STARTING_AFFINITY;
 }
 
 /**

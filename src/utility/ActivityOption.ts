@@ -6,7 +6,7 @@
 
 import type { Task, NeedAdvertisement } from './Task';
 import type { Character } from '../characters/Character';
-import { TEAM_ID_PLAYER } from '../characters/CharacterConstants';
+import { TEAM_ID_PLAYER, ACTIVITY_AFFINITY_CHANGE_PCT } from '../characters/CharacterConstants';
 import { isoSquareDist } from '../core/MiscUtil';
 
 /** Distance penalty factor for utility scoring. */
@@ -188,6 +188,13 @@ export class ActivityOption {
       // Lower current value = higher utility for satisfying it
       const urgency = Math.max(0, 100 - currentValue) / 100;
       score += urgency * adv.amount;
+    }
+
+    // Activity affinity modifier (Lua: ±ACTIVITY_AFFINITY_CHANGE_PCT)
+    const actAff = character.getActivityAffinity(this.task.name);
+    if (actAff !== 0) {
+      // Positive affinity boosts score, negative reduces it, scaled by ±20%
+      score *= 1 + (actAff > 0 ? 1 : -1) * ACTIVITY_AFFINITY_CHANGE_PCT * (Math.abs(actAff) / 10);
     }
 
     // Distance penalty

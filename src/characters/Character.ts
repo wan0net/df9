@@ -19,6 +19,8 @@ import {
   CAUSE_OF_DEATH,
   SPACESUIT_MAX_OXYGEN,
   MAX_LOG_ENTRIES, LOG_RECENT_HISTORY, LOG_RATE_MIN, LOG_RATE_MAX,
+  MAX_AFFINITY, STARTING_AFFINITY,
+  STUFF_AFFINITY_PICKUP_THRESHOLD, STUFF_AFFINITY_DISCARD_THRESHOLD,
 } from './CharacterConstants';
 import { Malady, type MaladyInstance } from '../malady/Malady';
 import { CharacterInventory, createRandomStartingStuff } from '../inventory/Inventory';
@@ -52,8 +54,11 @@ export class Character {
   nMorale = 50;
   nAnger = 0;
 
-  // ── Affinity tracking ───────────────────────────────────────
-  tAffinity: Map<number, number> = new Map();
+  // ── Affinity & Familiarity ──────────────────────────────────
+  /** Topic-keyed affinity: person IDs (as strings), 'DUTY_Builder', 'Drinking', 'Room_42', etc. */
+  tAffinity: Map<string, number> = new Map();
+  /** Person-keyed familiarity: tracks time spent together. */
+  tFamiliarity: Map<string, number> = new Map();
 
   // Spacewalking (original: tStatus.bSpacewalking)
   bSpacewalking = false;
@@ -357,6 +362,117 @@ export class Character {
   /** Check if character can carry more items. */
   canCarry(): boolean {
     return this.inventory.getTotalCount() < Character.MAX_INVENTORY;
+  }
+
+  // ── Affinity Methods ─────────────────────────────────────────
+
+  /**
+   * Get affinity for a topic. Lazy-loads a random value [-STARTING_AFFINITY, +STARTING_AFFINITY]
+   * on first access (mirrors Lua Character:getAffinity / generateAffinityFor).
+   */
+  getAffinity(topic: string): number {
+    let val = this.tAffinity.get(topic);
+    if (val === undefined) {
+      val = (Math.random() * 2 - 1) * STARTING_AFFINITY;
+      this.tAffinity.set(topic, val);
+    }
+    return val;
+  }
+
+  /** Add to affinity for a topic, clamped to [-MAX_AFFINITY, MAX_AFFINITY]. */
+  addAffinity(topic: string, change: number) {
+    const current = this.getAffinity(topic);
+    this.tAffinity.set(topic, Math.max(-MAX_AFFINITY, Math.min(MAX_AFFINITY, current + change)));
+  }
+
+  /** Set affinity for a topic directly, clamped to [-MAX_AFFINITY, MAX_AFFINITY]. */
+  setAffinity(topic: string, value: number) {
+    this.tAffinity.set(topic, Math.max(-MAX_AFFINITY, Math.min(MAX_AFFINITY, value)));
+  }
+
+  /** Get affinity normalized to 0-1 range. */
+  getNormalizedAffinity(topic: string): number {
+    return 0.5 + 0.5 * (this.getAffinity(topic) / MAX_AFFINITY);
+  }
+
+  /** Get affinity for a job duty (topic key: 'DUTY_<jobname>'). */
+  getJobAffinity(jobId?: number): number {
+    const job = jobId ?? this.tStats.nJob;
+    const name = JOB_NAMES[job] ?? 'Unknown';
+    return this.getAffinity(`DUTY_${name}`);
+  }
+
+  /** Get affinity for an activity. Returns the value (lazy-generated). */
+  getActivityAffinity(activity: string): number {
+    return this.getAffinity(activity);
+  }
+
+  /** Add room affinity (topic key: 'Room_<id>'). */
+  addRoomAffinity(roomId: number, change: number) {
+    this.addAffinity(`Room_${roomId}`, change);
+  }
+
+  /** Get room affinity (topic key: 'Room_<id>'). */
+  getRoomAffinity(roomId: number): number {
+    return this.getAffinity(`Room_${roomId}`);
+  }
+
+  // ── Familiarity Methods ────────────────────────────────────
+
+  /** Get familiarity with another character (defaults to 0). */
+  getFamiliarity(charId: number): number {
+    return this.tFamiliarity.get(String(charId)) ?? 0;
+  }
+
+  /** Add familiarity with another character. */
+  addFamiliarity(charId: number, amount: number) {
+    const key = String(charId);
+    this.tFamiliarity.set(key, (this.tFamiliarity.get(key) ?? 0) + amount);
+  }
+
+  /** Set familiarity with another character directly. */
+  setFamiliarity(charId: number, amount: number) {
+    this.tFamiliarity.set(String(charId), amount);
+  }
+
+  /**
+   * Get people with affinity >= or < threshold, sorted by affinity * familiarity.
+   * Returns array of { charId, nAffinity, nFamiliarity }.
+   */
+  getPeopleOfAffinity(threshold: number, greaterThan: boolean): { charId: number; nAffinity: number; nFamiliarity: number }[] {
+    const results: { charId: number; nAffinity: number; nFamiliarity: number }[] = [];
+    for (const [key, aff] of this.tAffinity) {
+      // Only consider numeric keys (person IDs)
+      const id = Number(key);
+      if (isNaN(id) || id === this.id) continue;
+      if (greaterThan ? aff >= threshold : aff < threshold) {
+        const fam = this.getFamiliarity(id);
+        results.push({ charId: id, nAffinity: aff, nFamiliarity: fam });
+      }
+    }
+    results.sort((a, b) => (b.nAffinity * b.nFamiliarity * 0.1) - (a.nAffinity * a.nFamiliarity * 0.1));
+    return results;
+  }
+
+  /** Get all topics with a given prefix, sorted by affinity descending. */
+  getSortedAffinityList(prefix: string): { topic: string; value: number }[] {
+    const results: { topic: string; value: number }[] = [];
+    for (const [key, val] of this.tAffinity) {
+      if (key.startsWith(prefix)) {
+        results.push({ topic: key, value: val });
+      }
+    }
+    results.sort((a, b) => b.value - a.value);
+    return results;
+  }
+
+  /** Get icon name and color for an affinity value (mirrors Lua AFFINITY_ICONS). */
+  static getAffinityIconAndColor(aff: number): { icon: string; color: string } {
+    if (aff >= 7.5) return { icon: 'bigsmile', color: '#4f4' };
+    if (aff >= 2.5) return { icon: 'smile', color: '#8f8' };
+    if (aff >= -2.5) return { icon: 'meh', color: '#ff0' };
+    if (aff >= -7.5) return { icon: 'frown', color: '#f80' };
+    return { icon: 'bigfrown', color: '#f44' };
   }
 
   // ── Log Methods ──────────────────────────────────────────────

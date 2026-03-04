@@ -263,6 +263,10 @@ export const PERSONALITY_TRAITS = {
   nAuthoritarian: 19,
 } as const;
 
+// ── Stuff / Object Affinity ─────────────────────────────────────────────
+export const STUFF_AFFINITY_PICKUP_THRESHOLD = 2;
+export const STUFF_AFFINITY_DISCARD_THRESHOLD = -1;
+
 // ── Log / Journal ──────────────────────────────────────────────────────
 export const MAX_LOG_ENTRIES = 100;
 export const LOG_RECENT_HISTORY = 5;

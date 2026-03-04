@@ -3,8 +3,10 @@ import {
   MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
   RAIDER,
   CAUSE_OF_DEATH, MORALE_CITIZEN_DIES_MIN, MORALE_CITIZEN_DIES_MAX,
+  MORALE_MAX_FAMILIARITY_DEATH, MORALE_MAX_AFFINITY_DEATH,
   ANGER_MAX, VIOLENT_RAMPAGE_CHANCE, HURT_THRESHOLD,
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
+  FAMILIARITY_TICK_RATE, FAMILIARITY_TICK_INCREASE,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -101,6 +103,9 @@ export class CharacterManager {
   private static readonly CONTAGION_INTERVAL = 5;
   /** Contagion range in tiles (manhattan distance). */
   private static readonly CONTAGION_RANGE = 3;
+
+  /** Familiarity tick accumulator (seconds). */
+  private familiarityTimer = 0;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -207,6 +212,13 @@ export class CharacterManager {
       this.processContagion();
     }
 
+    // Familiarity ticking: characters in same room gain familiarity
+    this.familiarityTimer += dtSec;
+    if (this.familiarityTimer >= FAMILIARITY_TICK_RATE) {
+      this.familiarityTimer -= FAMILIARITY_TICK_RATE;
+      this.processFamiliarity();
+    }
+
     // Process combat
     this.processCombat(dtSec);
 
@@ -288,13 +300,16 @@ export class CharacterManager {
         Base.addAlert('death', `${char.getName()} has died (${causeName.toLowerCase()})`);
 
         // Morale hit on all living player characters (not for enemy deaths)
+        // Lua: lossPct = (min(familiarity, MAX_FAMILIARITY_DEATH) * clamp(affinity, 0, MAX_AFFINITY_DEATH)) / (MAX_FAMILIARITY_DEATH * MAX_AFFINITY_DEATH)
+        // loss = lerp(MORALE_CITIZEN_DIES_MIN, MORALE_CITIZEN_DIES_MAX, lossPct)
         if (char.tStats.nTeam === TEAM_ID_PLAYER) {
           for (const other of this.characters) {
             if (other === char || !other.isAlive()) continue;
             if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue;
-            const affinity = other.tAffinity.get(char.id) ?? 0;
-            const scale = Math.min(1, affinity / 10);
-            const hit = MORALE_CITIZEN_DIES_MIN + scale * (MORALE_CITIZEN_DIES_MAX - MORALE_CITIZEN_DIES_MIN);
+            const affinity = Math.max(0, Math.min(other.getAffinity(String(char.id)), MORALE_MAX_AFFINITY_DEATH));
+            const familiarity = Math.min(other.getFamiliarity(char.id), MORALE_MAX_FAMILIARITY_DEATH);
+            const lossPct = (familiarity * affinity) / (MORALE_MAX_FAMILIARITY_DEATH * MORALE_MAX_AFFINITY_DEATH);
+            const hit = MORALE_CITIZEN_DIES_MIN + lossPct * (MORALE_CITIZEN_DIES_MAX - MORALE_CITIZEN_DIES_MIN);
             other.nMorale = Math.max(-100, other.nMorale + hit);
           }
         }
@@ -339,6 +354,34 @@ export class CharacterManager {
       const anim = Malady.getSymptomAnim(carrier);
       if (anim === 'sneeze') {
         Malady.playedSymptomAnim(carrier, this.characters);
+      }
+    }
+  }
+
+  /**
+   * Familiarity ticking: characters in the same room gain familiarity with each other.
+   * Mirrors Character.lua familiarity tick — every FAMILIARITY_TICK_RATE seconds,
+   * all pairs of living player characters in the same room gain FAMILIARITY_TICK_INCREASE.
+   */
+  private processFamiliarity() {
+    // Group living player characters by room
+    const roomCharMap = new Map<number, Character[]>();
+    for (const char of this.characters) {
+      if (!char.isAlive() || char.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+      const room = this.roomManager.getRoomAt(char.tileX, char.tileY);
+      if (!room) continue;
+      let list = roomCharMap.get(room.id);
+      if (!list) { list = []; roomCharMap.set(room.id, list); }
+      list.push(char);
+    }
+    // For rooms with 2+ characters, increase familiarity between all pairs
+    for (const chars of roomCharMap.values()) {
+      if (chars.length < 2) continue;
+      for (let i = 0; i < chars.length; i++) {
+        for (let j = i + 1; j < chars.length; j++) {
+          chars[i].addFamiliarity(chars[j].id, FAMILIARITY_TICK_INCREASE);
+          chars[j].addFamiliarity(chars[i].id, FAMILIARITY_TICK_INCREASE);
+        }
       }
     }
   }

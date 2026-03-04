@@ -25,6 +25,7 @@ import { BuildCursor } from './building/BuildCursor';
 import { RoomManager } from './rooms/RoomManager';
 import { OxygenSystem } from './oxygen/OxygenSystem';
 import { CharacterManager } from './characters/CharacterManager';
+import { Character } from './characters/Character';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
 import { EnvObject } from './envobjects/EnvObject';
@@ -1107,6 +1108,37 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     },
     getLogTypeCount: () => Object.keys(LOG_TYPES).length,
     getLineCodeCount: () => Object.keys(LINE_CODES).length,
+    // ── Affinity & Familiarity helpers ────────────────────────
+    getCharacterAffinity: (charId: number, topic: string) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return null;
+      return char.getAffinity(topic);
+    },
+    setCharacterAffinity: (charId: number, topic: string, value: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      char.setAffinity(topic, value);
+      return true;
+    },
+    getCharacterFamiliarity: (charId: number, otherId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return null;
+      return char.getFamiliarity(otherId);
+    },
+    addCharacterFamiliarity: (charId: number, otherId: number, amount: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      char.addFamiliarity(otherId, amount);
+      return true;
+    },
+    getCharacterJobAffinity: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return null;
+      return char.getJobAffinity();
+    },
+    getAffinityIconAndColor: (aff: number) => {
+      return Character.getAffinityIconAndColor(aff);
+    },
     // ── UI Panel helpers ──────────────────────────────────────
     getResearchPanelVisible: () => uiManager.isResearchPanelVisible(),
     getGoalsPanelVisible: () => uiManager.isGoalsPanelVisible(),
