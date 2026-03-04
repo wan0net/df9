@@ -18,10 +18,12 @@ import {
   STATUS_HEALTHY, STATUS_DEAD, STATUS_SICK, STATUS_ILL, STATUS_INCAPACITATED,
   CAUSE_OF_DEATH,
   SPACESUIT_MAX_OXYGEN,
+  MAX_LOG_ENTRIES, LOG_RECENT_HISTORY, LOG_RATE_MIN, LOG_RATE_MAX,
 } from './CharacterConstants';
 import { Malady, type MaladyInstance } from '../malady/Malady';
 import { CharacterInventory, createRandomStartingStuff } from '../inventory/Inventory';
 import type { Task } from '../utility/Task';
+import type { LogEntry } from '../log/Log';
 
 /** Character stats block (mirrors Lua tStats) */
 export interface CharacterStats {
@@ -97,6 +99,16 @@ export class Character {
   // AI
   idleTimer = 0;
   currentTask: Task | null = null;
+
+  // ── Log / Journal ─────────────────────────────────────────────
+  /** Character's log entries (most recent first) */
+  tLog: LogEntry[] = [];
+  /** Queued log entries awaiting posting (priority queue) */
+  private tLogQueue: LogEntry[] = [];
+  /** Recently used linecodes (circular buffer) */
+  private recentLineCodes: string[] = [];
+  /** Cooldown timer before next queued log can post (seconds) */
+  private logCooldown = 0;
 
   // Morale tick accumulator
   private moraleTickAccum = 0;
@@ -345,6 +357,55 @@ export class Character {
   /** Check if character can carry more items. */
   canCarry(): boolean {
     return this.inventory.getTotalCount() < Character.MAX_INVENTORY;
+  }
+
+  // ── Log Methods ──────────────────────────────────────────────
+
+  /** Check if a linecode was used recently. */
+  lineCodeUsedRecently(code: string): boolean {
+    return this.recentLineCodes.includes(code);
+  }
+
+  /** Mark a linecode as recently used (circular buffer). */
+  markLineCodeUsed(code: string) {
+    this.recentLineCodes.push(code);
+    if (this.recentLineCodes.length > LOG_RECENT_HISTORY) {
+      this.recentLineCodes.shift();
+    }
+  }
+
+  /** Queue a log entry for later posting (sorted by priority desc). */
+  queueLog(entry: LogEntry) {
+    this.tLogQueue.push(entry);
+    this.tLogQueue.sort((a, b) => b.priority - a.priority);
+  }
+
+  /** Add a log entry directly to the character's log. */
+  addLogEntry(entry: LogEntry) {
+    this.tLog.unshift(entry);
+    if (this.tLog.length > MAX_LOG_ENTRIES) {
+      this.tLog.pop();
+    }
+  }
+
+  /** Post the highest-priority queued log entry if cooldown has elapsed. dt in seconds. */
+  postLogFromQueue(dt: number) {
+    this.logCooldown -= dt;
+    if (this.logCooldown > 0 || this.tLogQueue.length === 0) return;
+
+    const entry = this.tLogQueue.shift();
+    if (entry) {
+      this.addLogEntry(entry);
+    }
+
+    // Reset cooldown based on chattiness
+    const chattiness = this.tStats.personality.nChattiness ?? 0.5;
+    this.logCooldown = LOG_RATE_MAX - chattiness * (LOG_RATE_MAX - LOG_RATE_MIN);
+  }
+
+  /** Get log entries (most recent first). */
+  getLog(): LogEntry[] {
+    return this.tLog;
   }
 
   destroy() {

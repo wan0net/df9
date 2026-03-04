@@ -263,6 +263,12 @@ export const PERSONALITY_TRAITS = {
   nAuthoritarian: 19,
 } as const;
 
+// ── Log / Journal ──────────────────────────────────────────────────────
+export const MAX_LOG_ENTRIES = 100;
+export const LOG_RECENT_HISTORY = 5;
+export const LOG_RATE_MIN = 5;
+export const LOG_RATE_MAX = 15;
+
 export const PERSONALITY_LIKELIHOOD: Record<string, number> = {
   bEmoticon: 0.1,
   bJoker: 0.2,

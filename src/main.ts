@@ -61,6 +61,9 @@ import { Malady } from './malady/Malady';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
 import { CAUSE_OF_DEATH, FACTION_BEHAVIOR } from './characters/CharacterConstants';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
+import { Log } from './log/Log';
+import { LOG_TYPES } from './log/LogData';
+import { LINE_CODES } from './log/LineCodes';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
 
@@ -1084,6 +1087,26 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (!char) return null;
       return { ...char.tStats.personality };
     },
+    // ── Log / Journal System helpers ───────────────────────────
+    addCharacterLog: (charId: number, logType: string, tData?: Record<string, any>) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return null;
+      const entry = Log.add(char, logType, tData ?? {}, false);
+      return entry;
+    },
+    getCharacterLog: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return [];
+      return char.getLog().map(e => ({
+        sLine: e.sLine,
+        linecode: e.linecode,
+        logType: e.logType,
+        priority: e.priority,
+        nTagScore: e.nTagScore,
+      }));
+    },
+    getLogTypeCount: () => Object.keys(LOG_TYPES).length,
+    getLineCodeCount: () => Object.keys(LINE_CODES).length,
     // ── UI Panel helpers ──────────────────────────────────────
     getResearchPanelVisible: () => uiManager.isResearchPanelVisible(),
     getGoalsPanelVisible: () => uiManager.isGoalsPanelVisible(),

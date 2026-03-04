@@ -160,6 +160,8 @@ export class CharacterManager {
       // Pass room morale score to character morale update
       const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
       char.updateMorale(dtSec, charRoom?.nMoraleScore ?? 0);
+      // Process queued log entries
+      char.postLogFromQueue(dtSec);
 
       // Update active task
       if (char.currentTask && char.currentTask.isActive()) {

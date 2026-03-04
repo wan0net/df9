@@ -1859,4 +1859,102 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.foodRepPrice).toBe(50);
     expect(result.doorLayer).toBe('worldWall');
   });
+
+  // ── Priority 9: Log / Journal System ────────────────────────
+
+  test('log system: LineCodes and LogData are loaded', async () => {
+    const lineCodeCount = await page.evaluate(() => (window as any).__df9?.getLineCodeCount());
+    const logTypeCount = await page.evaluate(() => (window as any).__df9?.getLogTypeCount());
+    expect(lineCodeCount).toBeGreaterThanOrEqual(800);
+    expect(logTypeCount).toBeGreaterThanOrEqual(100);
+  });
+
+  test('log system: can add a GENERIC log entry to a character', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    expect(chars.length).toBeGreaterThan(0);
+    const charId = chars[0].id;
+
+    const entry = await page.evaluate((id: number) => {
+      return (window as any).__df9?.addCharacterLog(id, 'GENERIC');
+    }, charId);
+
+    expect(entry).not.toBeNull();
+    expect(entry.sLine).toBeTruthy();
+    expect(entry.logType).toBe('GENERIC');
+    expect(entry.linecode).toBeTruthy();
+    expect(typeof entry.priority).toBe('number');
+  });
+
+  test('log system: log entries are stored on character', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+
+    // Add multiple log entries
+    for (let i = 0; i < 3; i++) {
+      await page.evaluate((id: number) => {
+        (window as any).__df9?.addCharacterLog(id, 'GENERIC');
+      }, charId);
+    }
+
+    const log = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterLog(id);
+    }, charId);
+
+    expect(log.length).toBeGreaterThanOrEqual(3);
+    // Most recent first
+    expect(log[0].logType).toBe('GENERIC');
+  });
+
+  test('log system: different log types produce different entries', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+
+    const genericEntry = await page.evaluate((id: number) => {
+      return (window as any).__df9?.addCharacterLog(id, 'GENERIC');
+    }, charId);
+
+    const joinedEntry = await page.evaluate((id: number) => {
+      return (window as any).__df9?.addCharacterLog(id, 'JOINED');
+    }, charId);
+
+    expect(genericEntry).not.toBeNull();
+    expect(joinedEntry).not.toBeNull();
+    expect(genericEntry.logType).toBe('GENERIC');
+    expect(joinedEntry.logType).toBe('JOINED');
+    expect(joinedEntry.priority).toBe(3);
+  });
+
+  test('log system: replacement codes are resolved in log text', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+    const charName = chars[0].name ?? await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterName(id);
+    }, charId);
+
+    // JOINED entries often contain /MYNAME/ which should resolve to char name
+    // Add several to get one with a name reference
+    const entries: any[] = [];
+    for (let i = 0; i < 5; i++) {
+      const entry = await page.evaluate((id: number) => {
+        return (window as any).__df9?.addCharacterLog(id, 'JOINED');
+      }, charId);
+      if (entry) entries.push(entry);
+    }
+
+    // Verify no unresolved /CODE/ patterns remain
+    for (const e of entries) {
+      expect(e.sLine).not.toMatch(/\/[A-Z]+\//);
+    }
+  });
+
+  test('log system: invalid log type returns null', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+
+    const entry = await page.evaluate((id: number) => {
+      return (window as any).__df9?.addCharacterLog(id, 'NONEXISTENT_TYPE');
+    }, charId);
+
+    expect(entry).toBeNull();
+  });
 });

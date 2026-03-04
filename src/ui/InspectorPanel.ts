@@ -18,7 +18,7 @@ export type SelectedEntity =
   | { type: 'room'; data: Room }
   | null;
 
-type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'actions';
+type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'actions' | 'log';
 
 export class InspectorPanel {
   private el: HTMLDivElement;
@@ -180,6 +180,7 @@ export class InspectorPanel {
       { label: 'Needs', tab: 'needs' },
       { label: 'Psych', tab: 'psych' },
       { label: 'Actions', tab: 'actions' },
+      { label: 'Log', tab: 'log' },
     ];
     for (const t of tabs) {
       const btn = document.createElement('div');
@@ -215,6 +216,9 @@ export class InspectorPanel {
         break;
       case 'actions':
         this.renderActionsTab(body, char);
+        break;
+      case 'log':
+        this.renderLogTab(body, char);
         break;
     }
     this.contentEl.appendChild(body);
@@ -410,6 +414,48 @@ export class InspectorPanel {
       btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
     }
     return btn;
+  }
+
+  private renderLogTab(container: HTMLDivElement, char: Character) {
+    const log = char.getLog();
+    if (log.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No thoughts yet...';
+      empty.style.cssText = 'color:#666;font-style:italic;';
+      container.appendChild(empty);
+      return;
+    }
+
+    container.style.maxHeight = '200px';
+    container.style.overflowY = 'auto';
+
+    for (const entry of log.slice(0, 20)) {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:3px 0;border-bottom:1px solid #222;font-size:11px;';
+
+      const priorityColor = entry.priority >= 4 ? '#f44' :
+        entry.priority >= 3 ? '#ff0' :
+        entry.priority >= 2 ? AMBER : '#888';
+
+      const dot = document.createElement('span');
+      dot.textContent = '\u25CF';
+      dot.style.cssText = `color:${priorityColor};margin-right:4px;`;
+      row.appendChild(dot);
+
+      const text = document.createElement('span');
+      text.textContent = entry.sLine;
+      text.style.color = '#ccc';
+      row.appendChild(text);
+
+      container.appendChild(row);
+    }
+
+    if (log.length > 20) {
+      const more = document.createElement('div');
+      more.textContent = `... ${log.length - 20} more entries`;
+      more.style.cssText = 'color:#666;font-size:10px;text-align:center;margin-top:4px;';
+      container.appendChild(more);
+    }
   }
 
   // ── Object Inspector ────────────────────────────────────
