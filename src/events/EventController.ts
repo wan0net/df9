@@ -49,6 +49,8 @@ export class EventController implements TickableSystem {
   private forecast: ForecastEntry[] = [];
   private forecastGenerated = false;
   private compoundEventFired = false;
+  /** simTime when the compound (mega) event was triggered; -1 if not yet fired. */
+  private compoundEventStartTime = -1;
 
   // ── Callbacks ──────────────────────────────────────────────────
   /** Callback to spawn immigrant characters. Set from main.ts. */
@@ -114,6 +116,7 @@ export class EventController implements TickableSystem {
     if (!this.compoundEventFired && GameRules.simTime >= COMPOUND_EVENT_TIME && this.population >= 8) {
       this.fireCompoundEvent();
       this.compoundEventFired = true;
+      this.compoundEventStartTime = GameRules.simTime;
     }
   }
 
@@ -314,11 +317,17 @@ export class EventController implements TickableSystem {
     }));
   }
 
+  /** Returns whether the compound (mega) event has fired, and when. */
+  getCompoundEventState(): { fired: boolean; startTime: number } {
+    return { fired: this.compoundEventFired, startTime: this.compoundEventStartTime };
+  }
+
   /** Get save data for persistence. */
   getSaveData() {
     return {
       forecastGenerated: this.forecastGenerated,
       compoundEventFired: this.compoundEventFired,
+      compoundEventStartTime: this.compoundEventStartTime,
       forecast: this.forecast.map(f => ({
         defName: Object.keys(EVENT_DEFS).find(k => EVENT_DEFS[k].name === f.def.name) ?? '',
         scheduledTime: f.scheduledTime,
@@ -331,6 +340,7 @@ export class EventController implements TickableSystem {
   loadSaveData(data: ReturnType<typeof this.getSaveData>) {
     this.forecastGenerated = data.forecastGenerated;
     this.compoundEventFired = data.compoundEventFired;
+    this.compoundEventStartTime = (data as any).compoundEventStartTime ?? -1;
     this.forecast = data.forecast.map(f => ({
       def: EVENT_DEFS[f.defName] ?? EVENT_DEFS['Immigration'],
       scheduledTime: f.scheduledTime,

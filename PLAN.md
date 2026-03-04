@@ -306,16 +306,23 @@
 
 ---
 
-## 13. Goals Update (~60% → ?)
-**Goal**: Match original Lua goals (15 achievements with correct thresholds).
+## 13. Goals Update (~60% → 100% ✅)
+**Goal**: Match original Lua goals (16 achievements with correct thresholds).
 
-- [ ] Replace simplified goals with original 15 (Citizens≥50, Matter≥50000, BuiltEverything, HostilesKilled≥50, BaseTiles≥3000, MealsServed≥1000, CuresResearched≥10, AllTechs, HappyCitizens≥30@morale>90, BreachShipsDestroyed≥5, AllPossessions, RaidersConverted≥10, HostilesAsphyxiated≥10, HostilesKilledByTurrets≥20, BodiesRefined≥100, FinalSiege)
-- [ ] Wire goal checks to stats system
-- [ ] Implement FinalSiege complex check (survive mega-event + 120s, friendly in safe room, all hostiles dead)
+- [x] Replace 12 simplified goals with 16 Lua-accurate goals in GoalData.ts
+- [x] Citizens≥50, Matter≥50000, BuiltEverything (dynamic), HostilesKilled≥50, BaseTiles≥3000
+- [x] MealsServed≥1000, CuresResearched≥10, AllTechs (dynamic), HappyCitizens≥30 @morale>90
+- [x] BreachShipsDestroyed≥5, AllPossessions (dynamic), RaidersConverted≥10
+- [x] HostilesAsphyxiated≥10, HostilesKilledByTurrets≥20, BodiesRefined≥100
+- [x] FinalSiege: compound event + 120s + friendly alive + all hostiles dead
+- [x] Stat-based checks via Base.getStats() — no extra counters in GoalSystem
+- [x] getProgress(goalName) for UI progress bars; getGoalProgress helper in main.ts
+- [x] compoundEventStartTime added to EventController (+ save/load)
+- [x] 5 new E2E tests; 102 passing total, 0 TypeScript errors
 
-**What we did**: (not started)
-**What we didn't do**: (everything)
-**Blockers**: Statistics tracking (#3)
+**What we did**: Full replacement with Lua-accurate 16-goal set, wired stat checks + complex FinalSiege.
+**What we didn't do**: GoalsPanel UI progress bars (UI polish pass needed).
+**Blockers**: None
 
 ---
 

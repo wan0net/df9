@@ -1,101 +1,142 @@
 /**
  * GoalData.ts — Goal/achievement definitions.
- * Mirrors GoalData.lua: 12 goals tracking player progress.
+ * Mirrors GoalData.lua: 16 goals matching original Spacebase DF-9 exactly.
  */
 
 export interface GoalDef {
   sName: string;
   friendlyName: string;
   description: string;
-  /** Check function key — matched in GoalSystem. */
+  /** Check type key — matched in GoalSystem.checkGoal(). */
   checkType: string;
-  /** Threshold value for completion. */
+  /** Target threshold (used by most check types). */
   nThreshold: number;
 }
 
 export const GOAL_DEFS: GoalDef[] = [
+  // ── Population / Resources ──────────────────────────────────────────
   {
-    sName: 'FirstRoom',
-    friendlyName: 'First Room',
-    description: 'Build your first enclosed room',
-    checkType: 'roomCount',
-    nThreshold: 1,
-  },
-  {
-    sName: 'FiveRooms',
-    friendlyName: 'Expanding',
-    description: 'Have 5 rooms in your base',
-    checkType: 'roomCount',
-    nThreshold: 5,
-  },
-  {
-    sName: 'TenCrew',
-    friendlyName: 'Growing Community',
-    description: 'Have 10 crew members',
+    sName: 'Citizens',
+    friendlyName: 'Population Boom',
+    description: 'Have 50 citizens living in your base',
     checkType: 'population',
+    nThreshold: 50,
+  },
+  {
+    sName: 'Matter',
+    friendlyName: 'Loaded',
+    description: 'Accumulate 50,000 matter',
+    checkType: 'matter',
+    nThreshold: 50000,
+  },
+  // ── Building ────────────────────────────────────────────────────────
+  {
+    sName: 'BuiltEverything',
+    friendlyName: 'One of Everything',
+    description: 'Build at least one of every object type',
+    checkType: 'builtEverything',
+    nThreshold: 0, // dynamic — all showInObjectMenu types
+  },
+  // ── Combat ──────────────────────────────────────────────────────────
+  {
+    sName: 'HostilesKilled',
+    friendlyName: 'Exterminator',
+    description: 'Kill 50 hostile raiders',
+    checkType: 'stat:nHostilesKilled',
+    nThreshold: 50,
+  },
+  // ── Territory ───────────────────────────────────────────────────────
+  {
+    sName: 'BaseTiles',
+    friendlyName: 'Growing Fast',
+    description: 'Have 3,000 base tiles',
+    checkType: 'baseTiles',
+    nThreshold: 3000,
+  },
+  // ── Food ────────────────────────────────────────────────────────────
+  {
+    sName: 'MealsServed',
+    friendlyName: 'Five-Star Chef',
+    description: 'Serve 1,000 meals',
+    checkType: 'stat:nMealsServed',
+    nThreshold: 1000,
+  },
+  // ── Research ────────────────────────────────────────────────────────
+  {
+    sName: 'CuresResearched',
+    friendlyName: 'Doctor Doctor',
+    description: 'Research 10 disease cures',
+    checkType: 'stat:nCuresResearched',
     nThreshold: 10,
   },
   {
-    sName: 'TwentyCrew',
-    friendlyName: 'Bustling Station',
-    description: 'Have 20 crew members',
-    checkType: 'population',
+    sName: 'AllTechs',
+    friendlyName: 'Master of Science',
+    description: 'Research all technologies',
+    checkType: 'allTechs',
+    nThreshold: 0, // dynamic — all non-bDiscoverOnly techs
+  },
+  // ── Morale ──────────────────────────────────────────────────────────
+  {
+    sName: 'HappyCitizens',
+    friendlyName: 'Happy Station',
+    description: 'Have 30 citizens with morale above 90',
+    checkType: 'happyCitizens',
+    nThreshold: 30,
+  },
+  // ── Events ──────────────────────────────────────────────────────────
+  {
+    sName: 'BreachShipsDestroyed',
+    friendlyName: 'Repel Boarders',
+    description: 'Destroy 5 breach ships',
+    checkType: 'stat:nBreachShipsDestroyed',
+    nThreshold: 5,
+  },
+  // ── Inventory ───────────────────────────────────────────────────────
+  {
+    sName: 'AllPossessions',
+    friendlyName: 'Hoarder',
+    description: 'Collect all displayable item types',
+    checkType: 'allPossessions',
+    nThreshold: 0, // dynamic — all bStuff+bDisplayable items
+  },
+  // ── Factions ────────────────────────────────────────────────────────
+  {
+    sName: 'RaidersConverted',
+    friendlyName: 'Turn the Other Cheek',
+    description: 'Convert 10 raiders to your cause',
+    checkType: 'stat:nRaidersConverted',
+    nThreshold: 10,
+  },
+  // ── Combat (continued) ──────────────────────────────────────────────
+  {
+    sName: 'HostilesAsphyxiated',
+    friendlyName: 'Space is a Harsh Mistress',
+    description: 'Asphyxiate 10 hostiles',
+    checkType: 'stat:nHostilesAsphyxiated',
+    nThreshold: 10,
+  },
+  {
+    sName: 'HostilesKilledByTurrets',
+    friendlyName: 'Automated Defense',
+    description: 'Kill 20 hostiles with turrets',
+    checkType: 'stat:nHostilesKilledByTurret',
     nThreshold: 20,
   },
+  // ── Recycling ───────────────────────────────────────────────────────
   {
-    sName: 'FirstResearch',
-    friendlyName: 'Discovery',
-    description: 'Complete your first research project',
-    checkType: 'researchCompleted',
-    nThreshold: 1,
+    sName: 'BodiesRefined',
+    friendlyName: 'Recycler',
+    description: 'Recycle 100 corpses into matter',
+    checkType: 'stat:nCorpsesRecycled',
+    nThreshold: 100,
   },
+  // ── Final Goal ──────────────────────────────────────────────────────
   {
-    sName: 'ThreeResearch',
-    friendlyName: 'Scientific Progress',
-    description: 'Complete 3 research projects',
-    checkType: 'researchCompleted',
-    nThreshold: 3,
-  },
-  {
-    sName: 'FirstKill',
-    friendlyName: 'First Blood',
-    description: 'Defeat a hostile raider',
-    checkType: 'hostilesDefeated',
-    nThreshold: 1,
-  },
-  {
-    sName: 'SurviveOneHour',
-    friendlyName: 'Survivor',
-    description: 'Survive for 1 hour',
-    checkType: 'simTime',
-    nThreshold: 3600,
-  },
-  {
-    sName: 'Matter5000',
-    friendlyName: 'Resourceful',
-    description: 'Accumulate 5000 matter',
-    checkType: 'matter',
-    nThreshold: 5000,
-  },
-  {
-    sName: 'AllZones',
-    friendlyName: 'Full Service',
-    description: 'Have at least one of every zone type',
-    checkType: 'uniqueZones',
-    nThreshold: 8,
-  },
-  {
-    sName: 'SurviveSiege',
-    friendlyName: 'Under Siege',
-    description: 'Survive the compound event',
-    checkType: 'siegeSurvived',
-    nThreshold: 1,
-  },
-  {
-    sName: 'HighMorale',
-    friendlyName: 'Happy Station',
-    description: 'All crew members have morale above 50',
-    checkType: 'allMoraleAbove',
-    nThreshold: 50,
+    sName: 'FinalSiege',
+    friendlyName: 'Victory!',
+    description: 'Survive the final siege: endure the compound event and eliminate all hostiles',
+    checkType: 'finalSiege',
+    nThreshold: 0,
   },
 ];

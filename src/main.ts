@@ -39,6 +39,7 @@ import { Fire } from './hazards/Fire';
 import { ProjectileManager } from './hazards/Projectile';
 import { SaveLoadSystem } from './save/SaveLoad';
 import { researchSystem } from './research/ResearchSystem';
+import { RESEARCH_DEFS } from './research/ResearchData';
 import { GoalSystem } from './goals/GoalSystem';
 import { HintSystem } from './hints/HintSystem';
 import { SoundManager } from './audio/SoundManager';
@@ -60,7 +61,7 @@ import {
 import { ITEM_TEMPLATES, TAGS, STUFF_NAMES } from './inventory/InventoryData';
 import { Malady } from './malady/Malady';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
-import { CAUSE_OF_DEATH, FACTION_BEHAVIOR } from './characters/CharacterConstants';
+import { CAUSE_OF_DEATH, FACTION_BEHAVIOR, TEAM_ID_PLAYER } from './characters/CharacterConstants';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
 import { Log } from './log/Log';
 import { LOG_TYPES } from './log/LogData';
@@ -296,22 +297,57 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const saveLoadSystem = new SaveLoadSystem(grid, roomManager);
 
   // Goal system
-  let _hostilesDefeated = 0;
-  let _siegeSurvived = 0;
   const goalSystem: GoalSystem = new GoalSystem({
-    getRoomCount: () => roomManager.getRooms().length,
     getPopulation: () => characterManager.getPopulation(),
-    getResearchCompleted: () => researchSystem.getCompletedList().length,
-    getHostilesDefeated: () => _hostilesDefeated,
     getMatter: () => GameRules.nMatter,
-    getUniqueZones: () => {
-      const zones = new Set(roomManager.getRooms().map(r => r.zone));
-      return zones.size;
+    getBaseTileCount: () => {
+      return roomManager.getRooms().reduce((sum, r) => sum + r.size, 0);
     },
-    getSiegeSurvived: () => _siegeSurvived,
-    getAllMoraleAbove: (threshold: number) => {
-      const chars = characterManager.getCharacters();
-      return chars.length > 0 && chars.every(c => c.nMorale > threshold);
+    getBuiltEverything: () => {
+      const builtable = Object.keys(tObjects).filter(k => tObjects[k].showInObjectMenu);
+      const builtNames = new Set(
+        EnvObjectManager.getObjects().filter(o => o.bBuilt).map(o => o.sName),
+      );
+      const built = builtable.filter(k => builtNames.has(k)).length;
+      return { done: built >= builtable.length, built, total: builtable.length };
+    },
+    getAllTechs: () => {
+      const all = Object.entries(RESEARCH_DEFS).filter(([, d]) => !d.bDiscoverOnly);
+      const completedSet = new Set(researchSystem.getCompletedList());
+      const completed = all.filter(([id]) => completedSet.has(id)).length;
+      return { done: completed >= all.length, completed, total: all.length };
+    },
+    getHappyCitizenCount: () => {
+      return characterManager.getCharacters().filter(c => c.nMorale > 90).length;
+    },
+    getAllPossessions: () => {
+      const possTypes = Object.entries(ITEM_TEMPLATES)
+        .filter(([, t]) => t.bStuff && t.bDisplayable)
+        .map(([name]) => name);
+      const ownedNames = new Set<string>();
+      for (const char of characterManager.getCharacters()) {
+        for (const item of char.inventory.getAll()) {
+          ownedNames.add(item.sTemplate);
+        }
+      }
+      const collected = possTypes.filter(n => ownedNames.has(n)).length;
+      return { done: collected >= possTypes.length, collected, total: possTypes.length };
+    },
+    getFinalSiegeStatus: () => {
+      const { fired, startTime } = eventController.getCompoundEventState();
+      if (!fired || startTime < 0) return false;
+      if (GameRules.simTime < startTime + 120) return false;
+      // At least one alive, non-incapacitated citizen
+      const chars = characterManager.getAllCharacters();
+      const hasFriendly = chars.some(
+        c => c.tStats.nTeam === TEAM_ID_PLAYER && c.isAlive() && !Malady.isIncapacitated(c),
+      );
+      if (!hasFriendly) return false;
+      // All hostiles dead or incapacitated
+      const allHostilesDead = chars
+        .filter(c => c.tStats.nTeam !== TEAM_ID_PLAYER && c.tStats.nTeam !== 0)
+        .every(c => !c.isAlive() || Malady.isIncapacitated(c));
+      return allHostilesDead;
     },
   });
 
@@ -1004,6 +1040,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       completedCount: goalSystem.getCompletedCount(),
       totalGoals: goalSystem.getTotalGoals(),
     }),
+    getGoalProgress: (goalName: string) => goalSystem.getProgress(goalName),
     getStats: () => ({ ...Base.tStats }),
     incrementStat: (key: string, amount?: number) => Base.incrementStat(key as any, amount),
     // ── Inventory System ────────────────────────────────────────
