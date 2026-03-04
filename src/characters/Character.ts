@@ -7,6 +7,8 @@ import { generatePersonality, type PersonalityTraits } from './Personality';
 import {
   UNEMPLOYED, TEAM_ID_PLAYER, JOB_NAMES, tJobs,
   BUILDER, TECHNICIAN, MINER, EMERGENCY, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR,
+  RACE_HUMAN, RACE_CAT, RACE_NAMES, HUMAN_RACE_PCT, CAT_RACE_PCT,
+  RANDOM_ALIEN_RACES, NON_BREATHING_RACES,
   STARTING_HIT_POINTS, BASE_SPEED,
   MORALE_MAX, MORALE_MIN, MORALE_TICK,
   MAX_ROOM_MORALE_BOOST, ROOM_MORALE_TICK,
@@ -39,6 +41,8 @@ export interface CharacterStats {
   nXP: number;
   /** Per-job competency (0-1) */
   tCompetency: Record<number, number>;
+  /** Race ID (1-10, see RACE_* constants) */
+  nRace: number;
 }
 
 export class Character {
@@ -62,6 +66,8 @@ export class Character {
 
   // Spacewalking (original: tStatus.bSpacewalking)
   bSpacewalking = false;
+  /** Whether this character is immune to O2 mechanics (Killbot, Monster). */
+  bDoesNotBreathe = false;
 
   // ── Equipment & inventory ───────────────────────────────────
   /** Active diseases/maladies. */
@@ -131,6 +137,8 @@ export class Character {
     // Assign a random starting job
     const startingJob = tJobs[Math.floor(Math.random() * tJobs.length)];
 
+    const race = Character.rollRace();
+
     this.tStats = {
       sName: name,
       nJob: startingJob,
@@ -141,7 +149,10 @@ export class Character {
       personality,
       nXP: 0,
       tCompetency: {},
+      nRace: race,
     };
+
+    this.bDoesNotBreathe = NON_BREATHING_RACES.has(race);
 
     // Start with some competency in assigned job
     this.tStats.tCompetency[startingJob] = Math.random() * 0.3;
@@ -158,6 +169,20 @@ export class Character {
   getJobName(): string { return JOB_NAMES[this.tStats.nJob] ?? 'Unknown'; }
   getHP(): number { return this.tStats.nHP; }
   isAlive(): boolean { return this.tStats.nStatus !== STATUS_DEAD; }
+  getRace(): number { return this.tStats.nRace; }
+  getRaceName(): string { return RACE_NAMES[this.tStats.nRace] ?? 'Unknown'; }
+
+  /**
+   * Weighted random race assignment matching Lua Character:_assignRace().
+   * 60% Human, 2% Cat, 38% random alien.
+   */
+  static rollRace(): number {
+    const roll = Math.floor(Math.random() * 100) + 1; // 1-100
+    if (roll <= HUMAN_RACE_PCT) return RACE_HUMAN;
+    if (roll <= HUMAN_RACE_PCT + CAT_RACE_PCT) return RACE_CAT;
+    // Remaining: random from alien races
+    return RANDOM_ALIEN_RACES[Math.floor(Math.random() * RANDOM_ALIEN_RACES.length)];
+  }
 
   setJob(job: number) {
     this.tStats.nJob = job;

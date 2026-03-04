@@ -2108,4 +2108,73 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     }, charId);
     expect(jobAff).not.toBe(0);
   });
+
+  // ── Priority 11: Race System ─────────────────────────────────────────
+
+  test('race: all existing characters have a valid race (1-10)', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    expect(chars.length).toBeGreaterThan(0);
+    for (const char of chars) {
+      const raceInfo = await page.evaluate((id: number) => {
+        return (window as any).__df9?.getCharacterRace(id);
+      }, char.id);
+      expect(raceInfo).not.toBeNull();
+      expect(raceInfo.raceId).toBeGreaterThanOrEqual(1);
+      expect(raceInfo.raceId).toBeLessThanOrEqual(10);
+      expect(raceInfo.raceName).toBeTruthy();
+    }
+  });
+
+  test('race: rollRace produces values in valid range', async () => {
+    const rolls = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const results: number[] = [];
+      for (let i = 0; i < 50; i++) {
+        results.push(df9.rollRace());
+      }
+      return results;
+    });
+    for (const r of rolls) {
+      expect(r).toBeGreaterThanOrEqual(1);
+      expect(r).toBeLessThanOrEqual(10);
+    }
+  });
+
+  test('race: most citizens are Human (race 1)', async () => {
+    // With 60% human rate, at least half of 50 rolls should be Human
+    const counts = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const tally: Record<number, number> = {};
+      for (let i = 0; i < 200; i++) {
+        const r = df9.rollRace();
+        tally[r] = (tally[r] ?? 0) + 1;
+      }
+      return tally;
+    });
+    // RACE_HUMAN = 1 should have the most entries (60% expected)
+    const humanCount = counts[1] ?? 0;
+    expect(humanCount).toBeGreaterThan(80); // >40% of 200 rolls (generous lower bound)
+  });
+
+  test('race: getRaceName returns correct string for known races', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    const charId = chars[0].id;
+    const raceInfo = await page.evaluate((id: number) => {
+      return (window as any).__df9?.getCharacterRace(id);
+    }, charId);
+    const validNames = ['Human', 'Jelly', 'Tobian', 'Cat', 'Birdshark',
+                        'Chicken', 'Monster', 'Shamon', 'Murderface', 'Killbot'];
+    expect(validNames).toContain(raceInfo.raceName);
+  });
+
+  test('race: bDoesNotBreathe is true only for Monster (7) and Killbot (10)', async () => {
+    const chars = await page.evaluate(() => (window as any).__df9?.getCharacters());
+    for (const char of chars) {
+      const raceInfo = await page.evaluate((id: number) => {
+        return (window as any).__df9?.getCharacterRace(id);
+      }, char.id);
+      const isNonBreathing = raceInfo.raceId === 7 || raceInfo.raceId === 10;
+      expect(raceInfo.bDoesNotBreathe).toBe(isNonBreathing);
+    }
+  });
 });

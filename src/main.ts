@@ -1139,6 +1139,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getAffinityIconAndColor: (aff: number) => {
       return Character.getAffinityIconAndColor(aff);
     },
+    getCharacterRace: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return null;
+      return { raceId: char.getRace(), raceName: char.getRaceName(), bDoesNotBreathe: char.bDoesNotBreathe };
+    },
+    rollRace: () => Character.rollRace(),
     // ── UI Panel helpers ──────────────────────────────────────
     getResearchPanelVisible: () => uiManager.isResearchPanelVisible(),
     getGoalsPanelVisible: () => uiManager.isGoalsPanelVisible(),

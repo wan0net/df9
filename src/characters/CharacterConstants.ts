@@ -267,6 +267,45 @@ export const PERSONALITY_TRAITS = {
 export const STUFF_AFFINITY_PICKUP_THRESHOLD = 2;
 export const STUFF_AFFINITY_DISCARD_THRESHOLD = -1;
 
+// ── Race ────────────────────────────────────────────────────────────────
+export const RACE_HUMAN      = 1;
+export const RACE_JELLY      = 2;
+export const RACE_TOBIAN     = 3;
+export const RACE_CAT        = 4;
+export const RACE_BIRDSHARK  = 5;
+export const RACE_CHICKEN    = 6;
+export const RACE_MONSTER    = 7;
+export const RACE_SHAMON     = 8;
+export const RACE_MURDERFACE = 9;
+export const RACE_KILLBOT    = 10;
+
+export const RACE_NAMES: Record<number, string> = {
+  [RACE_HUMAN]:      'Human',
+  [RACE_JELLY]:      'Jelly',
+  [RACE_TOBIAN]:     'Tobian',
+  [RACE_CAT]:        'Cat',
+  [RACE_BIRDSHARK]:  'Birdshark',
+  [RACE_CHICKEN]:    'Chicken',
+  [RACE_MONSTER]:    'Monster',
+  [RACE_SHAMON]:     'Shamon',
+  [RACE_MURDERFACE]: 'Murderface',
+  [RACE_KILLBOT]:    'Killbot',
+};
+
+/** Chance (1-100) of a citizen being Human. */
+export const HUMAN_RACE_PCT = 60;
+/** Chance (1-100) additive threshold for Cat after Human check. */
+export const CAT_RACE_PCT   = 2;
+
+/** Races that do not need to breathe (immune to O2 mechanics). */
+export const NON_BREATHING_RACES = new Set([RACE_KILLBOT, RACE_MONSTER]);
+
+/** Non-human alien/bot races available for random assignment. */
+export const RANDOM_ALIEN_RACES = [
+  RACE_JELLY, RACE_TOBIAN, RACE_CAT, RACE_BIRDSHARK,
+  RACE_CHICKEN, RACE_SHAMON,
+];
+
 // ── Log / Journal ──────────────────────────────────────────────────────
 export const MAX_LOG_ENTRIES = 100;
 export const LOG_RECENT_HISTORY = 5;

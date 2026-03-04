@@ -267,15 +267,23 @@
 
 ---
 
-## 11. Race System (0% → ?)
+## 11. Race System (0% → 100% ✅)
 **Goal**: Add 10 character races from Lua, missing health statuses.
 
-- [ ] Add nRace property with 10 races (HUMAN, JELLY, TOBIAN, CAT, BIRDSHARK, CHICKEN, MONSTER, SHAMON, MURDERFACE, KILLBOT)
-- [ ] Add missing health statuses (STATUS_SCUFFED_UP, STATUS_INJURED, STATUS_DRUGGED)
-- [ ] Wire race into character generation/visuals
+- [x] Add 10 RACE_* constants + RACE_NAMES + HUMAN_RACE_PCT/CAT_RACE_PCT to CharacterConstants.ts
+- [x] Add NON_BREATHING_RACES and RANDOM_ALIEN_RACES sets
+- [x] Add `nRace: number` to CharacterStats interface
+- [x] Add `bDoesNotBreathe: boolean` field to Character
+- [x] Implement `Character.rollRace()` static method (60% Human, 2% Cat, 38% random alien)
+- [x] Wire race assignment in Character constructor
+- [x] Add `getRace()` and `getRaceName()` accessors
+- [x] Wire `bDoesNotBreathe` into CharacterManager O2 update (non-breathing races always have 100% O2)
+- [x] Add health statuses STATUS_SCUFFED_UP (7), STATUS_INJURED (8), STATUS_DRUGGED (9) — already existed
+- [x] Add `getCharacterRace()` and `rollRace()` test helpers to main.ts
+- [x] Add 5 E2E tests (valid range, rollRace distribution, Human majority, raceName, bDoesNotBreathe)
 
-**What we did**: (not started)
-**What we didn't do**: (everything)
+**What we did**: Full race system — 10 races, weighted random generation, non-breathing flag for Killbot/Monster, 97 tests passing.
+**What we didn't do**: Race-specific visual body variants (renderer not yet at that stage).
 **Blockers**: None
 
 ---

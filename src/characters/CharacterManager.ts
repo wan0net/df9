@@ -173,9 +173,12 @@ export class CharacterManager {
         char.currentTask.update(dtSec);
       }
 
-      // Update O2 need from room
+      // Update O2 need from room (skip for non-breathing races: Killbot, Monster)
       const room = this.roomManager.getRoomAt(char.tileX, char.tileY);
-      if (room && room.sealed && room.oxygen > 50) {
+      if (char.bDoesNotBreathe) {
+        // Non-breathing races always have full oxygen
+        char.needs.updateOxygen(100);
+      } else if (room && room.sealed && room.oxygen > 50) {
         // Safe sealed room — breathable
         char.needs.updateOxygen(room.oxygen);
         if (char.bSpacewalking) {
