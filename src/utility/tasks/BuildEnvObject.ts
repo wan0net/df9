@@ -6,17 +6,21 @@
 import { Task, type NeedAdvertisement } from '../Task';
 import { CommandQueue } from '../../core/CommandQueue';
 import { Base } from '../../core/Base';
+import { TileType } from '../../world/TileTypes';
 import type { EnvObject } from '../../envobjects/EnvObject';
+import type { TileGrid } from '../../world/TileGrid';
 
 export class BuildEnvObject extends Task {
   readonly name = 'BuildEnvObject';
   private targetObj: EnvObject;
   private commandId: number;
+  private grid: TileGrid | null = null;
 
-  constructor(targetObj: EnvObject, commandId: number) {
+  constructor(targetObj: EnvObject, commandId: number, grid?: TileGrid) {
     super();
     this.targetObj = targetObj;
     this.commandId = commandId;
+    this.grid = grid ?? null;
   }
 
   getAdvertisedNeeds(): NeedAdvertisement[] {
@@ -56,6 +60,25 @@ export class BuildEnvObject extends Task {
     if (this.character) {
       this.targetObj.sBuilderName = this.character.getName();
     }
+
+    // Door-type objects: convert the wall tile to DOOR when construction completes
+    if (this.targetObj.tData.door && this.grid) {
+      const { tileX, tileY } = this.targetObj;
+      const current = this.grid.get(tileX, tileY);
+      if (current === TileType.WALL || current === TileType.WALL_PENDING) {
+        // Complete any pending wall build command
+        if (current === TileType.WALL_PENDING) {
+          for (const cmd of CommandQueue.getAllActive()) {
+            if (cmd.type === 'build_tile' && cmd.tileX === tileX && cmd.tileY === tileY) {
+              CommandQueue.complete(cmd.id);
+              break;
+            }
+          }
+        }
+        this.grid.set(tileX, tileY, TileType.DOOR);
+      }
+    }
+
     CommandQueue.complete(this.commandId);
 
     Base.addAlert('build', `${this.character?.getName() ?? 'Builder'} built ${this.targetObj.tData.friendlyName}`);

@@ -11,25 +11,51 @@ import { tObjects, getMenuForZone } from '../envobjects/EnvObjectData';
 import { STATUS_DEAD } from '../characters/CharacterConstants';
 import { InspectorPanel, type SelectedEntity } from './InspectorPanel';
 import { JobRoster } from './JobRoster';
+import { ResearchPanel } from './ResearchPanel';
+import { GoalsPanel } from './GoalsPanel';
 import type { BuildMode } from '../building/BuildSystem';
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
 import type { Room } from '../rooms/Room';
+import type { GoalSystem } from '../goals/GoalSystem';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 
 const AMBER = '#dfa200';
 const SIDEBAR_W = 286;
 const BUTTON_H = 56;
 
-/** Alert color mapping by category */
+/** Alert color mapping by category (covers all BASE_EVENT types) */
 const ALERT_COLORS: Record<string, string> = {
   system: '#ccc',
   mining: AMBER,
   build: '#4f4',
+  // BASE_EVENT values:
+  CitizenAttacked: '#f44',
   breach: '#f44',
-  fire: '#f44',
+  CitizenSuffocating: '#f44',
+  Default: '#ccc',
   death: '#f44',
+  CitizenSkillUp: '#4f4',
   immigration: '#48f',
+  event: AMBER,
+  EventFailure: '#f84',
+  fire: '#f44',
+  MaladyEncountered: '#f84',
+  hostile: '#f44',
+  research: '#4f4',
+  MaladyResearchCompleted: '#4f4',
+  derelict: AMBER,
+  CitizensBrawling: '#f84',
+  CitizenTantrum: '#f84',
+  rampage: '#f84',
+  goal: '#4f4',
+  BrigEscaped: '#f44',
+  // Other UI categories:
+  hint: '#aaa',
+  siege: '#f44',
+  recycle: '#888',
+  docking: '#48f',
+  meteor: '#f84',
 };
 
 export class UIManager {
@@ -42,6 +68,7 @@ export class UIManager {
   private getPopulation: () => number;
   private getSelectedZone: () => ZoneType;
   private setSelectedZone: (zone: ZoneType) => void;
+  private getHoveredRoomZone: () => ZoneType | null;
   private getHoveredInfo: () => string;
   private onSave: () => void;
   private onLoad: () => void;
@@ -51,6 +78,7 @@ export class UIManager {
   private getEnvObjects: () => EnvObject[];
   private toggleO2Overlay: () => void;
   private getRooms: () => Room[];
+  private getPendingBuildCost: (() => { cost: number; tileCount: number; mode: BuildMode } | null) | null = null;
 
   // HUD elements
   private matterText!: HTMLSpanElement;
@@ -71,6 +99,11 @@ export class UIManager {
   // Object picker
   private objectPicker!: HTMLDivElement;
   selectedObjectName = '';
+  private currentObjectZone: ZoneType | null = null;
+  /** Explicit zone override chosen by clicking a tab (null = follow hovered room). */
+  private objectZoneOverride: ZoneType | null = null;
+  /** Set true when a UI click should suppress game input for this frame. */
+  uiClickConsumed = false;
 
   // Tooltip
   private tooltipEl!: HTMLDivElement;
@@ -83,6 +116,9 @@ export class UIManager {
   // Sidebar buttons for active tracking
   private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; mode: BuildMode; btnLabel: string }[] = [];
 
+  // Build cost overlay
+  private costOverlay!: HTMLDivElement;
+
   // Construct sub-menu
   private constructSub!: HTMLDivElement;
 
@@ -92,12 +128,22 @@ export class UIManager {
   // Job roster
   private jobRoster!: JobRoster;
 
+  // Research panel
+  private researchPanel!: ResearchPanel;
+
+  // Goals panel
+  private goalsPanel!: GoalsPanel;
+
+  // Active side panel (mutually exclusive)
+  private activePanel: 'none' | 'research' | 'goals' = 'none';
+
   constructor(container: HTMLElement, callbacks: {
     getBuildMode: () => BuildMode;
     setBuildMode: (mode: BuildMode) => void;
     getPopulation: () => number;
     getSelectedZone: () => ZoneType;
     setSelectedZone: (zone: ZoneType) => void;
+    getHoveredRoomZone: () => ZoneType | null;
     getHoveredInfo: () => string;
     onSave: () => void;
     onLoad: () => void;
@@ -108,6 +154,11 @@ export class UIManager {
     toggleO2Overlay: () => void;
     getRooms: () => Room[];
     onSetJob: (character: Character, jobId: number) => void;
+    goalSystem: GoalSystem;
+    onCuffCharacter?: (character: Character) => void;
+    onExecuteCharacter?: (character: Character) => void;
+    onDemolishObject?: (obj: EnvObject) => void;
+    getPendingBuildCost?: () => { cost: number; tileCount: number; mode: BuildMode } | null;
   }) {
     this.container = container;
     this.getBuildMode = callbacks.getBuildMode;
@@ -115,6 +166,7 @@ export class UIManager {
     this.getPopulation = callbacks.getPopulation;
     this.getSelectedZone = callbacks.getSelectedZone;
     this.setSelectedZone = callbacks.setSelectedZone;
+    this.getHoveredRoomZone = callbacks.getHoveredRoomZone;
     this.getHoveredInfo = callbacks.getHoveredInfo;
     this.onSave = callbacks.onSave;
     this.onLoad = callbacks.onLoad;
@@ -124,11 +176,18 @@ export class UIManager {
     this.getEnvObjects = callbacks.getEnvObjects;
     this.toggleO2Overlay = callbacks.toggleO2Overlay;
     this.getRooms = callbacks.getRooms;
+    this.getPendingBuildCost = callbacks.getPendingBuildCost ?? null;
 
-    this.createUI(callbacks.onSetJob);
+    this.createUI(callbacks.onSetJob, callbacks);
   }
 
-  private createUI(onSetJob: (character: Character, jobId: number) => void) {
+  private createUI(onSetJob: (character: Character, jobId: number) => void, callbacks: {
+    goalSystem: GoalSystem;
+    onCuffCharacter?: (character: Character) => void;
+    onExecuteCharacter?: (character: Character) => void;
+    onDemolishObject?: (obj: EnvObject) => void;
+    getRooms: () => Room[];
+  }) {
     this.uiRoot = document.createElement('div');
     this.uiRoot.id = 'game-ui';
     this.uiRoot.style.cssText = `
@@ -142,6 +201,7 @@ export class UIManager {
     this.createObjectPicker();
     this.createTooltip();
     this.createAlertLog();
+    this.createCostOverlay();
 
     this.container.appendChild(this.uiRoot);
 
@@ -149,7 +209,20 @@ export class UIManager {
     this.inspectorPanel = new InspectorPanel(this.uiRoot, {
       onSetJob,
       getObjectsInRoom: (room: Room) => EnvObjectManager.getObjectsInRoom(room),
+      onCuffCharacter: callbacks.onCuffCharacter,
+      onExecuteCharacter: callbacks.onExecuteCharacter,
+      onDemolishObject: callbacks.onDemolishObject,
+      getBrigRooms: () => {
+        const rooms = callbacks.getRooms();
+        return rooms.filter(r => r.zone === 'BRIG');
+      },
     });
+
+    // Research panel
+    this.researchPanel = new ResearchPanel(this.uiRoot);
+
+    // Goals panel
+    this.goalsPanel = new GoalsPanel(this.uiRoot, callbacks.goalSystem);
 
     // Job roster
     this.jobRoster = new JobRoster(this.container, {
@@ -265,8 +338,8 @@ export class UIManager {
     const btnDefs: { label: string; hotkey: string; mode: BuildMode; action?: string }[] = [
       { label: 'Inspect',   hotkey: 'I', mode: 'none', action: 'inspect' },
       { label: 'Assign',    hotkey: 'R', mode: 'none', action: 'roster' },
-      { label: 'Research',  hotkey: 'E', mode: 'none', action: 'stub' },
-      { label: 'Goals',     hotkey: 'G', mode: 'none', action: 'stub' },
+      { label: 'Research',  hotkey: 'E', mode: 'none', action: 'research' },
+      { label: 'Goals',     hotkey: 'G', mode: 'none', action: 'goals' },
       { label: 'Construct', hotkey: 'C', mode: 'room', action: 'construct' },
       { label: 'Mine',      hotkey: 'M', mode: 'mine' },
       { label: 'Beacon',    hotkey: 'N', mode: 'none', action: 'stub' },
@@ -296,6 +369,14 @@ export class UIManager {
       btn.addEventListener('click', () => {
         if (def.action === 'roster') {
           this.jobRoster.toggle();
+          return;
+        }
+        if (def.action === 'research') {
+          this.toggleResearchPanel();
+          return;
+        }
+        if (def.action === 'goals') {
+          this.toggleGoalsPanel();
           return;
         }
         if (def.action === 'stub') {
@@ -442,6 +523,14 @@ export class UIManager {
     this.uiRoot.appendChild(this.objectPicker);
   }
 
+  /** Resolve which zone to show objects for: explicit override > hovered room > fallback */
+  private getEffectiveObjectZone(): ZoneType {
+    if (this.objectZoneOverride) return this.objectZoneOverride;
+    const hoveredZone = this.getHoveredRoomZone();
+    if (hoveredZone) return hoveredZone;
+    return ZoneType.PLAIN;
+  }
+
   private refreshObjectPicker() {
     this.objectPicker.innerHTML = '';
     if (this.getBuildMode() !== 'object') {
@@ -449,30 +538,61 @@ export class UIManager {
       return;
     }
 
-    const items = getMenuForZone(this.getSelectedZone());
+    const zone = this.getEffectiveObjectZone();
+    this.currentObjectZone = zone;
+    const items = getMenuForZone(zone);
     const btnW = 280;
-    const btnH = 48;
+    const btnH = 44;
 
+    // ── Zone selector tabs ──
+    const tabRow = document.createElement('div');
+    tabRow.style.cssText = `display:flex;flex-wrap:wrap;gap:2px;margin-bottom:4px;width:${btnW}px;`;
+    for (const z of ZONE_LIST) {
+      const config = ZONE_SPRITES[z];
+      const isActive = z === zone;
+      const tab = document.createElement('div');
+      tab.textContent = config.name;
+      tab.style.cssText = `
+        font-size:11px;padding:3px 6px;cursor:pointer;
+        color:${isActive ? '#000' : AMBER};
+        background:${isActive ? AMBER : 'rgba(0,0,0,0.85)'};
+      `;
+      tab.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
+      tab.addEventListener('click', () => {
+        this.objectZoneOverride = z;
+        this.refreshObjectPicker();
+      });
+      tab.addEventListener('mouseenter', () => { if (!isActive) tab.style.background = 'rgba(223,162,0,0.3)'; });
+      tab.addEventListener('mouseleave', () => { if (!isActive) tab.style.background = 'rgba(0,0,0,0.85)'; });
+      tabRow.appendChild(tab);
+    }
+    this.objectPicker.appendChild(tabRow);
+
+    // ── Object list ──
     for (let i = 0; i < items.length; i++) {
       const objName = items[i];
       const objData = tObjects[objName];
       if (!objData || !objData.showInObjectMenu) continue;
 
+      const isSelected = objName === this.selectedObjectName;
       const el = document.createElement('div');
       el.style.cssText = `
-        width:${btnW}px;height:${btnH}px;background:rgba(0,0,0,0.85);
+        width:${btnW}px;height:${btnH}px;
+        background:${isSelected ? 'rgba(223,162,0,0.3)' : 'rgba(0,0,0,0.85)'};
         margin-bottom:2px;padding:6px 8px;cursor:pointer;box-sizing:border-box;
       `;
       el.innerHTML = `
         <div style="font-size:14px;color:${AMBER};">${objData.friendlyName}</div>
-        <div style="font-size:11px;color:#888;">Cost: ${objData.matterCost}</div>
+        <div style="font-size:11px;color:#888;">Cost: ${objData.matterCost}${objData.nPowerDraw ? ` | Power: ${objData.nPowerDraw}` : ''}${objData.nPowerOutput ? ` | +Power: ${objData.nPowerOutput}` : ''}</div>
       `;
+      el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
       el.addEventListener('click', () => {
         this.selectedObjectName = objName;
         this.onObjectSelected(objName);
+        this.refreshObjectPicker(); // Re-render to show selection
       });
-      el.addEventListener('mouseenter', () => { el.style.background = 'rgba(223,162,0,0.3)'; });
-      el.addEventListener('mouseleave', () => { el.style.background = 'rgba(0,0,0,0.85)'; });
+      el.addEventListener('mouseenter', () => { if (!isSelected) el.style.background = 'rgba(223,162,0,0.15)'; });
+      el.addEventListener('mouseleave', () => { if (!isSelected) el.style.background = 'rgba(0,0,0,0.85)'; });
       this.objectPicker.appendChild(el);
     }
 
@@ -528,10 +648,25 @@ export class UIManager {
     this.uiRoot.appendChild(this.alertContainer);
   }
 
+  // ── Build Cost Overlay ─────────────────────────────────────
+
+  private createCostOverlay() {
+    this.costOverlay = document.createElement('div');
+    this.costOverlay.id = 'build-cost-overlay';
+    this.costOverlay.style.cssText = `
+      position:absolute;bottom:10px;left:${SIDEBAR_W + 10}px;
+      background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
+      color:${AMBER};font-family:monospace;font-size:13px;
+      padding:6px 12px;display:none;pointer-events:none;z-index:15;
+    `;
+    this.uiRoot.appendChild(this.costOverlay);
+  }
+
   // ── Public API ──────────────────────────────────────────────────
 
   /** Set the selected entity to show in the inspector panel. */
   setSelectedEntity(entity: SelectedEntity) {
+    if (entity) this.hideActivePanel();
     this.inspectorPanel.setEntity(entity);
   }
 
@@ -543,6 +678,51 @@ export class UIManager {
   /** Check if job roster is open. */
   isJobRosterOpen(): boolean {
     return this.jobRoster.isVisible();
+  }
+
+  /** Toggle research panel. Hides goals panel if open. */
+  toggleResearchPanel() {
+    if (this.activePanel === 'research') {
+      this.hideActivePanel();
+    } else {
+      this.showPanel('research');
+    }
+  }
+
+  /** Toggle goals panel. Hides research panel if open. */
+  toggleGoalsPanel() {
+    if (this.activePanel === 'goals') {
+      this.hideActivePanel();
+    } else {
+      this.showPanel('goals');
+    }
+  }
+
+  /** Check if research panel is visible. */
+  isResearchPanelVisible(): boolean {
+    return this.researchPanel.isVisible();
+  }
+
+  /** Check if goals panel is visible. */
+  isGoalsPanelVisible(): boolean {
+    return this.goalsPanel.isVisible();
+  }
+
+  private showPanel(panel: 'research' | 'goals') {
+    this.hideActivePanel();
+    this.setBuildMode('none');
+    this.activePanel = panel;
+    if (panel === 'research') {
+      this.researchPanel.show();
+    } else {
+      this.goalsPanel.show();
+    }
+  }
+
+  private hideActivePanel() {
+    this.researchPanel.hide();
+    this.goalsPanel.hide();
+    this.activePanel = 'none';
   }
 
   // ── Update Loop ─────────────────────────────────────────────────
@@ -677,6 +857,7 @@ export class UIManager {
     // ── Object picker ─────────────────────────────────────
     if (buildMode !== 'object') {
       this.objectPicker.style.display = 'none';
+      this.objectZoneOverride = null;
     }
 
     // ── Tooltip ───────────────────────────────────────────
@@ -702,8 +883,32 @@ export class UIManager {
       }
     }
 
+    // ── Build cost overlay ──────────────────────────────────
+    if (this.getPendingBuildCost) {
+      const costInfo = this.getPendingBuildCost();
+      if (costInfo && costInfo.tileCount > 0) {
+        const canAfford = GameRules.nMatter >= costInfo.cost;
+        const sign = costInfo.mode === 'demolish' ? '+' : '-';
+        const costColor = costInfo.mode === 'demolish' ? '#4f4' : (canAfford ? AMBER : '#f44');
+        this.costOverlay.innerHTML = `
+          <span style="color:${costColor};">${sign}${Math.abs(costInfo.cost)} matter</span>
+          <span style="color:#888;font-size:11px;"> (${costInfo.tileCount} tiles)</span>
+          ${!canAfford && costInfo.mode !== 'demolish' ? '<div style="color:#f44;font-size:11px;">Insufficient matter!</div>' : ''}
+        `;
+        this.costOverlay.style.display = 'block';
+      } else {
+        this.costOverlay.style.display = 'none';
+      }
+    }
+
     // ── Inspector panel ───────────────────────────────────
     this.inspectorPanel.update();
+
+    // ── Research panel ────────────────────────────────────
+    this.researchPanel.update();
+
+    // ── Goals panel ───────────────────────────────────────
+    this.goalsPanel.update();
 
     // ── Job roster ────────────────────────────────────────
     this.jobRoster.update();
@@ -711,6 +916,8 @@ export class UIManager {
 
   dispose() {
     this.inspectorPanel.dispose();
+    this.researchPanel.dispose();
+    this.goalsPanel.dispose();
     this.jobRoster.dispose();
     this.uiRoot.remove();
   }

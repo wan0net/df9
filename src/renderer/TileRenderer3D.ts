@@ -333,6 +333,49 @@ export class TileRenderer3D {
         result.push(door);
       }
 
+    } else if (tileType === TileType.FLOOR_PENDING) {
+      // Ghost floor tile — original Lua prebuiltColor: RGB(0.125, 0.125, 0.5) at 50% opacity
+      // Clone material so we don't pollute the shared cache with ghost tint
+      const room = this.roomManager?.getRoomAt(x, y);
+      const zone = room?.zone ?? ZoneType.PLAIN;
+      const floorKey = getZoneFloorKey(zone, x, y);
+      const mesh = createSpriteQuad(floorKey, pos.x, pos.y, DEPTH_FLOOR(y));
+      if (mesh) {
+        const mat = (mesh.material as THREE.MeshBasicMaterial).clone();
+        mat.opacity = 0.5;
+        mat.color.setHex(0x202080);
+        mesh.material = mat;
+        this.scene.add(mesh);
+        result.push(mesh);
+      }
+
+    } else if (tileType === TileType.WALL_PENDING) {
+      // Ghost wall — original Lua prebuiltColor: RGB(0.125, 0.125, 0.5) at 50% opacity
+      // Clone materials so we don't pollute the shared cache with ghost tint
+      const zone = this.getWallZone(x, y);
+      const dir = getWallDirection(this.grid, x, y);
+      const info = getWallSprites(dir, zone);
+
+      const bottom = this.createWallSprite(info.bottomKey, x, y, DEPTH_WALL_BOTTOM(y), info.flip);
+      if (bottom) {
+        const mat = (bottom.material as THREE.MeshBasicMaterial).clone();
+        mat.opacity = 0.5;
+        mat.color.setHex(0x202080);
+        bottom.material = mat;
+        this.scene.add(bottom);
+        result.push(bottom);
+      }
+
+      const top = this.createWallSprite(info.topKey, x, y, DEPTH_WALL_TOP(y), info.flip);
+      if (top) {
+        const mat = (top.material as THREE.MeshBasicMaterial).clone();
+        mat.opacity = 0.5;
+        mat.color.setHex(0x202080);
+        top.material = mat;
+        this.scene.add(top);
+        result.push(top);
+      }
+
     } else if (isAsteroid(tileType)) {
       const mesh = createSpriteQuad('asteroid01', pos.x, pos.y - 32, DEPTH_FLOOR(y));
       if (mesh) {

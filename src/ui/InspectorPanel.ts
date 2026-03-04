@@ -18,25 +18,38 @@ export type SelectedEntity =
   | { type: 'room'; data: Room }
   | null;
 
-type InspectorTab = 'duty' | 'stats' | 'needs';
+type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'actions';
 
 export class InspectorPanel {
   private el: HTMLDivElement;
   private contentEl!: HTMLDivElement;
   private entity: SelectedEntity = null;
   private currentTab: InspectorTab = 'duty';
+  private editingName = false;
   private onSetJob: ((character: Character, jobId: number) => void) | null = null;
   private getObjectsInRoom: ((room: Room) => EnvObject[]) | null = null;
+  private onCuffCharacter: ((character: Character) => void) | null = null;
+  private onExecuteCharacter: ((character: Character) => void) | null = null;
+  private onDemolishObject: ((obj: EnvObject) => void) | null = null;
+  private getBrigRooms: (() => Room[]) | null = null;
 
   constructor(
     parent: HTMLElement,
     callbacks: {
       onSetJob: (character: Character, jobId: number) => void;
       getObjectsInRoom: (room: Room) => EnvObject[];
+      onCuffCharacter?: (character: Character) => void;
+      onExecuteCharacter?: (character: Character) => void;
+      onDemolishObject?: (obj: EnvObject) => void;
+      getBrigRooms?: () => Room[];
     },
   ) {
     this.onSetJob = callbacks.onSetJob;
     this.getObjectsInRoom = callbacks.getObjectsInRoom;
+    this.onCuffCharacter = callbacks.onCuffCharacter ?? null;
+    this.onExecuteCharacter = callbacks.onExecuteCharacter ?? null;
+    this.onDemolishObject = callbacks.onDemolishObject ?? null;
+    this.getBrigRooms = callbacks.getBrigRooms ?? null;
 
     this.el = document.createElement('div');
     this.el.id = 'inspector-panel';
@@ -56,6 +69,7 @@ export class InspectorPanel {
   setEntity(entity: SelectedEntity) {
     this.entity = entity;
     this.currentTab = 'duty';
+    this.editingName = false;
     if (entity) {
       this.el.style.display = 'block';
     } else {
@@ -89,21 +103,70 @@ export class InspectorPanel {
   private renderCharacter(char: Character) {
     const isDead = !char.isAlive();
 
-    // Header
+    // Header with editable name
     const header = this.makeSection();
-    header.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:16px;font-weight:bold;color:${AMBER};">${char.getName()}</span>
-        <span style="font-size:12px;color:#888;">[${char.getJobName()}]</span>
-      </div>
-      <div style="margin-top:4px;">
-        ${this.bar('HP', char.getHP(), char.tStats.nMaxHP, isDead ? '#f44' : '#4f4')}
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:4px;">
-        <span>Morale: ${char.nMorale}</span>
-        <span>Task: ${char.currentTask?.name ?? (isDead ? 'Dead' : 'Idle')}</span>
-      </div>
+    const nameRow = document.createElement('div');
+    nameRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+
+    if (this.editingName) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = char.getName();
+      input.style.cssText = `
+        font-size:16px;font-weight:bold;color:${AMBER};background:#111;
+        border:1px solid ${AMBER};outline:none;font-family:monospace;
+        width:180px;padding:1px 4px;
+      `;
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const trimmed = input.value.trim();
+          if (trimmed) char.tStats.sName = trimmed;
+          this.editingName = false;
+          e.stopPropagation();
+        } else if (e.key === 'Escape') {
+          this.editingName = false;
+          e.stopPropagation();
+        }
+      });
+      input.addEventListener('blur', () => {
+        const trimmed = input.value.trim();
+        if (trimmed) char.tStats.sName = trimmed;
+        this.editingName = false;
+      });
+      nameRow.appendChild(input);
+      // Focus on next frame
+      setTimeout(() => input.focus(), 0);
+    } else {
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = char.getName();
+      nameSpan.style.cssText = `font-size:16px;font-weight:bold;color:${AMBER};cursor:pointer;`;
+      nameSpan.title = 'Click to edit name';
+      nameSpan.addEventListener('click', () => {
+        this.editingName = true;
+        this.update();
+      });
+      nameRow.appendChild(nameSpan);
+    }
+
+    const jobSpan = document.createElement('span');
+    jobSpan.textContent = `[${char.getJobName()}]`;
+    jobSpan.style.cssText = 'font-size:12px;color:#888;';
+    nameRow.appendChild(jobSpan);
+    header.appendChild(nameRow);
+
+    const hpDiv = document.createElement('div');
+    hpDiv.style.cssText = 'margin-top:4px;';
+    hpDiv.innerHTML = this.bar('HP', char.getHP(), char.tStats.nMaxHP, isDead ? '#f44' : '#4f4');
+    header.appendChild(hpDiv);
+
+    const infoDiv = document.createElement('div');
+    infoDiv.style.cssText = 'display:flex;justify-content:space-between;margin-top:4px;';
+    infoDiv.innerHTML = `
+      <span>Morale: ${char.nMorale}</span>
+      <span>Task: ${char.currentTask?.name ?? (isDead ? 'Dead' : 'Idle')}</span>
     `;
+    header.appendChild(infoDiv);
+
     this.contentEl.appendChild(header);
 
     // Tab row
@@ -115,6 +178,8 @@ export class InspectorPanel {
       { label: 'Duty', tab: 'duty' },
       { label: 'Stats', tab: 'stats' },
       { label: 'Needs', tab: 'needs' },
+      { label: 'Psych', tab: 'psych' },
+      { label: 'Actions', tab: 'actions' },
     ];
     for (const t of tabs) {
       const btn = document.createElement('div');
@@ -144,6 +209,12 @@ export class InspectorPanel {
         break;
       case 'needs':
         this.renderNeedsTab(body, char);
+        break;
+      case 'psych':
+        this.renderPsychTab(body, char);
+        break;
+      case 'actions':
+        this.renderActionsTab(body, char);
         break;
     }
     this.contentEl.appendChild(body);
@@ -218,6 +289,129 @@ export class InspectorPanel {
     }
   }
 
+  private renderPsychTab(container: HTMLDivElement, char: Character) {
+    const p = char.tStats.personality;
+
+    // Slider traits (0-1 range)
+    const sliders: { label: string; value: number; lowLabel: string; highLabel: string }[] = [
+      { label: 'Bravery', value: p.nBravery, lowLabel: 'Cowardly', highLabel: 'Brave' },
+      { label: 'Temper', value: p.nTemper, lowLabel: 'Calm', highLabel: 'Hot-headed' },
+      { label: 'Work Ethic', value: p.nWorkEthic, lowLabel: 'Lazy', highLabel: 'Diligent' },
+      { label: 'Gregariousness', value: p.nGregariousness, lowLabel: 'Loner', highLabel: 'Social' },
+      { label: 'Chattiness', value: p.nChattiness, lowLabel: 'Quiet', highLabel: 'Chatty' },
+      { label: 'Neatness', value: p.nNeatness, lowLabel: 'Messy', highLabel: 'Tidy' },
+      { label: 'Positivity', value: p.nPositivity, lowLabel: 'Pessimist', highLabel: 'Optimist' },
+      { label: 'Authority', value: p.nAuthoritarian, lowLabel: 'Rebel', highLabel: 'Obedient' },
+    ];
+
+    for (const s of sliders) {
+      const pct = Math.round(s.value * 100);
+      const desc = s.value < 0.3 ? s.lowLabel : s.value > 0.7 ? s.highLabel : 'Average';
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom:4px;';
+      row.innerHTML = `
+        <div style="display:flex;align-items:center;">
+          <span style="width:95px;font-size:11px;color:#888;">${s.label}</span>
+          <div style="flex:1;height:6px;background:#222;margin:0 4px;position:relative;">
+            <div style="width:${pct}%;height:100%;background:${AMBER};"></div>
+          </div>
+          <span style="width:65px;text-align:right;font-size:10px;color:#888;">${desc}</span>
+        </div>
+      `;
+      container.appendChild(row);
+    }
+
+    // Boolean traits
+    const boolTraits: { label: string; value: boolean }[] = [
+      { label: 'Xenophobe', value: p.bXenophobe },
+      { label: 'Anxious', value: p.bAnxious },
+      { label: 'Gourmand', value: p.bGourmand },
+      { label: 'Joker', value: p.bJoker },
+      { label: 'Sentimental', value: p.bSentimental },
+      { label: 'Competitive', value: p.bCompetitive },
+      { label: 'Hipster', value: p.bHipster },
+    ];
+
+    const activeTraits = boolTraits.filter(t => t.value);
+    if (activeTraits.length > 0) {
+      const traitDiv = document.createElement('div');
+      traitDiv.style.cssText = `margin-top:6px;padding-top:6px;border-top:1px solid #333;`;
+      traitDiv.innerHTML = `<div style="font-size:11px;color:${AMBER};margin-bottom:4px;">Quirks</div>`;
+      for (const t of activeTraits) {
+        const tag = document.createElement('span');
+        tag.textContent = t.label;
+        tag.style.cssText = `
+          display:inline-block;margin:2px;padding:2px 6px;
+          border:1px solid #555;color:#ccc;font-size:10px;
+        `;
+        traitDiv.appendChild(tag);
+      }
+      container.appendChild(traitDiv);
+    }
+  }
+
+  private renderActionsTab(container: HTMLDivElement, char: Character) {
+    const isDead = !char.isAlive();
+
+    // Cuff / Uncuff
+    const cuffBtn = this.makeActionButton(
+      char.bCuffed ? 'Uncuff' : 'Cuff',
+      isDead,
+      () => { if (this.onCuffCharacter) this.onCuffCharacter(char); },
+    );
+    container.appendChild(cuffBtn);
+
+    // Send to Brig
+    const brigRooms = this.getBrigRooms ? this.getBrigRooms() : [];
+    const brigBtn = this.makeActionButton(
+      'Send to Brig',
+      isDead || brigRooms.length === 0,
+      () => {
+        if (this.onCuffCharacter && !char.bCuffed) this.onCuffCharacter(char);
+      },
+    );
+    if (brigRooms.length === 0) {
+      const note = document.createElement('div');
+      note.textContent = 'No brig zone exists';
+      note.style.cssText = 'font-size:10px;color:#666;margin-top:-4px;margin-bottom:8px;';
+      container.appendChild(brigBtn);
+      container.appendChild(note);
+    } else {
+      container.appendChild(brigBtn);
+    }
+
+    // Execute (red)
+    const execBtn = this.makeActionButton(
+      'Execute',
+      isDead,
+      () => { if (this.onExecuteCharacter) this.onExecuteCharacter(char); },
+      '#f44',
+    );
+    container.appendChild(execBtn);
+  }
+
+  private makeActionButton(
+    label: string,
+    disabled: boolean,
+    onClick: () => void,
+    color = AMBER,
+  ): HTMLDivElement {
+    const btn = document.createElement('div');
+    btn.textContent = label;
+    const baseColor = disabled ? '#555' : color;
+    btn.style.cssText = `
+      padding:6px 12px;margin-bottom:6px;cursor:${disabled ? 'default' : 'pointer'};
+      border:1px solid ${baseColor};color:${baseColor};font-size:12px;text-align:center;
+      opacity:${disabled ? '0.5' : '1'};
+    `;
+    if (!disabled) {
+      btn.addEventListener('click', () => { onClick(); this.update(); });
+      btn.addEventListener('mouseenter', () => { btn.style.background = `rgba(${color === '#f44' ? '255,68,68' : '223,162,0'},0.2)`; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+    }
+    return btn;
+  }
+
   // ── Object Inspector ────────────────────────────────────
 
   private renderObject(obj: EnvObject) {
@@ -258,6 +452,25 @@ export class InspectorPanel {
         obj.bActive = !obj.bActive;
         this.update();
       });
+    }
+
+    // Demolish button
+    if (obj.bBuilt) {
+      const refund = obj.getVaporizeMatterYield();
+      const demolishBtn = this.makeActionButton(
+        `Demolish (+${refund} matter)`,
+        false,
+        () => {
+          if (this.onDemolishObject) this.onDemolishObject(obj);
+          this.entity = null;
+          this.el.style.display = 'none';
+        },
+        '#f44',
+      );
+      demolishBtn.style.marginTop = '8px';
+      demolishBtn.style.marginLeft = '8px';
+      demolishBtn.style.marginRight = '8px';
+      this.contentEl.appendChild(demolishBtn);
     }
 
     this.addCloseButton();

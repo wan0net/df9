@@ -34,7 +34,7 @@ export interface WallSpriteInfo {
 function isWallOrDoor(grid: TileGrid, x: number, y: number): boolean {
   if (!grid.inBounds(x, y)) return false;
   const t = grid.get(x, y);
-  return t === TileType.WALL || t === TileType.DOOR;
+  return t === TileType.WALL || t === TileType.DOOR || t === TileType.WALL_PENDING;
 }
 
 /**

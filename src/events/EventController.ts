@@ -226,6 +226,7 @@ export class EventController implements TickableSystem {
           this.onBreachWall?.();
           // Also spawn a raider through the breach
           this.onHostileSpawn?.(1, this.getScaledRaiderHP());
+          Base.incrementStat('nBreachShipsDestroyed');
           Base.addAlert('breach', 'Raiders have breached the hull!');
         };
         event = breachEvent;

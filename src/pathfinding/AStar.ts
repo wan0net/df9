@@ -17,13 +17,15 @@ function heuristic(ax: number, ay: number, bx: number, by: number): number {
 /** Walkable filter: returns true if a tile type can be traversed. */
 export type WalkableFilter = (tileType: number) => boolean;
 
-/** Default filter: only FLOOR and DOOR tiles are walkable. */
+/** Default filter: FLOOR, DOOR, and PENDING tiles are walkable. */
 export const WALKABLE_DEFAULT: WalkableFilter = (t) =>
-  t === TileType.FLOOR || t === TileType.DOOR;
+  t === TileType.FLOOR || t === TileType.DOOR ||
+  t === TileType.FLOOR_PENDING || t === TileType.WALL_PENDING;
 
-/** Spacewalk filter: FLOOR, DOOR, and SPACE tiles are walkable. */
+/** Spacewalk filter: FLOOR, DOOR, SPACE, and PENDING tiles are walkable. */
 export const WALKABLE_SPACEWALK: WalkableFilter = (t) =>
-  t === TileType.FLOOR || t === TileType.DOOR || t === TileType.SPACE;
+  t === TileType.FLOOR || t === TileType.DOOR || t === TileType.SPACE ||
+  t === TileType.FLOOR_PENDING || t === TileType.WALL_PENDING;
 
 /**
  * A* pathfinding on the diamond isometric grid.

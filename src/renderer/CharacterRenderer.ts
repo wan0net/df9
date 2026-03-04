@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { TILE_HALF_W, TILE_HALF_H } from '../config';
 import type { Character } from '../characters/Character';
@@ -8,7 +9,8 @@ import type { Character } from '../characters/Character';
  * Renders characters in the Three.js scene.
  *
  * Loads Citizen_Base.glb for normal characters and Spacesuit.glb for spacewalking.
- * Applies procedural animations (walk bob, idle breathing).
+ * Uses skeletal animations from GLTF clips when available, otherwise
+ * applies procedural animations (walk bob, idle breathing).
  */
 
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
@@ -25,6 +27,12 @@ const BREATHE_AMPLITUDE = 1.5;
 const BREATHE_SPEED = 1.2;
 /** Walk sway (left-right lean) amplitude in radians. */
 const WALK_SWAY = 0.06;
+/** Working/building bob speed. */
+const WORK_BOB_SPEED = 4;
+/** Working bob amplitude. */
+const WORK_BOB_AMPLITUDE = 3;
+/** Working lean (forward tilt). */
+const WORK_LEAN = 0.12;
 
 /**
  * Subset indices from .brig (Citizen_Base) by category.
@@ -83,13 +91,87 @@ const JOB_COLORS: Record<number, number> = {
   13: 0x888888,  // JANITOR - grey
 };
 
-/** Cached loaded GLTF scenes. */
+/**
+ * Character texture variants for skin tone diversity.
+ * Textures in public/assets/characters/ follow the pattern:
+ *   {Species}_{Part}_{Gender}_{Variant}_base_{ToneIndex}.png
+ * The _base_01 and _base_02 variants provide two skin tones per model.
+ */
+const CHARACTER_TEXTURE_PATH = 'assets/characters/';
+const textureLoader = new THREE.TextureLoader();
+const charTexCache = new Map<string, THREE.Texture>();
+
+function loadCharTexture(filename: string): THREE.Texture | null {
+  const cached = charTexCache.get(filename);
+  if (cached) return cached;
+
+  const tex = textureLoader.load(
+    `${CHARACTER_TEXTURE_PATH}${filename}`,
+    (t) => {
+      t.magFilter = THREE.NearestFilter;
+      t.minFilter = THREE.NearestFilter;
+      t.colorSpace = THREE.SRGBColorSpace;
+      charTexCache.set(filename, t);
+    },
+    undefined,
+    () => { /* silently fail for missing textures */ }
+  );
+  charTexCache.set(filename, tex);
+  return tex;
+}
+
+/** Swap skin tone textures on a cloned citizen model based on character ID. */
+function applySkinVariant(group: THREE.Group, charId: number) {
+  // Use char ID to pick tone variant: _base_01 or _base_02
+  const toneIdx = (charId % 2) + 1;
+  const toneSuffix = `_base_0${toneIdx}.png`;
+
+  // Walk all meshes and try to find matching variant textures
+  group.traverse((child) => {
+    if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
+    const mat = child.material;
+    if (!(mat instanceof THREE.MeshStandardMaterial) && !(mat instanceof THREE.MeshBasicMaterial)) return;
+    if (!mat.map) return;
+
+    // Get the original texture name from the material
+    const origName = mat.name || child.name;
+    if (!origName) return;
+
+    // Try to find a variant texture matching this mesh's name pattern
+    // E.g., for mesh "Human_Body_Male01" → try "Human_Body_Male01_base_01.png"
+    const variantFile = `${origName}${toneSuffix}`;
+    const tex = loadCharTexture(variantFile);
+    if (tex) {
+      mat.map = tex;
+      mat.needsUpdate = true;
+    }
+  });
+}
+
+/** Cached loaded GLTF data. */
 let cachedCitizen: THREE.Group | null = null;
 let cachedSpacesuit: THREE.Group | null = null;
+let citizenAnimClips: THREE.AnimationClip[] = [];
+let spacesuitAnimClips: THREE.AnimationClip[] = [];
+let citizenHasSkeleton = false;
+let spacesuitHasSkeleton = false;
 let citizenLoadPromise: Promise<void> | null = null;
 let spacesuitLoadPromise: Promise<void> | null = null;
 let citizenLoadFailed = false;
 let spacesuitLoadFailed = false;
+
+/** Map character activity state to animation clip name. */
+const STATE_CLIP_MAP: Record<string, string[]> = {
+  walking: ['Citizen_Walk', 'Spacewalk_Walk_Rock'],
+  idle: ['Citizen_Idle_A', 'Citizen_Idle_Normal'],
+  sleeping: ['Citizen_Goto_Sleep'],
+  building: ['Citizen_Build'],
+  eating: ['Citizen_EatReplicator'],
+  fighting_melee: ['Citizen_Punch'],
+  fighting_ranged: ['Citizen_EmergencyShoot'],
+  dead: ['Citizen_DeathPose'],
+  panicking: ['Citizen_Panic_Walk'],
+};
 
 function stripSkinning(group: THREE.Group) {
   const toReplace: { skinned: THREE.SkinnedMesh; parent: THREE.Object3D }[] = [];
@@ -113,16 +195,39 @@ function stripSkinning(group: THREE.Group) {
   });
 }
 
+function hasSkinning(group: THREE.Group): boolean {
+  let found = false;
+  group.traverse((child) => {
+    if (child instanceof THREE.SkinnedMesh) found = true;
+  });
+  return found;
+}
+
 function loadCitizenModel(): Promise<void> {
   if (citizenLoadPromise) return citizenLoadPromise;
   citizenLoadPromise = new Promise<void>((resolve) => {
     const loader = new GLTFLoader();
     loader.load(MODEL_PATH, (gltf) => {
       cachedCitizen = gltf.scene;
-      stripSkinning(cachedCitizen);
+      citizenAnimClips = gltf.animations || [];
+      citizenHasSkeleton = hasSkinning(cachedCitizen) && citizenAnimClips.length > 0;
+
+      // Only strip skinning if we have no usable animation clips
+      if (!citizenHasSkeleton) {
+        stripSkinning(cachedCitizen);
+      }
+
+      // Ensure double-sided materials
+      cachedCitizen.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          const mat = child.material as THREE.Material;
+          mat.side = THREE.DoubleSide;
+        }
+      });
+
       let mc = 0;
-      cachedCitizen.traverse((c) => { if (c instanceof THREE.Mesh) mc++; });
-      console.log('Citizen model loaded:', mc, 'meshes');
+      cachedCitizen.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Citizen model loaded: ${mc} meshes, ${citizenAnimClips.length} clips, skeleton=${citizenHasSkeleton}`);
       resolve();
     }, undefined, (err) => {
       console.warn('Failed to load citizen model:', err);
@@ -139,10 +244,23 @@ function loadSpacesuitModel(): Promise<void> {
     const loader = new GLTFLoader();
     loader.load(SPACESUIT_PATH, (gltf) => {
       cachedSpacesuit = gltf.scene;
-      stripSkinning(cachedSpacesuit);
+      spacesuitAnimClips = gltf.animations || [];
+      spacesuitHasSkeleton = hasSkinning(cachedSpacesuit) && spacesuitAnimClips.length > 0;
+
+      if (!spacesuitHasSkeleton) {
+        stripSkinning(cachedSpacesuit);
+      }
+
+      cachedSpacesuit.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          const mat = child.material as THREE.Material;
+          mat.side = THREE.DoubleSide;
+        }
+      });
+
       let mc = 0;
-      cachedSpacesuit.traverse((c) => { if (c instanceof THREE.Mesh) mc++; });
-      console.log('Spacesuit model loaded:', mc, 'meshes');
+      cachedSpacesuit.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Spacesuit model loaded: ${mc} meshes, ${spacesuitAnimClips.length} clips, skeleton=${spacesuitHasSkeleton}`);
       resolve();
     }, undefined, (err) => {
       console.warn('Failed to load spacesuit model:', err);
@@ -168,6 +286,12 @@ export interface CharacterRenderHandle {
   showingSpacesuit: boolean;
   /** Animation phase (unique per character for variety). */
   animPhase: number;
+  /** AnimationMixer for skeletal clips (null if no clips). */
+  mixer: THREE.AnimationMixer | null;
+  /** Currently playing animation action. */
+  currentAction: THREE.AnimationAction | null;
+  /** Current animation state key. */
+  currentAnimState: string;
 }
 
 export class CharacterRenderer {
@@ -186,10 +310,17 @@ export class CharacterRenderer {
     let object: THREE.Object3D;
     let modelGroup = new THREE.Group();
     let is3D = false;
+    let mixer: THREE.AnimationMixer | null = null;
 
-    if (cachedCitizen && !citizenLoadFailed) {
-      const model = this.createModel(char, char.bSpacewalking);
-      modelGroup = model;
+    // If spacewalking and spacesuit model not loaded yet, queue for upgrade
+    if (char.bSpacewalking && !cachedSpacesuit && !spacesuitLoadFailed) {
+      object = this.createBoxPlaceholder(char);
+      this.pendingUpgrade.push(char);
+      loadSpacesuitModel().then(() => this.upgradePending());
+    } else if (cachedCitizen && !citizenLoadFailed) {
+      const result = this.createModel(char, char.bSpacewalking);
+      modelGroup = result.group;
+      mixer = result.mixer;
       object = modelGroup;
       is3D = true;
     } else {
@@ -213,6 +344,9 @@ export class CharacterRenderer {
       object, modelGroup, needBarsEl, needBarsObj, is3D,
       showingSpacesuit: char.bSpacewalking,
       animPhase: Math.random() * Math.PI * 2,
+      mixer,
+      currentAction: null,
+      currentAnimState: '',
     };
     this.handles.set(char.id, handle);
     return handle;
@@ -225,20 +359,30 @@ export class CharacterRenderer {
     return new THREE.Mesh(geo, mat);
   }
 
-  /** Create either citizen or spacesuit model. */
-  private createModel(char: Character, spacesuit: boolean): THREE.Group {
+  /** Create either citizen or spacesuit model. Returns { group, mixer }. */
+  private createModel(char: Character, spacesuit: boolean): { group: THREE.Group; mixer: THREE.AnimationMixer | null } {
     const group = new THREE.Group();
+    let mixer: THREE.AnimationMixer | null = null;
 
     if (spacesuit && cachedSpacesuit && !spacesuitLoadFailed) {
       // Spacesuit model
-      const clone = cachedSpacesuit.clone(true);
+      const clone = spacesuitHasSkeleton
+        ? cloneSkeleton(cachedSpacesuit) as THREE.Group
+        : cachedSpacesuit.clone(true);
       clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
       clone.rotation.x = 0.4;
       clone.rotation.y = 0.6;
       group.add(clone);
+
+      // Set up animation mixer if clips available
+      if (spacesuitHasSkeleton && spacesuitAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
     } else if (cachedCitizen && !citizenLoadFailed) {
       // Citizen model with subset visibility
-      const clone = cachedCitizen.clone(true);
+      const clone = citizenHasSkeleton
+        ? cloneSkeleton(cachedCitizen) as THREE.Group
+        : cachedCitizen.clone(true);
       clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
       clone.rotation.x = 0.4;
       clone.rotation.y = 0.6;
@@ -246,12 +390,21 @@ export class CharacterRenderer {
       const visibleSet = this.getVisibleSubsets(char);
       let meshIdx = 0;
       clone.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
+        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
           child.visible = visibleSet.has(meshIdx);
           meshIdx++;
         }
       });
+
+      // Apply skin tone variant textures for visual diversity
+      applySkinVariant(clone, char.id);
+
       group.add(clone);
+
+      // Set up animation mixer if clips available
+      if (citizenHasSkeleton && citizenAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
     } else {
       // Fallback box
       const color = JOB_COLORS[char.getJob()] ?? 0xcccccc;
@@ -260,7 +413,7 @@ export class CharacterRenderer {
       group.add(new THREE.Mesh(geo, mat));
     }
 
-    return group;
+    return { group, mixer };
   }
 
   private getVisibleSubsets(char: Character): Set<number> {
@@ -332,11 +485,12 @@ export class CharacterRenderer {
         handle.object.geometry.dispose();
       }
 
-      const newObj = this.createModel(char, char.bSpacewalking);
-      this.positionCharacter(newObj, char);
-      this.scene.add(newObj);
-      handle.object = newObj;
-      handle.modelGroup = newObj;
+      const result = this.createModel(char, char.bSpacewalking);
+      this.positionCharacter(result.group, char);
+      this.scene.add(result.group);
+      handle.object = result.group;
+      handle.modelGroup = result.group;
+      handle.mixer = result.mixer;
       handle.is3D = true;
       handle.showingSpacesuit = char.bSpacewalking;
     }
@@ -354,10 +508,13 @@ export class CharacterRenderer {
         if (child instanceof THREE.Mesh) child.geometry.dispose();
       });
 
-      const newObj = this.createModel(char, char.bSpacewalking);
-      this.scene.add(newObj);
-      handle.object = newObj;
-      handle.modelGroup = newObj;
+      const result = this.createModel(char, char.bSpacewalking);
+      this.scene.add(result.group);
+      handle.object = result.group;
+      handle.modelGroup = result.group;
+      handle.mixer = result.mixer;
+      handle.currentAction = null;
+      handle.currentAnimState = '';
       handle.showingSpacesuit = char.bSpacewalking;
     }
 
@@ -365,14 +522,80 @@ export class CharacterRenderer {
     this.positionCharacter(handle.object, char);
     this.positionNeedBars(handle.needBarsObj, char);
 
-    // Procedural animation
-    this.applyProceduralAnim(handle, char);
+    // Animation: use skeletal clips if available, else procedural
+    if (handle.mixer) {
+      this.updateSkeletalAnim(handle, char);
+    } else {
+      this.applyProceduralAnim(handle, char);
+    }
 
     // Need bars
     this.drawNeedBars(handle.needBarsEl, char);
   }
 
-  /** Apply procedural walk bob / idle breathing. */
+  /** Get the animation state key for a character. */
+  private getAnimState(char: Character): string {
+    if (!char.isAlive()) return 'dead';
+    if (char.moving) return 'walking';
+    const taskName = char.currentTask?.name;
+    if (taskName === 'sleep' || taskName === 'SleepInBed' || taskName === 'SleepOnFloor') return 'sleeping';
+    if (taskName === 'BuildEnvObject' || taskName === 'BuildTile') return 'building';
+    if (taskName === 'Eat' || taskName === 'GetDrink') return 'eating';
+    if (taskName === 'AttackEnemy' && char.weapon) return 'fighting_ranged';
+    if (taskName === 'AttackEnemy') return 'fighting_melee';
+    if (taskName === 'Mine') return 'building'; // Use build animation for mining too
+    return 'idle';
+  }
+
+  /** Find the best matching animation clip for a state. */
+  private findClip(state: string, spacesuit: boolean): THREE.AnimationClip | null {
+    const candidates = STATE_CLIP_MAP[state] || [];
+    const clips = spacesuit ? spacesuitAnimClips : citizenAnimClips;
+
+    for (const name of candidates) {
+      const clip = clips.find(c => c.name === name);
+      if (clip) return clip;
+    }
+    // Fallback: try partial match
+    for (const name of candidates) {
+      const clip = clips.find(c => c.name.includes(name));
+      if (clip) return clip;
+    }
+    return null;
+  }
+
+  /** Update skeletal animation from mixer clips. */
+  private updateSkeletalAnim(handle: CharacterRenderHandle, char: Character) {
+    const state = this.getAnimState(char);
+
+    // Switch clip if state changed
+    if (state !== handle.currentAnimState) {
+      handle.currentAnimState = state;
+
+      const clip = this.findClip(state, handle.showingSpacesuit);
+      if (clip && handle.mixer) {
+        if (handle.currentAction) {
+          handle.currentAction.fadeOut(0.2);
+        }
+        const action = handle.mixer.clipAction(clip);
+        action.reset().fadeIn(0.2).play();
+        handle.currentAction = action;
+      }
+    }
+
+    // Update mixer (use real time delta)
+    const dt = 1 / 60; // Approximate — called once per frame
+    handle.mixer!.update(dt);
+  }
+
+  /** Check if character is doing a working task (building, mining, maintaining). */
+  private isWorking(char: Character): boolean {
+    const name = char.currentTask?.name;
+    return name === 'BuildTile' || name === 'BuildEnvObject' || name === 'Mine' ||
+           name === 'MaintainEnvObject' || name === 'MaintainPlants';
+  }
+
+  /** Apply procedural walk bob / idle breathing / working animation. */
   private applyProceduralAnim(handle: CharacterRenderHandle, char: Character) {
     const t = performance.now() / 1000;
     const phase = handle.animPhase;
@@ -385,6 +608,18 @@ export class CharacterRenderer {
       // Walk sway: slight lean left/right
       if (handle.modelGroup.children.length > 0) {
         handle.modelGroup.children[0].rotation.z = Math.sin(t * WALK_BOB_SPEED * 0.5 + phase) * WALK_SWAY;
+      }
+    } else if (this.isWorking(char)) {
+      // Working: smooth sawtooth — lean forward, brief dip, return (rhythmic tap)
+      const cycle = ((t * WORK_BOB_SPEED + phase) % (Math.PI * 2)) / (Math.PI * 2); // 0..1
+      // Ease-in dip at cycle peak (0.4..0.6), gentle return
+      const dip = cycle < 0.4 ? 0 : cycle < 0.6 ? Math.sin((cycle - 0.4) / 0.2 * Math.PI) : 0;
+      handle.object.position.y += dip * WORK_BOB_AMPLITUDE;
+
+      // Forward lean: ramp up to strike, snap back
+      if (handle.modelGroup.children.length > 0) {
+        const lean = cycle < 0.5 ? cycle * 2 : (1 - cycle) * 2; // triangle wave 0..1..0
+        handle.modelGroup.children[0].rotation.z = lean * WORK_LEAN;
       }
     } else {
       // Idle breathing: gentle vertical pulse
@@ -418,6 +653,12 @@ export class CharacterRenderer {
   destroyCharacter(charId: number) {
     const handle = this.handles.get(charId);
     if (!handle) return;
+
+    // Clean up animation mixer
+    if (handle.mixer) {
+      handle.mixer.stopAllAction();
+    }
+
     this.scene.remove(handle.object);
     handle.object.traverse((child) => {
       if (child instanceof THREE.Mesh) child.geometry.dispose();

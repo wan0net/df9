@@ -48,7 +48,23 @@ export class ResearchSystem {
     const def = RESEARCH_DEFS[researchId];
     this.activeResearch = null;
     this.progress = 0;
-    Base.addAlert('research', `Research complete: ${def?.friendlyName ?? researchId}`);
+    if (def?.bDiscoverOnly) {
+      Base.addAlert('research', `Blueprint discovered: ${def.friendlyName}`);
+    } else {
+      Base.addAlert('research', `Research complete: ${def?.friendlyName ?? researchId}`);
+    }
+  }
+
+  /**
+   * Directly complete a discovery blueprint (e.g. from datacube pickup).
+   * bDiscoverOnly items are normally completed this way, not via the research queue.
+   */
+  discoverBlueprint(researchId: string): boolean {
+    const def = RESEARCH_DEFS[researchId];
+    if (!def || !def.bDiscoverOnly) return false;
+    if (this.completed.has(researchId)) return false;
+    this.completeResearch(researchId);
+    return true;
   }
 
   /** Check if a research topic is completed. */
@@ -56,15 +72,28 @@ export class ResearchSystem {
     return this.completed.has(researchId);
   }
 
-  /** Get available research topics (prerequisites met, not completed). */
+  /** Get available research topics (prerequisites met, not completed, not discovery-only). */
   getAvailable(): ResearchDef[] {
     const available: ResearchDef[] = [];
     for (const [id, def] of Object.entries(RESEARCH_DEFS)) {
       if (this.completed.has(id)) continue;
+      // Discovery blueprints are not manually researchable — they come from datacubes/events
+      if (def.bDiscoverOnly) continue;
       const prereqsMet = def.prerequisites.every(p => this.completed.has(p));
       if (prereqsMet) available.push(def);
     }
     return available;
+  }
+
+  /** Get all research defs including discoveries (for UI/debug). */
+  getAllResearch(): Record<string, ResearchDef & { completed: boolean; available: boolean }> {
+    const result: Record<string, ResearchDef & { completed: boolean; available: boolean }> = {};
+    for (const [id, def] of Object.entries(RESEARCH_DEFS)) {
+      const completed = this.completed.has(id);
+      const prereqsMet = def.prerequisites.every(p => this.completed.has(p));
+      result[id] = { ...def, completed, available: !completed && prereqsMet };
+    }
+    return result;
   }
 
   getActiveResearch(): string | null { return this.activeResearch; }

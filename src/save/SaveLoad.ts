@@ -4,11 +4,13 @@
  */
 
 import { GameRules, SAVEGAME_VERSION } from '../core/GameRules';
+import { Base, type BaseStats } from '../core/Base';
 import type { TileGrid } from '../world/TileGrid';
 import type { RoomManager } from '../rooms/RoomManager';
 import type { CharacterManager } from '../characters/CharacterManager';
 import type { EnvObjectManager as EnvObjMgrType } from '../envobjects/EnvObjectManager';
 import type { EventController } from '../events/EventController';
+import type { MaladyInstance } from '../malady/Malady';
 
 // ── Save data interfaces ────────────────────────────────────────
 
@@ -30,7 +32,7 @@ export interface CharSaveData {
   weapon: string | null;
   bSpacesuit: boolean;
   nSuitOxygen: number;
-  maladies: { name: string; elapsed: number }[];
+  maladies: MaladyInstance[];
 }
 
 export interface ObjSaveData {
@@ -57,6 +59,8 @@ export interface SaveData {
   research: { active: string | null; progress: number; completed: string[] };
   roomZones: { roomId: number; zone: string }[];
   events?: ReturnType<EventController['getSaveData']>;
+  tStats?: BaseStats;
+  factionData?: { teamFactions: [number, number][]; nNextTeamID: number };
 }
 
 export class SaveLoadSystem {
@@ -110,6 +114,8 @@ export class SaveLoadSystem {
       research: this.getResearchData?.() ?? { active: null, progress: 0, completed: [] },
       roomZones,
       events: this.getEventData?.(),
+      tStats: { ...Base.tStats },
+      factionData: Base.getFactionSaveData(),
     };
   }
 
@@ -163,6 +169,12 @@ export class SaveLoadSystem {
 
     // Mark rooms dirty for re-detection
     this.roomManager.markDirty([]);
+
+    // Restore stats
+    if (data.tStats) Base.loadStats(data.tStats);
+
+    // Restore faction registry
+    if (data.factionData) Base.loadFactionData(data.factionData);
 
     // Restore subsystem data
     if (data.characters) this.loadCharacterData?.(data.characters);

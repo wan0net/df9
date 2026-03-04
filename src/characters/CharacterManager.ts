@@ -20,6 +20,7 @@ import { SleepInBed } from '../utility/tasks/SleepInBed';
 import { Chat } from '../utility/tasks/Chat';
 import { Mine } from '../utility/tasks/Mine';
 import { BuildEnvObject } from '../utility/tasks/BuildEnvObject';
+import { BuildTile } from '../utility/tasks/BuildTile';
 import { GetDrink } from '../utility/tasks/GetDrink';
 import { Eat } from '../utility/tasks/Eat';
 import { MaintainEnvObject } from '../utility/tasks/MaintainEnvObject';
@@ -31,6 +32,29 @@ import { Patrol } from '../utility/tasks/Patrol';
 import { DropOffCorpse } from '../utility/tasks/DropOffCorpse';
 import { AttackEnemy } from '../utility/tasks/AttackEnemy';
 import { Cuff } from '../utility/tasks/Cuff';
+import { ListenToJukebox } from '../utility/tasks/ListenToJukebox';
+import { LiftAtWeightBench } from '../utility/tasks/LiftAtWeightBench';
+import { WorkOut } from '../utility/tasks/WorkOut';
+import { Explore } from '../utility/tasks/Explore';
+import { Breathe } from '../utility/tasks/Breathe';
+import { Brawl } from '../utility/tasks/Brawl';
+import { PanicFire } from '../utility/tasks/PanicFire';
+import { PanicOxygen } from '../utility/tasks/PanicOxygen';
+import { FleeThreat } from '../utility/tasks/FleeThreat';
+import { PanicThreat } from '../utility/tasks/PanicThreat';
+import { FireFleeArea } from '../utility/tasks/FireFleeArea';
+import { OxygenFleeArea } from '../utility/tasks/OxygenFleeArea';
+import { FleeEmergencyAlarm } from '../utility/tasks/FleeEmergencyAlarm';
+import { RampageTantrum } from '../utility/tasks/RampageTantrum';
+import { Sabotage } from '../utility/tasks/Sabotage';
+import { BedHeal } from '../utility/tasks/BedHeal';
+import { PutOnSuit } from '../utility/tasks/PutOnSuit';
+import { HarvestAndDeliverFood } from '../utility/tasks/HarvestAndDeliverFood';
+import { ServeFoodAtTable } from '../utility/tasks/ServeFoodAtTable';
+import { EatAtTable } from '../utility/tasks/EatAtTable';
+import { DropOffRocks } from '../utility/tasks/DropOffRocks';
+import { IncapacitatedOnFloor } from '../utility/tasks/IncapacitatedOnFloor';
+import { PRIORITY } from '../utility/ActivityOption';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { Base } from '../core/Base';
@@ -39,6 +63,7 @@ import { CombatSystem, isHostile } from '../combat/CombatSystem';
 import { SquadList } from '../combat/SquadList';
 import { FIRE_DAMAGE_PER_SECOND } from '../hazards/Fire';
 import type { Fire } from '../hazards/Fire';
+import { Malady } from '../malady/Malady';
 import type { Task } from '../utility/Task';
 import type { CharacterRenderer } from '../renderer/CharacterRenderer';
 import type { CrewSpawnPoint } from '../world/WorldGen';
@@ -118,6 +143,7 @@ export class CharacterManager {
     for (const spawn of spawns) {
       const char = new Character(this.nextId++, spawn.x, spawn.y);
       char.bSpacewalking = true; // Initial crew starts spacewalking
+      char.setJob(BUILDER); // Starting crew are all builders (original Lua behavior)
       this.characterRenderer?.createCharacter(char);
       this.characters.push(char);
     }
@@ -142,14 +168,18 @@ export class CharacterManager {
 
       // Update O2 need from room
       const room = this.roomManager.getRoomAt(char.tileX, char.tileY);
-      if (room) {
+      if (room && room.sealed && room.oxygen > 50) {
+        // Safe sealed room — breathable
         char.needs.updateOxygen(room.oxygen);
-        // Character entered a room — stop spacewalking
         if (char.bSpacewalking) {
           char.bSpacewalking = false;
         }
       } else {
-        char.needs.updateOxygen(0);
+        // In space, on unsealed floor, or in a room with no oxygen
+        char.needs.updateOxygen(room?.oxygen ?? 0);
+        if (!char.bSpacewalking) {
+          char.bSpacewalking = true;
+        }
       }
 
       // Update renderer
@@ -298,25 +328,15 @@ export class CharacterManager {
     return this.characters.filter(c => c.isAlive() && isHostile(TEAM_ID_PLAYER, c.tStats.nTeam)).length;
   }
 
-  /** Check malady contagion between nearby characters. */
+  /** Check malady contagion: sneeze spread to nearby characters. */
   private processContagion() {
     for (const carrier of this.characters) {
       if (!carrier.isAlive() || carrier.maladies.length === 0) continue;
 
-      for (const malady of carrier.maladies) {
-        if (!malady.def.bContagious || malady.bCured) continue;
-
-        for (const other of this.characters) {
-          if (other === carrier || !other.isAlive()) continue;
-
-          const dist = Math.abs(carrier.tileX - other.tileX) + Math.abs(carrier.tileY - other.tileY);
-          if (dist > CharacterManager.CONTAGION_RANGE) continue;
-
-          // Spread chance
-          if (Math.random() < malady.def.nSpreadChance) {
-            other.infectWith(malady.def.sName);
-          }
-        }
+      // Check if it's time for a sneeze-spread
+      const anim = Malady.getSymptomAnim(carrier);
+      if (anim === 'sneeze') {
+        Malady.playedSymptomAnim(carrier, this.characters);
       }
     }
   }
@@ -341,8 +361,33 @@ export class CharacterManager {
     for (const char of this.decisionQueue) {
       if (processed >= UPDATES_PER_TICK) break;
 
-      // Spacewalking characters: seek nearest room
+      // Spacewalking characters: try outdoor tasks first, then seek nearest room
       if (char.bSpacewalking) {
+        // Check for outdoor tasks (build_tile, mine) that can be done in a spacesuit
+        const outdoorOptions: ActivityOption[] = [];
+        for (const cmd of CommandQueue.getAvailable('build_tile')) {
+          outdoorOptions.push(new ActivityOption(
+            new BuildTile(cmd.id, this.grid),
+            cmd.tileX, cmd.tileY,
+            9,
+          ));
+        }
+        for (const cmd of CommandQueue.getAvailable('mine')) {
+          outdoorOptions.push(new ActivityOption(
+            new Mine(cmd.id, this.grid),
+            cmd.tileX, cmd.tileY,
+            7,
+          ));
+        }
+        if (outdoorOptions.length > 0) {
+          const task = UtilityAI.selectTask(char, outdoorOptions);
+          if (task) {
+            this.assignTask(char, task);
+            processed++;
+            continue;
+          }
+        }
+        // No outdoor tasks — just seek the nearest room
         this.seekNearestRoom(char);
         processed++;
         continue;
@@ -474,11 +519,21 @@ export class CharacterManager {
       if (obj) {
         const priority = job === BUILDER ? 8 : 3;
         options.push(new ActivityOption(
-          new BuildEnvObject(obj, cmd.id),
+          new BuildEnvObject(obj, cmd.id, this.grid),
           cmd.tileX, cmd.tileY,
           priority,
         ));
       }
+    }
+
+    // ── Build tile commands (floor/wall construction) ─────
+    for (const cmd of CommandQueue.getAvailable('build_tile')) {
+      const priority = job === BUILDER ? 9 : 4; // Higher priority than objects
+      options.push(new ActivityOption(
+        new BuildTile(cmd.id, this.grid),
+        cmd.tileX, cmd.tileY,
+        priority,
+      ));
     }
 
     // ── Sleep in bed ─────────────────────────────────────────
@@ -637,7 +692,283 @@ export class CharacterManager {
       }
     }
 
+    // ── Hobby: Listen to Jukebox ──────────────────────────────
+    for (const jukebox of EnvObjectManager.getObjectsByType('Jukebox')) {
+      if (!jukebox.bBuilt || !jukebox.isFunctioning()) continue;
+      options.push(new ActivityOption(
+        new ListenToJukebox(),
+        jukebox.tileX, jukebox.tileY,
+        2,
+      ));
+    }
+
+    // ── Hobby: Lift at weight bench ─────────────────────────
+    for (const bench of EnvObjectManager.getObjectsByType('WeightBench')) {
+      if (!bench.bBuilt || !bench.isFunctioning()) continue;
+      options.push(new ActivityOption(
+        new LiftAtWeightBench(),
+        bench.tileX, bench.tileY,
+        2,
+      ));
+    }
+
+    // ── Hobby: Work out (no gym needed) ─────────────────────
+    if (room) {
+      options.push(new ActivityOption(
+        new WorkOut(),
+        character.tileX, character.tileY,
+        0.5,
+      ));
+    }
+
+    // ── Explore (all characters, low priority) ──────────────
+    if (room && room.tiles.length >= 2) {
+      const target = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      options.push(new ActivityOption(
+        new Explore(),
+        target.x, target.y,
+        0.3,
+        { tags: { WorkShift: true } },
+      ));
+    }
+
+    // ── Brawl (anger-driven, high anger only) ───────────────
+    if (character.nAnger >= 60) {
+      for (const other of this.characters) {
+        if (other === character || !other.isAlive()) continue;
+        if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+        const otherRoom = this.roomManager.getRoomAt(other.tileX, other.tileY);
+        if (otherRoom === room) {
+          options.push(new ActivityOption(
+            new Brawl(),
+            other.tileX, other.tileY,
+            60,
+            { priorityLevel: PRIORITY.SURVIVAL_LOW },
+          ));
+          break;
+        }
+      }
+    }
+
+    // ── Fire response (branching on bravery) ──────────────────
+    if (room && this.hasFireInRoom(room)) {
+      // Low bravery: panic
+      options.push(new ActivityOption(
+        new PanicFire(),
+        character.tileX, character.tileY,
+        2,
+        {
+          priorityLevel: PRIORITY.SURVIVAL_NORMAL,
+          personalityGates: { nBravery: [0, 0.4] },
+        },
+      ));
+      // Moderate+ bravery: flee the area
+      options.push(new ActivityOption(
+        new FireFleeArea(),
+        character.tileX, character.tileY,
+        4,
+        {
+          priorityLevel: PRIORITY.SURVIVAL_NORMAL,
+          personalityGates: { nBravery: [0.2, 1] },
+        },
+      ));
+    }
+
+    // ── Oxygen response (branching on bravery) ───────────────
+    if (room && room.oxygen < 30) {
+      // Low bravery: panic
+      options.push(new ActivityOption(
+        new PanicOxygen(),
+        character.tileX, character.tileY,
+        1,
+        {
+          priorityLevel: PRIORITY.SURVIVAL_NORMAL,
+          personalityGates: { nBravery: [0, 0.4] },
+        },
+      ));
+      // All: flee low-oxygen area
+      options.push(new ActivityOption(
+        new OxygenFleeArea(),
+        character.tileX, character.tileY,
+        200,
+        { priorityLevel: PRIORITY.SURVIVAL_NORMAL },
+      ));
+    }
+
+    // ── Threat response (branching on bravery) ───────────────
+    if (this.getHostileCount() > 0 && job !== EMERGENCY) {
+      const nearest = this.combatSystem.findNearestHostile(character, this.characters);
+      if (nearest) {
+        const dist = Math.abs(character.tileX - nearest.tileX) + Math.abs(character.tileY - nearest.tileY);
+        if (dist < 10) {
+          // Low bravery: panic
+          options.push(new ActivityOption(
+            new PanicThreat(),
+            character.tileX, character.tileY,
+            110,
+            {
+              priorityLevel: PRIORITY.SURVIVAL_NORMAL,
+              personalityGates: { nBravery: [0, 0.2] },
+            },
+          ));
+          // Moderate bravery: flee
+          options.push(new ActivityOption(
+            new FleeThreat(),
+            character.tileX, character.tileY,
+            110,
+            {
+              priorityLevel: PRIORITY.SURVIVAL_NORMAL,
+              personalityGates: { nBravery: [0.2, 0.8] },
+            },
+          ));
+        }
+      }
+    }
+
+    // ── Rampage (anger-driven, rampaging characters only) ────
+    if (character.bRampaging) {
+      // Violent rampage
+      options.push(new ActivityOption(
+        new RampageTantrum(),
+        character.tileX, character.tileY,
+        100,
+        { priorityLevel: PRIORITY.SURVIVAL_NORMAL },
+      ));
+      // Non-violent sabotage: target a nearby object
+      for (const obj of EnvObjectManager.getObjects()) {
+        if (!obj.bBuilt || obj.nCondition <= 0) continue;
+        options.push(new ActivityOption(
+          new Sabotage(obj),
+          obj.tileX, obj.tileY,
+          105,
+          { priorityLevel: PRIORITY.SURVIVAL_LOW },
+        ));
+        break; // Just the nearest one
+      }
+    }
+
+    // ── Incapacitated (very low HP) ──────────────────────────
+    if (character.tStats.nHP <= 10 && character.tStats.nHP > 0) {
+      options.push(new ActivityOption(
+        new IncapacitatedOnFloor(),
+        character.tileX, character.tileY,
+        0.002,
+        { prerequisites: { NonThreatening: true } },
+      ));
+    }
+
+    // ── Doctor: Heal patients in hospital beds ───────────────
+    if (job === DOCTOR) {
+      for (const bed of EnvObjectManager.getObjectsByType('HospitalBed')) {
+        if (!bed.bBuilt || !bed.isFunctioning()) continue;
+        // Find a wounded character near the bed
+        for (const other of this.characters) {
+          if (other === character || !other.isAlive()) continue;
+          if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+          if (other.tStats.nHP < other.tStats.nMaxHP * 0.7) {
+            options.push(new ActivityOption(
+              new BedHeal(other),
+              bed.tileX, bed.tileY,
+              16 + shiftBoost,
+              { tags: { Job: DOCTOR, WorkShift: true } },
+            ));
+            break;
+          }
+        }
+      }
+    }
+
+    // ── Botanist: Harvest and deliver food ───────────────────
+    if (job === BOTANIST) {
+      const plantTypes = ['space_tree', 'HydroPlant', 'BulbousPlant', 'StrangePlant'];
+      for (const pType of plantTypes) {
+        for (const plant of EnvObjectManager.getObjectsByType(pType)) {
+          if (!plant.bBuilt) continue;
+          if (plant.nCondition > 80) { // Harvestable when healthy
+            options.push(new ActivityOption(
+              new HarvestAndDeliverFood(),
+              plant.tileX, plant.tileY,
+              7 + shiftBoost,
+              { tags: { Job: BOTANIST, WorkShift: true } },
+            ));
+            break;
+          }
+        }
+      }
+    }
+
+    // ── Bartender: Serve food at table ───────────────────────
+    if (job === BARTENDER) {
+      for (const table of EnvObjectManager.getObjectsByType('StandingTable')) {
+        if (!table.bBuilt) continue;
+        options.push(new ActivityOption(
+          new ServeFoodAtTable(),
+          table.tileX, table.tileY,
+          6 + shiftBoost,
+          { tags: { Job: BARTENDER, WorkShift: true } },
+        ));
+      }
+    }
+
+    // ── Eat at table (better than replicator) ────────────────
+    for (const table of EnvObjectManager.getObjectsByType('StandingTable')) {
+      if (!table.bBuilt) continue;
+      options.push(new ActivityOption(
+        new EatAtTable(),
+        table.tileX, table.tileY,
+        3,
+      ));
+    }
+
+    // ── Miner: Drop off rocks at refinery ────────────────────
+    if (job === MINER && character.heldItem === 'Rock') {
+      const refineries = [
+        ...EnvObjectManager.getObjectsByType('RefineryDropoff'),
+        ...EnvObjectManager.getObjectsByType('RefineryDropoffLevel2'),
+      ];
+      for (const ref of refineries) {
+        if (!ref.bBuilt || !ref.isFunctioning()) continue;
+        options.push(new ActivityOption(
+          new DropOffRocks(),
+          ref.tileX, ref.tileY,
+          7 + shiftBoost,
+          {
+            tags: { Job: MINER },
+            prerequisites: { HeldItem: 'Rock' },
+          },
+        ));
+      }
+    }
+
+    // ── Put on suit (near airlock lockers) ───────────────────
+    for (const locker of EnvObjectManager.getObjectsByType('AirlockLocker')) {
+      if (!locker.bBuilt || !locker.isFunctioning()) continue;
+      if (character.bSpacesuit) continue; // Already suited
+      options.push(new ActivityOption(
+        new PutOnSuit(),
+        locker.tileX, locker.tileY,
+        0.5,
+      ));
+    }
+
+    // ── Breathe (absolute fallback) ─────────────────────────
+    options.push(new ActivityOption(
+      new Breathe(),
+      character.tileX, character.tileY,
+      0.001,
+    ));
+
     return options;
+  }
+
+  /** Check if a room has any active fires. */
+  private hasFireInRoom(room: Room): boolean {
+    if (!this.fire) return false;
+    const fireTiles = this.fire.getFireTiles();
+    for (const tile of room.tiles) {
+      if (fireTiles.has(`${tile.x},${tile.y}`)) return true;
+    }
+    return false;
   }
 
   /** Assign a task to a character and start pathfinding if needed. */

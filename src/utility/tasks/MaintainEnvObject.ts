@@ -5,6 +5,8 @@
 import { Task, type NeedAdvertisement } from '../Task';
 import { TECHNICIAN } from '../../characters/CharacterConstants';
 import type { EnvObject } from '../../envobjects/EnvObject';
+import { researchSystem } from '../../research/ResearchSystem';
+import { RESEARCH_DEFS } from '../../research/ResearchData';
 
 export class MaintainEnvObject extends Task {
   readonly name = 'MaintainEnvObject';
@@ -28,7 +30,20 @@ export class MaintainEnvObject extends Task {
       // Repair the object
       if (this.targetObj && this.character) {
         const competency = this.character.tStats.tCompetency[TECHNICIAN] ?? 0;
-        this.targetObj.maintain(this.targetObj.getCondition(), competency);
+        const condBefore = this.targetObj.getCondition();
+        this.targetObj.maintain(condBefore, competency);
+
+        // Apply research multiplier if MaintenanceLevel2 is completed
+        if (researchSystem.isCompleted('MaintenanceLevel2')) {
+          const multiplier = RESEARCH_DEFS.MaintenanceLevel2.nConditionMultiplier ?? 1;
+          const healed = this.targetObj.getCondition() - condBefore;
+          const extraHeal = healed * (multiplier - 1);
+          if (extraHeal > 0) {
+            this.targetObj.setCondition(
+              Math.min(100, this.targetObj.getCondition() + extraHeal),
+            );
+          }
+        }
       }
       this.complete();
     }

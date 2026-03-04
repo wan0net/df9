@@ -11,6 +11,7 @@ import {
 } from '../characters/CharacterConstants';
 import { WEAPON_DEFS, type WeaponDef } from './WeaponData';
 import type { ProjectileManager } from '../hazards/Projectile';
+import { Base } from '../core/Base';
 
 /** Grapple duration before melee damage is applied. */
 const GRAPPLE_TIME = 3;
@@ -22,22 +23,15 @@ function tileDist(ax: number, ay: number, bx: number, by: number): number {
   return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
-/** Check if two teams are hostile to each other. */
+/** Check if two teams are hostile to each other (delegates to Base alliance matrix). */
 export function isHostile(teamA: number, teamB: number): boolean {
   if (teamA === teamB) return false;
-  // Player team vs enemy groups
-  if (teamA === TEAM_ID_PLAYER && teamB === TEAM_ID_DEBUG_ENEMYGROUP) return true;
-  if (teamA === TEAM_ID_DEBUG_ENEMYGROUP && teamB === TEAM_ID_PLAYER) return true;
-  // Abandoned citizens vs everyone
-  if (teamA === TEAM_ID_PLAYER_ABANDONED || teamB === TEAM_ID_PLAYER_ABANDONED) return true;
-  // All negative teams are hostile to player
-  if ((teamA === TEAM_ID_PLAYER && teamB < 0) || (teamB === TEAM_ID_PLAYER && teamA < 0)) return true;
-  return false;
+  return !Base.isFriendly(teamA, teamB);
 }
 
-/** Check if two teams are friendly. */
+/** Check if two teams are friendly (delegates to Base alliance matrix). */
 export function isFriendly(teamA: number, teamB: number): boolean {
-  return teamA === teamB;
+  return Base.isFriendly(teamA, teamB);
 }
 
 /** Active combat engagement between two characters. */

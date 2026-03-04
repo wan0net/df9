@@ -217,6 +217,12 @@ export const DAMAGE_TYPE = {
   Stunner: 7,
 } as const;
 
+// ── Bullet / Projectile Sprite Names ────────────────────────────────────
+export const SPRITE_NAME_FRIENDLY_RIFLE = 'temp_laser_blue';
+export const SPRITE_NAME_ENEMY_RIFLE = 'temp_laser';
+export const SPRITE_NAME_FRIENDLY_PISTOL = 'pistol_laser_blue';
+export const SPRITE_NAME_ENEMY_PISTOL = 'pistol_laser';
+
 // ── Social / Affinity ───────────────────────────────────────────────────
 export const MAX_AFFINITY = 20;
 export const STARTING_AFFINITY = 10;

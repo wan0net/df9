@@ -1,5 +1,6 @@
 import { TileGrid } from './TileGrid';
 import { TileType } from './TileTypes';
+import { CommandQueue } from '../core/CommandQueue';
 
 /**
  * Auto-generate wall tiles at floor/space boundaries.
@@ -34,20 +35,55 @@ export class WallAutoGen {
       const [x, y] = key.split(',').map(Number);
       const current = this.grid.get(x, y);
 
-      if (current === TileType.FLOOR || current === TileType.DOOR) {
-        continue; // Don't overwrite floors or doors
+      if (current === TileType.FLOOR || current === TileType.DOOR ||
+          current === TileType.FLOOR_PENDING || current === TileType.WALL_PENDING) {
+        continue; // Don't overwrite floors, doors, or pending tiles
       }
 
       // Check if this tile should be a wall (borders a floor in any direction)
       const neighbors = this.grid.getAllNeighbors(x, y);
       const bordersFloor = neighbors.some(
-        n => this.grid.get(n.x, n.y) === TileType.FLOOR || this.grid.get(n.x, n.y) === TileType.DOOR
+        n => {
+          const nt = this.grid.get(n.x, n.y);
+          return nt === TileType.FLOOR || nt === TileType.DOOR || nt === TileType.FLOOR_PENDING;
+        }
       );
 
       if (bordersFloor && current === TileType.SPACE) {
         this.grid.set(x, y, TileType.WALL);
       } else if (!bordersFloor && current === TileType.WALL) {
         this.grid.set(x, y, TileType.SPACE);
+      }
+    }
+  }
+
+  /** Place PENDING walls around pending floor tiles (for room build mode). */
+  updatePending(changedTiles: { x: number; y: number }[]) {
+    const candidates = new Set<string>();
+
+    for (const t of changedTiles) {
+      candidates.add(`${t.x},${t.y}`);
+      for (const n of this.grid.getAllNeighbors(t.x, t.y)) {
+        candidates.add(`${n.x},${n.y}`);
+      }
+    }
+
+    for (const key of candidates) {
+      const [x, y] = key.split(',').map(Number);
+      const current = this.grid.get(x, y);
+
+      // Don't overwrite existing real or pending tiles
+      if (current !== TileType.SPACE) continue;
+
+      // Check if this space tile borders a pending floor
+      const neighbors = this.grid.getAllNeighbors(x, y);
+      const bordersPendingFloor = neighbors.some(
+        n => this.grid.get(n.x, n.y) === TileType.FLOOR_PENDING
+      );
+
+      if (bordersPendingFloor) {
+        this.grid.set(x, y, TileType.WALL_PENDING);
+        CommandQueue.addCommand('build_tile', x, y, 'wall');
       }
     }
   }
@@ -71,12 +107,16 @@ export class WallAutoGen {
       const [x, y] = key.split(',').map(Number);
       const current = this.grid.get(x, y);
 
-      // Only process WALL tiles — remove if no adjacent floor
-      if (current !== TileType.WALL) continue;
+      // Only process WALL or WALL_PENDING tiles — remove if no adjacent floor
+      if (current !== TileType.WALL && current !== TileType.WALL_PENDING) continue;
 
       const neighbors = this.grid.getAllNeighbors(x, y);
       const bordersFloor = neighbors.some(
-        n => this.grid.get(n.x, n.y) === TileType.FLOOR || this.grid.get(n.x, n.y) === TileType.DOOR
+        n => {
+          const nt = this.grid.get(n.x, n.y);
+          return nt === TileType.FLOOR || nt === TileType.DOOR ||
+                 nt === TileType.FLOOR_PENDING;
+        }
       );
 
       if (!bordersFloor) {

@@ -1,0 +1,342 @@
+# Spacebase DF-9 — Gap Closure Plan
+
+## Status Key
+- [ ] Not started
+- [~] In progress
+- [x] Complete
+
+---
+
+## 1. Inventory System (~5% → ~95%)
+**Goal**: Port all 62+ item templates from Lua InventoryData, weapon stats, armor, job tools, procedural naming, containers, affinity decay, outfit overrides.
+
+- [x] Port all 54+ item templates from InventoryData.lua (32 base) + WeaponData.lua (22 weapons)
+- [x] Add full ItemTemplate interface with 40+ properties matching Lua exactly
+- [x] Add weapon properties (nDamage, nRange, nMeleeCoolDown, nMaxCoolDown, nMinCoolDown, nDamageType, nPoints, sStance, sBulletSprite)
+- [x] Add armor properties (nDamageReduction, nDodgeChance, sOutfit)
+- [x] Add item flags (bStackable, bHeldOnly, bDisappearOnDrop, bSingleton, bSatisfier, bStuff, bDisplayable, bJobTool, bContainer)
+- [x] Add job restrictions (Job field, getItemJob(), getHeldItemSatisfier())
+- [x] Add tag system (Color×14, Material×5, Texture×5, Shape×4, Style×5 — all with RGB colors)
+- [x] Add procedural item naming (tPossibleTags, tForcedTags, 0-2 random tags, _generateName)
+- [x] Add affinity decay (getAffinityDecay: job tools=0, weapons=75%, default=0.016)
+- [x] Add container support (putItemIntoContainer, removeItemFromContainer, putItemListIntoContainer)
+- [x] Add incineration system (getIncinerateBias, allowIncinerate, TIME_UNWANTED 5-20 min, JOB_ITEM_NO_INCINERATE_MULT=4)
+- [x] Add outfit override system (getOutfitOverride, sOutfit per armor level)
+- [x] Add createItem() with full Lua logic (unique tags, forced tags, tint colors, containers)
+- [x] Add dupeItem(), createRandomStartingStuff(), canStack(), getMaxStacks()
+- [x] Add portrait/display sprite accessors (getPortrait, getDisplaySprite)
+- [x] Add save/load (portFromSave with validation, getSaveTable)
+- [x] Add CharacterInventory class with addItem, removeItem, stacking, singleton, save/load
+- [x] Add SPRITE_NAME constants to CharacterConstants.ts
+- [x] Wire inventory into main.ts window.__df9 (13 test helpers)
+- [x] E2E tests: 7 tests (template count, item creation, weapon data, armor data, item flags, affinity decay, character inventory ops)
+
+**What we did**: Complete rewrite of InventoryData.ts (54+ items matching Lua exactly) and Inventory.ts (full createItem, procedural naming, tag system, containers, incineration, weapon/armor accessors, save/load). CharacterInventory class replaces old simple Inventory.
+**What we didn't do**: createItemAtCursor (debug feature, needs cursor integration). Object display rendering (CompoundProp equivalent — needs renderer work).
+**Blockers**: Display rendering needs renderer system (#12).
+
+---
+
+## 2. Research Tree Corrections (~45% → ~98%)
+**Goal**: Fix all costs, prerequisites, add 11 missing items, implement discovery blueprint system.
+
+- [x] Fix 9 items with wrong costs (all now match Lua exactly)
+- [x] Add 8 missing research items (SpaceSuit2, VaporizeLevel2, BuildLevel2, PlantLevel2, LaserRifles, ArmorLevel2, TeamTactics, HappyBot)
+- [x] Add 4 discovery blueprints (FridgeLevel2Discovered, TeamTacticsDiscovered, MaintenanceLevel2Discovered, WallMountedTurretLevel2Discovered)
+- [x] Implement bDiscoverOnly flag in ResearchDef and ResearchSystem
+- [x] Fix all wrong prerequisites to use Discovered gates
+- [x] Add AirScrubber as prerequisite for HappyBot and OxygenRecyclerLevel2
+- [x] Add nConditionMultiplier field (MaintenanceLevel2: 1.5, PlantLevel2: 2)
+- [x] Fix key names to match Lua (TurretLevel2→WallMountedTurret2, RefineryLevel2→RefineryDropoffLevel2)
+- [x] Wire researchPrereq check into ObjectPlacement (was a stub)
+- [x] Add discoverBlueprint() method for datacube/event-triggered discovery
+- [x] Add getAllResearch() for UI/debug
+- [x] Wire nConditionMultiplier into MaintainEnvObject (MaintenanceLevel2 → 1.5x repair)
+- [x] Wire nConditionMultiplier into MaintainPlants (PlantLevel2 → 2x repair)
+- [x] E2E tests: research tree costs, discovery gating, prereq blocks placement (3 tests)
+
+**What we did**: Complete rewrite of ResearchData.ts matching Lua exactly (24 items). Updated ResearchSystem with bDiscoverOnly support. Wired research prereq into ObjectPlacement. Wired nConditionMultiplier into MaintainEnvObject and MaintainPlants tasks.
+**What we didn't do**: Discovery trigger mechanics (datacubes, derelict events) — requires inventory/event system. Research UI panel.
+**Blockers**: Datacube discovery triggers need inventory system (#1). Research UI panel needs UI system (#6).
+
+---
+
+## 3. Statistics Tracking (0% → ~90%)
+**Goal**: Add persistent stat counters matching Lua Base.tStats, wire into game systems.
+
+- [x] Create BaseStats interface with all 9 counters matching Lua Base.tS.tStats
+- [x] Add incrementStat(), getStats(), loadStats() to Base class
+- [x] Wire hostile kill tracking into Character.kill() (nHostilesKilled, nHostilesAsphyxiated)
+- [x] Add save/load persistence for stats (SaveLoad.ts)
+- [x] Expose getStats() and incrementStat() via window.__df9
+- [x] E2E tests: kill counter tracking, stats persist through save/load (2 tests)
+- [x] Wire nMealsServed into Eat.ts and ServeDrink.ts
+- [x] Wire nCorpsesRecycled into DropOffCorpse.ts
+- [x] Wire nBreachShipsDestroyed into EventController.ts (breach event callback)
+- [x] Wire nCuresResearched into Malady.ts (attemptCure)
+- [ ] Wire nHostilesKilledByTurret into turret combat (DEPENDENCY: turret damage system not implemented)
+- [ ] Wire nHostilesKilledByParasite into parasite events (DEPENDENCY: parasite event type not implemented)
+- [ ] Wire nRaidersConverted into raider conversion (DEPENDENCY: raider conversion system not implemented)
+
+**What we did**: Stats infrastructure complete — all 9 counters, save/load, test helpers. Wired 7 of 9 stats: nHostilesKilled, nHostilesAsphyxiated, nMealsServed, nCorpsesRecycled, nBreachShipsDestroyed, nCuresResearched + Character.kill() tracking.
+**What we didn't do**: 3 stats blocked by unimplemented systems.
+**Blockers**: nHostilesKilledByTurret (turret damage system), nHostilesKilledByParasite (parasite events #5), nRaidersConverted (raider conversion system #7)
+
+---
+
+## 4. Character AI Tasks & Prerequisites (~50% → ~90%)
+**Goal**: Add ~20 missing tasks, implement prerequisite/tag system, personality gates, priority levels, affinity modifiers.
+
+- [x] Implement activity prerequisite system (EmptyHands, Spacewalking, WearingSuit, HeldItem, Cuffed, NonThreatening)
+- [x] Implement activity tag system (WorkShift, DestOwned, DestSafe, Job, HighDistPenalty)
+- [x] Add personality-based activity filtering (bravery gates, temper gates, work ethic, gregariousness)
+- [x] Add priority levels (SURVIVAL_LOW, SURVIVAL_NORMAL, PUPPET) with score bonuses
+- [x] Add heldItem and bCuffed fields to Character
+- [x] Add hobby tasks: WorkOut, LiftAtWeightBench, ListenToJukebox
+- [x] Add survival/panic tasks: PanicFire, PanicOxygen (with bravery gates)
+- [x] Add combat variant: Brawl (anger-driven, SURVIVAL_LOW)
+- [x] Add exploration: Explore (WorkShift-gated)
+- [x] Add fallback: Breathe (absolute minimum activity)
+- [x] Wire all new tasks into CharacterManager.gatherOptions()
+- [x] Add hasFireInRoom() helper for panic checks
+- [x] Add flee tasks: FleeThreat (bravery 0.2-0.8), PanicThreat (bravery 0-0.2), SURVIVAL_NORMAL
+- [x] Add fire response: FireFleeArea (bravery 0.2-1), SURVIVAL_NORMAL
+- [x] Add oxygen response: OxygenFleeArea (BaseScore=200, SURVIVAL_NORMAL)
+- [x] Add emergency: FleeEmergencyAlarm (alarm panel check)
+- [x] Add rampage tasks: RampageTantrum (SURVIVAL_NORMAL), Sabotage (SURVIVAL_LOW, targets objects)
+- [x] Add hospital: BedHeal (HospitalBed, Job: DOCTOR, WorkShift)
+- [x] Add food tasks: HarvestAndDeliverFood (BOTANIST), ServeFoodAtTable (BARTENDER), EatAtTable
+- [x] Add mining: DropOffRocks (Refinery, Job: MINER, HeldItem: 'Rock')
+- [x] Add suit management: PutOnSuit (AirlockLocker)
+- [x] Add IncapacitatedOnFloor (HP<=10, NonThreatening prereq)
+- [x] E2E tests: hobby task availability, brawl anger check (2 tests)
+- [ ] Add affinity modifiers to scoring (±20% from relationships) (DEPENDENCY: affinity system #10)
+- [ ] Add beacon/exploration tasks (ERCircleBeaconInside, ERBeaconExplore) (DEPENDENCY: beacon system not implemented)
+- [ ] Add remaining hospital tasks (GetFieldScanned, CheckInToHospital) (DEPENDENCY: field scanner/hospital triage system)
+- [ ] Add ViolentRampagePatrol (DEPENDENCY: full rampage state machine with patrol waypoints)
+
+**What we did**: Full prerequisite/tag/personality gate infrastructure in ActivityOption. Added 22 new task types. Priority system with score bonuses. Character heldItem/bCuffed/bSpacesuit fields. Complete fire/oxygen/threat response chains with personality-gated bravery. Rampage (tantrum + sabotage). Job-specific tasks (doctor heal, botanist harvest, bartender serve, miner drop-off). Incapacitation. Suit management.
+**What we didn't do**: 4 tasks blocked by unimplemented systems.
+**Blockers**: Affinity modifiers (#10), beacon system, hospital triage, violent rampage patrol waypoints.
+
+---
+
+## 5. Disease/Malady Expansion (~15% → ~95%)
+**Goal**: Port all 25 diseases from Lua NewMaladyData, add severity tiers, symptom stages, spread mechanics, cure research, specials.
+
+- [x] Port all 25 disease definitions from NewMaladyData.lua (6 injuries, 1 drug, 17 contagious diseases, 1 Default template)
+- [x] Full MaladyDef interface (40+ properties matching Lua exactly)
+- [x] Add severity/difficulty tiers (nDifficultyTier: 0=injury, 1=easy, 2=medium, 3=plague, -1=special, -2=drug)
+- [x] Add multi-stage symptom progression (tSymptomStages with tTimeToSymptoms, tReduceMods, sSpecial per stage)
+- [x] Add need reduce mods (tReduceMods affecting Hunger, Social, Energy, Amusement, Duty — 0=lock, negative=increase)
+- [x] Add contagion modes (bSpreadSneeze, bSpreadTouch) with range-based spreading via playedSymptomAnim
+- [x] Add field treatment (nFieldTreatSkill, bRefuseHeal) with doctor skill checks
+- [x] Add cure research integration (nResearchCure, nCureProgress, nForceResearch, separate from tech research)
+- [x] Add random strain naming (type-specific adjective+noun tables, Greek letter suffixes, unique name tracking)
+- [x] Add hidden/diagnosis mechanic (bHidden flag, bDiagnosed, getNextUndiagnosedMalady)
+- [x] Add incubation periods (tTimeToContagious, tTimeToSymptoms ranges with absolute time tracking)
+- [x] Add special effects: 'thing' (spawn monster), 'parasite' (chestburst), 'fire' (ignite), 'death' (instant kill)
+- [x] Add incapacitation system (MajorInjury + bSymptomatic = INCAPACITATED_ALLOWED tasks only)
+- [x] Add speed modifiers (nSpeed per malady/stage, getSpeedModifier wired into Character.getEffectiveSpeed)
+- [x] Add contagion processing in CharacterManager (sneeze spread replaces old stub)
+- [x] Add doctor infection mechanics (WormParisite: 100% for doctors, Disease: 50% reduction)
+- [x] Add Malady module state (research, strains, used names, elapsed time) with save/load
+- [x] Wire into game loop (Malady.updateElapsedTime, Character.update calls Malady.tickMaladies)
+- [x] Wire into main.ts window.__df9 (12 test helpers)
+- [x] E2E tests: 7 disease tests + 2 updated existing tests (definition count, strain generation, injuries, speed mods, multi-stage, research tracking, Drugged)
+
+**What we did**: Complete rewrite of MaladyData.ts (25 diseases) and Malady.ts (full Lua-parity module with strains, stages, contagion, research, specials). Updated Character.ts (MaladyInstance, speed mods, proper tickMaladies). Updated CharacterManager.ts (proper sneeze contagion). Updated save/load.
+**What we didn't do**: Air scrubber environment spread modifier (needs powered object detection wiring). Monster spawning integration (spawnThing/spawnMonster stubs kill character but don't create hostile). Disease UI panel.
+**Blockers**: Air scrubber integration needs power/object query system. Monster spawning needs CharacterManager hostile creation. Disease UI needs UI system (#6).
+**Blockers**: None
+
+---
+
+## 6. UI Panels (~40% → ~75%)
+**Goal**: Implement missing UI screens and panel features matching original Lua UI.
+
+- [x] Research panel (Tech/Disease tabs, progress bars, start research, prerequisites)
+- [x] Goals/achievements display panel (12 goals, completion checkmarks)
+- [x] Inspector: Actions tab (Cuff/Uncuff, Send to Brig, Execute for characters)
+- [x] Inspector: Demolish button for objects (refunds matter)
+- [x] Panel mutual exclusivity (Research/Goals auto-close each other)
+- [x] Keyboard bindings (E=Research, G=Goals)
+- [x] Sidebar buttons wired (replaced "Coming Soon" stubs)
+- [x] Inspector: Psych tab (8 slider traits + 7 boolean quirks from PersonalityTraits)
+- [x] Inspector: name editing with text input (click name to edit, Enter/Escape/blur to confirm)
+- [x] Build menu: pending cost display (tile count, matter cost, no-funds warning)
+- [ ] Save/Load dialogs (file browser, naming, confirmation)
+- [ ] Inspector: Log tab (event history per citizen)
+- [ ] Inspector: object sprite/portrait display
+- [ ] Mine menu UI
+- [ ] Beacon/rescue menu UI
+- [ ] Build menu: Wall mode, Airlock mode, Vaporize mode
+- [ ] Tab icons, status icons, hover sounds
+
+**What we did**: ResearchPanel, GoalsPanel, InspectorPanel (Actions + Psych tabs, name editing, demolish), UIManager panel tracking, build cost overlay, keyboard bindings. 12 E2E tests total for UI panels.
+**What we didn't do**: Save/Load dialogs, Log tab, portraits, mine/beacon menus, build menu modes, icons/sounds.
+**Blockers**: Log tab needs Log/Journal system (#9).
+
+---
+
+## 7. Base Event & Faction System (~30% → ~90%)
+**Goal**: Implement faction behavior mapping, alert priority system, team alliance logic.
+
+- [x] Add faction behavior system (team ID → behavior: Citizen, EnemyGroup, Friendly, Monster, KillBot, Trader)
+- [x] Implement Base.isFriendly(nTeamA, nTeamB) team alliance checking (Lua Base.lua lines 428-449)
+- [x] Implement Base.isFriendlyToPlayer(nTeam) (Lua Base.lua lines 422-426)
+- [x] Add createNewTeamID(nFactionBehavior) — Citizen→PLAYER, others allocate unique IDs ≥100
+- [x] Add 20 alert event types with priorities and durations (all Lua BASE_EVENT types)
+- [x] Add EVENT_DATA metadata table (nPriority, nLogVisibleTime per event type)
+- [x] Add DEATH_ALERTS mapping (cause of death → message template)
+- [x] Add eventOccurred() with deduplication by type+reporter
+- [x] Add memory system (storeMemory/retrieveMemory with expiry)
+- [x] Add Base.isHostileInBase() detection via room/character callback
+- [x] Add onTick: periodic hostile check every 60s, expired event pruning
+- [x] Replace hardcoded CombatSystem.isHostile/isFriendly with Base.isFriendly delegation
+- [x] Complete UIManager ALERT_COLORS (all 20 BASE_EVENT types + extra categories)
+- [x] Add faction save/load (teamFactions array + nNextTeamID)
+- [x] Wire Base.setCharactersInRoomsCallback in main.ts
+- [x] Add 8 window.__df9 test helpers (createNewTeamID, getTeamFactionBehavior, isFriendlyTeams, isHostileInBase, getBaseEvents, getEventPriority, getAllEventData, getFactionBehavior)
+- [x] E2E tests: 6 tests (faction defaults, alliance matrix, team ID creation, event metadata, hostile-in-base, alert colors)
+- [ ] Add Base.freeShelving() capacity tracking
+
+**What we did**: Full faction registry with 4 default teams, Lua-exact alliance matrix (Citizen↔Friendly=ally, Monster↔Monster=ally, EnemyGroup teams only self-friendly), dynamic team allocation, 20 event types with metadata, memory system for cooldown-based checks, hostile-in-base detection, CombatSystem delegation to Base, complete alert color coverage.
+**What we didn't do**: freeShelving() capacity tracking (needs shelving objects). Event localization strings (using English templates).
+**Blockers**: freeShelving needs Env Object shelving support (#8).
+
+---
+
+## 8. Env Object Properties (~50% → ?)
+**Goal**: Add missing objects and properties to match Lua EnvObjectData.
+
+- [ ] Add 8 missing objects (HousePlant, DockPoint, Dresser, WallShelf, Rug1, TVScreen1, InteriorTurret, FoodReplicator standalone)
+- [ ] Add interactSprite per object (state-based sprite variants)
+- [ ] Add portrait/inspector UI data (portrait, sPortraitPath, offsets)
+- [ ] Add ambientSound per object (refineryloop, etc.)
+- [ ] Add tAnimOffset for character animation positioning on objects
+- [ ] Add inherentActivities (Bed→SleepInBed, Jukebox→ListenToJukebox, WeightBench→LiftAtWeightBench, Refinery→DropOffRocks)
+- [ ] Add object inventory/capacity (Fridge=7, FridgeLevel2=50)
+- [ ] Add maintainJob/createJob fields
+- [ ] Add object alias system
+- [ ] Add flavor text strings
+- [ ] Add changeZone flag
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: Inventory system (#1)
+
+---
+
+## 9. Log/Journal System (0% → ?)
+**Goal**: Implement character thought/memory system with 50+ thought types.
+
+- [ ] Create Log system with 8 categories (generic, health, work, social, recreation, food, combat, item)
+- [ ] Add 50+ thought templates
+- [ ] Wire thought generation into character actions/events
+- [ ] Add thought display in inspector Log tab
+- [ ] Add thought filtering
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: UI panels (#6, Log tab)
+
+---
+
+## 10. Affinity & Familiarity (~15% → ?)
+**Goal**: Implement full affinity system matching Lua (room, object, activity affinity + familiarity tracking).
+
+- [ ] Add familiarity system (tFamiliarity map, getFamiliarity, addFamiliarity)
+- [ ] Add room affinity tracking (addRoomAffinity, getRoomAffinity)
+- [ ] Add object/item affinity
+- [ ] Add activity affinity modifiers (±20% scoring)
+- [ ] Add affinity queries (getPeopleOfAffinity, getSortedAffinityList)
+- [ ] Add affinity icon/emotion system (getAffinityIconAndColor)
+- [ ] Wire familiarity into death morale calculation (-4 to -60 scaling)
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: None
+
+---
+
+## 11. Race System (0% → ?)
+**Goal**: Add 10 character races from Lua, missing health statuses.
+
+- [ ] Add nRace property with 10 races (HUMAN, JELLY, TOBIAN, CAT, BIRDSHARK, CHICKEN, MONSTER, SHAMON, MURDERFACE, KILLBOT)
+- [ ] Add missing health statuses (STATUS_SCUFFED_UP, STATUS_INJURED, STATUS_DRUGGED)
+- [ ] Wire race into character generation/visuals
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: None
+
+---
+
+## 12. Renderer Polish (~40% → ?)
+**Goal**: Add skeletal animation, post-FX, particles, camera shake, construction feedback.
+
+- [ ] Skeletal animation system (~20 animation states)
+- [ ] Post-processing (FXAA, bloom, color LUT, outline filter)
+- [ ] Particle effects (fire sparks, destruction debris, impact)
+- [ ] Camera shake on damage/explosions
+- [ ] Construction progress bars on objects
+- [ ] Tile damage states (cracks, scorch marks)
+- [ ] Object state animations (powered on/off, working)
+- [ ] Selection highlighting on tiles/objects
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: Animation data (.banim format not fully reversed)
+
+---
+
+## 13. Goals Update (~60% → ?)
+**Goal**: Match original Lua goals (15 achievements with correct thresholds).
+
+- [ ] Replace simplified goals with original 15 (Citizens≥50, Matter≥50000, BuiltEverything, HostilesKilled≥50, BaseTiles≥3000, MealsServed≥1000, CuresResearched≥10, AllTechs, HappyCitizens≥30@morale>90, BreachShipsDestroyed≥5, AllPossessions, RaidersConverted≥10, HostilesAsphyxiated≥10, HostilesKilledByTurrets≥20, BodiesRefined≥100, FinalSiege)
+- [ ] Wire goal checks to stats system
+- [ ] Implement FinalSiege complex check (survive mega-event + 120s, friendly in safe room, all hostiles dead)
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: Statistics tracking (#3)
+
+---
+
+## 14. Hints Expansion (~15% → ?)
+**Goal**: Add 30+ contextual hints matching Lua HintChecks.
+
+- [ ] Port all hint checks from HintChecks.lua (30+ conditions)
+- [ ] Wire hint triggers into game systems
+- [ ] Add hint display in UI
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: UI panels (#6)
+
+---
+
+## Progress Log
+
+| Date | Item | Action | Result |
+|------|------|--------|--------|
+| 2026-03-04 | #2 Research | Complete rewrite of ResearchData.ts (24 items matching Lua), bDiscoverOnly support, prereq wiring | ~95% done |
+| 2026-03-04 | #3 Statistics | BaseStats infrastructure, hostile kill tracking, save/load, test helpers | ~70% done |
+| 2026-03-04 | #4 AI Tasks | Prerequisite/tag/personality gate system, 8 new tasks, priority levels | ~65% done |
+| 2026-03-04 | Tests | Added 7 new E2E tests (research×3, stats×2, AI×2) | 47 total tests |
+| 2026-03-04 | #2 Research | Wired nConditionMultiplier into MaintainEnvObject (1.5x) and MaintainPlants (2x) | ~98% done |
+| 2026-03-04 | #3 Statistics | Wired nMealsServed (Eat, ServeDrink), nCorpsesRecycled (DropOffCorpse), nBreachShipsDestroyed (EventController), nCuresResearched (Malady) | ~90% done |
+| 2026-03-04 | #4 AI Tasks | Added 14 more tasks: FleeThreat, PanicThreat, FireFleeArea, OxygenFleeArea, FleeEmergencyAlarm, RampageTantrum, Sabotage, BedHeal, PutOnSuit, HarvestAndDeliverFood, ServeFoodAtTable, EatAtTable, DropOffRocks, IncapacitatedOnFloor | ~90% done |
+| 2026-03-04 | Tests | All 46 passing (1 skipped), 0 type errors | 47 total tests |
+| 2026-03-04 | #1 Inventory | Complete rewrite: 54+ item templates, tag system, procedural naming, weapon/armor data, containers, incineration, affinity decay, CharacterInventory class, 7 new tests | ~95% done |
+| 2026-03-04 | Tests | All 53 passing (1 skipped), 0 type errors | 54 total tests |
+| 2026-03-04 | #5 Disease | Complete rewrite: MaladyData.ts (25 diseases matching Lua), Malady.ts (full module with strains, stages, contagion, research, specials, speed mods, incapacitation). Updated Character.ts, CharacterManager.ts, SaveLoad.ts, main.ts. 7 new E2E tests | ~95% done |
+| 2026-03-04 | Tests | All 60 passing (1 skipped), 0 type errors | 61 total tests |
+| 2026-03-04 | #6 UI Panels | ResearchPanel (Tech/Disease tabs), GoalsPanel (12 goals), InspectorPanel Actions tab (Cuff/Execute/Demolish), UIManager panel tracking, keyboard bindings (E/G). 6 new E2E tests | ~65% done |
+| 2026-03-04 | #6 UI Panels | Psych tab (8 sliders + 7 boolean quirks), name editing (click-to-edit), build cost overlay (pending cost + no-funds warning). 3 new E2E tests | ~75% done |
+| 2026-03-04 | Tests | All 69 passing (1 skipped), 0 type errors | 70 total tests |
+| 2026-03-04 | Tests | All 66 passing (1 skipped), 0 type errors | 67 total tests |
+| 2026-03-04 | #7 Base Event & Faction | Faction registry (4 defaults), alliance matrix, createNewTeamID, 20 event types with metadata, memory system, eventOccurred with dedup, isHostileInBase, onTick hostile check, CombatSystem delegation, full alert colors, save/load faction data. 6 new E2E tests | ~90% done |
+| 2026-03-04 | Tests | All 75 passing (1 skipped), 0 type errors | 76 total tests |
+| 2026-03-04 | Tests | Fixed eat test: root cause was Fridge losing power (PowerSystem override) + room oxygen causing bSpacewalking. Added `buildSealedRoom` test helper. All 69 passing | 70 total tests |

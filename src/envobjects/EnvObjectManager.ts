@@ -29,8 +29,10 @@ class EnvObjectManagerClass implements TickableSystem {
     GameRules.registerSystem(7, this);
   }
 
-  /** Create and register an environment object. Returns null if invalid. */
-  createObject(sName: string, tileX: number, tileY: number, bFlipX = false, bFlipY = false): EnvObject | null {
+  /** Create and register an environment object. Returns null if invalid.
+   *  @param startBuilt — if false, object starts as a ghost (unbuilt). Default true.
+   */
+  createObject(sName: string, tileX: number, tileY: number, bFlipX = false, bFlipY = false, startBuilt = true): EnvObject | null {
     const data = tObjects[sName];
     if (!data) {
       console.warn(`EnvObjectManager: unknown object type '${sName}'`);
@@ -42,6 +44,11 @@ class EnvObjectManagerClass implements TickableSystem {
       obj = new Door(sName, tileX, tileY, bFlipX, bFlipY);
     } else {
       obj = new EnvObject(sName, tileX, tileY, bFlipX, bFlipY);
+    }
+
+    // Set build state BEFORE notifying renderer
+    if (!startBuilt) {
+      obj.bBuilt = false;
     }
 
     const id = this.nextId++;
@@ -56,7 +63,7 @@ class EnvObjectManagerClass implements TickableSystem {
       }
     }
 
-    // Notify renderer
+    // Notify renderer (now with correct bBuilt state)
     this.onObjectCreated?.(id, obj);
 
     return obj;

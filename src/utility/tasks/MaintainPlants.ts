@@ -5,6 +5,8 @@
 
 import { Task, type NeedAdvertisement } from '../Task';
 import type { EnvObject } from '../../envobjects/EnvObject';
+import { researchSystem } from '../../research/ResearchSystem';
+import { RESEARCH_DEFS } from '../../research/ResearchData';
 
 export class MaintainPlants extends Task {
   readonly name = 'MaintainPlants';
@@ -30,7 +32,20 @@ export class MaintainPlants extends Task {
       // Heal the plant
       if (this.targetObj && this.character) {
         const competence = this.character.getEffectiveCompetency();
-        this.targetObj.maintain(this.targetObj.nCondition, competence);
+        const condBefore = this.targetObj.nCondition;
+        this.targetObj.maintain(condBefore, competence);
+
+        // Apply research multiplier if PlantLevel2 is completed
+        if (researchSystem.isCompleted('PlantLevel2')) {
+          const multiplier = RESEARCH_DEFS.PlantLevel2.nConditionMultiplier ?? 1;
+          const healed = this.targetObj.getCondition() - condBefore;
+          const extraHeal = healed * (multiplier - 1);
+          if (extraHeal > 0) {
+            this.targetObj.setCondition(
+              Math.min(100, this.targetObj.getCondition() + extraHeal),
+            );
+          }
+        }
       }
       this.complete();
     }

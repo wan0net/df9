@@ -6,6 +6,8 @@
  * Conversion to Three.js (bottom-left origin) done at render time.
  */
 
+import { ATLAS_FRAMES, ATLAS_SHEET_ENTRIES } from './SpriteAtlasData.generated';
+
 export interface SpriteFrame {
   /** AssetLoader texture key for the sprite sheet PNG */
   textureKey: string;
@@ -69,18 +71,99 @@ const frames: Record<string, SpriteFrame> = {
   strange_plant: { textureKey: 'sheet_strange_plant', u0: 0, v0: 0, u1: 0.320312, v1: 0.8125, sourceW: 82, sourceH: 208 },
 };
 
-/** Look up a sprite frame by name. Returns undefined if not found. */
+/**
+ * Aliases mapping EnvObjectData spriteName values to actual atlas frame names.
+ * These are looked up when getSpriteFrame() doesn't find a direct match.
+ */
+const SPRITE_ALIASES: Record<string, string> = {
+  // Generators
+  ReactorGen: 'generator',
+  ReactorGen_damaged: 'generator_damaged',
+  ReactorGen_destroyed: 'generator_destroyed',
+  // O2 recyclers
+  O2Gen: 'oxygen_recycler',
+  O2Gen_damaged: 'oxygen_recycler_damaged',
+  O2Gen_destroyed: 'oxygen_recycler_destroyed',
+  // Residence
+  Bed: 'bed',
+  Dresser: 'residence_dresser01',
+  WallShelf: 'ShelvesWallStack',
+  Rug1: 'residence_rug01',
+  HousePoint: 'residence_houseplant',
+  // Pub
+  Bar: 'bar',
+  Fridge: 'fridge',
+  Fridge_damaged: 'fridge_damaged',
+  Fridge_destroyed: 'fridge_destroyed',
+  Stove: 'stove',
+  Stove_damaged: 'stove_damaged',
+  Stove_destroyed: 'stove_destroyed',
+  StandingTable: 'standing_table',
+  BurgerSign: 'dec_wall_neon_burger',
+  PizzaSign: 'dec_wall_neon_pizza',
+  FriesSign: 'dec_wall_neon_fries',
+  // Refinery
+  Refinery: 'refinery',
+  Refinery_damaged: 'refinery_damaged',
+  Refinery_destroyed: 'refinery_destroyed',
+  // Fitness
+  WeightBench: 'weightbench',
+  // Research
+  ResearchDesk: 'research_desk',
+  ResearchDesk_damaged: 'research_desk_damaged',
+  ResearchDesk_destroyed: 'research_desk_destroyed',
+  // Hospital
+  HospitalBed: 'hospital_bed',
+  HospitalBed_damaged: 'hospital_bed_damaged',
+  HospitalBed_destroyed: 'hospital_bed_destroyed',
+  // Airlock
+  AirlockLocker: 'airlock_locker',
+  AirlockLocker_damaged: 'airlock_locker_damaged',
+  AirlockLocker_destroyed: 'airlock_locker_destroyed',
+  // Safety
+  FirePanel: 'fire_panel',
+  EmergencyAlarm: 'alarm_panel',
+  // Entertainment
+  TVScreen1: 'tv_screen01',
+  // Food
+  FoodReplicator: 'food_replicator',
+  FoodReplicator_damaged: 'food_replicator_damaged',
+  FoodReplicator_destroyed: 'food_replicator_destroyed',
+  // Military
+  Turret: 'turret_frames0001',
+  Turret_destroyed: 'turret_destroyed',
+  // Garden
+  HydroPlant: 'hydro_farm',
+  HydroPlant_destroyed: 'hydro_farm_destroyed',
+  // Special
+  SpaceshipEngine: 'ShipEngine',
+  BaseSeed: 'seedpod01',
+};
+
+/** Look up a sprite frame by name. Returns undefined if not found.
+ *  Checks hand-tuned frames first, then aliases, then auto-generated atlas frames.
+ */
 export function getSpriteFrame(frameName: string): SpriteFrame | undefined {
-  return frames[frameName];
+  const direct = frames[frameName] ?? ATLAS_FRAMES[frameName];
+  if (direct) return direct;
+  // Try alias
+  const alias = SPRITE_ALIASES[frameName];
+  if (alias) return frames[alias] ?? ATLAS_FRAMES[alias];
+  return undefined;
 }
 
 /** Check if a sprite frame exists. */
 export function hasSpriteFrame(frameName: string): boolean {
-  return frameName in frames;
+  if (frameName in frames || frameName in ATLAS_FRAMES) return true;
+  const alias = SPRITE_ALIASES[frameName];
+  return alias ? (alias in frames || alias in ATLAS_FRAMES) : false;
 }
 
-/** All texture keys that need to be loaded as sprite sheet PNGs. */
+/** All texture keys that need to be loaded as sprite sheet PNGs.
+ *  Includes both hand-tuned multi-variant sheets and auto-extracted atlas sprites.
+ */
 export const SPRITE_SHEET_ENTRIES: [string, string][] = [
+  // Hand-tuned multi-variant sheets (higher quality UV coords)
   ['sheet_ReactorGen3',   'assets/environments/ReactorGen3.png'],
   ['sheet_ReactorGen4',   'assets/environments/ReactorGen4.png'],
   ['sheet_O2Gen3',        'assets/environments/O2Gen3.png'],
@@ -90,4 +173,6 @@ export const SPRITE_SHEET_ENTRIES: [string, string][] = [
   ['sheet_Jukebox',       'assets/environments/Jukebox.png'],
   ['sheet_space_tree',    'assets/environments/space_tree.png'],
   ['sheet_strange_plant', 'assets/environments/strange_plant.png'],
+  // Auto-extracted atlas sprites
+  ...ATLAS_SHEET_ENTRIES,
 ];

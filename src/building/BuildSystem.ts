@@ -2,6 +2,7 @@ import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { WallAutoGen } from '../world/WallAutoGen';
 import { MAT_BUILD_FLOOR, MAT_BUILD_DOOR, MAT_VAPE_FLOOR } from '../core/GameRules';
+import { CommandQueue } from '../core/CommandQueue';
 
 /**
  * Build modes matching original Lua GameRules MODE_ constants:
@@ -27,8 +28,8 @@ export class BuildSystem {
   }
 
   /**
-   * Build a room: place floor tiles AND auto-generate walls at the perimeter.
-   * Matches Lua MODE_BUILD_ROOM — the primary construction mode.
+   * Build a room: place PENDING floor tiles AND pending walls at the perimeter.
+   * Builders must construct each tile. Matches original Lua COMMAND_BUILD_TILE flow.
    */
   buildRoom(tiles: { x: number; y: number }[], availableMatter: number): number {
     let cost = 0;
@@ -39,50 +40,74 @@ export class BuildSystem {
       // Can build on SPACE or WALL tiles (walls get replaced with floor)
       if (current !== TileType.SPACE && current !== TileType.WALL) continue;
       if (cost + MAT_BUILD_FLOOR > availableMatter) break;
-      this.grid.set(t.x, t.y, TileType.FLOOR);
+      this.grid.set(t.x, t.y, TileType.FLOOR_PENDING);
+      CommandQueue.addCommand('build_tile', t.x, t.y, 'floor');
       cost += MAT_BUILD_FLOOR;
       placed.push(t);
     }
 
-    // Auto-generate walls around the placed floor
+    // Auto-generate pending walls around the placed floor
     if (placed.length > 0) {
-      this.wallAutoGen.update(placed);
+      this.wallAutoGen.updatePending(placed);
     }
     return cost;
   }
 
-  /** Place floor tiles only — no wall generation (Lua MODE_BUILD_FLOOR). */
+  /** Place PENDING floor tiles only — no wall generation (Lua MODE_BUILD_FLOOR). */
   placeFloors(tiles: { x: number; y: number }[], availableMatter: number): number {
     let cost = 0;
 
     for (const t of tiles) {
       if (this.grid.get(t.x, t.y) !== TileType.SPACE) continue;
       if (cost + MAT_BUILD_FLOOR > availableMatter) break;
-      this.grid.set(t.x, t.y, TileType.FLOOR);
+      this.grid.set(t.x, t.y, TileType.FLOOR_PENDING);
+      CommandQueue.addCommand('build_tile', t.x, t.y, 'floor');
       cost += MAT_BUILD_FLOOR;
     }
 
     return cost;
   }
 
-  /** Place wall tiles only (Lua MODE_BUILD_WALL). */
+  /** Place PENDING wall tiles only (Lua MODE_BUILD_WALL). */
   placeWalls(tiles: { x: number; y: number }[], availableMatter: number): number {
     let cost = 0;
 
     for (const t of tiles) {
       if (this.grid.get(t.x, t.y) !== TileType.SPACE) continue;
       if (cost + MAT_BUILD_FLOOR > availableMatter) break;
-      this.grid.set(t.x, t.y, TileType.WALL);
+      this.grid.set(t.x, t.y, TileType.WALL_PENDING);
+      CommandQueue.addCommand('build_tile', t.x, t.y, 'wall');
       cost += MAT_BUILD_FLOOR;
     }
 
     return cost;
   }
 
-  /** Place a door on a wall tile, return matter cost */
+  /** Complete construction of a pending tile (called by builder task). */
+  completeTile(x: number, y: number) {
+    const current = this.grid.get(x, y);
+    if (current === TileType.FLOOR_PENDING) {
+      this.grid.set(x, y, TileType.FLOOR);
+    } else if (current === TileType.WALL_PENDING) {
+      this.grid.set(x, y, TileType.WALL);
+    }
+  }
+
+  /** Place a door on a wall or pending-wall tile, return matter cost */
   placeDoor(x: number, y: number, availableMatter: number): number {
-    if (this.grid.get(x, y) !== TileType.WALL) return 0;
+    const current = this.grid.get(x, y);
+    if (current !== TileType.WALL && current !== TileType.WALL_PENDING) return 0;
     if (availableMatter < MAT_BUILD_DOOR) return 0;
+    // If placed on a pending wall, complete it directly as a door
+    if (current === TileType.WALL_PENDING) {
+      // Complete and remove any pending build_tile command for this tile
+      for (const cmd of CommandQueue.getAllActive()) {
+        if (cmd.type === 'build_tile' && cmd.tileX === x && cmd.tileY === y) {
+          CommandQueue.complete(cmd.id);
+          break;
+        }
+      }
+    }
     this.grid.set(x, y, TileType.DOOR);
     return MAT_BUILD_DOOR;
   }
@@ -94,7 +119,7 @@ export class BuildSystem {
 
     for (const t of tiles) {
       const current = this.grid.get(t.x, t.y);
-      if (current === TileType.FLOOR) {
+      if (current === TileType.FLOOR || current === TileType.FLOOR_PENDING) {
         this.grid.set(t.x, t.y, TileType.SPACE);
         refund += MAT_VAPE_FLOOR;
         changed.push(t);
@@ -102,7 +127,7 @@ export class BuildSystem {
         this.grid.set(t.x, t.y, TileType.SPACE);
         refund += MAT_VAPE_FLOOR;
         changed.push(t);
-      } else if (current === TileType.WALL) {
+      } else if (current === TileType.WALL || current === TileType.WALL_PENDING) {
         this.grid.set(t.x, t.y, TileType.SPACE);
         refund += MAT_VAPE_FLOOR;
         changed.push(t);

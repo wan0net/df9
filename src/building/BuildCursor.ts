@@ -27,6 +27,10 @@ export class BuildCursor {
     return this.dragStartTile !== null;
   }
 
+  get dragTileCount() {
+    return this.dragTiles.length;
+  }
+
   updateHover(worldX: number, worldY: number) {
     this._hoveredTile = screenToTile(worldX, worldY);
   }

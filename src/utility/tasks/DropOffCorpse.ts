@@ -24,6 +24,7 @@ export class DropOffCorpse extends Task {
       // Convert corpse to matter
       const matter = MAT_CORPSE_MIN + Math.floor(Math.random() * (MAT_CORPSE_MAX - MAT_CORPSE_MIN + 1));
       GameRules.nMatter += matter;
+      Base.incrementStat('nCorpsesRecycled');
       Base.addAlert('recycle', `Corpse recycled for ${matter} matter`);
       this.complete();
     }

@@ -4,7 +4,15 @@
 Web reimplementation of Spacebase DF-9 using TypeScript + Three.js. The original Lua source is the reference at `spacebase-v2-updated-code-master/`.
 
 ## Guiding Principle
-**Adhere to the original Lua source code as closely as possible.** When implementing game mechanics (tile adjacency, room detection, oxygen, AI), always reference the original Lua files first. Do not invent new mechanics or deviate from the original game's behavior unless explicitly asked.
+**This is a 1:1 faithful reimplementation of the original game. Adhere to the original Lua source code as the single source of truth for ALL aspects of the game:**
+
+- **Game mechanics**: tile adjacency, room detection, oxygen, AI, combat, research, events — replicate the original logic exactly.
+- **UI layout**: menus, panels, HUD elements, button placement, inspector panels — match the original game's UI structure and positioning.
+- **Graphics**: sprites, animations, visual effects, overlays, tinting — use the original assets and reproduce the same visual appearance.
+- **Code structure**: when the original has a constant, threshold, formula, or state machine, replicate it — do not invent replacements or "improvements."
+- **Behavior**: character AI priorities, task selection, need decay rates, event timing — all must match the original.
+
+**Always reference the original Lua files in `spacebase-v2-updated-code-master/` before implementing or modifying anything.** Do not invent new mechanics, alter existing behavior, or deviate from the original game unless explicitly asked. When in doubt, check the Lua source.
 
 ### Key Reference Files (original Lua)
 | File | Contains |

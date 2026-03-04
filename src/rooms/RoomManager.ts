@@ -85,7 +85,7 @@ export class RoomManager {
     for (let y = 0; y < this.grid.height; y++) {
       for (let x = 0; x < this.grid.width; x++) {
         const tileType = this.grid.get(x, y);
-        if (tileType !== TileType.FLOOR) continue;
+        if (tileType !== TileType.FLOOR && tileType !== TileType.FLOOR_PENDING) continue;
         const key = `${x},${y}`;
         if (visited.has(key)) continue;
 
@@ -109,16 +109,20 @@ export class RoomManager {
 
             if (nType === TileType.SPACE) {
               // Floor directly diagonal-adjacent to space = breached
+              // But pending walls count as boundaries (they will become walls)
               isSealed = false;
+            } else if (nType === TileType.WALL_PENDING) {
+              // Pending walls act as seal boundaries — skip (don't flood, don't breach)
+              continue;
             }
 
             if (visited.has(nKey)) continue;
 
-            if (nType === TileType.FLOOR) {
+            if (nType === TileType.FLOOR || nType === TileType.FLOOR_PENDING) {
               visited.add(nKey);
               queue.push(n);
             }
-            // Walls, doors, and space are boundaries — don't flood through
+            // Walls, wall-pending, doors, and space are boundaries — don't flood through
           }
         }
 

@@ -9,6 +9,7 @@ import { CameraController3D } from './renderer/CameraController3D';
 import { TileRenderer3D } from './renderer/TileRenderer3D';
 import { CharacterRenderer } from './renderer/CharacterRenderer';
 import { EnvObjectRenderer } from './renderer/EnvObjectRenderer';
+import { PropRenderer } from './renderer/PropRenderer';
 import { SceneManager } from './renderer/SceneManager';
 import { loadAllAssets, getTexture } from './renderer/AssetLoader';
 import { InputManager } from './input/InputManager';
@@ -24,7 +25,7 @@ import { BuildCursor } from './building/BuildCursor';
 import { RoomManager } from './rooms/RoomManager';
 import { OxygenSystem } from './oxygen/OxygenSystem';
 import { CharacterManager } from './characters/CharacterManager';
-import { GameRules, type TickableSystem } from './core/GameRules';
+import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
 import { EnvObject } from './envobjects/EnvObject';
 import { ObjectPlacement } from './building/ObjectPlacement';
@@ -48,6 +49,17 @@ import { tileToScreen } from './world/IsometricUtils';
 import { TileType } from './world/TileTypes';
 import { isAsteroid } from './world/Asteroid';
 import { CommandQueue } from './core/CommandQueue';
+import {
+  createItem, createRandomStartingStuff, getWeaponData, getArmorData,
+  getAffinityDecay, getIncinerateBias, allowIncinerate, canStack,
+  getMaxStacks, isStuff, heldOnly, disappearOnDrop, getPickupName,
+  portFromSave, type InventoryItem,
+} from './inventory/Inventory';
+import { ITEM_TEMPLATES, TAGS, STUFF_NAMES } from './inventory/InventoryData';
+import { Malady } from './malady/Malady';
+import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
+import { CAUSE_OF_DEATH, FACTION_BEHAVIOR } from './characters/CharacterConstants';
+import { BASE_EVENT, EVENT_DATA } from './core/Base';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
 
@@ -169,6 +181,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // Env object renderer
   const envObjRenderer = new EnvObjectRenderer(threeRenderer.scene);
 
+  // Prop renderer for 3D pickup/held-item models
+  const propRenderer = new PropRenderer(threeRenderer.scene);
+  propRenderer.preload([
+    'BodyBag', 'FoodBar', 'FoodCrate', 'AsteroidChunk',
+    'Pistol', 'Rifle', 'SpaceGun', 'Builder', 'Weldammer',
+    'FireExtinguisher', 'Datapad', 'FoodTray', 'Mug01',
+  ]);
+
+  Malady.reset();
   EnvObjectManager.init(roomManager);
 
   // Wire EnvObjectManager lifecycle → EnvObjectRenderer
@@ -183,6 +204,26 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     envObjRenderer.updateObject(String(id), obj.bBuilt, obj.nCondition, obj.getSpriteKey());
   };
   Base.init();
+
+  // Wire Base hostile-in-base callback (needs room + character data)
+  Base.setCharactersInRoomsCallback(() => {
+    const rooms = roomManager.getRooms();
+    return rooms.map(room => ({
+      roomId: room.id,
+      characters: characterManager.getAllCharacters()
+        .filter(c => room.tiles.some(t => t.x === c.tileX && t.y === c.tileY))
+        .map(c => ({
+          id: c.id,
+          tileX: c.tileX,
+          tileY: c.tileY,
+          nTeam: c.tStats.nTeam,
+          isAlive: c.isAlive(),
+          bIncapacitated: Malady.isIncapacitated(c),
+          bCuffed: c.bCuffed,
+        })),
+    }));
+  });
+
   const powerSystem = new PowerSystem(grid, roomManager);
   const lighting = new Lighting(roomManager);
   lighting.init();
@@ -287,7 +328,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     xp: c.tStats.nXP, competency: { ...c.tStats.tCompetency },
     morale: c.nMorale, anger: c.nAnger, bOnShift: c.bOnShift,
     weapon: c.weapon, bSpacesuit: c.bSpacesuit, nSuitOxygen: c.nSuitOxygen,
-    maladies: c.maladies.map(m => ({ name: m.def.sName, elapsed: m.elapsedTime })),
+    maladies: c.maladies.map(m => ({ ...m })),
   }));
   saveLoadSystem.getObjectData = () => EnvObjectManager.getObjects().map(o => ({
     name: o.sName, tileX: o.tileX, tileY: o.tileY,
@@ -361,6 +402,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getPopulation: () => characterManager.getPopulation(),
     getSelectedZone: () => selectedZone,
     setSelectedZone: (z) => { selectedZone = z; },
+    getHoveredRoomZone: () => {
+      const hovered = buildCursor.hoveredTile;
+      if (!hovered) return null;
+      const room = roomManager.getRoomAt(hovered.x, hovered.y);
+      return room?.zone ?? null;
+    },
     getHoveredInfo: () => {
       const hovered = buildCursor.hoveredTile;
       if (!hovered) return '';
@@ -404,7 +451,36 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     toggleO2Overlay: () => { showO2Overlay = !showO2Overlay; },
     getRooms: () => roomManager.getRooms(),
     onSetJob: (character, jobId) => { character.setJob(jobId); },
+    goalSystem,
+    onCuffCharacter: (character) => {
+      character.bCuffed = !character.bCuffed;
+    },
+    onExecuteCharacter: (character) => {
+      character.kill(CAUSE_OF_DEATH.UNSPECIFIED);
+    },
+    getPendingBuildCost: () => {
+      if (!buildCursor.isDragging) return null;
+      const count = buildCursor.dragTileCount;
+      if (count === 0) return null;
+      if (buildMode === 'demolish') {
+        return { cost: count * MAT_VAPE_FLOOR, tileCount: count, mode: buildMode };
+      }
+      if (buildMode === 'room' || buildMode === 'floor' || buildMode === 'wall') {
+        return { cost: count * MAT_BUILD_FLOOR, tileCount: count, mode: buildMode };
+      }
+      return null;
+    },
+    onDemolishObject: (obj) => {
+      const refund = obj.getVaporizeMatterYield();
+      EnvObjectManager.removeObject(obj);
+      GameRules.nMatter += refund;
+      Base.addAlert('build', `Demolished ${obj.tData.friendlyName}, refunded ${refund} matter`);
+    },
   });
+
+  // Keyboard bindings for panels (must come after uiManager creation)
+  inputManager.onKeyPress('KeyE', () => { uiManager.toggleResearchPanel(); });
+  inputManager.onKeyPress('KeyG', () => { uiManager.toggleGoalsPanel(); });
 
   // ── Game loop ─────────────────────────────────────────────
   let lastTime = performance.now();
@@ -446,8 +522,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Master tick
     GameRules.onTick(delta / 1000);
 
-    // Goal, hint, and music systems
+    // Sync 3D prop models for pickups and held items
+    syncProps();
+
+    // Goal, hint, disease, and music systems
     const gameDt = (delta / 1000) * GameRules.playerTimeScale;
+    Malady.updateElapsedTime(gameDt);
     goalSystem.update(gameDt);
     hintSystem.update(gameDt);
     musicSystem.update(delta / 1000); // Music uses real time, not game time
@@ -456,7 +536,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     SoundManager.setListenerPosition(cameraController.scrollX, cameraController.scrollY);
     SoundManager.setZoomDepth(Math.min(1, Math.max(0, (cameraController.zoom - 0.5) / 1.5)));
 
-    // O2 overlay
+    // Room lighting tints (skip when O2 overlay is active — it has its own tinting)
+    if (!showO2Overlay) {
+      renderRoomLighting();
+    }
+
+    // Fire tile overlays
+    renderFireOverlays();
+
+    // O2 overlay (overrides room lighting tints)
     if (showO2Overlay) {
       renderO2Overlay();
     }
@@ -466,6 +554,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // End-of-frame input state
     inputManager.endFrame();
+    uiManager.uiClickConsumed = false;
 
     // Render
     threeRenderer.render();
@@ -473,10 +562,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     requestAnimationFrame(gameLoop);
   }
 
-  /** Render amber tint on tiles with pending commands. */
+  /** Render amber tint on tiles with pending commands (skip build_tile — those use ghost rendering). */
   function renderCommandOverlays() {
     const currentTiles = new Set<string>();
     for (const cmd of CommandQueue.getAllActive()) {
+      if (cmd.type === 'build_tile') continue; // Pending tiles have their own blue ghost rendering
       const key = `${cmd.tileX},${cmd.tileY}`;
       currentTiles.add(key);
       tileRenderer.setTileTint(cmd.tileX, cmd.tileY, 0xDFA200);
@@ -501,8 +591,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     const isDragMode = buildMode === 'room' || buildMode === 'floor' ||
                        buildMode === 'wall' || buildMode === 'demolish';
 
-    // Left button just pressed
-    if (inputManager.leftJustPressed) {
+    // Left button just pressed (skip if a UI element consumed the click)
+    if (inputManager.leftJustPressed && !uiManager.uiClickConsumed) {
       // Inspect mode: click to select character/object/room
       if (buildMode === 'none') {
         let found = false;
@@ -553,12 +643,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         if (cost > 0) onTilesChanged([tile]);
       } else if (buildMode === 'object') {
         const objName = uiManager.selectedObjectName;
-        if (objName) objectPlacement.placeObject(objName, tile.x, tile.y);
+        if (objName) {
+          const check = objectPlacement.canPlace(objName, tile.x, tile.y);
+          if (!check.valid) {
+            const tileVal = grid.get(tile.x, tile.y);
+            Base.addAlert('build', `Cannot place ${objName} at (${tile.x},${tile.y}): ${check.reason} [tile=${tileVal}]`);
+          }
+          const cost = objectPlacement.placeObject(objName, tile.x, tile.y);
+          if (cost > 0) onTilesChanged([tile]); // Re-detect rooms for door placement
+        } else {
+          Base.addAlert('build', 'No object selected — pick one from the list');
+        }
       } else if (buildMode === 'mine') {
         const tileVal = grid.get(tile.x, tile.y);
         if (isAsteroid(tileVal)) {
           CommandQueue.addCommand('mine', tile.x, tile.y);
           Base.addAlert('mining', `Queued asteroid for mining at (${tile.x},${tile.y})`);
+        } else {
+          Base.addAlert('mining', `Not an asteroid at (${tile.x},${tile.y}) — tile type: ${tileVal}`);
         }
       } else if (isDragMode) {
         buildCursor.startDrag(tile.x, tile.y);
@@ -613,6 +715,131 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         tileRenderer.setTileTint(t.x, t.y, tint);
       }
     }
+  }
+
+  /** Apply room-based lighting tints via the Lighting system. */
+  const prevLitTiles = new Set<string>();
+  function renderRoomLighting() {
+    const currentLit = new Set<string>();
+    for (const room of roomManager.getRooms()) {
+      const scheme = lighting.getRoomLightingScheme(room);
+      const tint = lighting.getRoomTint(room.zone, scheme);
+      // Only apply tint if not full white (normal lit)
+      if (tint !== 0xffffff) {
+        for (const t of room.tiles) {
+          const key = `${t.x},${t.y}`;
+          currentLit.add(key);
+          tileRenderer.setTileTint(t.x, t.y, tint);
+        }
+      }
+    }
+    // Clear tint from tiles no longer lit
+    for (const key of prevLitTiles) {
+      if (!currentLit.has(key)) {
+        const [x, y] = key.split(',').map(Number);
+        tileRenderer.clearTileTint(x, y);
+      }
+    }
+    prevLitTiles.clear();
+    for (const key of currentLit) prevLitTiles.add(key);
+  }
+
+  /** Render orange overlay on tiles with active fires. */
+  const prevFireTiles = new Set<string>();
+  function renderFireOverlays() {
+    const currentFires = new Set<string>();
+    for (const f of fire.getActiveFires()) {
+      const key = `${f.x},${f.y}`;
+      currentFires.add(key);
+      // Orange-red tint scaled by intensity
+      const intensity = f.intensity / 100;
+      const r = Math.floor(255 * Math.min(1, 0.5 + intensity * 0.5));
+      const g = Math.floor(255 * Math.max(0, 0.3 * intensity));
+      const b = Math.floor(255 * Math.max(0, 0.05 * intensity));
+      const tint = (r << 16) | (g << 8) | b;
+      tileRenderer.setTileTint(f.x, f.y, tint);
+    }
+    // Clear tint from tiles where fire has been extinguished
+    for (const key of prevFireTiles) {
+      if (!currentFires.has(key)) {
+        const [x, y] = key.split(',').map(Number);
+        tileRenderer.clearTileTint(x, y);
+      }
+    }
+    prevFireTiles.clear();
+    for (const key of currentFires) prevFireTiles.add(key);
+  }
+
+  // ── Pickup → 3D model mapping ───────────────────────────────
+  const PICKUP_MODELS: Record<string, string> = {
+    Corpse: 'BodyBag',
+    Food: 'FoodBar',
+    Rock: 'AsteroidChunk',
+    Debris: 'AsteroidChunk',
+  };
+
+  // ── Weapon/tool → 3D model mapping (for held items) ────────
+  const WEAPON_MODELS: Record<string, string> = {
+    LaserPistol: 'Pistol',
+    Pistol: 'Pistol',
+    Rifle: 'Rifle',
+    SpaceGun: 'SpaceGun',
+    PlasmaCannon: 'PlasmaCannon',
+    Wand: 'Wand',
+  };
+  const TASK_MODELS: Record<string, string> = {
+    BuildTile: 'Builder',
+    BuildEnvObject: 'Builder',
+    Mine: 'Weldammer',
+    MaintainEnvObject: 'Weldammer',
+    ExtinguishFire: 'FireExtinguisher',
+  };
+
+  const activePickupProps = new Set<string>();
+  const activeHeldProps = new Set<string>();
+
+  function syncProps() {
+    // ── Pickup props ──
+    const currentPickups = new Set<string>();
+    for (const p of characterManager.getPickups()) {
+      if (p.bPickedUp) continue;
+      const propId = `pickup_${p.sName}_${p.tileX}_${p.tileY}`;
+      currentPickups.add(propId);
+      if (!activePickupProps.has(propId)) {
+        const modelName = PICKUP_MODELS[p.sName];
+        if (modelName) propRenderer.addProp(propId, modelName, p.tileX, p.tileY);
+      }
+    }
+    // Remove picked-up props
+    for (const id of activePickupProps) {
+      if (!currentPickups.has(id)) propRenderer.removeProp(id);
+    }
+    activePickupProps.clear();
+    for (const id of currentPickups) activePickupProps.add(id);
+
+    // ── Held item props (weapons, tools) ──
+    const currentHeld = new Set<string>();
+    for (const char of characterManager.getCharacters()) {
+      if (!char.isAlive()) continue;
+      const taskName = char.currentTask?.name ?? '';
+      const toolModel = TASK_MODELS[taskName];
+      const weaponModel = char.weapon ? WEAPON_MODELS[char.weapon] : null;
+      const modelName = toolModel ?? weaponModel;
+      if (!modelName) continue;
+
+      const propId = `held_${char.id}`;
+      currentHeld.add(propId);
+      if (!activeHeldProps.has(propId)) {
+        propRenderer.addProp(propId, modelName, char.tileX, char.tileY, 20);
+      }
+      // Follow the character
+      propRenderer.updatePropPosition(propId, char.screenX, char.screenY - 15);
+    }
+    for (const id of activeHeldProps) {
+      if (!currentHeld.has(id)) propRenderer.removeProp(id);
+    }
+    activeHeldProps.clear();
+    for (const id of currentHeld) activeHeldProps.add(id);
   }
 
   // ── Expose game state for E2E test assertions ─────────────
@@ -724,18 +951,47 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getFireCount: () => fire.getFireCount(),
     getActiveFires: () => fire.getActiveFires(),
     startFire: (x: number, y: number) => fire.startFire(x, y),
-    infectCharacter: (charId: number, maladyName: string) => {
+    infectCharacter: (charId: number, maladyType: string) => {
       const char = characterManager.getAllCharacters().find(c => c.id === charId);
-      if (char) return char.infectWith(maladyName);
+      if (char) return char.infectWith(maladyType);
       return false;
     },
     getCharacterMaladies: (charId: number) => {
       const char = characterManager.getAllCharacters().find(c => c.id === charId);
       if (!char) return [];
-      return char.maladies.map(m => ({ name: m.def.sName, cured: m.bCured, elapsed: m.elapsedTime }));
+      return char.maladies.map(m => ({
+        name: m.sMaladyName,
+        type: m.sMaladyType,
+        symptomatic: m.bSymptomatic,
+        contagious: m.bContagious,
+        diagnosed: m.bDiagnosed,
+        stage: m.nCurrentStage,
+        severity: m.nSeverity,
+        speed: m.nSpeed,
+        special: m.sSpecial,
+      }));
     },
     getDiseasedCount: () => {
       return characterManager.getAllCharacters().filter(c => c.isAlive() && c.maladies.length > 0).length;
+    },
+    // Disease system helpers
+    getMaladyDefCount: () => Object.keys(MALADY_DEFS).length,
+    getSpawnableDiseases: () => getSpawnableDiseases(),
+    getMaladyByTier: (tier: number) => getMaladyByTier(tier),
+    getMaladyResearch: () => Malady.getResearch(),
+    getMaladyStrains: () => Malady.getAllStrains(),
+    getMaladyElapsedTime: () => Malady.getElapsedTime(),
+    advanceMaladyTime: (dt: number) => Malady.updateElapsedTime(dt),
+    createMaladyInstance: (type: string) => {
+      try { return Malady.createNewMaladyInstance(type); } catch { return null; }
+    },
+    isIncapacitated: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      return char ? Malady.isIncapacitated(char) : false;
+    },
+    getMaladySpeedMod: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      return char ? Malady.getSpeedModifier(char) : 1.0;
     },
     // ── Milestone 11: Goals, Hints, Save/Load ────────────────
     getGoals: () => ({
@@ -743,6 +999,39 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       completedCount: goalSystem.getCompletedCount(),
       totalGoals: goalSystem.getTotalGoals(),
     }),
+    getStats: () => ({ ...Base.tStats }),
+    incrementStat: (key: string, amount?: number) => Base.incrementStat(key as any, amount),
+    // ── Inventory System ────────────────────────────────────────
+    getItemTemplateCount: () => Object.keys(ITEM_TEMPLATES).length,
+    getStuffNames: () => [...STUFF_NAMES],
+    getTagCategories: () => Object.keys(TAGS),
+    createItem: (sTemplate: string) => createItem(sTemplate),
+    createRandomStuff: () => createRandomStartingStuff(),
+    getWeaponData: (sTemplate: string) => getWeaponData({ sTemplate, sName: '', nCount: 1 }),
+    getArmorData: (sTemplate: string) => getArmorData({ sTemplate, sName: '', nCount: 1 }),
+    getAffinityDecay: (sTemplate: string) => getAffinityDecay({ sTemplate, sName: '', nCount: 1 }),
+    canStack: (a: string, b: string) => canStack(
+      { sTemplate: a, sName: '', nCount: 1 },
+      { sTemplate: b, sName: '', nCount: 1 },
+    ),
+    getMaxStacks: (sTemplate: string) => getMaxStacks(sTemplate),
+    isStuff: (sTemplate: string) => isStuff({ sTemplate, sName: '', nCount: 1 }),
+    heldOnly: (sTemplate: string) => heldOnly({ sTemplate, sName: '', nCount: 1 }),
+    disappearOnDrop: (sTemplate: string) => disappearOnDrop({ sTemplate, sName: '', nCount: 1 }),
+    getPickupName: (sTemplate: string) => getPickupName({ sTemplate, sName: '', nCount: 1 }),
+    getCharacterInventory: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return [];
+      return char.inventory.getAll().map(i => ({
+        sTemplate: i.sTemplate, sName: i.sName, nCount: i.nCount,
+      }));
+    },
+    giveCharacterItem: (charId: number, sTemplate: string) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      const item = createItem(sTemplate);
+      return char.inventory.addItem(item);
+    },
     getHints: () => hintSystem.getShownHints(),
     saveGame: () => saveLoadSystem.saveToStorage('df9_test_save'),
     loadGame: () => saveLoadSystem.loadFromStorage('df9_test_save'),
@@ -770,6 +1059,142 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     triggerJukebox: (objectId: string, tileX: number, tileY: number, start: boolean) => {
       if (start) SpatialAudio.jukeboxStart(objectId, tileX, tileY);
       else SpatialAudio.jukeboxStop(objectId);
+    },
+    // ── Character manipulation helpers ─────────────────────
+    setCharacterHunger: (charId: number, value: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      char.needs.hunger = value;
+      return true;
+    },
+    // ── Inspector helpers ────────────────────────────────────
+    renameCharacter: (charId: number, newName: string) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      char.tStats.sName = newName;
+      return true;
+    },
+    getCharacterName: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      return char ? char.getName() : null;
+    },
+    getCharacterPersonality: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return null;
+      return { ...char.tStats.personality };
+    },
+    // ── UI Panel helpers ──────────────────────────────────────
+    getResearchPanelVisible: () => uiManager.isResearchPanelVisible(),
+    getGoalsPanelVisible: () => uiManager.isGoalsPanelVisible(),
+    toggleResearchPanel: () => uiManager.toggleResearchPanel(),
+    toggleGoalsPanel: () => uiManager.toggleGoalsPanel(),
+    demolishObject: (name: string, tileX: number, tileY: number) => {
+      const obj = EnvObjectManager.getObjects().find(o =>
+        o.sName === name && o.tileX === tileX && o.tileY === tileY
+      );
+      if (!obj) return false;
+      const refund = obj.getVaporizeMatterYield();
+      EnvObjectManager.removeObject(obj);
+      GameRules.nMatter += refund;
+      return refund;
+    },
+    cuffCharacter: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      char.bCuffed = !char.bCuffed;
+      return char.bCuffed;
+    },
+    /** Test helper: build a room directly (floors + walls, instantly built). */
+    buildRoomAt: (cx: number, cy: number, radius = 2) => {
+      let cost = 0;
+      const tiles: { x: number; y: number }[] = [];
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const x = cx + dx, y = cy + dy;
+          const t = grid.get(x, y);
+          if (t === TileType.SPACE || t === TileType.FLOOR_PENDING || t === TileType.WALL_PENDING) {
+            grid.set(x, y, TileType.FLOOR);
+            cost++;
+            tiles.push({ x, y });
+          }
+        }
+      }
+      if (tiles.length > 0) {
+        wallAutoGen.update(tiles);
+        roomManager.markDirty(tiles);
+        roomManager.update();
+      }
+      return cost;
+    },
+    /** Test helper: build a sealed room with full oxygen. Returns room tiles. */
+    buildSealedRoom: (cx: number, cy: number, radius = 2) => {
+      // Build the room
+      const tiles: { x: number; y: number }[] = [];
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const x = cx + dx, y = cy + dy;
+          const t = grid.get(x, y);
+          if (t === TileType.SPACE || t === TileType.FLOOR_PENDING || t === TileType.WALL_PENDING) {
+            grid.set(x, y, TileType.FLOOR);
+            tiles.push({ x, y });
+          }
+        }
+      }
+      if (tiles.length > 0) {
+        wallAutoGen.update(tiles);
+        roomManager.markDirty(tiles);
+        roomManager.update();
+      }
+      // Set all detected rooms covering these tiles as sealed with full O2
+      const seen = new Set<number>();
+      for (const t of tiles) {
+        const room = roomManager.getRoomAt(t.x, t.y);
+        if (room && !seen.has(room.id)) {
+          seen.add(room.id);
+          room.sealed = true;
+          room.oxygen = 255;
+        }
+      }
+      return tiles;
+    },
+    // ── Faction & Event System helpers ──────────────────────
+    createNewTeamID: (behavior: number) => Base.createNewTeamID(behavior),
+    getTeamFactionBehavior: (teamId: number) => Base.getTeamFactionBehavior(teamId),
+    isFriendlyTeams: (teamA: number, teamB: number) => Base.isFriendly(teamA, teamB),
+    isHostileInBase: () => Base.isHostileInBase(),
+    getBaseEvents: () => ({ ...BASE_EVENT }),
+    getEventPriority: (eventType: string) => EVENT_DATA[eventType]?.nPriority ?? null,
+    getAllEventData: () => {
+      const result: Record<string, { nPriority: number; nLogVisibleTime: number }> = {};
+      for (const [key, val] of Object.entries(EVENT_DATA)) {
+        result[key] = { ...val };
+      }
+      return result;
+    },
+    getFactionBehavior: () => ({ ...FACTION_BEHAVIOR }),
+    /** Test helper: instantly complete all pending tile builds. */
+    completePendingBuilds: () => {
+      let count = 0;
+      for (let y = 0; y < grid.height; y++) {
+        for (let x = 0; x < grid.width; x++) {
+          const t = grid.get(x, y);
+          if (t === TileType.FLOOR_PENDING) {
+            grid.set(x, y, TileType.FLOOR);
+            count++;
+          } else if (t === TileType.WALL_PENDING) {
+            grid.set(x, y, TileType.WALL);
+            count++;
+          }
+        }
+      }
+      // Clear build_tile commands
+      for (const cmd of CommandQueue.getAllActive()) {
+        if (cmd.type === 'build_tile') CommandQueue.complete(cmd.id);
+      }
+      // Force room re-detection
+      roomManager.markDirty([]);
+      roomManager.update();
+      return count;
     },
   };
 
@@ -853,6 +1278,9 @@ function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: numbe
 }
 
 function tileName(type: number): string {
-  const names: Record<number, string> = { 1: 'Space', 4: 'Wall', 5: 'Door', 6: 'Destroyed', 8: 'Floor' };
+  const names: Record<number, string> = {
+    1: 'Space', 4: 'Wall', 5: 'Door', 6: 'Destroyed', 8: 'Floor',
+    9: 'Floor (building)', 10: 'Wall (building)',
+  };
   return names[type] || 'Unknown';
 }

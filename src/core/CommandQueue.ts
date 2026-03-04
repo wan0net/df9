@@ -4,7 +4,7 @@
  * pick them up as work tasks via the utility AI.
  */
 
-export type CommandType = 'mine' | 'build_object';
+export type CommandType = 'mine' | 'build_object' | 'build_tile';
 export type CommandStatus = 'pending' | 'in_progress' | 'complete' | 'cancelled';
 
 export interface Command {

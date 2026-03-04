@@ -5,13 +5,14 @@
 
 import { tObjects, type EnvObjectDef, getMenuForZone } from '../envobjects/EnvObjectData';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
-import { GameRules } from '../core/GameRules';
+import { GameRules, MAT_BUILD_DOOR } from '../core/GameRules';
 import { CommandQueue } from '../core/CommandQueue';
 import { TileType } from '../world/TileTypes';
 import type { TileGrid } from '../world/TileGrid';
 import type { RoomManager } from '../rooms/RoomManager';
 import type { Room } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
+import { researchSystem } from '../research/ResearchSystem';
 
 export class ObjectPlacement {
   private grid: TileGrid;
@@ -32,23 +33,25 @@ export class ObjectPlacement {
       return { valid: false, reason: 'Not enough matter' };
     }
 
-    // Research check (stub — always passes until Phase 9)
+    // Research check
     if (data.researchPrereq) {
-      // TODO: check research completion
+      if (!researchSystem.isCompleted(data.researchPrereq)) {
+        return { valid: false, reason: 'Research not completed' };
+      }
     }
 
-    // Tile type check
+    // Tile type check — accept pending tiles too (they'll be built by the time object is constructed)
     const tileType = this.grid.get(tileX, tileY);
     if (data.againstWall) {
-      if (tileType !== TileType.WALL) {
+      if (tileType !== TileType.WALL && tileType !== TileType.WALL_PENDING) {
         return { valid: false, reason: 'Must place on wall' };
       }
     } else if (data.door) {
-      if (tileType !== TileType.WALL) {
+      if (tileType !== TileType.WALL && tileType !== TileType.WALL_PENDING) {
         return { valid: false, reason: 'Doors must be placed on walls' };
       }
     } else {
-      if (tileType !== TileType.FLOOR) {
+      if (tileType !== TileType.FLOOR && tileType !== TileType.FLOOR_PENDING) {
         return { valid: false, reason: 'Must place on floor' };
       }
     }
@@ -66,15 +69,16 @@ export class ObjectPlacement {
       }
     }
 
-    // Multi-tile footprint check
-    if (data.width > 1 || data.height > 1) {
+    // Multi-tile footprint check (skip for doors/wall objects — they occupy a single wall tile,
+    // width/height is visual sprite size only)
+    if ((data.width > 1 || data.height > 1) && !data.door && !data.againstWall) {
       for (let dy = 0; dy < data.height; dy++) {
         for (let dx = 0; dx < data.width; dx++) {
           if (dx === 0 && dy === 0) continue;
           const tx = tileX + dx;
           const ty = tileY + dy;
           const tt = this.grid.get(tx, ty);
-          if (tt !== TileType.FLOOR) {
+          if (tt !== TileType.FLOOR && tt !== TileType.FLOOR_PENDING) {
             return { valid: false, reason: 'Not enough space' };
           }
         }
@@ -90,11 +94,9 @@ export class ObjectPlacement {
     if (!check.valid) return 0;
 
     const data = tObjects[sName];
-    const obj = EnvObjectManager.createObject(sName, tileX, tileY);
-    if (!obj) return 0;
 
-    // Start as ghost (unbuilt) — builder must construct it
-    obj.bBuilt = false;
+    const obj = EnvObjectManager.createObject(sName, tileX, tileY, false, false, false);
+    if (!obj) return 0;
 
     // Queue a build command for the AI
     CommandQueue.addCommand('build_object', tileX, tileY, sName);

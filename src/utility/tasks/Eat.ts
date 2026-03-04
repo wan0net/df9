@@ -4,6 +4,7 @@
 
 import { Task, type NeedAdvertisement } from '../Task';
 import { MORALE_ATE_MEAL_BASE } from '../../characters/CharacterConstants';
+import { Base } from '../../core/Base';
 
 export class Eat extends Task {
   readonly name = 'Eat';
@@ -22,6 +23,7 @@ export class Eat extends Task {
       if (this.character) {
         this.character.addMorale(MORALE_ATE_MEAL_BASE);
       }
+      Base.incrementStat('nMealsServed');
       this.complete();
     }
   }
