@@ -627,7 +627,7 @@ export class CharacterManager {
 
     // BOTANIST: Maintain garden plants
     if (job === BOTANIST) {
-      const plantTypes = ['space_tree', 'HydroPlant', 'BulbousPlant', 'StrangePlant', 'HousePoint'];
+      const plantTypes = ['space_tree', 'HydroPlant', 'BulbousPlant', 'StrangePlant', 'HousePlant'];
       for (const pType of plantTypes) {
         for (const plant of EnvObjectManager.getObjectsByType(pType)) {
           if (!plant.bBuilt || !plant.needsMaintenance()) continue;

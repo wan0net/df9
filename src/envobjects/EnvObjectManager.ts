@@ -109,6 +109,19 @@ class EnvObjectManagerClass implements TickableSystem {
     return result;
   }
 
+  /** Get placed objects matching a functionality grouping. */
+  getObjectsByFunctionality(sFunctionality: string, bOnlyWorking = false): EnvObject[] {
+    const result: EnvObject[] = [];
+    for (const obj of this.objects.values()) {
+      if (obj.sFunctionality === sFunctionality) {
+        if (!bOnlyWorking || obj.isFunctioning()) {
+          result.push(obj);
+        }
+      }
+    }
+    return result;
+  }
+
   /** Get total power output from objects in a room. */
   getRoomPowerOutput(room: Room): number {
     let total = 0;

@@ -28,6 +28,7 @@ import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
 import { EnvObject } from './envobjects/EnvObject';
+import { tObjects, resolveAlias, getObjectData, getObjectsByFunctionality as getObjsByFunc } from './envobjects/EnvObjectData';
 import { ObjectPlacement } from './building/ObjectPlacement';
 import { Base } from './core/Base';
 import { PowerSystem } from './power/PowerSystem';
@@ -1172,6 +1173,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       return result;
     },
     getFactionBehavior: () => ({ ...FACTION_BEHAVIOR }),
+    // ── EnvObject property helpers ────────────────────────────
+    getObjectDef: (name: string) => getObjectData(name),
+    getObjectsByFunc: (func: string) => getObjsByFunc(func),
+    resolveAlias: (name: string) => resolveAlias(name),
     /** Test helper: instantly complete all pending tile builds. */
     completePendingBuilds: () => {
       let count = 0;

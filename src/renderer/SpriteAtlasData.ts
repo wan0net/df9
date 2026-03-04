@@ -90,6 +90,7 @@ const SPRITE_ALIASES: Record<string, string> = {
   WallShelf: 'ShelvesWallStack',
   Rug1: 'residence_rug01',
   HousePoint: 'residence_houseplant',
+  HousePlant: 'residence_houseplant',
   // Pub
   Bar: 'bar',
   Fridge: 'fridge',

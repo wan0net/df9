@@ -53,6 +53,9 @@ export class EnvObject implements TaggableObject {
   // Oxygen generation
   bGeneratingOxygen = false;
 
+  // Interact sprite state
+  bUseInteractSprite = false;
+
   // Construction state
   bBuilt = true;
   sBuilderName = '';
@@ -224,6 +227,20 @@ export class EnvObject implements TaggableObject {
     }
   }
 
+  // ── Interact sprite ─────────────────────────────────────────
+
+  /** Toggle the interact sprite (e.g. fridge_open when character uses it). */
+  onInteract(bStart: boolean) {
+    if (!this.tData.interactSprite) return;
+    this.bUseInteractSprite = bStart;
+    this._notifyRenderer();
+  }
+
+  /** Logical functionality grouping. Falls back to object name. */
+  get sFunctionality(): string {
+    return this.tData.sFunctionality ?? this.sName;
+  }
+
   // ── Sprite suffix for condition-based rendering ──────────────
 
   getConditionSuffix(): string {
@@ -234,7 +251,10 @@ export class EnvObject implements TaggableObject {
 
   /** Get the full sprite key for current condition */
   getSpriteKey(): string {
-    return this.tData.spriteName + this.getConditionSuffix();
+    const base = (this.bUseInteractSprite && this.tData.interactSprite)
+      ? this.tData.interactSprite
+      : this.tData.spriteName;
+    return base + this.getConditionSuffix();
   }
 
   // ── Save data ────────────────────────────────────────────────

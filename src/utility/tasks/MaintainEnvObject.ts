@@ -3,7 +3,6 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
-import { TECHNICIAN } from '../../characters/CharacterConstants';
 import type { EnvObject } from '../../envobjects/EnvObject';
 import { researchSystem } from '../../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../../research/ResearchData';
@@ -27,9 +26,10 @@ export class MaintainEnvObject extends Task {
 
   protected onUpdate(dt: number) {
     if (this.elapsedTime >= this.duration) {
-      // Repair the object
+      // Repair the object — use the object's maintainJob for competency lookup
       if (this.targetObj && this.character) {
-        const competency = this.character.tStats.tCompetency[TECHNICIAN] ?? 0;
+        const jobId = this.targetObj.tData.maintainJob;
+        const competency = this.character.tStats.tCompetency[jobId] ?? 0;
         const condBefore = this.targetObj.getCondition();
         this.targetObj.maintain(condBefore, competency);
 

@@ -1703,4 +1703,160 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     // Verify the event count matches expectations (20 event types)
     expect(result.eventCount).toBeGreaterThanOrEqual(19);
   });
+
+  // ── Priority #8: EnvObject Properties ─────────────────────────────
+
+  test('Object property completeness: Fridge has interactSprite, nCapacity, portrait, placeSound', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const fridge = df9.getObjectDef('Fridge');
+      return {
+        interactSprite: fridge?.interactSprite,
+        nCapacity: fridge?.nCapacity,
+        portrait: fridge?.portrait,
+        placeSound: fridge?.placeSound,
+        clickSound: fridge?.clickSound,
+        sFlavorText: fridge?.sFlavorText,
+        createJob: fridge?.createJob,
+        maintainJob: fridge?.maintainJob,
+      };
+    });
+    expect(result.interactSprite).toBe('fridge_open');
+    expect(result.nCapacity).toBe(7);
+    expect(result.portrait).toBe('Env_Pub_Fridge');
+    expect(result.placeSound).toBe('placefridge');
+    expect(result.sFlavorText).toBe('OBFLAV013TEXT');
+    expect(result.createJob).toBe(2); // BUILDER
+    expect(result.maintainJob).toBe(3); // TECHNICIAN (default)
+  });
+
+  test('Alias resolution: 7 aliases resolve correctly', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return {
+        fridgeLv2: df9.resolveAlias('Fridge_level2'),
+        fridgeLv2b: df9.resolveAlias('FridgeLevel2'),
+        tv: df9.resolveAlias('tvScreen1'),
+        burger: df9.resolveAlias('burgerSign'),
+        pizza: df9.resolveAlias('pizzaSign'),
+        fries: df9.resolveAlias('friesSign'),
+        housePlant: df9.resolveAlias('HousePoint'),
+        // Non-alias should pass through
+        passthrough: df9.resolveAlias('Generator'),
+      };
+    });
+    expect(result.fridgeLv2).toBe('FridgeLvl2');
+    expect(result.fridgeLv2b).toBe('FridgeLvl2');
+    expect(result.tv).toBe('TVScreen1');
+    expect(result.burger).toBe('BurgerSign');
+    expect(result.pizza).toBe('PizzaSign');
+    expect(result.fries).toBe('FriesSign');
+    expect(result.housePlant).toBe('HousePlant');
+    expect(result.passthrough).toBe('Generator');
+  });
+
+  test('Functionality grouping: OxygenRecycler query returns Lv1-4, Fridge finds both levels', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return {
+        o2Recyclers: df9.getObjectsByFunc('OxygenRecycler').sort(),
+        fridges: df9.getObjectsByFunc('Fridge').sort(),
+        turrets: df9.getObjectsByFunc('Turret').sort(),
+        shelving: df9.getObjectsByFunc('Shelving').sort(),
+        doors: df9.getObjectsByFunc('Door').sort(),
+        refineries: df9.getObjectsByFunc('RefineryDropoff').sort(),
+      };
+    });
+    // OxygenRecycler: base + Lv2/3/4 (Lv2-4 have sFunctionality='OxygenRecycler')
+    expect(result.o2Recyclers).toEqual([
+      'OxygenRecycler', 'OxygenRecyclerLevel2', 'OxygenRecyclerLevel3', 'OxygenRecyclerLevel4',
+    ]);
+    // Fridge: base (key matches) + FridgeLvl2 (sFunctionality='Fridge')
+    expect(result.fridges).toEqual(['Fridge', 'FridgeLvl2']);
+    // Turrets: both have sFunctionality='Turret'
+    expect(result.turrets).toEqual(['WallMountedTurret', 'WallMountedTurret2']);
+    // Shelving
+    expect(result.shelving).toEqual(['Dresser', 'WallShelf']);
+    // Doors: base (key) + HeavyDoor (sFunctionality='Door')
+    expect(result.doors).toEqual(['Door', 'HeavyDoor']);
+    // Refineries
+    expect(result.refineries).toEqual(['refinery_level2']);
+  });
+
+  test('Job requirements: Fridge=BUILDER, HydroPlant=BOTANIST, space_tree=BOTANIST', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const fridge = df9.getObjectDef('Fridge');
+      const hydro = df9.getObjectDef('HydroPlant');
+      const tree = df9.getObjectDef('space_tree');
+      const gen = df9.getObjectDef('Generator');
+      return {
+        fridgeCreate: fridge?.createJob,
+        fridgeMaintain: fridge?.maintainJob,
+        hydroCreate: hydro?.createJob,
+        hydroMaintain: hydro?.maintainJob,
+        treeCreate: tree?.createJob,
+        treeMaintain: tree?.maintainJob,
+        genMaintain: gen?.maintainJob,
+      };
+    });
+    expect(result.fridgeCreate).toBe(2);    // BUILDER
+    expect(result.fridgeMaintain).toBe(3);   // TECHNICIAN
+    expect(result.hydroCreate).toBe(2);      // BUILDER
+    expect(result.hydroMaintain).toBe(8);    // BOTANIST
+    expect(result.treeCreate).toBe(2);       // BUILDER
+    expect(result.treeMaintain).toBe(8);     // BOTANIST
+    expect(result.genMaintain).toBe(3);      // TECHNICIAN
+  });
+
+  test('Missing objects added: Spawner, DockPoint exist; HousePlant exists', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const spawner = df9.getObjectDef('Spawner');
+      const dock = df9.getObjectDef('DockPoint');
+      const plant = df9.getObjectDef('HousePlant');
+      // Verify alias from old name
+      const plantViaAlias = df9.getObjectDef('HousePoint');
+      return {
+        spawnerExists: !!spawner,
+        spawnerHidden: spawner?.showInObjectMenu === false,
+        spawnerSpace: spawner?.bCanBuildInSpace === true,
+        dockExists: !!dock,
+        dockHidden: dock?.showInObjectMenu === false,
+        plantExists: !!plant,
+        plantName: plant?.friendlyName,
+        plantViaAliasName: plantViaAlias?.friendlyName,
+        // New properties on various objects
+        rugSortBack: df9.getObjectDef('Rug1')?.bSortBack,
+        rugMorale: df9.getObjectDef('Rug1')?.bHelpsMorale,
+        burgerLighting: df9.getObjectDef('BurgerSign')?.bIgnoreLighting,
+        lockerAttackable: df9.getObjectDef('AirlockLocker')?.bAttackable,
+        turretFlipY: df9.getObjectDef('WallMountedTurret')?.bCanFlipY,
+        scrubberRange: df9.getObjectDef('AirScrubber')?.nRange,
+        happyBotRange: df9.getObjectDef('HappyBot')?.nRange,
+        foodRepPrice: df9.getObjectDef('FoodReplicator')?.nFoodPrice,
+        doorLayer: df9.getObjectDef('Door')?.layer,
+      };
+    });
+    // Spawner and DockPoint
+    expect(result.spawnerExists).toBe(true);
+    expect(result.spawnerHidden).toBe(true);
+    expect(result.spawnerSpace).toBe(true);
+    expect(result.dockExists).toBe(true);
+    expect(result.dockHidden).toBe(true);
+    // HousePlant
+    expect(result.plantExists).toBe(true);
+    expect(result.plantName).toBe('House Plant');
+    expect(result.plantViaAliasName).toBe('House Plant');
+    // Misc new properties
+    expect(result.rugSortBack).toBe(true);
+    expect(result.rugMorale).toBe(true);
+    expect(result.burgerLighting).toBe(true);
+    expect(result.lockerAttackable).toBe(false);
+    expect(result.turretFlipY).toBe(true);
+    expect(result.scrubberRange).toBe(12);
+    expect(result.happyBotRange).toBe(3);
+    expect(result.foodRepPrice).toBe(50);
+    expect(result.doorLayer).toBe('worldWall');
+  });
 });
