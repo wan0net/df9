@@ -61,6 +61,8 @@ export interface SaveData {
   events?: ReturnType<EventController['getSaveData']>;
   tStats?: BaseStats;
   factionData?: { teamFactions: [number, number][]; nNextTeamID: number };
+  goals?: { completed: string[]; progress: [string, number][] };
+  hints?: string[];
 }
 
 export class SaveLoadSystem {
@@ -72,11 +74,15 @@ export class SaveLoadSystem {
   getObjectData: (() => ObjSaveData[]) | null = null;
   getResearchData: (() => { active: string | null; progress: number; completed: string[] }) | null = null;
   getEventData: (() => ReturnType<EventController['getSaveData']>) | null = null;
+  getGoalData: (() => { completed: string[]; progress: [string, number][] }) | null = null;
+  getHintData: (() => string[]) | null = null;
 
   loadCharacterData: ((data: CharSaveData[]) => void) | null = null;
   loadObjectData: ((data: ObjSaveData[]) => void) | null = null;
   loadResearchData: ((data: { active: string | null; progress: number; completed: string[] }) => void) | null = null;
   loadEventData: ((data: ReturnType<EventController['getSaveData']>) => void) | null = null;
+  loadGoalData: ((data: { completed: string[]; progress?: [string, number][] }) => void) | null = null;
+  loadHintData: ((data: string[]) => void) | null = null;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -116,6 +122,8 @@ export class SaveLoadSystem {
       events: this.getEventData?.(),
       tStats: { ...Base.tStats },
       factionData: Base.getFactionSaveData(),
+      goals: this.getGoalData?.(),
+      hints: this.getHintData?.(),
     };
   }
 
@@ -181,6 +189,8 @@ export class SaveLoadSystem {
     if (data.objects) this.loadObjectData?.(data.objects);
     if (data.research) this.loadResearchData?.(data.research);
     if (data.events) this.loadEventData?.(data.events);
+    if (data.goals) this.loadGoalData?.(data.goals);
+    if (data.hints) this.loadHintData?.(data.hints);
 
     return true;
   }

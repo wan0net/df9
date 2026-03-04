@@ -736,6 +736,42 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     // Some hints should have been shown by now
   });
 
+  test('hint system has 24 total hint definitions', async () => {
+    const count = await page.evaluate(() => (window as any).__df9?.getHintCount());
+    expect(count).toBe(24);
+  });
+
+  test('hint ids include expanded Lua-ported hints', async () => {
+    // Advance time so hint checks fire
+    await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Advance game time by 30 seconds so hints have multiple check cycles
+      for (let i = 0; i < 30; i++) {
+        df9?.advanceTime?.(1);
+      }
+    });
+    const hints = await page.evaluate(() => (window as any).__df9?.getHints());
+    expect(Array.isArray(hints)).toBe(true);
+    // At least one new hint from expanded set should appear given game state
+    const expanded = ['build_room', 'combat', 'low_matter', 'rooms_but_no_oxygen',
+      'research_ready_no_research', 'low_power'];
+    const found = expanded.some(id => hints.includes(id));
+    expect(found).toBe(true);
+  });
+
+  test('hint save/load preserves shown hints', async () => {
+    const before = await page.evaluate(() => (window as any).__df9?.getHints());
+    // Save and reload
+    await page.evaluate(() => (window as any).__df9?.saveGame());
+    await page.evaluate(() => (window as any).__df9?.loadGame());
+    const after = await page.evaluate(() => (window as any).__df9?.getHints());
+    // All hints visible before save should still be visible after load
+    expect(Array.isArray(after)).toBe(true);
+    for (const h of before) {
+      expect(after).toContain(h);
+    }
+  });
+
   // ── Milestone 12: Audio Foundation ────────────────────────────
 
   test('SoundManager initializes without errors', async () => {

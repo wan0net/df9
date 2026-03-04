@@ -61,7 +61,12 @@ import {
 import { ITEM_TEMPLATES, TAGS, STUFF_NAMES } from './inventory/InventoryData';
 import { Malady } from './malady/Malady';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
-import { CAUSE_OF_DEATH, FACTION_BEHAVIOR, TEAM_ID_PLAYER } from './characters/CharacterConstants';
+import {
+  CAUSE_OF_DEATH, FACTION_BEHAVIOR, TEAM_ID_PLAYER,
+  BUILDER, MINER, TECHNICIAN, DOCTOR, BOTANIST, SCIENTIST,
+  STATUS_SICK, STATUS_ILL, STATUS_INCAPACITATED,
+  NEEDS_HUNGER_STARVATION,
+} from './characters/CharacterConstants';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
 import { Log } from './log/Log';
 import { LOG_TYPES } from './log/LogData';
@@ -353,12 +358,82 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Hint system
   const hintSystem = new HintSystem({
+    // ── Basics ──────────────────────────────────────────────────
     hasEnclosedRooms: () => roomManager.getRooms().length > 0,
-    hasZonedRoom: () => roomManager.getRooms().some(r => r.zone !== 'PLAIN'),
-    hasStartedResearch: () => researchSystem.getActiveResearch() !== null || researchSystem.getCompletedList().length > 0,
+    hasZonedRoom: () => roomManager.getRooms().some(r => r.zone !== ZoneType.PLAIN),
+    hasStartedResearch: () =>
+      researchSystem.getActiveResearch() !== null || researchSystem.getCompletedList().length > 0,
     hasBuiltObject: () => EnvObjectManager.getObjects().some(o => o.bBuilt),
     getPopulation: () => characterManager.getPopulation(),
     hasHostiles: () => characterManager.getHostileCount() > 0,
+    // ── Resources ───────────────────────────────────────────────
+    getMatter: () => GameRules.nMatter,
+    // ── Jobs ────────────────────────────────────────────────────
+    getJobCount: (job: number) =>
+      characterManager.getCharacters().filter(
+        c => c.isAlive() && c.tStats.nStatus !== STATUS_INCAPACITATED && c.getJob() === job,
+      ).length,
+    // ── Construction ────────────────────────────────────────────
+    hasPendingBuildOrders: () =>
+      CommandQueue.getAllActive().some(c => c.type === 'build_tile' || c.type === 'build_object'),
+    hasPendingMineOrders: () =>
+      CommandQueue.getAllActive().some(c => c.type === 'mine'),
+    getDamagedObjectCount: () =>
+      EnvObjectManager.getObjects().filter(o => o.bBuilt && o.isDamaged()).length,
+    // ── Objects ─────────────────────────────────────────────────
+    hasBuiltObjectType: (sName: string) =>
+      EnvObjectManager.getObjects().some(o => o.sName === sName && o.bBuilt),
+    hasBuiltObjectFunc: (func: string) => {
+      const names = new Set(getObjsByFunc(func));
+      return EnvObjectManager.getObjects().some(o => o.bBuilt && names.has(o.sName));
+    },
+    // ── Environment ─────────────────────────────────────────────
+    getLowOxygenFraction: () => {
+      const pop = characterManager.getPopulation();
+      if (pop === 0) return 0;
+      // Count living player chars in rooms with oxygen < 400 (OXYGEN_LOW)
+      const low = characterManager.getCharacters().filter(c => {
+        if (!c.isAlive()) return false;
+        const room = roomManager.getRoomAt(c.tileX, c.tileY);
+        return !room || room.oxygen < 400;
+      }).length;
+      return low / pop;
+    },
+    hasRoomsWithPowerDeficit: () =>
+      roomManager.getRooms().some(r => r.nPowerOutput > 0 && r.nPowerSupply < 0),
+    allRoomsLackPower: () => {
+      const rooms = roomManager.getRooms();
+      return rooms.length > 0 && rooms.every(r => r.nPowerOutput === 0);
+    },
+    // ── Characters ──────────────────────────────────────────────
+    hasSickCharacter: () =>
+      characterManager.getCharacters().some(
+        c => c.isAlive() && (c.tStats.nStatus === STATUS_SICK || c.tStats.nStatus === STATUS_ILL),
+      ),
+    hasIncapacitatedCharacter: () =>
+      characterManager.getCharacters().some(
+        c => c.isAlive() && c.tStats.nStatus === STATUS_INCAPACITATED,
+      ),
+    hasStarvingCitizen: () =>
+      characterManager.getCharacters().some(
+        c => c.isAlive() && c.needs.hunger < NEEDS_HUNGER_STARVATION,
+      ),
+    hasMinerWithRocks: () =>
+      characterManager.getCharacters().some(
+        c => c.isAlive() && c.getJob() === MINER && c.heldItem === 'Rock',
+      ),
+    // ── Pickups / Zones ─────────────────────────────────────────
+    hasCorpse: () =>
+      characterManager.getPickups().some(p => p.sName === 'Corpse' && !p.bPickedUp),
+    hasHospitalZone: () =>
+      roomManager.getRooms().some(r => r.zone === ZoneType.INFIRMARY),
+    hasGardenZone: () =>
+      roomManager.getRooms().some(r => r.zone === ZoneType.GARDEN),
+    hasGardenPlants: () =>
+      EnvObjectManager.getObjects().some(
+        o => o.bBuilt && (o.sName === 'HydroPlant' || o.sName === 'space_tree'),
+      ),
+    hasActiveResearch: () => researchSystem.getActiveResearch() !== null,
   });
 
   // Wire save/load data providers
@@ -381,6 +456,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     completed: researchSystem.getCompletedList(),
   });
   saveLoadSystem.getEventData = () => eventController.getSaveData();
+  saveLoadSystem.getGoalData = () => goalSystem.getSaveData();
+  saveLoadSystem.getHintData = () => hintSystem.getSaveData();
+  saveLoadSystem.loadGoalData = (data) => goalSystem.loadSaveData(data);
+  saveLoadSystem.loadHintData = (data) => hintSystem.loadSaveData(data);
 
   // Register subsystems
   GameRules.registerSystem(2, new OxygenTickAdapter(oxygenSystem));
@@ -1075,6 +1154,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       return char.inventory.addItem(item);
     },
     getHints: () => hintSystem.getShownHints(),
+    getHintCount: () => hintSystem.getTotalHints(),
     saveGame: () => saveLoadSystem.saveToStorage('df9_test_save'),
     loadGame: () => saveLoadSystem.loadFromStorage('df9_test_save'),
     hasSave: () => saveLoadSystem.hasSave('df9_test_save'),
