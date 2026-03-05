@@ -108,40 +108,29 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(motdBg);
 
-    // Logo — rendered from startmenu_atlas, top-left position, scale 1.5 per Lua
-    const logoTex = getTexture('startmenu_atlas');
-    if (logoTex?.image && logoTex.image instanceof HTMLImageElement) {
-      const logoImg = document.createElement('img');
-      logoImg.src = logoTex.image.src;
-      // StartMenu.png is 2048x4096; logo occupies roughly top 25% of sheet
-      logoImg.style.cssText = `
-        position:absolute;top:20px;left:20px;
-        width:auto;height:200px;
-        object-fit:cover;object-position:top left;
-      `;
-      this.overlay.appendChild(logoImg);
-    } else {
-      // Text fallback if texture not loaded yet
-      const logoLine1 = document.createElement('div');
-      logoLine1.textContent = 'SPACEBASE';
-      logoLine1.style.cssText = `
-        position:absolute;top:30px;left:30px;
-        font-family:'Orbitron',monospace;
-        font-size:48px;font-weight:700;color:${AMBER};
-        text-shadow:0 0 20px rgba(223,162,0,0.5);
-      `;
-      this.overlay.appendChild(logoLine1);
+    // Game title — original Lua has logo sprite commented out and shows the 3D world behind.
+    // We use styled Orbitron text matching the game's visual language.
+    const titleTop = document.createElement('div');
+    titleTop.textContent = 'SPACEBASE';
+    titleTop.style.cssText = `
+      position:absolute;top:40px;left:40px;
+      font-family:'Orbitron',monospace;
+      font-size:52px;font-weight:700;color:${AMBER};
+      letter-spacing:4px;
+      text-shadow:0 0 30px rgba(223,162,0,0.4), 0 0 60px rgba(223,162,0,0.2);
+    `;
+    this.overlay.appendChild(titleTop);
 
-      const logoLine2 = document.createElement('div');
-      logoLine2.textContent = 'DF-9';
-      logoLine2.style.cssText = `
-        position:absolute;top:90px;left:30px;
-        font-family:'Orbitron',monospace;
-        font-size:72px;font-weight:700;color:${AMBER};
-        text-shadow:0 0 20px rgba(223,162,0,0.5);
-      `;
-      this.overlay.appendChild(logoLine2);
-    }
+    const titleBottom = document.createElement('div');
+    titleBottom.textContent = 'DF-9';
+    titleBottom.style.cssText = `
+      position:absolute;top:105px;left:40px;
+      font-family:'Orbitron',monospace;
+      font-size:88px;font-weight:700;color:${AMBER};
+      letter-spacing:8px;
+      text-shadow:0 0 30px rgba(223,162,0,0.5), 0 0 80px rgba(223,162,0,0.3);
+    `;
+    this.overlay.appendChild(titleBottom);
 
     // Buttons panel — right side, right-aligned (mirrors Lua nMenuItemsX=100, RIGHT_JUSTIFY)
     const btnsPanel = document.createElement('div');
