@@ -91,6 +91,16 @@ class EnvObjectManagerClass implements TickableSystem {
     return Array.from(this.objects.values());
   }
 
+  /** Get the Door at a tile position, or null if none. */
+  getDoorAt(tileX: number, tileY: number): Door | null {
+    for (const obj of this.objects.values()) {
+      if (obj instanceof Door && obj.tileX === tileX && obj.tileY === tileY) {
+        return obj;
+      }
+    }
+    return null;
+  }
+
   /** Get objects in a specific room. */
   getObjectsInRoom(room: Room): EnvObject[] {
     const result: EnvObject[] = [];

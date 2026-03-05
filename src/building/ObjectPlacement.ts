@@ -98,6 +98,11 @@ export class ObjectPlacement {
     const obj = EnvObjectManager.createObject(sName, tileX, tileY, false, false, false);
     if (!obj) return 0;
 
+    // Door-type objects convert the wall tile to a DOOR tile
+    if (data.door) {
+      this.grid.set(tileX, tileY, TileType.DOOR);
+    }
+
     // Queue a build command for the AI
     CommandQueue.addCommand('build_object', tileX, tileY, sName);
 

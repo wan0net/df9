@@ -193,16 +193,28 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   Malady.reset();
   EnvObjectManager.init(roomManager);
 
+  // Wire door sprite lookup for TileRenderer3D
+  tileRenderer.getDoorSpriteAt = (x, y) => {
+    const door = EnvObjectManager.getDoorAt(x, y);
+    return door ? door.getSpriteKey() : 'tile_door_closed';
+  };
+
   // Wire EnvObjectManager lifecycle → EnvObjectRenderer
   EnvObjectManager.onObjectCreated = (id, obj) => {
     envObjRenderer.addObject(String(id), obj.tileX, obj.tileY, obj.sName, obj.bBuilt);
+    // Re-render the tile so door sprite is correct immediately
+    tileRenderer.rerenderTile(obj.tileX, obj.tileY);
   };
   EnvObjectManager.onObjectRemoved = (id) => {
     envObjRenderer.removeObject(String(id));
   };
-  // Wire EnvObject visual updates (condition change, ghost→built) → renderer
+  // Wire EnvObject visual updates (condition change, ghost→built, door open/close) → renderer
   EnvObject.onVisualUpdate = (id, obj) => {
     envObjRenderer.updateObject(String(id), obj.bBuilt, obj.nCondition, obj.getSpriteKey());
+    // Re-render door tiles when door state changes (open/close/lock)
+    if (obj.sName === 'Door' || obj.sName === 'HeavyDoor' || obj.sName === 'Airlock') {
+      tileRenderer.rerenderTile(obj.tileX, obj.tileY);
+    }
   };
   Base.init();
 

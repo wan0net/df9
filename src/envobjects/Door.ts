@@ -119,8 +119,14 @@ export class Door extends EnvObject {
       }
     }
 
-    this.state = newState;
-    this._updateBlockingFlags();
+    if (newState !== this.state || bForce) {
+      this.state = newState;
+      this._updateBlockingFlags();
+      this._notifyRenderer();
+    } else {
+      this.state = newState;
+      this._updateBlockingFlags();
+    }
   }
 
   private _updateBlockingFlags() {
@@ -144,6 +150,19 @@ export class Door extends EnvObject {
   // ── Sprite ────────────────────────────────────────────────────
 
   getSpriteKey(): string {
+    const broken = this.state === DOOR_STATE.BROKEN_OPEN || this.state === DOOR_STATE.BROKEN_CLOSED;
+    if (this.sName === 'Airlock') {
+      if (broken) return 'tile_airlock_door_broken';
+      if (this.isOpen()) return 'tile_airlock_door_open';
+      return 'tile_airlock_door_closed';
+    }
+    if (this.sName === 'HeavyDoor') {
+      if (this.isLocked()) return 'tile_heavy_door_locked';
+      return 'tile_heavy_door_closed';
+    }
+    // Regular Door
+    if (broken) return 'tile_door_broken';
+    if (this.isLocked()) return 'tile_door_locked';
     if (this.isOpen()) return 'tile_door_open';
     return 'tile_door_closed';
   }

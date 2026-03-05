@@ -37,8 +37,15 @@ const WALL_TRIM_BY_SUFFIX: Record<string, { trimX: number; trimY: number }> = {
 };
 
 const DOOR_TRIM: Record<string, { trimX: number; trimY: number }> = {
-  'tile_door_closed': { trimX: 21, trimY: 15 },
-  'tile_door_open':   { trimX: 21, trimY: 15 },
+  'tile_door_closed':         { trimX: 21, trimY: 15 },
+  'tile_door_open':           { trimX: 21, trimY: 15 },
+  'tile_door_locked':         { trimX: 21, trimY: 15 },
+  'tile_door_broken':         { trimX: 21, trimY: 15 },
+  'tile_heavy_door_closed':   { trimX: 21, trimY: 15 },
+  'tile_heavy_door_locked':   { trimX: 21, trimY: 15 },
+  'tile_airlock_door_closed': { trimX: 21, trimY: 15 },
+  'tile_airlock_door_open':   { trimX: 21, trimY: 15 },
+  'tile_airlock_door_broken': { trimX: 21, trimY: 15 },
 };
 
 function getWallTrim(textureKey: string): { trimX: number; trimY: number } {
@@ -118,6 +125,8 @@ export class TileRenderer3D {
   private grid: TileGrid;
   private scene: THREE.Scene;
   private roomManager: RoomManager | null = null;
+  /** Callback to get the correct door sprite key for a tile position. */
+  getDoorSpriteAt: ((x: number, y: number) => string) | null = null;
 
   private visMinX = 0;
   private visMaxX = 0;
@@ -131,6 +140,13 @@ export class TileRenderer3D {
 
   setRoomManager(rm: RoomManager) {
     this.roomManager = rm;
+  }
+
+  /** Re-render a single tile (e.g. when door state changes). */
+  rerenderTile(x: number, y: number) {
+    if (x >= this.visMinX && x <= this.visMaxX && y >= this.visMinY && y <= this.visMaxY) {
+      this.renderTile(x, y);
+    }
   }
 
   renderRegion(minX: number, minY: number, maxX: number, maxY: number) {
@@ -327,7 +343,8 @@ export class TileRenderer3D {
       const dir = getWallDirection(this.grid, x, y);
       const flip = dir === WallDirection.NWSE;
 
-      const door = this.createWallSprite('tile_door_closed', x, y, DEPTH_WALL_TOP(y), flip);
+      const doorSpriteKey = this.getDoorSpriteAt?.(x, y) ?? 'tile_door_closed';
+      const door = this.createWallSprite(doorSpriteKey, x, y, DEPTH_WALL_TOP(y), flip);
       if (door) {
         this.scene.add(door);
         result.push(door);

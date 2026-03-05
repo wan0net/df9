@@ -31,6 +31,8 @@ export class EnvObjectRenderer {
     this.removeObject(id);
 
     const objDef = tObjects[objectType];
+    // Doors are rendered as tile sprites by TileRenderer3D — skip here.
+    if (objDef?.door) return;
     const spriteName = objDef?.spriteName ?? objectType;
     const spriteKey = built ? spriteName : spriteName; // ghost uses same sprite
 

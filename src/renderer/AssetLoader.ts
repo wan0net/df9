@@ -97,9 +97,18 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   // Space tile
   entries.push(['tile_space', 'assets/tiles/full_01.png']);
 
-  // Door sprites
+  // Door sprites — regular door
   entries.push(['tile_door_closed', 'assets/walls/door_closed.png']);
   entries.push(['tile_door_open', 'assets/walls/door_open.png']);
+  entries.push(['tile_door_locked', 'assets/walls/door_locked.png']);
+  entries.push(['tile_door_broken', 'assets/walls/door_broken.png']);
+  // Door sprites — heavy door
+  entries.push(['tile_heavy_door_closed', 'assets/walls/door_heavy_closed.png']);
+  entries.push(['tile_heavy_door_locked', 'assets/walls/door_heavy_locked.png']);
+  // Door sprites — airlock door
+  entries.push(['tile_airlock_door_closed', 'assets/walls/airlock_door_closed.png']);
+  entries.push(['tile_airlock_door_open', 'assets/walls/airlock_door_open.png']);
+  entries.push(['tile_airlock_door_broken', 'assets/walls/AirlockDoor_broken.png']);
 
   // Build cursor sprites
   entries.push(['cursor_yes', 'assets/ui/ISO_build_YES.png']);

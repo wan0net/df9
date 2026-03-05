@@ -221,7 +221,7 @@ export class EnvObject implements TaggableObject {
   }
 
   /** Notify the renderer of visual state changes. */
-  private _notifyRenderer() {
+  protected _notifyRenderer() {
     if (this.id >= 0) {
       EnvObject.onVisualUpdate?.(this.id, this);
     }
