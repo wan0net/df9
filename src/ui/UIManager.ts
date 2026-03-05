@@ -85,7 +85,8 @@ export class UIManager {
   private popText!: HTMLSpanElement;
   private capacityText!: HTMLSpanElement;
   private starDateText!: HTMLSpanElement;
-  private speedButtons: HTMLDivElement[] = [];
+  // Speed button sprite pairs (inactive/active imgs), one per speed level 0-3
+  private speedImgs: { inactive: HTMLImageElement; active: HTMLImageElement }[] = [];
   private moraleText!: HTMLSpanElement;
   private machineHealthText!: HTMLSpanElement;
   private corpseText!: HTMLSpanElement;
@@ -234,90 +235,199 @@ export class UIManager {
   }
 
   // ── HUD (Status Bar) ───────────────────────────────────────────
+  // Mirrors StatusBarLayout.lua: sprite icons, Orbitron-style layout, AMBER color.
 
   private createHUD() {
-    const hud = document.createElement('div');
-    hud.style.cssText = `
+    // Top-right panel: matter icon + value, people icon + value, divider, stardate, speed buttons
+    const hudTop = document.createElement('div');
+    hudTop.style.cssText = `
       position:absolute;top:8px;right:10px;pointer-events:auto;
-      color:${AMBER};display:flex;align-items:center;gap:12px;
-      font-size:13px;
+      color:${AMBER};display:flex;align-items:center;gap:10px;font-size:13px;
     `;
 
-    // Matter
-    const matterGroup = this.hudCell();
-    matterGroup.innerHTML = `<span style="font-size:11px;color:#666;margin-right:4px;">MATTER</span>`;
+    // Matter icon (ui_hud_iconMatter) + value
+    const matterIcon = document.createElement('img');
+    matterIcon.src = 'assets/ui/hud/ui_hud_iconMatter.png';
+    matterIcon.style.cssText = 'height:40px;width:auto;filter:sepia(1) saturate(5) hue-rotate(5deg);vertical-align:middle;';
+    hudTop.appendChild(matterIcon);
+
     this.matterText = document.createElement('span');
     this.matterText.id = 'hud-matter';
-    this.matterText.style.cssText = 'font-size:22px;font-weight:bold;';
+    this.matterText.style.cssText = `font-size:30px;font-weight:bold;color:${AMBER};`;
     this.matterText.textContent = '0';
-    matterGroup.appendChild(this.matterText);
-    hud.appendChild(matterGroup);
+    hudTop.appendChild(this.matterText);
+
+    // People icon (ui_hud_iconPeople) + population / capacity
+    const peopleIcon = document.createElement('img');
+    peopleIcon.src = 'assets/ui/hud/ui_hud_iconPeople.png';
+    peopleIcon.style.cssText = 'height:40px;width:auto;filter:sepia(1) saturate(5) hue-rotate(5deg);vertical-align:middle;margin-left:8px;';
+    hudTop.appendChild(peopleIcon);
+
+    const capGroup = document.createElement('div');
+    capGroup.style.cssText = 'display:flex;align-items:baseline;gap:0;';
+    this.popText = document.createElement('span');
+    this.popText.id = 'hud-pop';
+    this.popText.style.cssText = `font-size:30px;font-weight:bold;color:${AMBER};`;
+    this.popText.textContent = '0';
+    this.capacityText = document.createElement('span');
+    this.capacityText.style.cssText = 'font-size:16px;color:#888;';
+    capGroup.appendChild(this.popText);
+    capGroup.appendChild(this.capacityText);
+    hudTop.appendChild(capGroup);
+
+    // Divider (DividerLine from Lua)
+    const divider = document.createElement('div');
+    divider.style.cssText = `width:2px;height:40px;background:${AMBER};opacity:0.6;margin:0 4px;`;
+    hudTop.appendChild(divider);
 
     // Stardate
     this.starDateText = document.createElement('span');
     this.starDateText.id = 'hud-stardate';
     this.starDateText.style.cssText = `font-size:12px;color:${AMBER};`;
-    hud.appendChild(this.starDateText);
+    hudTop.appendChild(this.starDateText);
 
-    // Speed controls
+    // Speed buttons (sprite images: speed0-3 + active variants)
     const speedRow = document.createElement('div');
-    speedRow.style.cssText = 'display:flex;gap:3px;';
+    speedRow.style.cssText = 'display:flex;gap:2px;align-items:center;margin-left:4px;';
     const speeds = [0, 1, 2, 4];
-    const labels = ['||', '>', '>>', '>>>'];
+    const speedKeys = ['speed0', 'speed1', 'speed2', 'speed3'];
     for (let i = 0; i < 4; i++) {
-      const btn = document.createElement('div');
-      btn.textContent = labels[i];
-      btn.style.cssText = `
-        width:28px;height:22px;text-align:center;line-height:22px;
-        font-size:11px;cursor:pointer;border:1px solid ${AMBER};color:${AMBER};
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position:relative;width:30px;height:30px;cursor:pointer;';
+
+      const inactiveImg = document.createElement('img');
+      inactiveImg.src = `assets/ui/hud/ui_hud_${speedKeys[i]}.png`;
+      inactiveImg.style.cssText = `
+        position:absolute;top:0;left:0;width:100%;height:100%;
+        filter:sepia(1) saturate(5) hue-rotate(5deg);
+        object-fit:contain;
       `;
-      btn.addEventListener('click', () => {
-        if (speeds[i] === 0) { GameRules.bRunning = !GameRules.bRunning; }
-        else { GameRules.bRunning = true; GameRules.setTimeScale(speeds[i]); }
+
+      const activeImg = document.createElement('img');
+      activeImg.src = `assets/ui/hud/ui_hud_${speedKeys[i]}_active.png`;
+      activeImg.style.cssText = `
+        position:absolute;top:0;left:0;width:100%;height:100%;
+        filter:sepia(1) saturate(5) hue-rotate(5deg);
+        object-fit:contain;display:none;
+      `;
+
+      wrapper.appendChild(inactiveImg);
+      wrapper.appendChild(activeImg);
+
+      const idx = i;
+      wrapper.addEventListener('click', () => {
+        if (speeds[idx] === 0) { GameRules.bRunning = !GameRules.bRunning; }
+        else { GameRules.bRunning = true; GameRules.setTimeScale(speeds[idx]); }
       });
-      speedRow.appendChild(btn);
-      this.speedButtons.push(btn);
+      wrapper.addEventListener('mouseenter', () => { wrapper.style.opacity = '0.7'; });
+      wrapper.addEventListener('mouseleave', () => { wrapper.style.opacity = '1'; });
+
+      speedRow.appendChild(wrapper);
+      this.speedImgs.push({ inactive: inactiveImg, active: activeImg });
     }
-    hud.appendChild(speedRow);
+    hudTop.appendChild(speedRow);
 
-    // O2 toggle
-    const o2Btn = document.createElement('div');
-    o2Btn.textContent = 'O2';
-    o2Btn.style.cssText = `
-      width:28px;height:22px;text-align:center;line-height:22px;
-      font-size:11px;cursor:pointer;border:1px solid ${AMBER};color:${AMBER};
+    this.uiRoot.appendChild(hudTop);
+
+    // Bottom-right panel: morale, machine health, corpses, divider, O2 button, walls button, zoom buttons
+    const hudBottom = document.createElement('div');
+    hudBottom.style.cssText = `
+      position:absolute;bottom:10px;right:10px;pointer-events:auto;
+      color:${AMBER};display:flex;align-items:center;gap:8px;font-size:13px;
     `;
-    o2Btn.addEventListener('click', () => this.toggleO2Overlay());
-    hud.appendChild(o2Btn);
 
-    // Capacity (pop/beds)
-    const capGroup = this.hudCell();
-    this.popText = document.createElement('span');
-    this.popText.id = 'hud-pop';
-    this.popText.style.cssText = 'font-weight:bold;';
-    this.popText.textContent = '0';
-    this.capacityText = document.createElement('span');
-    this.capacityText.style.cssText = 'color:#888;';
-    capGroup.appendChild(this.popText);
-    capGroup.appendChild(this.capacityText);
-    hud.appendChild(capGroup);
-
-    // Morale
-    this.moraleText = document.createElement('span');
-    this.moraleText.style.cssText = 'font-size:14px;';
-    hud.appendChild(this.moraleText);
+    // Corpse count
+    this.corpseText = document.createElement('span');
+    this.corpseText.style.cssText = `font-size:13px;color:${AMBER};`;
+    hudBottom.appendChild(this.corpseText);
 
     // Machine health
     this.machineHealthText = document.createElement('span');
-    this.machineHealthText.style.cssText = 'font-size:12px;color:#888;';
-    hud.appendChild(this.machineHealthText);
+    this.machineHealthText.style.cssText = 'font-size:13px;color:#888;';
+    hudBottom.appendChild(this.machineHealthText);
 
-    // Corpses
-    this.corpseText = document.createElement('span');
-    this.corpseText.style.cssText = 'font-size:12px;color:#f44;';
-    hud.appendChild(this.corpseText);
+    // Morale text/icon
+    this.moraleText = document.createElement('span');
+    this.moraleText.style.cssText = `font-size:13px;color:${AMBER};`;
+    hudBottom.appendChild(this.moraleText);
 
-    this.uiRoot.appendChild(hud);
+    // Divider
+    const divider2 = document.createElement('div');
+    divider2.style.cssText = `width:2px;height:36px;background:${AMBER};opacity:0.6;`;
+    hudBottom.appendChild(divider2);
+
+    // O2 toggle button (sprite image with active state swap)
+    const o2Btn = this._makeBottomButton(
+      'assets/ui/hud/ui_hud_buttonvis_o2.png',
+      'assets/ui/hud/ui_hud_buttonvis_o2_active.png',
+      () => this.toggleO2Overlay(),
+    );
+    hudBottom.appendChild(o2Btn.el);
+
+    // Walls toggle button
+    const wallsBtn = this._makeBottomButton(
+      'assets/ui/hud/ui_hud_buttonvis_walls.png',
+      'assets/ui/hud/ui_hud_buttonvis_walls_active.png',
+      () => {}, // walls toggle wired in main.ts
+    );
+    hudBottom.appendChild(wallsBtn.el);
+
+    // Divider
+    const divider3 = document.createElement('div');
+    divider3.style.cssText = `width:2px;height:36px;background:${AMBER};opacity:0.6;`;
+    hudBottom.appendChild(divider3);
+
+    // Zoom out button
+    const zoomOutBtn = this._makeBottomButton(
+      'assets/ui/hud/ui_hud_button_zoomout.png',
+      'assets/ui/hud/ui_hud_button_zoomout_active.png',
+      () => {},
+    );
+    hudBottom.appendChild(zoomOutBtn.el);
+
+    // Zoom in button
+    const zoomInBtn = this._makeBottomButton(
+      'assets/ui/hud/ui_hud_button_zoomin.png',
+      'assets/ui/hud/ui_hud_button_zoomin_active.png',
+      () => {},
+    );
+    hudBottom.appendChild(zoomInBtn.el);
+
+    this.uiRoot.appendChild(hudBottom);
+  }
+
+  /** Create a bottom-bar icon button with inactive/active sprite swap on hover. */
+  private _makeBottomButton(inactiveSrc: string, activeSrc: string, onClick: () => void): { el: HTMLDivElement } {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:relative;width:44px;height:46px;cursor:pointer;';
+
+    const inactiveImg = document.createElement('img');
+    inactiveImg.src = inactiveSrc;
+    inactiveImg.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      filter:sepia(1) saturate(5) hue-rotate(5deg);object-fit:contain;
+    `;
+
+    const activeImg = document.createElement('img');
+    activeImg.src = activeSrc;
+    activeImg.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      filter:sepia(1) saturate(5) hue-rotate(5deg);object-fit:contain;display:none;
+    `;
+
+    wrapper.appendChild(inactiveImg);
+    wrapper.appendChild(activeImg);
+    wrapper.addEventListener('mouseenter', () => {
+      inactiveImg.style.display = 'none';
+      activeImg.style.display = 'block';
+    });
+    wrapper.addEventListener('mouseleave', () => {
+      inactiveImg.style.display = 'block';
+      activeImg.style.display = 'none';
+    });
+    wrapper.addEventListener('click', onClick);
+
+    return { el: wrapper };
   }
 
   private hudCell(): HTMLDivElement {
@@ -752,10 +862,10 @@ export class UIManager {
     // ── Speed buttons ─────────────────────────────────────
     const currentSpeed = !GameRules.bRunning ? 0 : GameRules.playerTimeScale;
     const speedMap = [0, 1, 2, 4];
-    for (let i = 0; i < this.speedButtons.length; i++) {
+    for (let i = 0; i < this.speedImgs.length; i++) {
       const active = speedMap[i] === currentSpeed;
-      this.speedButtons[i].style.background = active ? AMBER : 'transparent';
-      this.speedButtons[i].style.color = active ? '#000' : AMBER;
+      this.speedImgs[i].inactive.style.display = active ? 'none' : 'block';
+      this.speedImgs[i].active.style.display = active ? 'block' : 'none';
     }
 
     // ── Capacity (pop / bed count) ────────────────────────

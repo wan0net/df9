@@ -2,11 +2,13 @@ import type { SceneContext, SceneState } from '../renderer/SceneManager';
 import { getTexture } from '../renderer/AssetLoader';
 import { SoundManager } from '../audio/SoundManager';
 
-const AMBER_HEX = '#dfa200';
+const AMBER = '#dfa200';
+const BRIGHT_AMBER = '#ffcc44';
 
 /**
  * Start menu rendered as HTML overlay.
- * Plays menu music and UI sounds on interactions.
+ * Mirrors StartMenuLayout.lua: right-aligned Orbitron-font buttons in AMBER,
+ * logo from UI/StartMenu sprite sheet, gradient overlay bars, dark background.
  */
 export class StartMenuState implements SceneState {
   private ctx!: SceneContext;
@@ -37,13 +39,21 @@ export class StartMenuState implements SceneState {
     // Play menu music
     SoundManager.playMusic('Intro_GuitarTrack');
 
+    // Load Orbitron font (matches original game's orbitronWhite style)
+    if (!document.getElementById('orbitron-font')) {
+      const link = document.createElement('link');
+      link.id = 'orbitron-font';
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap';
+      document.head.appendChild(link);
+    }
+
     this.overlay = document.createElement('div');
     this.overlay.id = 'start-menu';
     this.overlay.style.cssText = `
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: #000; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; z-index: 100;
-      font-family: monospace;
+      align-items: stretch; z-index: 100; overflow: hidden;
     `;
 
     // Space background
@@ -65,55 +75,128 @@ export class StartMenuState implements SceneState {
       this.overlay.appendChild(bgCanvas);
     }
 
-    // Content container
-    const content = document.createElement('div');
-    content.style.cssText = 'position:relative;z-index:1;text-align:center;';
+    // Dark overlay (PAUSESCREEN_BG = rgba(0,0,0,0.3))
+    const darkOverlay = document.createElement('div');
+    darkOverlay.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0.3);pointer-events:none;
+    `;
+    this.overlay.appendChild(darkOverlay);
 
-    // Title
-    content.innerHTML = `
-      <div style="color:${AMBER_HEX};font-size:64px;font-weight:bold;margin-bottom:0;">SPACEBASE</div>
-      <div style="color:${AMBER_HEX};font-size:80px;font-weight:bold;margin-bottom:10px;">DF-9</div>
-      <div style="color:#888;font-size:16px;margin-bottom:30px;">Web Prototype</div>
-      <div style="width:300px;height:2px;background:${AMBER_HEX};opacity:0.4;margin:0 auto 40px;"></div>
+    // Gradient fade bars (TextBGFadeTop / TextBGFadeBottom from UI/Shared grad64)
+    const gradTop = document.createElement('div');
+    gradTop.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:180px;
+      background:linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0));
+      pointer-events:none;
+    `;
+    this.overlay.appendChild(gradTop);
+
+    const gradBottom = document.createElement('div');
+    gradBottom.style.cssText = `
+      position:absolute;bottom:0;left:0;width:100%;height:180px;
+      background:linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0));
+      pointer-events:none;
+    `;
+    this.overlay.appendChild(gradBottom);
+
+    // MOTD background panel
+    const motdBg = document.createElement('div');
+    motdBg.style.cssText = `
+      position:absolute;top:0;left:0;width:55%;height:100%;
+      background:rgba(0,0,0,0.5);pointer-events:none;
+    `;
+    this.overlay.appendChild(motdBg);
+
+    // Logo — rendered from startmenu_atlas, top-left position, scale 1.5 per Lua
+    const logoTex = getTexture('startmenu_atlas');
+    if (logoTex?.image && logoTex.image instanceof HTMLImageElement) {
+      const logoImg = document.createElement('img');
+      logoImg.src = logoTex.image.src;
+      // StartMenu.png is 2048x4096; logo occupies roughly top 25% of sheet
+      logoImg.style.cssText = `
+        position:absolute;top:20px;left:20px;
+        width:auto;height:200px;
+        object-fit:cover;object-position:top left;
+      `;
+      this.overlay.appendChild(logoImg);
+    } else {
+      // Text fallback if texture not loaded yet
+      const logoLine1 = document.createElement('div');
+      logoLine1.textContent = 'SPACEBASE';
+      logoLine1.style.cssText = `
+        position:absolute;top:30px;left:30px;
+        font-family:'Orbitron',monospace;
+        font-size:48px;font-weight:700;color:${AMBER};
+        text-shadow:0 0 20px rgba(223,162,0,0.5);
+      `;
+      this.overlay.appendChild(logoLine1);
+
+      const logoLine2 = document.createElement('div');
+      logoLine2.textContent = 'DF-9';
+      logoLine2.style.cssText = `
+        position:absolute;top:90px;left:30px;
+        font-family:'Orbitron',monospace;
+        font-size:72px;font-weight:700;color:${AMBER};
+        text-shadow:0 0 20px rgba(223,162,0,0.5);
+      `;
+      this.overlay.appendChild(logoLine2);
+    }
+
+    // Buttons panel — right side, right-aligned (mirrors Lua nMenuItemsX=100, RIGHT_JUSTIFY)
+    const btnsPanel = document.createElement('div');
+    btnsPanel.style.cssText = `
+      position:absolute;right:80px;top:50%;transform:translateY(-50%);
+      display:flex;flex-direction:column;align-items:flex-end;gap:0;
+      pointer-events:auto;
     `;
 
-    // Buttons
     const buttons = [
-      { label: 'New Game', action: this.onNewGame },
-      { label: 'Tutorial', action: this.onTutorial },
-      { label: 'Load Base', action: this.onLoadBase },
+      { label: 'NEW GAME', action: this.onNewGame },
+      { label: 'TUTORIAL', action: this.onTutorial },
+      { label: 'LOAD BASE', action: this.onLoadBase },
     ];
 
     for (const btn of buttons) {
       const el = document.createElement('div');
       el.textContent = btn.label;
       el.style.cssText = `
-        color: ${AMBER_HEX}; font-size: 28px; padding: 8px 40px; margin: 10px 0;
-        cursor: pointer; position: relative;
+        color: ${AMBER};
+        font-family: 'Orbitron', monospace;
+        font-size: 28px;
+        font-weight: 400;
+        padding: 16px 0;
+        cursor: pointer;
+        text-align: right;
+        letter-spacing: 2px;
+        min-width: 400px;
       `;
       el.addEventListener('mouseenter', () => {
-        el.style.background = AMBER_HEX;
-        el.style.color = '#000';
+        el.style.color = BRIGHT_AMBER;
         SoundManager.playUI('UI_Hilight');
       });
       el.addEventListener('mouseleave', () => {
-        el.style.background = 'transparent';
-        el.style.color = AMBER_HEX;
+        el.style.color = AMBER;
       });
       el.addEventListener('click', () => {
         SoundManager.playUI('Intro_AcceptButton');
         btn.action();
       });
-      content.appendChild(el);
+      btnsPanel.appendChild(el);
     }
 
-    // Version
+    this.overlay.appendChild(btnsPanel);
+
+    // Version label (bottom-left)
     const version = document.createElement('div');
     version.textContent = 'v0.1';
-    version.style.cssText = 'position:fixed;bottom:10px;left:10px;color:#444;font-size:12px;';
-    content.appendChild(version);
+    version.style.cssText = `
+      position:absolute;bottom:10px;left:10px;
+      color:#444;font-size:12px;font-family:monospace;
+      pointer-events:none;
+    `;
+    this.overlay.appendChild(version);
 
-    this.overlay.appendChild(content);
     ctx.container.appendChild(this.overlay);
   }
 
