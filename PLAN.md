@@ -316,6 +316,328 @@
 
 ---
 
+## 15. Character Morale Events & Need Interactions (0% → ?)
+**Goal**: Add all missing morale event constants and wire them into the systems that trigger them. Lua `CharacterConstants.lua` defines ~15 morale-modifying events not yet implemented.
+
+**Missing constants** (Lua `CharacterConstants.lua:374-400`):
+- `MORALE_LOW_OXYGEN = -0.1` (per tick when O2 < `MORALE_LOW_OXYGEN_THRESHOLD = 550`)
+- `MORALE_NEEDS_MET_BONUS = 0.5` (small bump when all needs met but morale is negative)
+- `MORALE_NICE_CHAT` — from positive social interactions
+- `MORALE_MINE_ASTEROID` — from successful mining
+- `MORALE_MAINTAIN_OBJECT` — from successful maintenance
+- `MORALE_REPAIR_OBJECT` — from repair actions
+- `MORALE_BUILD_BASE` — from completing construction
+- `MORALE_DID_HOBBY` — from hobby activities (jukebox, workout, etc.)
+- `MORALE_DELIVERED_FOOD` — from bartender/delivery
+- `MORALE_BAD_CHAT` — from negative/failed social interactions
+
+- [ ] Add all 10 missing morale-event constants to CharacterConstants.ts matching Lua values
+- [ ] Wire `MORALE_LOW_OXYGEN` into Character.update() (check O2 per tick)
+- [ ] Wire `MORALE_NEEDS_MET_BONUS` into Character morale tick (when all needs satisfied + morale < 0)
+- [ ] Wire `MORALE_MINE_ASTEROID` into Mine.ts on success
+- [ ] Wire `MORALE_MAINTAIN_OBJECT` into MaintainEnvObject.ts on success
+- [ ] Wire `MORALE_BUILD_BASE` into BuildEnvObject.ts / BuildTile.ts on completion
+- [ ] Wire `MORALE_DID_HOBBY` into ListenToJukebox.ts, WorkOut.ts, LiftAtWeightBench.ts
+- [ ] Wire `MORALE_DELIVERED_FOOD` into ServeFoodAtTable.ts / HarvestAndDeliverFood.ts
+- [ ] Wire `MORALE_BAD_CHAT / NICE_CHAT` into Chat.ts (personality-dependent outcome)
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: None
+
+---
+
+## 16. Room Lighting & Danger State System (0% → ?)
+**Goal**: Implement Lua `Room.lua` lighting scheme enum and danger/visibility timers.
+
+**Missing from Lua `Room.lua:46-58`**:
+- 6 lighting scheme constants: `LIGHTING_SCHEME_OFF`, `_NORMAL`, `_FIRE`, `_VACUUM`, `_DIM`, `_LOWPOWER`
+- `DANGEROUS_DURATION = 120` seconds threshold for "room has been dangerous too long" alert
+- `LOSE_VISIBILITY_TIME = 45` seconds after hostile leaves before room stops being "alert"
+- `LOSE_REVEALED_TIME = 270` seconds until unexplored room loses its revealed status
+- `FLOAT_AWAY_TIME = 720` seconds until loose items float away in vacuum
+- `CONTIGUITY_TEST_INTERVAL = 2` ticks between re-checking room connectivity
+- `POWER_DRAW_PER_TILE = 1` — rooms draw power proportional to tile count
+
+- [ ] Add `LightingScheme` enum to Room.ts with all 6 values
+- [ ] Add `nDangerTimer` to Room.ts; increment when hostile/fire/vacuum present; trigger alert at DANGEROUS_DURATION
+- [ ] Add `nVisibilityTimer` to Room.ts for LOSE_VISIBILITY_TIME post-threat
+- [ ] Add `FLOAT_AWAY_TIME` timer for items in vacuum rooms
+- [ ] Wire `POWER_DRAW_PER_TILE` into PowerSystem — rooms themselves draw power per tile
+- [ ] Wire lighting scheme into TileRenderer3D tinting (off=dark, vacuum=red, fire=orange, low-power=dim)
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: None
+
+---
+
+## 17. Tile Damage & Wall Destruction (0% → ?)
+**Goal**: Implement Lua `WorldConstants.lua` tile HP system — walls degrade under fire/explosion.
+
+**Missing from Lua `WorldConstants.lua:14-19`**:
+- `TILE_STARTING_HIT_POINTS = 100`
+- `TILE_DAMAGE_HEALTHY = 100`, `TILE_DAMAGE_LIGHT_DAMAGE = 50`, `TILE_DAMAGE_HEAVY_DAMAGE = 20`, `TILE_DAMAGE_DESTROYED = 0`
+- `TILE_HEAL_OVER_TIME` rate
+- `WALL_DESTROYED` tile type (Lua WorldConstants.lua) — destroyed wall becomes passable + breaches room
+
+- [ ] Add `nTileHP` per-wall tracking to TileGrid (sparse map, only for WALL tiles)
+- [ ] Add `TILE_DESTROYED` tile type constant
+- [ ] Wire fire spread damage into wall HP reduction
+- [ ] When wall HP hits 0 → convert to TILE_DESTROYED, trigger RoomManager re-flood, breach adjacent rooms
+- [ ] Add `TILE_HEAL_OVER_TIME` slow wall repair (only in powered rooms)
+- [ ] Wire `CHARACTER_SAFETY_TOLERANCE = 2` from WorldConstants into construction validation (prevent building too close to world edge)
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: Fire system (#12)
+
+---
+
+## 18. Airlock Pressurisation State Machine (0% → ?)
+**Goal**: Implement full Lua `Airlock.lua` pressurisation cycle — pump out, open outer, cycle, pump in.
+
+**Missing**:
+- Lua Airlock.lua defines states: `IDLE`, `PUMPING_OUT`, `OUTER_OPEN`, `PUMPING_IN`
+- Pressurisation cycle: takes time proportional to room O2 level, drains O2 during pump-out, fills during pump-in
+- Inner/outer door distinction — airlock has two doors; cannot open both simultaneously
+- Airlock vent event when outer opens in vacuum (rapid O2 loss + character force-push)
+- Alert when character enters without spacesuit
+
+- [ ] Add `AirlockState` enum to Door.ts/Airlock logic
+- [ ] Implement pump-out phase: reduce room O2 to 0 over N seconds, then unlock outer door
+- [ ] Implement pump-in phase: restore room O2 from station supply
+- [ ] Prevent both doors open simultaneously (hard interlock)
+- [ ] Wire vent event: when outer door opens to space, characters in airlock take explosive decompression damage
+- [ ] Alert system: character without spacesuit entering active airlock cycle
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: Door state system, OxygenSystem
+
+---
+
+## 19. Personality Trait Modifiers on AI Scoring (0% → ?)
+**Goal**: Wire all 17 personality traits into actual task score and morale calculations. Currently traits are stored but have no effect.
+
+**Required from Lua `Character.lua` + `Personality.lua`**:
+- `workEthic` → multiplier on all work task scores (0.5 to 1.5)
+- `bravery` → already gates panic/flee tasks (done), but should also affect combat attack score
+- `gregariousness` → multiplier on Chat task score
+- `temper` → probability of Brawl at high anger; already gates brawl (done), but should scale anger build rate
+- `creativity` → bonus score on Research and hobby tasks
+- `empathy` → morale bonus when fellow citizens are happy; penalty when they are unhappy
+- `laziness` → inverse multiplier on work tasks (stacks with workEthic)
+- `punctuality` → affects work shift adherence scoring
+- `bLoner` → penalty on Chat score, bonus on solo tasks
+- `bInsomniac` → modified sleep schedule / reduced energy from rest
+- `bHothead` → increases anger build rate (stacks with temper)
+- `bNaturalist` → bonus to Garden zone tasks
+- `bMachineWhisperer` → bonus to MaintainEnvObject
+- `bGourmet` → higher food quality requirement; bonus morale from high-quality meals
+- `bHoarder` → bonus to DropOffRocks; resistance to inventory incineration
+- `bKlutz` → chance to accidentally damage objects during maintenance
+- `bPhobic` → panic at lower thresholds for specific threats
+
+- [ ] Add `getWorkEthicMultiplier()` to Character → workEthic * (1 - laziness) clamp [0.2, 2.0]
+- [ ] Apply workEthic multiplier in all work-task `setScore()` calls
+- [ ] Add `getGregariousnessMultiplier()` → wire into Chat.ts
+- [ ] Wire `empathy` into morale tick (scan nearby characters' morale, apply empathy delta)
+- [ ] Wire `bHothead + temper` into anger build rate (Brawl threshold scaling)
+- [ ] Wire `creativity` into Research and hobby task scores
+- [ ] Wire `bNaturalist` into Garden zone tasks
+- [ ] Wire `bMachineWhisperer` into MaintainEnvObject score
+- [ ] Wire `bGourmet` into Eat.ts morale bonus (scale with food quality)
+- [ ] Wire `bKlutz` into MaintainEnvObject — chance to lower condition instead of raise
+- [ ] Wire `bPhobic` into panic task thresholds
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: None
+
+---
+
+## 20. Topics / Gossip System (0% → ?)
+**Goal**: Implement Lua `Topics.lua` — characters share information during Chat interactions.
+
+**From Lua `Topics.lua`**:
+- Topics are facts a character knows: enemy locations, discoveries, deaths, events
+- Characters spread topics to each other during Chat tasks
+- Topic memory has TTL (time-to-live); stale topics expire
+- Topics affect AI decision-making (flee from known enemy location, seek known food source)
+
+- [ ] Create `Topic` interface: `type`, `data`, `ttl`, `sourceCharId`
+- [ ] Add `knownTopics: Topic[]` to Character
+- [ ] Wire topic exchange into Chat.ts: when two characters chat, exchange top N topics
+- [ ] Wire topic generation at events: enemy spotted → add enemy-location topic; fire spotted → add fire-location topic
+- [ ] Wire topic consumption into AI: FleeThreat uses enemy-location topics as targets
+- [ ] Add topic expiry in Character.update()
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: Chat task (#4)
+
+---
+
+## 21. Character Emoticons Above Heads (0% → ?)
+**Goal**: Render Lua-style emoticon sprites above characters showing current mood/state.
+
+**From Lua `UI/Emoticons` spritesheet and `Character.lua`**:
+- Emoticons shown for: low morale (sad/angry), needs critical (hunger, sleep), social events (heart/speech bubble), combat (exclamation), carrying items, working
+- Emoticon sprites extracted to `public/assets/ui/Emoticons.png`
+- Original uses `ui_dialogicon_*` sprite names (meh, happy, sad, angry, heart, etc.)
+
+- [ ] Add emoticon overlay sprite system to CharacterRenderer (billboard quad above character head)
+- [ ] Map character state → emoticon sprite (hunger critical → food icon; low O2 → blue face; angry → red; happy → heart; working → wrench; combat → !)
+- [ ] Wire morale thresholds into emoticon selection (morale < -50 → sad, < -80 → angry, > 50 → happy)
+- [ ] Add emoticon fade-in/out with TTL (show for 3-5 seconds, fade)
+- [ ] Add thought bubbles for specific events (marriage, death nearby, goal completed)
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: CharacterRenderer sprite overlay
+
+---
+
+## 22. Power Circuit Propagation (0% → ?)
+**Goal**: Match Lua power distribution — power flows through connected rooms, not just individual room generators.
+
+**From Lua `Power.lua` + `Room.lua`**:
+- Rooms are connected via doors into power networks
+- `tContiguousRooms` in Room.lua tracks connected room groups
+- Power shared across entire connected network: total output vs total draw
+- Rooms with enough total network power get `bHasPower = true` on all objects
+- Network breaks when a door is destroyed/locked — isolated rooms lose power
+- `POWER_DRAW_PER_TILE = 1` means larger rooms cost more to power
+
+- [ ] Implement power network BFS in PowerSystem: starting from generators, walk connected rooms via open doors
+- [ ] Accumulate total output and draw per network
+- [ ] Apply `POWER_DRAW_PER_TILE` per room tile count in draw calculation
+- [ ] Set `bHasPower` on objects based on network balance (not per-room balance)
+- [ ] Re-run network calculation when a door opens/closes/breaks or generator condition changes
+- [ ] Wire network power failure state into room lighting (dimmed when power < demand)
+
+**What we did**: (not started — current PowerSystem uses per-room balance only)
+**What we didn't do**: (everything — cross-room network propagation)
+**Blockers**: RoomManager contiguous room tracking (partially done)
+
+---
+
+## 23. Zone Benefit Implementations (0% → ?)
+**Goal**: Implement the functional effects of each zone type matching Lua `Zones/*.lua`.
+
+Currently zones are assigned to rooms but have minimal runtime effect. Each zone in Lua grants specific benefits:
+
+- [ ] **BedZone**: Characters assigned to beds for sleep; bed count caps population capacity; `nBedCount` tracked
+- [ ] **ResearchZone**: ResearchSystem pulls from `nResearchPoints` generated per tick by characters working in zone
+- [ ] **HospitalZone**: Doctor task eligibility; `nBedCount` tracks hospital capacity; triage priority
+- [ ] **PubZone**: Social/morale bonus to characters drinking; Jukebox adds ambient morale to room
+- [ ] **FitnessZone**: WorkOut task eligibility; `bHelpsMorale` for weight bench, pullup bar
+- [ ] **GardenZone**: Food production rate; botanist task eligibility; `nFoodProduced` tracking
+- [ ] **BrigZone**: Prisoner confinement; cuffed characters auto-pathfind to brig bed; `nCapacity` enforcement
+- [ ] **AirlockZone**: Pressurisation cycle eligibility; spacesuit locker assignment; EVA management
+- [ ] **RefineryZone**: Rock drop-off point; matter output per rock type; `nMatterGenerated` tracking
+- [ ] **ReactorZone**: Power bonus multiplier for generators in reactor zone
+
+**What we did**: Zone types assigned, zone objects exist, but no benefit calculations
+**What we didn't do**: All benefit implementations
+**Blockers**: None
+
+---
+
+## 24. Fire System Lua Parity (0% → ?)
+**Goal**: Verify and fix fire spread/damage to exactly match Lua `Fire.lua`.
+
+**From audit of Lua `Fire.lua`**:
+- Fire spreads along isometric adjacency (4 diagonal neighbors matching grid geometry)
+- Fire has `nFuelRemaining` per tile — burns out when fuel exhausted
+- Walls block fire spread (fire cannot jump walls, only spreads to open tiles)
+- Object flammability: env objects with `bFlammable = true` can catch fire from adjacent fire
+- Character fire damage rate: `FIRE_DAMAGE_RATE = 5` HP/second (verify this is wired)
+- Fire creates smoke: visibility reduced in fire rooms
+- Destroyed env objects have a `DESTROYED_FIRE_CHANCE = 0.05` per 60-tick interval to ignite
+
+- [ ] Verify fire spread uses correct diamond-grid adjacency (4 diagonal neighbors only, matching Lua)
+- [ ] Add `nFuelRemaining` to Fire — fire burns out naturally; fuel decremented per tick
+- [ ] Wire wall blocking into fire spread (WALL tiles stop propagation)
+- [ ] Wire `bFlammable` from EnvObjectDef into fire spread (destroyed objects can ignite)
+- [ ] Verify `FIRE_DAMAGE_RATE = 5` HP/second is wired into character damage (currently uses `O2_FIRE_DAMAGE` in CharacterConstants)
+- [ ] Add smoke/visibility reduction in fire rooms
+- [ ] Wire `DESTROYED_FIRE_CHECK_INTERVAL` into EnvObject.onTick() → Fire.startFire() (already partially stubbed)
+
+**What we did**: Fire spread exists, adjacency implemented, character damage wired
+**What we didn't do**: Fuel system, wall blocking verification, bFlammable wiring, smoke visibility
+**Blockers**: None
+
+---
+
+## 25. Event System Lua Parity (0% → ?)
+**Goal**: Match Lua `EventController.lua` spawn frequency math, module loading, and compound event structure.
+
+**From Lua `EventController.lua:79-129`**:
+- `getExpMod(nX, nY)` — exponential modifier based on galaxy coordinates; higher distance = more hostile events
+- `nEventForecastMax = 15` (check TS matches)
+- `tFirstEventTimeRange = {400, 440}` — first event appears between 400-440 stardate ticks
+- `tAlertTimeRange = {45, 45}` — constant 45 ticks between forecast → active
+- Module-based event definitions: events are loaded as Lua modules from `Events/` directory
+- `CompoundEvent` type: multiple sub-events chained together with timing between them
+- `nFinalSiegeTime = 60 * 60 * 6` — final siege at 6 hours of game time
+- `bHardcoreMode` flag: doubles hostile event frequency
+- Event `nDifficulty` scaling from galaxy zone density + distance traveled
+- `bExpeditionMode` flag: alternative game mode with different event table
+
+- [ ] Verify `FORECAST_SIZE = 15` in TS EventData.ts
+- [ ] Implement `getExpMod()` — exponential galaxy-position difficulty modifier (use landing zone coordinates)
+- [ ] Wire galaxy landing zone distance into event frequency scaling
+- [ ] Add `bHardcoreMode` flag to GameRules; wire into EventController spawn rates
+- [ ] Verify `FIRST_EVENT_DELAY` and alert timing match Lua ranges exactly
+- [ ] Add `nDifficulty` per-event property; use in damage/hostile-count scaling
+- [ ] Add CompoundEvent support: chained sub-events with inter-event delays
+
+**What we did**: Basic event types, forecast queue, difficulty scaling stub
+**What we didn't do**: Galaxy-position exponential mod, hardcore mode, compound events, per-event difficulty
+**Blockers**: Landing zone data needs to be passed to EventController
+
+---
+
+## 26. World Generation Lua Parity (0% → ?)
+**Goal**: Match Lua `WorldGen.lua` procedural generation exactly — seed-based asteroid layout, starting rooms, edge safety.
+
+**From Lua `WorldGen.lua` + `WorldConstants.lua`**:
+- `CHARACTER_SAFETY_TOLERANCE = 2` tiles — construction blocked within 2 tiles of world edge
+- Starting room layout defined by Lua (specific shape/size for seed pod landing zone)
+- Asteroid field procedurally generated from world seed — density and position deterministic
+- `WALL_DESTROYED` tile type — when a wall reaches 0 HP it becomes this state (different from SPACE)
+- Specific starting matter value tied to galaxy zone density choice
+
+- [ ] Add `CHARACTER_SAFETY_TOLERANCE = 2` constant to config.ts; enforce in BuildSystem tile placement checks
+- [ ] Verify starting room shape matches Lua's default layout (seed pod chamber dimensions)
+- [ ] Make asteroid generation use explicit Lua-matching seeded PRNG (currently uses `Math.random`)
+- [ ] Add `TILE_WALL_DESTROYED = 5` tile type (passable wall ruin; lets O2 and characters through)
+- [ ] Wire landing zone density choice into GameRules starting matter (low density = less starting matter)
+
+**What we did**: Basic world gen with seed pod, asteroids, starting room
+**What we didn't do**: Safety tolerance enforcement, exact starting layout, seeded PRNG for asteroids, wall-destroyed tile type, density-linked starting matter
+**Blockers**: None
+
+---
+
+## 27. Inspector Panel Log Tab & Save/Load Dialogs (0% → ?)
+**Goal**: Complete the UI work deferred from #6: Log tab, save/load dialogs, portrait display.
+
+- [ ] Inspector Log tab: show character's recent morale events, work history, social interactions (needs Log system #9)
+- [ ] Inspector portrait: render character portrait sprite from `Portraits.png` atlas in inspector header
+- [ ] Save Base dialog: name input, overwrite confirmation, existing save list
+- [ ] Load Base dialog: save file browser, preview info, delete option
+- [ ] Mine mode UI: show mineable asteroid tiles, matter yield preview
+- [ ] Build menu wall/airlock/vaporize mode buttons in sidebar sub-menu
+
+**What we did**: (not started)
+**What we didn't do**: (everything)
+**Blockers**: Log system (#9)
+
+---
+
 ## Progress Log
 
 | Date | Item | Action | Result |
