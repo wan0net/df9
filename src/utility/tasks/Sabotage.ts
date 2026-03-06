@@ -6,6 +6,7 @@
 
 import { Task, type NeedAdvertisement } from '../Task';
 import type { EnvObject } from '../../envobjects/EnvObject';
+import { addLog } from '../../characters/Log';
 
 export class Sabotage extends Task {
   readonly name = 'Sabotage';
@@ -23,6 +24,7 @@ export class Sabotage extends Task {
 
   protected onStart() {
     this.duration = 5;
+    if (this.character) addLog('TANTRUM_START', this.character);
   }
 
   protected onUpdate(dt: number) {

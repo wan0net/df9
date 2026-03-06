@@ -6,6 +6,7 @@
 import { Task, type NeedAdvertisement } from '../Task';
 import { GameRules, MAT_CORPSE_MIN, MAT_CORPSE_MAX } from '../../core/GameRules';
 import { Base } from '../../core/Base';
+import { MORALE_MINE_ASTEROID } from '../../characters/CharacterConstants';
 
 export class DropOffCorpse extends Task {
   readonly name = 'DropOffCorpse';
@@ -26,6 +27,8 @@ export class DropOffCorpse extends Task {
       GameRules.nMatter += matter;
       Base.incrementStat('nCorpsesRecycled');
       Base.addAlert('recycle', `Corpse recycled for ${matter} matter`);
+      // mirrors DropOffCorpse.lua:34 — uses MORALE_MINE_ASTEROID constant on completion
+      this.character?.addMorale(MORALE_MINE_ASTEROID);
       this.complete();
     }
   }

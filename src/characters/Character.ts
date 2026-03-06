@@ -4,30 +4,47 @@ import { tileToScreen } from '../world/IsometricUtils';
 import { TILE_HALF_W, TILE_HALF_H } from '../config';
 import { generateName } from './CitizenNames';
 import { generatePersonality, type PersonalityTraits } from './Personality';
+import { getAllTopics, getTopicForActivity } from './Topics';
 import {
   UNEMPLOYED, TEAM_ID_PLAYER, JOB_NAMES, tJobs,
   BUILDER, TECHNICIAN, MINER, EMERGENCY, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR,
   STARTING_HIT_POINTS, BASE_SPEED,
   MORALE_MAX, MORALE_MIN, MORALE_TICK,
-  MAX_ROOM_MORALE_BOOST, ROOM_MORALE_TICK,
+  MAX_ROOM_MORALE_BOOST, ROOM_MORALE_TICK, ROOM_MORALE_FALLOFF_END,
   ANGER_MAX, ANGER_REDUCTION_PER_MORALE_TICK,
   MORALE_COMPETENCY_THRESHOLD, MORALE_COMPETENCY_MODIFIER,
   MORALE_SPEED_THRESHOLD, MORALE_LOW_SPEED_MODIFIER, MORALE_HIGH_SPEED_MODIFIER,
-  EXPERIENCE_PER_LEVEL, MAX_COMPETENCY,
+  MORALE_LOW_OXYGEN, MORALE_LOW_OXYGEN_THRESHOLD, MORALE_NEEDS_MET_BONUS,
+  MORALE_NEEDS_LOW, MORALE_NEEDS_DECREASE, MORALE_NEEDS_HIGH, MORALE_NEEDS_INCREASE,
+  EXPERIENCE_PER_LEVEL, MAX_COMPETENCY, STARTING_SKILL_POINTS,
   MAX_CHANCE_TO_FAIL, NO_FAIL_COMPETENCY_THRESHOLD,
   STATUS_HEALTHY, STATUS_DEAD, STATUS_SICK, STATUS_ILL, STATUS_INCAPACITATED,
+  STATUS_RAMPAGE, STATUS_RAMPAGE_NONVIOLENT, STATUS_RAMPAGE_VIOLENT,
   CAUSE_OF_DEATH,
   SPACESUIT_MAX_OXYGEN,
+  OXYGEN_SUFFOCATING, OXYGEN_SUFFOCATION_UNTIL_DEATH,
+  UNNECESSARY_SPACESUIT_REMOVE,
+  ANGER_REDUCTION_PER_MORALE_TICK_BRIG, VIOLENT_RAMPAGE_CHANCE,
+  MAX_AFFINITY, STARTING_AFFINITY,
+  MORALE_CITIZEN_DIES_MIN, MORALE_CITIZEN_DIES_MAX,
+  MORALE_MAX_FAMILIARITY_DEATH, MORALE_MAX_AFFINITY_DEATH,
+  DUTY_AFFINITY_XP_MAX_RATE, DUTY_AFFINITY_MORALE_MAX,
+  RACE_HUMAN, RACE_TYPE, type RaceTypeDef,
+  HUMAN_RACE_PCT, CAT_RACE_PCT,
+  RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK, RACE_CHICKEN, RACE_SHAMON,
 } from './CharacterConstants';
+import { GameRules } from '../core/GameRules';
 import { Malady, type MaladyInstance } from '../malady/Malady';
 import { CharacterInventory, createRandomStartingStuff } from '../inventory/Inventory';
 import type { Task } from '../utility/Task';
+import { type LogEntry, addLog, postLogFromQueue, getLogCooldown, setElapsedTimeProvider } from './Log';
 
 /** Character stats block (mirrors Lua tStats) */
 export interface CharacterStats {
   sName: string;
   nJob: number;
   nTeam: number;
+  nRace: number;
   nHP: number;
   nMaxHP: number;
   nStatus: number;
@@ -50,11 +67,18 @@ export class Character {
   nMorale = 50;
   nAnger = 0;
 
-  // ── Affinity tracking ───────────────────────────────────────
-  tAffinity: Map<number, number> = new Map();
+  // ── Affinity & Familiarity (mirrors Lua Character.tAffinity/tFamiliarity) ──
+  /** Topic-keyed affinity map. Keys: person IDs, 'DUTY_Builder', 'TAG_Red', etc. */
+  tAffinity: Map<string, number> = new Map();
+  /** Person-keyed familiarity map. Keys: character unique IDs. */
+  tFamiliarity: Map<number, number> = new Map();
 
   // Spacewalking (original: tStatus.bSpacewalking)
   bSpacewalking = false;
+  // On fire (original: Character.onFire)
+  bOnFire = false;
+  /** Total times this character has caught fire (for log). */
+  nTotalTimesOnFire = 0;
 
   // ── Equipment & inventory ───────────────────────────────────
   /** Active diseases/maladies. */
@@ -75,17 +99,42 @@ export class Character {
   nSuitOxygen = 0;
   /** Cause of death (0 = alive) */
   nCauseOfDeath = 0;
-  /** Rampage state */
+  /** Rampage state (Lua tStatus.bRampageViolent / bRampageNonviolent) */
   bRampaging = false;
   bViolentRampage = false;
+  bNonviolentRampage = false;
+  /** Whether rampage has been observed by nearby characters. */
+  bRampageObserved = false;
+  /** Marked for cuffing by security (Lua tStatus.bMarkedForCuff). */
+  bMarkedForCuff = false;
+  /** Marked for execution by security (Lua tStatus.bMarkedForExecution). */
+  bMarkedForExecution = false;
+  /** Brawl partners keyed by character ID → start time (Lua tStatus.tBrawlingWith). */
+  tBrawlingWith = new Map<number, number>();
 
-  /** Work shift tracking */
-  bOnShift = true;
-  private shiftTimer = 0;
+  // ── Log/journal system (mirrors Lua Character.tLog/tLogQueue) ──
+  tLog: LogEntry[] = [];
+  tLogQueue: LogEntry[] = [];
+  /** Cooldown timer for log posting. */
+  private logCooldown = 0;
+
+  /** Duty cycle: countdown timer (Lua nRemainingDutyTime).
+   *  Positive = on duty, negative = off duty. Decrements every frame. */
+  nRemainingDutyTime = 0;
   /** Shift duration in seconds */
   static readonly SHIFT_DURATION = 270;
   /** Rest duration in seconds */
   static readonly SHIFT_COOLDOWN = 360;
+
+  // ── Survival state ─────────────────────────────────────────
+  /** Suffocation timer in seconds (Lua tStatus.suffocationTime). Accumulates while O2 < OXYGEN_SUFFOCATING. */
+  suffocationTime = 0;
+  /** Low oxygen flag (Lua tStatus.bLowOxygen). */
+  bLowOxygen = false;
+  /** Timer for auto-removing unnecessary spacesuit in pressurized rooms. */
+  private nUnnecessarySpacesuit = -1; // -1 = not tracking
+  /** Time this character joined (immigration timestamp). */
+  nJoinTime = 0;
 
   // Movement
   path: { x: number; y: number }[] = [];
@@ -100,6 +149,12 @@ export class Character {
 
   // Morale tick accumulator
   private moraleTickAccum = 0;
+  /** Rolling room morale buffer (Lua tRoomScores, 5 samples averaged). */
+  private tRoomScores: number[] = [];
+
+  // ── Memory system (mirrors Lua Character.tMemory) ────────────
+  /** Timed memory store: key → { value, expiry (GameRules.elapsedTime) } */
+  private tMemory = new Map<string, { value: unknown; expiry: number }>();
 
   constructor(id: number, tileX: number, tileY: number) {
     this.id = id;
@@ -118,6 +173,7 @@ export class Character {
       sName: name,
       nJob: startingJob,
       nTeam: TEAM_ID_PLAYER,
+      nRace: Character.rollRace(),
       nHP: STARTING_HIT_POINTS,
       nMaxHP: STARTING_HIT_POINTS,
       nStatus: STATUS_HEALTHY,
@@ -126,39 +182,245 @@ export class Character {
       tCompetency: {},
     };
 
-    // Start with some competency in assigned job
-    this.tStats.tCompetency[startingJob] = Math.random() * 0.3;
+    // Skill-point budget allocation (Lua: STARTING_SKILL_POINTS=8 across random jobs)
+    const availableJobs = [...tJobs];
+    let nPoints = STARTING_SKILL_POINTS;
+    while (availableJobs.length > 0 && nPoints > 0) {
+      const idx = Math.floor(Math.random() * availableJobs.length);
+      const job = availableJobs.splice(idx, 1)[0];
+      let pts: number;
+      if (availableJobs.length === 0) {
+        // Last job gets all remaining points (up to max starting competency)
+        pts = Math.min(nPoints, Math.round(MAX_COMPETENCY * 0.2)); // ~2 points max
+      } else {
+        pts = Math.floor(Math.random() * Math.min(nPoints, 3)) + 1;
+      }
+      this.tStats.tCompetency[job] = Math.min(1, pts / MAX_COMPETENCY);
+      nPoints -= pts;
+    }
+
+    // Init duty cycle to random off-duty state (Lua: -SHIFT_COOLDOWN * random(0.1, 1))
+    this.nRemainingDutyTime = -Character.SHIFT_COOLDOWN * (0.1 + Math.random() * 0.9);
+
+    // Join time
+    this.nJoinTime = GameRules.elapsedTime;
 
     const pos = tileToScreen(tileX, tileY);
     this.screenX = pos.x + TILE_HALF_W;
     this.screenY = pos.y + TILE_HALF_H;
   }
 
+  // ── Race generation (Lua CharacterConstants spawn rates) ──
+
+  /** Roll a random citizen race. 60% human, 2% cat, rest split evenly. */
+  static rollRace(): number {
+    const roll = Math.random() * 100;
+    if (roll < HUMAN_RACE_PCT) return RACE_HUMAN;
+    if (roll < HUMAN_RACE_PCT + CAT_RACE_PCT) return RACE_CAT;
+    // Remaining races split evenly among: JELLY, TOBIAN, BIRDSHARK, CHICKEN, SHAMON
+    const remainingRaces = [RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK, RACE_CHICKEN, RACE_SHAMON];
+    return remainingRaces[Math.floor(Math.random() * remainingRaces.length)];
+  }
+
   // ── Accessors ──────────────────────────────────────────────
 
   getName(): string { return this.tStats.sName; }
+  getRace(): number { return this.tStats.nRace; }
+  getRaceDef(): RaceTypeDef { return RACE_TYPE[this.tStats.nRace] ?? RACE_TYPE[RACE_HUMAN]; }
   getJob(): number { return this.tStats.nJob; }
   getJobName(): string { return JOB_NAMES[this.tStats.nJob] ?? 'Unknown'; }
   getHP(): number { return this.tStats.nHP; }
+  setHP(hp: number) { this.tStats.nHP = Math.max(0, Math.min(this.tStats.nMaxHP, hp)); }
+  /** Apply damage to this character. Kills if HP drops to 0. */
+  takeDamage(amount: number) {
+    this.tStats.nHP = Math.max(0, this.tStats.nHP - amount);
+  }
+  /** Whether character has been stunned/knocked out (Lua KnockedOut malady). */
+  bIncapacitated = false;
   isAlive(): boolean { return this.tStats.nStatus !== STATUS_DEAD; }
+  /** Whether this character breathes (MONSTER/KILLBOT do not). */
+  doesBreathe(): boolean { return this.getRaceDef().bBreathes; }
+  /** Whether this character can be cuffed (MONSTER/KILLBOT cannot). */
+  canBeCuffed(): boolean { return this.getRaceDef().bCanBeCuffed; }
+  /** Whether this character can receive medical treatment (MONSTER/KILLBOT cannot). */
+  canBeTreated(): boolean { return this.getRaceDef().bCanBeTreated; }
+  /** Get melee damage for this character's race. */
+  getMeleeDamage(): number { return this.getRaceDef().nMeleeDamage; }
 
   setJob(job: number) {
     this.tStats.nJob = job;
   }
 
+  // ── Affinity methods (mirrors Lua Character:getAffinity/addAffinity) ──
+
+  /** Check if affinity exists for a topic without auto-generating. */
+  hasAffinity(key: string): boolean {
+    return this.tAffinity.has(key);
+  }
+
+  /** Generate initial random affinity for a topic (Lua Character:generateAffinityFor). */
+  generateAffinityFor(topicID: string): void {
+    if (this.tAffinity.has(topicID)) return;
+    const nMin = -STARTING_AFFINITY;
+    const nMax = STARTING_AFFINITY;
+    this.tAffinity.set(topicID, nMin + Math.random() * (nMax - nMin));
+  }
+
+  /** Get affinity for a topic key. Auto-generates random initial value if missing. */
+  getAffinity(key: string): number {
+    if (!this.tAffinity.has(key)) {
+      this.generateAffinityFor(key);
+    }
+    return this.tAffinity.get(key)!;
+  }
+
+  /** Add to affinity, clamped to [-MAX_AFFINITY, MAX_AFFINITY]. */
+  addAffinity(key: string, delta: number): void {
+    const current = this.getAffinity(key);
+    this.tAffinity.set(key, Math.max(-MAX_AFFINITY, Math.min(MAX_AFFINITY, current + delta)));
+  }
+
+  /** Get normalized affinity (0-1 range). -20→0, 0→0.5, +20→1. */
+  getNormalizedAffinity(key: string): number {
+    return 0.5 + 0.5 * this.getAffinity(key) / MAX_AFFINITY;
+  }
+
+  /** Get job affinity. */
+  getJobAffinity(jobId?: number): number {
+    const job = jobId ?? this.tStats.nJob;
+    return this.getAffinity(`DUTY_${JOB_NAMES[job] ?? 'Unknown'}`);
+  }
+
+  /** Get affinity for an activity (Lua Character:getAffinityForActivity). */
+  getAffinityForActivity(activityName: string): number | null {
+    const topic = getTopicForActivity(activityName);
+    if (topic) return this.getAffinity(topic);
+    return null;
+  }
+
+  /** Get favorite topic in a category (highest affinity). Lua: Character:getFavorite. */
+  getFavorite(category: string): string | null {
+    const topics = getAllTopics();
+    let favorite: string | null = null;
+    let favAff = -MAX_AFFINITY;
+    for (const [topicID, tData] of Object.entries(topics)) {
+      if (tData.category === category) {
+        const aff = this.getAffinity(topicID);
+        if (aff > favAff) {
+          favorite = topicID;
+          favAff = aff;
+        }
+      }
+    }
+    return favorite;
+  }
+
+  /** Get people with affinity above/below threshold. Lua: Character:getPeopleOfAffinity. */
+  getPeopleOfAffinity(nAffinity: number, bGreaterThan: boolean): { sID: string; nAffinity: number }[] {
+    const results: { sID: string; nAffinity: number }[] = [];
+    const topics = getAllTopics();
+    for (const [topicID, tData] of Object.entries(topics)) {
+      if (tData.category !== 'People' || topicID === String(this.id)) continue;
+      const aff = this.getAffinity(topicID);
+      if (bGreaterThan ? aff >= nAffinity : aff < nAffinity) {
+        results.push({ sID: topicID, nAffinity: aff });
+      }
+    }
+    return results;
+  }
+
+  // ── Familiarity methods (mirrors Lua Character:getFamiliarity/addFamiliarity) ──
+
+  /** Get familiarity with another character (0 = stranger). */
+  getFamiliarity(charId: number): number {
+    return this.tFamiliarity.get(charId) ?? 0;
+  }
+
+  /** Add familiarity with another character. */
+  addFamiliarity(charId: number, amount: number): void {
+    this.tFamiliarity.set(charId, (this.tFamiliarity.get(charId) ?? 0) + amount);
+  }
+
+  /** Calculate morale loss from a death based on affinity/familiarity.
+   * Lua: lerp(-4, -60, (familiarity * affinity) / (100 * 10)) */
+  getDeathMoraleLoss(deadCharId: number): number {
+    const familiarity = Math.min(this.getFamiliarity(deadCharId), MORALE_MAX_FAMILIARITY_DEATH);
+    const affinity = Math.max(0, Math.min(this.getAffinity(String(deadCharId)), MORALE_MAX_AFFINITY_DEATH));
+    const pct = (familiarity * affinity) / (MORALE_MAX_FAMILIARITY_DEATH * MORALE_MAX_AFFINITY_DEATH);
+    return MORALE_CITIZEN_DIES_MIN + (MORALE_CITIZEN_DIES_MAX - MORALE_CITIZEN_DIES_MIN) * pct;
+  }
+
+  /** Get job affinity XP multiplier (0.5x to 1.5x). */
+  getJobXPMultiplier(jobId?: number): number {
+    const norm = this.getNormalizedAffinity(`DUTY_${JOB_NAMES[jobId ?? this.tStats.nJob] ?? 'Unknown'}`);
+    return (1 - DUTY_AFFINITY_XP_MAX_RATE) + 2 * DUTY_AFFINITY_XP_MAX_RATE * norm;
+  }
+
+  /** Get job affinity morale modifier (-0.4 to +0.4). */
+  getJobMoraleModifier(jobId?: number): number {
+    const norm = this.getNormalizedAffinity(`DUTY_${JOB_NAMES[jobId ?? this.tStats.nJob] ?? 'Unknown'}`);
+    return -DUTY_AFFINITY_MORALE_MAX + 2 * DUTY_AFFINITY_MORALE_MAX * norm;
+  }
+
+  // ── Memory system ──────────────────────────────────────────
+
+  /** Store a memory with a duration in seconds (Lua Character:storeMemory). */
+  storeMemory(key: string, value: unknown, duration: number): void {
+    this.tMemory.set(key, { value, expiry: GameRules.elapsedTime + duration });
+  }
+
+  /** Retrieve a memory, returning null if expired or absent (Lua Character:retrieveMemory). */
+  retrieveMemory(key: string): unknown {
+    const entry = this.tMemory.get(key);
+    if (!entry) return null;
+    if (GameRules.elapsedTime >= entry.expiry) {
+      this.tMemory.delete(key);
+      return null;
+    }
+    return entry.value;
+  }
+
+  /** Remove a specific memory. */
+  clearMemory(key: string): void {
+    this.tMemory.delete(key);
+  }
+
+  /** Tick memory: purge expired entries (called from update). */
+  private tickMemory(): void {
+    const now = GameRules.elapsedTime;
+    for (const [key, entry] of this.tMemory) {
+      if (now >= entry.expiry) {
+        this.tMemory.delete(key);
+      }
+    }
+  }
+
+  /** Get all memory entries (for save/load). */
+  getMemoryEntries(): [string, { value: unknown; expiry: number }][] {
+    return Array.from(this.tMemory.entries());
+  }
+
+  /** Restore memory entries (from save data). */
+  loadMemoryEntries(entries: [string, { value: unknown; expiry: number }][]): void {
+    this.tMemory.clear();
+    for (const [key, entry] of entries) {
+      this.tMemory.set(key, entry);
+    }
+  }
+
   // ── Update ─────────────────────────────────────────────────
 
   update(delta: number) {
-    // Work shift timer
     const dtSec = delta / 1000;
-    this.shiftTimer += dtSec;
-    if (this.bOnShift && this.shiftTimer >= Character.SHIFT_DURATION) {
-      this.bOnShift = false;
-      this.shiftTimer = 0;
-    } else if (!this.bOnShift && this.shiftTimer >= Character.SHIFT_COOLDOWN) {
-      this.bOnShift = true;
-      this.shiftTimer = 0;
-    }
+
+    // Duty cycle countdown (Lua Character.lua:2358)
+    this.nRemainingDutyTime -= dtSec;
+
+    // Violent-rampage auto-end: if only 1 character left on team (Lua Character.lua:2347-2351)
+    // (checked by CharacterManager which has team info)
+
+    // Tick memory expiry
+    this.tickMemory();
 
     // Tick maladies (contagion, stages, specials, expiry)
     Malady.tickMaladies(this, dtSec);
@@ -169,6 +431,13 @@ export class Character {
       this.tStats.nStatus = hasSevere ? STATUS_ILL : STATUS_SICK;
     } else if (this.maladies.length === 0 && (this.tStats.nStatus === STATUS_SICK || this.tStats.nStatus === STATUS_ILL)) {
       this.tStats.nStatus = STATUS_HEALTHY;
+    }
+
+    // Log tick — post queued log entry when cooldown expires
+    this.logCooldown -= dtSec;
+    if (this.logCooldown <= 0 && this.tLogQueue.length > 0) {
+      postLogFromQueue(this);
+      this.logCooldown = getLogCooldown(this);
     }
 
     if (this.moving) {
@@ -197,22 +466,60 @@ export class Character {
     if (this.moraleTickAccum >= MORALE_TICK) {
       this.moraleTickAccum -= MORALE_TICK;
 
-      // Decay anger
-      this.nAnger = Math.max(0, this.nAnger - ANGER_REDUCTION_PER_MORALE_TICK);
-
-      // Morale drifts based on needs
-      const avgNeed = (this.needs.hunger + this.needs.energy + this.needs.amusement + this.needs.social) / 4;
-      if (avgNeed < 30) {
-        this.nMorale = Math.max(MORALE_MIN, this.nMorale - 2);
-      } else if (avgNeed > 70) {
-        this.nMorale = Math.min(MORALE_MAX, this.nMorale + 1);
+      // Anger reduction first (Lua tickMorale lines 5996-6001)
+      if (this.bCuffed) {
+        this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK_BRIG);
+      } else {
+        this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK);
       }
 
-      // Room morale drift — characters drift toward the room's morale score
-      if (roomMoraleScore !== 0) {
-        const drift = Math.min(MAX_ROOM_MORALE_BOOST, Math.abs(roomMoraleScore) * 0.1);
-        if (roomMoraleScore > 0) {
-          this.nMorale = Math.min(MORALE_MAX, this.nMorale + drift);
+      // Hostiles skip morale
+      if (this.tStats.nTeam !== TEAM_ID_PLAYER) return;
+
+      // Skip morale tick while sleeping or rampaging (Lua Character.lua:6045)
+      const taskName = this.currentTask?.name;
+      if (taskName === 'SleepInBed' || taskName === 'SleepOnFloor' || this.bRampaging) {
+        return;
+      }
+
+      // Low O2 morale penalty — mirrors Character.lua:6063-6069
+      // Fires when no spacesuit and average O2 < MORALE_LOW_OXYGEN_THRESHOLD (Lua tile scale 0-65535)
+      const o2LuaScale = this.needs.oxygen / 100 * 65535;
+      if (!this.bSpacesuit && o2LuaScale < MORALE_LOW_OXYGEN_THRESHOLD) {
+        this.addMorale(MORALE_LOW_OXYGEN);
+        return; // Skip other morale effects this tick (mirrors Lua early return)
+      }
+
+      // Morale drifts based on needs (needs range -100..+100)
+      const avgNeed = (this.needs.hunger + this.needs.energy + this.needs.amusement + this.needs.social) / 4;
+      if (avgNeed < MORALE_NEEDS_LOW) {
+        this.addMorale(MORALE_NEEDS_DECREASE);
+      } else if (avgNeed > MORALE_NEEDS_HIGH) {
+        this.addMorale(MORALE_NEEDS_INCREASE);
+      }
+
+      // Needs-met bonus — mirrors Character.lua:6067-6069
+      // When all needs positive (met in -100..+100 scale) and morale negative
+      const bAllNeedsMet = this.needs.hunger > 0 && this.needs.energy > 0 &&
+        this.needs.amusement > 0 && this.needs.social > 0;
+      if (bAllNeedsMet && this.nMorale < 0) {
+        this.addMorale(MORALE_NEEDS_MET_BONUS);
+      }
+
+      // Job morale modifier (Lua Character.lua:6075 — duty affinity)
+      this.addMorale(this.getJobMoraleModifier());
+
+      // Room morale drift — rolling 5-sample average (Lua tRoomScores buffer)
+      // Diminishing returns: no room morale bonus above morale 60 (Lua ROOM_MORALE_FALLOFF_END)
+      this.tRoomScores.push(roomMoraleScore);
+      if (this.tRoomScores.length > 5) this.tRoomScores.shift();
+      const avgRoomMorale = this.tRoomScores.reduce((a, b) => a + b, 0) / this.tRoomScores.length;
+      if (avgRoomMorale !== 0) {
+        const drift = Math.min(MAX_ROOM_MORALE_BOOST, Math.abs(avgRoomMorale) * 0.1);
+        if (avgRoomMorale > 0) {
+          if (this.nMorale < ROOM_MORALE_FALLOFF_END) {
+            this.nMorale = Math.min(MORALE_MAX, this.nMorale + drift);
+          }
         } else {
           this.nMorale = Math.max(MORALE_MIN, this.nMorale - drift);
         }
@@ -225,16 +532,143 @@ export class Character {
     this.nMorale = Math.max(MORALE_MIN, Math.min(MORALE_MAX, this.nMorale + amount));
   }
 
-  /** Apply anger change (scaled by temper trait and morale). */
+  /** Apply anger change (scaled by temper trait and morale).
+   * Mirrors Lua Character:angerEvent exactly:
+   *   nMoraleMult = 2 - 1.6 * nMorale / 100  (maps [100→0.4, -100→3.6])
+   *   if random() > nTemper then nAmt *= 0.25  (low temper usually deflects)
+   */
   addAnger(amount: number) {
-    let scaled = amount;
-    // Temper personality trait scales anger gain
+    // Linear morale multiplier: good mood deflects anger, bad mood amplifies it
+    const moraleMult = 2 - 1.6 * this.nMorale / 100;
+    let scaled = amount * moraleMult;
+    // Temper as probability gate: high temper rarely deflects, low temper usually does
     const temper = this.tStats.personality.nTemper ?? 0.5;
-    scaled *= 0.5 + temper;
-    // Good morale reduces anger gain, bad morale amplifies it
-    if (this.nMorale > 50) scaled *= 0.4;
-    else if (this.nMorale < -50) scaled *= 2.0;
+    if (Math.random() > temper) {
+      scaled *= 0.25;
+    }
     this.nAnger = Math.min(ANGER_MAX, Math.max(0, this.nAnger + scaled));
+
+    // Trigger rampage at max anger (Lua Character.lua:5827-5830)
+    if (this.nAnger >= ANGER_MAX && !this.bRampaging && !this.bCuffed) {
+      const eType = Math.random() < VIOLENT_RAMPAGE_CHANCE
+        ? STATUS_RAMPAGE_VIOLENT : STATUS_RAMPAGE_NONVIOLENT;
+      this.beginRampage(eType);
+    }
+  }
+
+  /** Reduce anger with morale multiplier (Lua Character:angerReduction).
+   *  Violent rampagers don't cool down unless in prison. */
+  angerReduction(amount: number) {
+    if (this.bViolentRampage && !this.bCuffed) return;
+
+    // Remap morale to [0.7, 1.3) multiplier (Lua: .7 + .6 * nMorale / 100)
+    const moraleMult = 0.7 + 0.6 * this.nMorale / 100;
+    this.nAnger = Math.max(0, this.nAnger - amount * moraleMult);
+    if (this.nAnger === 0 && this.bRampaging) {
+      this.endRampage();
+    }
+  }
+
+  /** Start a rampage (Lua Character:beginRampage). */
+  beginRampage(eStatusType: number) {
+    this.nAnger = ANGER_MAX;
+    this.bRampaging = true;
+
+    if (eStatusType === STATUS_RAMPAGE_NONVIOLENT) {
+      if (!this.bViolentRampage) {
+        this.bNonviolentRampage = true;
+      }
+      addLog('TANTRUM_START', this);
+    } else if (eStatusType === STATUS_RAMPAGE_VIOLENT) {
+      this.bViolentRampage = true;
+      this.bNonviolentRampage = false;
+      addLog('RAMPAGE_START', this);
+    }
+
+    // Interrupt current task
+    if (this.currentTask) {
+      this.currentTask = null;
+    }
+  }
+
+  /** End rampage (Lua Character:endRampage). */
+  endRampage() {
+    this.bRampaging = false;
+    this.bViolentRampage = false;
+    this.bNonviolentRampage = false;
+    this.bRampageObserved = false;
+  }
+
+  // ── Cuff/execute marking (Lua Character:setMarkedForCuff) ────────────────
+
+  /** Mark character for cuffing. Angers non-authoritarian citizens. */
+  setMarkedForCuff(bMarked: boolean): void {
+    if (this.bMarkedForCuff === bMarked) return;
+    this.bMarkedForCuff = bMarked;
+    if (bMarked) {
+      // Anger citizen (scaled by inverse of authoritarian trait)
+      if (this.tStats.nTeam === TEAM_ID_PLAYER) {
+        const auth = this.tStats.personality.nAuthoritarian ?? 0.5;
+        this.addAnger(ANGER_MAX * (1 - auth));
+      }
+    } else if (this.bCuffed) {
+      this.bCuffed = false; // uncuff
+    }
+  }
+
+  /** Whether character is marked for cuffing. */
+  isMarkedForCuff(): boolean {
+    return this.bMarkedForCuff;
+  }
+
+  // ── Brawling (Lua Character:isBrawling/startBrawling/stopBrawling) ────────
+
+  /** Check if brawling with another character. */
+  isBrawling(otherId: number): boolean {
+    return this.tBrawlingWith.has(otherId);
+  }
+
+  /** Start a brawl with another character. */
+  startBrawling(otherId: number): void {
+    this.tBrawlingWith.set(otherId, GameRules.elapsedTime);
+  }
+
+  /** Stop brawling with another character. */
+  stopBrawling(otherId: number): void {
+    this.tBrawlingWith.delete(otherId);
+  }
+
+  /** Cuff the character — ends rampage, sets bCuffed. */
+  cuff(): void {
+    this.bCuffed = true;
+    this.bMarkedForCuff = false;
+    this.endRampage();
+  }
+
+  // ── Duty cycle queries (Lua Character:onDuty / wantsWorkShiftTask) ──
+
+  /** Whether currently on duty (positive nRemainingDutyTime). */
+  onDuty(): boolean {
+    return this.nRemainingDutyTime > 0;
+  }
+
+  /** Whether character wants to start/continue a work shift task. */
+  wantsWorkShiftTask(): boolean {
+    if (this.bCuffed) return false;
+    if (this.nRemainingDutyTime > 0) return true;
+    // Currently doing a work task — continue it
+    if (this.currentTask?.tags?.WorkShift) return true;
+    // Been off duty for a long time — favor work (Lua: < -SHIFT_COOLDOWN * 1.5)
+    if (this.nRemainingDutyTime < -Character.SHIFT_COOLDOWN * 1.5) return true;
+    return false;
+  }
+
+  /** Called when a new task starts — reset duty timer if WorkShift task after cooldown.
+   *  Lua Character:_newTaskStarted (lines 2963-2970). */
+  onNewTaskStarted(task: Task) {
+    if (this.nRemainingDutyTime < -Character.SHIFT_COOLDOWN && task.tags?.WorkShift) {
+      this.nRemainingDutyTime = Character.SHIFT_DURATION;
+    }
   }
 
   /** Get effective competency for a job, modified by morale. */
@@ -285,6 +719,25 @@ export class Character {
   }
 
   /** Apply damage to HP */
+  /** Lua Character:catchFire — sets onFire, tracks history, logs. */
+  catchFire(): void {
+    if (!this.bOnFire) {
+      this.bOnFire = true;
+      this.nTotalTimesOnFire++;
+      const tLogData = { sTimesBurned: String(this.nTotalTimesOnFire) };
+      if (this.nTotalTimesOnFire > 1) {
+        addLog('CAUGHT_FIRE_MANY', this, tLogData);
+      } else {
+        addLog('CAUGHT_FIRE', this, tLogData);
+      }
+    }
+  }
+
+  /** Lua Character:douseFire */
+  douseFire(): void {
+    this.bOnFire = false;
+  }
+
   damage(amount: number, cause: number = CAUSE_OF_DEATH.UNSPECIFIED) {
     this.tStats.nHP = Math.max(0, this.tStats.nHP - amount);
     if (this.tStats.nHP <= 0) {
@@ -295,6 +748,16 @@ export class Character {
   /** Kill the character with a specific cause of death. */
   kill(cause: number = CAUSE_OF_DEATH.UNSPECIFIED) {
     if (this.tStats.nStatus === STATUS_DEAD) return; // Already dead
+
+    // Death log (Lua: per-cause log entries)
+    if (cause === CAUSE_OF_DEATH.SUFFOCATION) {
+      addLog('DEATH_SUFFOCATION', this);
+    } else if (cause === CAUSE_OF_DEATH.STARVATION) {
+      addLog('DEATH_STARVATION', this);
+    } else if (cause === CAUSE_OF_DEATH.FIRE) {
+      addLog('DEATH_FIRE', this);
+    }
+
     this.tStats.nHP = 0;
     this.tStats.nStatus = STATUS_DEAD;
     this.nCauseOfDeath = cause;

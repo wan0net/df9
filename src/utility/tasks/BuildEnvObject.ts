@@ -7,6 +7,8 @@ import { Task, type NeedAdvertisement } from '../Task';
 import { CommandQueue } from '../../core/CommandQueue';
 import { Base } from '../../core/Base';
 import { TileType } from '../../world/TileTypes';
+import { MORALE_BUILD_BASE } from '../../characters/CharacterConstants';
+import { Door } from '../../envobjects/Door';
 import type { EnvObject } from '../../envobjects/EnvObject';
 import type { TileGrid } from '../../world/TileGrid';
 
@@ -61,25 +63,33 @@ export class BuildEnvObject extends Task {
       this.targetObj.sBuilderName = this.character.getName();
     }
 
-    // Door-type objects: convert the wall tile to DOOR when construction completes
+    // Door-type objects: convert wall tile(s) to DOOR when construction completes
     if (this.targetObj.tData.door && this.grid) {
-      const { tileX, tileY } = this.targetObj;
-      const current = this.grid.get(tileX, tileY);
-      if (current === TileType.WALL || current === TileType.WALL_PENDING) {
-        // Complete any pending wall build command
-        if (current === TileType.WALL_PENDING) {
-          for (const cmd of CommandQueue.getAllActive()) {
-            if (cmd.type === 'build_tile' && cmd.tileX === tileX && cmd.tileY === tileY) {
-              CommandQueue.complete(cmd.id);
-              break;
+      const convertToDoor = (tx: number, ty: number) => {
+        const current = this.grid!.get(tx, ty);
+        if (current === TileType.WALL || current === TileType.WALL_PENDING) {
+          if (current === TileType.WALL_PENDING) {
+            for (const cmd of CommandQueue.getAllActive()) {
+              if (cmd.type === 'build_tile' && cmd.tileX === tx && cmd.tileY === ty) {
+                CommandQueue.complete(cmd.id);
+                break;
+              }
             }
           }
+          this.grid!.set(tx, ty, TileType.DOOR);
         }
-        this.grid.set(tileX, tileY, TileType.DOOR);
+      };
+      convertToDoor(this.targetObj.tileX, this.targetObj.tileY);
+      // Also convert second tile for 2-wide doors (e.g. Airlock)
+      if (this.targetObj instanceof Door && this.targetObj.secondTileX >= 0) {
+        convertToDoor(this.targetObj.secondTileX, this.targetObj.secondTileY);
       }
     }
 
     CommandQueue.complete(this.commandId);
+
+    // mirrors Character.lua:2795 — builder gets morale on completing construction
+    this.character?.addMorale(MORALE_BUILD_BASE);
 
     Base.addAlert('build', `${this.character?.getName() ?? 'Builder'} built ${this.targetObj.tData.friendlyName}`);
   }

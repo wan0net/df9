@@ -5,6 +5,7 @@
 
 import { Zone } from './Zone';
 import { ZoneType } from '../world/ZoneType';
+import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 
 export class BedZone extends Zone {
   /** Map of bed object ID → assigned character ID (or null if unassigned) */
@@ -73,5 +74,13 @@ export class BedZone extends Zone {
       if (assignedChar === null) available.push(bedId);
     }
     return available;
+  }
+
+  /** Count built Bed objects in this zone's room.
+   * Mirrors Lua BedZone: getPropsOfName('Bed') — dynamic query, no pre-registration needed. */
+  getBedCount(): number {
+    if (!this.room) return 0;
+    return EnvObjectManager.getObjectsByType('Bed')
+      .filter(b => b.rRoom === this.room && b.bBuilt).length;
   }
 }

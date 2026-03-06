@@ -16,6 +16,10 @@ export const DANGER_ZONE = 20;
 export const DESTROYED_FIRE_CHECK_DELAY = 30;
 export const DESTROYED_FIRE_CHECK_INTERVAL = 60;
 export const DESTROYED_FIRE_CHANCE = 0.05;
+/** Fire chance on maintenance failure in danger zone (Lua: 0.2 = 20%). */
+export const PROBABILITY_FIRE_ON_DANGER_ZONE_MAINTAIN_FAILURE = 0.2;
+/** Spark visual frequency in danger zone (seconds between sparks). */
+export const DANGER_SPARK_FREQUENCY = 6;
 
 /** Static callback for renderer notifications. Set from main.ts. */
 export type EnvObjectUpdateFn = (id: number, obj: EnvObject) => void;
@@ -23,6 +27,8 @@ export type EnvObjectUpdateFn = (id: number, obj: EnvObject) => void;
 export class EnvObject implements TaggableObject {
   /** Static callback set by the game loop to notify renderer of visual changes. */
   static onVisualUpdate: EnvObjectUpdateFn | null = null;
+  /** Static callback for spontaneous fire from destroyed objects. */
+  static onFireStart: ((tileX: number, tileY: number) => void) | null = null;
 
   // ObjectList integration
   _ObjectList_ObjectMarker?: ObjectTag;
@@ -66,6 +72,8 @@ export class EnvObject implements TaggableObject {
 
   // Broken timer (for fire chance)
   private nBrokenTimer = 0;
+  private nFireCheckTimer = 0;
+  private bCaughtFire = false;
 
   constructor(sName: string, tileX: number, tileY: number, bFlipX = false, bFlipY = false) {
     this.sName = sName;
@@ -107,12 +115,26 @@ export class EnvObject implements TaggableObject {
     this._notifyRenderer();
   }
 
-  damageCondition(amount: number) {
+  /** Damage condition. If bMaintainFailure and in danger zone with explodeOnFailure,
+   *  20% chance to start a fire (Lua EnvObject:damageCondition). Returns true if fire started. */
+  damageCondition(amount: number, bMaintainFailure = false): boolean {
     this.setCondition(this.nCondition - amount);
+    if (bMaintainFailure && this.nCondition > 0 && this.nCondition <= DANGER_ZONE && this.tData.explodeOnFailure) {
+      if (Math.random() < PROBABILITY_FIRE_ON_DANGER_ZONE_MAINTAIN_FAILURE) {
+        EnvObject.onFireStart?.(this.tileX, this.tileY);
+        return true;
+      }
+    }
+    return false;
   }
 
-  /** Repair object during maintenance task. Returns new condition. */
-  maintain(startCondition: number, competence: number): number {
+  /** Repair object during maintenance task. Returns new condition.
+   *  If task fails (competence too low), damages instead with fire risk. */
+  maintain(startCondition: number, competence: number, bFailed = false): number {
+    if (bFailed) {
+      this.damageCondition(0, true); // 0 damage but triggers fire check in danger zone
+      return this.nCondition;
+    }
     const healPct = MIN_PCT_HEALED_PER_MAINTAIN +
       competence * (MAX_PCT_HEALED_PER_MAINTAIN - MIN_PCT_HEALED_PER_MAINTAIN);
     this.setCondition(Math.min(100, startCondition + healPct));
@@ -180,14 +202,23 @@ export class EnvObject implements TaggableObject {
       }
     }
 
-    // Broken timer (fire chance)
-    if (this.nCondition <= 0) {
+    // Broken timer → spontaneous fire for explodeOnFailure objects
+    if (this.nCondition <= 0 && this.tData.explodeOnFailure && !this.bCaughtFire) {
       this.nBrokenTimer += dt;
       if (this.nBrokenTimer >= DESTROYED_FIRE_CHECK_DELAY) {
-        // Periodic fire check (handled by Fire system in Phase 10)
+        // Every DESTROYED_FIRE_CHECK_INTERVAL, roll DESTROYED_FIRE_CHANCE
+        this.nFireCheckTimer = (this.nFireCheckTimer ?? 0) + dt;
+        if (this.nFireCheckTimer >= DESTROYED_FIRE_CHECK_INTERVAL) {
+          this.nFireCheckTimer = 0;
+          if (Math.random() < DESTROYED_FIRE_CHANCE) {
+            this.bCaughtFire = true;
+            EnvObject.onFireStart?.(this.tileX, this.tileY);
+          }
+        }
       }
-    } else {
+    } else if (this.nCondition > 0) {
       this.nBrokenTimer = 0;
+      this.nFireCheckTimer = 0;
     }
 
     // Update O2 generation state

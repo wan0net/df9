@@ -27,6 +27,7 @@ import { OxygenSystem } from './oxygen/OxygenSystem';
 import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
+import { Door } from './envobjects/Door';
 import { EnvObject } from './envobjects/EnvObject';
 import { tObjects, resolveAlias, getObjectData, getObjectsByFunctionality as getObjsByFunc } from './envobjects/EnvObjectData';
 import { ObjectPlacement } from './building/ObjectPlacement';
@@ -39,6 +40,13 @@ import { ProjectileManager } from './hazards/Projectile';
 import { SaveLoadSystem } from './save/SaveLoad';
 import { researchSystem } from './research/ResearchSystem';
 import { GoalSystem } from './goals/GoalSystem';
+import { addLog, setElapsedTimeProvider, type LogEntry } from './characters/Log';
+import {
+  initializeTopicList, setCharacterProvider, generateCharacterAffinities,
+  addTopic, getRandomImmigrationCategory, getAllTopics, getTopicsByCategory,
+  getTopicName, getSaveData as getTopicsSaveData, fromSaveData as topicsFromSaveData,
+  IMMIGRATION_ADD_TOPIC_CHANCE,
+} from './characters/Topics';
 import { HintSystem } from './hints/HintSystem';
 import { SoundManager } from './audio/SoundManager';
 import { MusicSystem } from './audio/MusicSystem';
@@ -164,6 +172,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Initialize game systems (unchanged logic) ─────────────
   GameRules.init();
+  setElapsedTimeProvider(() => GameRules.elapsedTime);
   const grid = new TileGrid();
   const tileRenderer = new TileRenderer3D(threeRenderer.scene, grid);
   const wallAutoGen = new WallAutoGen(grid);
@@ -196,7 +205,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // Wire door sprite lookup for TileRenderer3D
   tileRenderer.getDoorSpriteAt = (x, y) => {
     const door = EnvObjectManager.getDoorAt(x, y);
-    return door ? door.getSpriteKey() : 'tile_door_closed';
+    if (!door) return 'tile_door_closed';
+    // Secondary tile of a 2-wide door (e.g. Airlock): suppress sprite here;
+    // the primary tile's sprite visually covers both tiles.
+    if (door.secondTileX === x && door.secondTileY === y) return null;
+    return door.getSpriteKey();
   };
 
   // Wire EnvObjectManager lifecycle → EnvObjectRenderer
@@ -207,6 +220,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   };
   EnvObjectManager.onObjectRemoved = (id) => {
     envObjRenderer.removeObject(String(id));
+  };
+  // Wire EnvObject spontaneous fire callback → Fire system
+  EnvObject.onFireStart = (tileX, tileY) => {
+    fire.startFire(tileX, tileY);
   };
   // Wire EnvObject visual updates (condition change, ghost→built, door open/close) → renderer
   EnvObject.onVisualUpdate = (id, obj) => {
@@ -238,7 +255,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   });
 
   const powerSystem = new PowerSystem(grid, roomManager);
-  const lighting = new Lighting(roomManager);
+  const lighting = new Lighting(roomManager); // fire ref set below after Fire is constructed
   lighting.init();
   const eventController = new EventController();
   eventController.init();
@@ -296,30 +313,67 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   };
   const fire = new Fire();
   fire.init();
+  lighting.setFire(fire);
   characterManager.setFire(fire);
   fire.tileCheck = (x, y) => grid.get(x, y);
+  // Lua OXYGEN_TILE_MAX=1000; our room.oxygen is 0-255. Scale to match Lua thresholds.
+  fire.oxygenCheck = (x, y) => {
+    const room = roomManager.getRoomAt(x, y);
+    return room ? (room.oxygen / 255) * 1000 : 0;
+  };
+  fire.tileHealthCheck = (x, y) => grid.getTileHP(x, y);
+  fire.citizenIgnite = (x, y) => {
+    for (const char of characterManager.getAllCharacters()) {
+      if (!char.isAlive() || char.bOnFire) continue;
+      if (char.tileX === x && char.tileY === y) {
+        char.catchFire();
+      }
+    }
+  };
   const projectileManager = new ProjectileManager();
   projectileManager.init();
   characterManager.setProjectileManager(projectileManager);
   const saveLoadSystem = new SaveLoadSystem(grid, roomManager);
 
   // Goal system
-  let _hostilesDefeated = 0;
-  let _siegeSurvived = 0;
   const goalSystem: GoalSystem = new GoalSystem({
-    getRoomCount: () => roomManager.getRooms().length,
     getPopulation: () => characterManager.getPopulation(),
-    getResearchCompleted: () => researchSystem.getCompletedList().length,
-    getHostilesDefeated: () => _hostilesDefeated,
     getMatter: () => GameRules.nMatter,
-    getUniqueZones: () => {
-      const zones = new Set(roomManager.getRooms().map(r => r.zone));
-      return zones.size;
+    getOwnedTileCount: () => {
+      // Count all floor/wall tiles owned by the player (tiles in rooms)
+      let count = 0;
+      for (const room of roomManager.getRooms()) {
+        count += room.tiles.length;
+      }
+      return count;
     },
-    getSiegeSurvived: () => _siegeSurvived,
-    getAllMoraleAbove: (threshold: number) => {
-      const chars = characterManager.getCharacters();
-      return chars.length > 0 && chars.every(c => c.nMorale > threshold);
+    getBuiltObjectTypeCount: () => {
+      const builtTypes = new Set<string>();
+      for (const obj of EnvObjectManager.getObjects()) {
+        if (obj.bBuilt) builtTypes.add(obj.sName);
+      }
+      // Count types that show in object menu (matching Lua showInObjectMenu check)
+      let total = 0;
+      for (const def of Object.values(tObjects)) {
+        if (def.showInObjectMenu !== false) total++;
+      }
+      return { built: builtTypes.size, total };
+    },
+    getResearchedTechCount: () => {
+      const completed = researchSystem.getCompletedList();
+      const allResearch = researchSystem.getAllResearch();
+      let total = 0;
+      for (const r of Object.values(allResearch)) {
+        if (!r.bDiscoverOnly) total++;
+      }
+      return { researched: completed.length, total };
+    },
+    getHappyCitizenCount: (moraleThreshold: number) => {
+      return characterManager.getCharacters().filter(c => c.nMorale > moraleThreshold).length;
+    },
+    checkFinalSiege: () => {
+      // TODO: implement when mega-event tracking is complete
+      return false;
     },
   });
 
@@ -336,12 +390,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // Wire save/load data providers
   saveLoadSystem.getCharacterData = () => characterManager.getCharacters().map(c => ({
     id: c.id, tileX: c.tileX, tileY: c.tileY,
-    name: c.getName(), job: c.getJob(), team: c.tStats.nTeam,
+    name: c.getName(), job: c.getJob(), team: c.tStats.nTeam, race: c.tStats.nRace,
     hp: c.getHP(), maxHP: c.tStats.nMaxHP, status: c.tStats.nStatus,
     xp: c.tStats.nXP, competency: { ...c.tStats.tCompetency },
-    morale: c.nMorale, anger: c.nAnger, bOnShift: c.bOnShift,
+    morale: c.nMorale, anger: c.nAnger, nRemainingDutyTime: c.nRemainingDutyTime,
     weapon: c.weapon, bSpacesuit: c.bSpacesuit, nSuitOxygen: c.nSuitOxygen,
     maladies: c.maladies.map(m => ({ ...m })),
+    tLog: c.tLog.slice(-100),
+    needs: { ...c.needs },
+    inventory: c.inventory.getAll().map(i => ({ sTemplate: i.sTemplate, sName: i.sName, nCount: i.nCount })),
   }));
   saveLoadSystem.getObjectData = () => EnvObjectManager.getObjects().map(o => ({
     name: o.sName, tileX: o.tileX, tileY: o.tileY,
@@ -353,6 +410,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     completed: researchSystem.getCompletedList(),
   });
   saveLoadSystem.getEventData = () => eventController.getSaveData();
+  saveLoadSystem.getTopicsData = () => getTopicsSaveData();
+
+  // Wire load callbacks (event controller has loadSaveData)
+  saveLoadSystem.loadEventData = (data) => {
+    eventController.loadSaveData(data);
+  };
 
   // Register subsystems
   GameRules.registerSystem(2, new OxygenTickAdapter(oxygenSystem));
@@ -362,11 +425,30 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   createSpaceBackground(threeRenderer);
 
   // ── Generate world ────────────────────────────────────────
-  const landingZone = initData.landingZone as { x: number; y: number; density: number } | undefined;
+  const landingZone = initData.landingZone as { x: number; y: number; density: number; threat: number; distance: number; interference: number } | undefined;
   const worldResult = generateWorld(grid, wallAutoGen, landingZone);
+
+  // Wire galaxy position into event system difficulty
+  if (landingZone) {
+    eventController.setGalaxyValues({
+      population: landingZone.density,
+      hostility: landingZone.threat,
+      asteroids: landingZone.interference,
+    });
+  }
+
+  // When a wall is destroyed, re-flood rooms to detect new breaches
+  grid.onWallDestroyed = (_x, _y) => roomManager.markDirty([]);
 
   roomManager.markDirty([]);
   roomManager.update();
+
+  // Initialize Topics system (Lua Topics.initializeTopicList)
+  setCharacterProvider(
+    () => characterManager.getCharacters(),
+    (id: string) => characterManager.getCharacters().find(c => String(c.id) === id),
+  );
+  initializeTopicList();
 
   // Spawn the initial 3 spacewalking settlers
   characterManager.spawnInitialCrew(worldResult.crewSpawns);
@@ -457,6 +539,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     },
     onSave: () => saveLoadSystem.saveToStorage(),
     onLoad: () => saveLoadSystem.loadFromStorage(),
+    onExport: () => saveLoadSystem.exportToFile(),
+    onImport: () => saveLoadSystem.importFromFile(),
     onSpawn: () => characterManager.spawnCharacter(),
     onObjectSelected: (name) => { /* placeholder */ },
     getCharacters: () => characterManager.getCharacters(),
@@ -522,6 +606,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Room updates
     roomManager.update();
+    roomManager.tick(delta / 1000);
 
     // Power distribution
     powerSystem.update();
@@ -531,6 +616,20 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Event controller
     eventController.setPopulation(characterManager.getPopulation());
+
+    // Passive wall healing (WorldConstants: TILE_HEAL_OVER_TIME = 0.05 HP/sec)
+    grid.healTick(delta / 1000);
+
+    // Zone ticks (airlock pressurisation, bed zone, etc.)
+    const dtSec = delta / 1000;
+    for (const room of roomManager.getRooms()) {
+      // Wire airlock safety check: returns true if any citizen without spacesuit is in room
+      if (room.zoneObj && (room.zoneObj as any).safetyCheck === null) {
+        (room.zoneObj as any).safetyCheck = () =>
+          characterManager.getCharactersAt(room).some(c => !c.bSpacesuit && !c.bSpacewalking);
+      }
+      room.zoneObj?.onTick(dtSec);
+    }
 
     // Master tick
     GameRules.onTick(delta / 1000);
@@ -663,7 +762,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
             Base.addAlert('build', `Cannot place ${objName} at (${tile.x},${tile.y}): ${check.reason} [tile=${tileVal}]`);
           }
           const cost = objectPlacement.placeObject(objName, tile.x, tile.y);
-          if (cost > 0) onTilesChanged([tile]); // Re-detect rooms for door placement
+          if (cost > 0) {
+            const tilesToUpdate = [tile];
+            // 2-wide doors (Airlock): also rerender the second tile
+            const door = EnvObjectManager.getDoorAt(tile.x, tile.y);
+            if (door && door.secondTileX >= 0) {
+              tilesToUpdate.push({ x: door.secondTileX, y: door.secondTileY });
+            }
+            onTilesChanged(tilesToUpdate);
+          }
         } else {
           Base.addAlert('build', 'No object selected — pick one from the list');
         }
@@ -735,8 +842,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   function renderRoomLighting() {
     const currentLit = new Set<string>();
     for (const room of roomManager.getRooms()) {
-      const scheme = lighting.getRoomLightingScheme(room);
-      const tint = lighting.getRoomTint(room.zone, scheme);
+      // scheme + flash timer are updated each frame by Lighting.onTick()
+      const tint = lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
       // Only apply tint if not full white (normal lit)
       if (tint !== 0xffffff) {
         for (const t of room.tiles) {
@@ -863,7 +970,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getBuildMode: () => buildMode,
     getCharacters: () => characterManager.getCharacters().map(c => ({
       id: c.id, x: c.tileX, y: c.tileY, moving: c.moving, spacewalking: c.bSpacewalking,
-      job: c.getJob(), taskName: c.currentTask?.name ?? null,
+      race: c.getRace(), job: c.getJob(), taskName: c.currentTask?.name ?? null,
       hunger: c.needs.hunger, energy: c.needs.energy,
       morale: c.nMorale, anger: c.nAnger, rampaging: c.bRampaging,
       team: c.tStats.nTeam, hp: c.getHP(), alive: c.isAlive(),
@@ -915,6 +1022,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (char) { char.kill(cause); return true; }
       return false;
     },
+    killAllHostiles: () => {
+      let count = 0;
+      for (const char of characterManager.getAllCharacters()) {
+        if (char.isAlive() && char.tStats.nTeam !== 1) { // TEAM_ID_PLAYER=1, FRIENDLY=4
+          char.kill(0);
+          count++;
+        }
+      }
+      return count;
+    },
     spawnCharacterAt: (tileX: number, tileY: number) => {
       const char = characterManager.spawnCharacterAt(tileX, tileY);
       return char.id;
@@ -961,6 +1078,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getActiveEvents: () => eventController.getActiveEvents().map(e => ({
       name: e.name, description: e.description, active: e.isActive(),
     })),
+    getEventDifficulty: () => eventController.getDifficulty(),
+    getGalaxyValues: () => eventController.getGalaxyValues(),
+    getTimeBetweenEvents: () => eventController.getTimeBetweenEvents(),
     getFireCount: () => fire.getFireCount(),
     getActiveFires: () => fire.getActiveFires(),
     startFire: (x: number, y: number) => fire.startFire(x, y),
@@ -1012,6 +1132,44 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       completedCount: goalSystem.getCompletedCount(),
       totalGoals: goalSystem.getTotalGoals(),
     }),
+    // ── Log/Journal System ───────────────────────────────────────
+    getCharacterLog: (charId: number) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      return char ? char.tLog : [];
+    },
+    addCharacterLog: (charId: number, logType: string) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      if (char) addLog(logType, char);
+    },
+    getLogQueueLength: (charId: number) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      return char ? char.tLogQueue.length : 0;
+    },
+    // ── Affinity & Familiarity ──────────────────────────────────
+    getCharacterAffinity: (charId: number, topicKey: string) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      return char ? char.getAffinity(topicKey) : 0;
+    },
+    addCharacterAffinity: (charId: number, topicKey: string, amount: number) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      if (char) char.addAffinity(topicKey, amount);
+    },
+    getCharacterFamiliarity: (charId: number, otherId: number) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      return char ? char.getFamiliarity(otherId) : 0;
+    },
+    addCharacterFamiliarity: (charId: number, otherId: number, amount: number) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      if (char) char.addFamiliarity(otherId, amount);
+    },
+    getDeathMoraleLoss: (charId: number, deadId: number) => {
+      const char = characterManager.getCharacters().find(c => c.id === charId);
+      return char ? char.getDeathMoraleLoss(deadId) : 0;
+    },
+    // ── Topics System ──────────────────────────────────────────
+    getTopicCount: () => Object.keys(getAllTopics()).length,
+    getTopicCategories: () => Object.keys(getTopicsByCategory()),
+    getTopicName: (id: string) => getTopicName(id),
     getStats: () => ({ ...Base.tStats }),
     incrementStat: (key: string, amount?: number) => Base.incrementStat(key as any, amount),
     // ── Inventory System ────────────────────────────────────────
@@ -1050,6 +1208,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     loadGame: () => saveLoadSystem.loadFromStorage('df9_test_save'),
     hasSave: () => saveLoadSystem.hasSave('df9_test_save'),
     deleteSave: () => saveLoadSystem.deleteSave('df9_test_save'),
+    exportSave: () => saveLoadSystem.exportToFile(),
+    importSave: () => saveLoadSystem.importFromFile(),
     // ── Milestone 12: Audio ──────────────────────────────────
     getAudioState: () => ({
       initialized: SoundManager.isInitialized(),

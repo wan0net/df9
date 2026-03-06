@@ -4,6 +4,7 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
+import { MORALE_DID_HOBBY } from '../../characters/CharacterConstants';
 
 export class LiftAtWeightBench extends Task {
   readonly name = 'LiftAtWeightBench';
@@ -21,6 +22,7 @@ export class LiftAtWeightBench extends Task {
 
   protected onUpdate(dt: number) {
     if (this.elapsedTime >= this.duration) {
+      this.character?.addMorale(MORALE_DID_HOBBY);
       this.complete();
     }
   }

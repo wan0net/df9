@@ -4,6 +4,7 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
+import { MORALE_DELIVERED_FOOD } from '../../characters/CharacterConstants';
 
 export class HarvestAndDeliverFood extends Task {
   readonly name = 'HarvestAndDeliverFood';
@@ -21,6 +22,7 @@ export class HarvestAndDeliverFood extends Task {
 
   protected onUpdate(dt: number) {
     if (this.elapsedTime >= this.duration) {
+      this.character?.addMorale(MORALE_DELIVERED_FOOD);
       this.complete();
     }
   }

@@ -5,6 +5,7 @@
 
 import { Task, type NeedAdvertisement } from '../Task';
 import { Base } from '../../core/Base';
+import { MORALE_DELIVERED_FOOD } from '../../characters/CharacterConstants';
 
 export class ServeFoodAtTable extends Task {
   readonly name = 'ServeFoodAtTable';
@@ -23,6 +24,7 @@ export class ServeFoodAtTable extends Task {
   protected onUpdate(dt: number) {
     if (this.elapsedTime >= this.duration) {
       Base.incrementStat('nMealsServed');
+      this.character?.addMorale(MORALE_DELIVERED_FOOD);
       this.complete();
     }
   }

@@ -1,6 +1,6 @@
 /**
  * EventController.ts — Event forecast queue and dispatch.
- * Mirrors EventController.lua: forecast, tick, weighting, difficulty scaling.
+ * Mirrors EventController.lua: single-event execution, forecast, weighting, difficulty scaling.
  */
 
 import { GameRules, type TickableSystem } from '../core/GameRules';
@@ -16,16 +16,21 @@ import { CompoundEvent } from './CompoundEvent';
 import {
   EVENT_DEFS, type EventDef,
   FORECAST_SIZE, FORECAST_ALERT_TIME,
-  MIN_EVENT_GAP, MAX_EVENT_GAP,
-  DIFFICULTY_MAX_TIME, BASE_RAIDER_COUNT, MAX_EXTRA_RAIDERS,
+  FIRST_EVENT_TIME_MIN, FIRST_EVENT_TIME_MAX,
+  COMPOUND_EVENT_TIME, MEGA_EVENT_WEIGHT,
+  MAX_CONSECUTIVE_SAME, PREV_EVENTS_COUNT,
+  POPULATION_CAP,
+  getDifficulty, getChallengeLevel, getExpMod,
+  getNextEventTimeDelta, computeTimeBetweenEvents,
+  rollRandomRaiders,
+  BASE_RAIDER_COUNT, MAX_EXTRA_RAIDERS,
   BASE_RAIDER_HP, MAX_EXTRA_HP,
-  COMPOUND_EVENT_TIME,
 } from './EventData';
 
 /** Time between event checks. */
 const EVENT_CHECK_INTERVAL = 5;
-/** Time before first event. */
-const FIRST_EVENT_DELAY = 400;
+/** Default max setup failures before skipping event (Lua: 30). */
+const DEFAULT_ALLOWED_FAILURES = 30;
 
 export type SpawnCharacterFn = (count: number) => void;
 export type SpawnHostileFn = (count: number, hp: number) => void;
@@ -37,11 +42,16 @@ export type DockingFn = (count: number) => void;
 interface ForecastEntry {
   def: EventDef;
   scheduledTime: number;
+  alertTime: number;
   alerted: boolean;
+  nFailures: number;
+  bFailed: boolean;
 }
 
 export class EventController implements TickableSystem {
-  private activeEvents: Event[] = [];
+  /** Currently executing event (Lua: single event at a time). */
+  private currentEvent: Event | null = null;
+  private currentEventEntry: ForecastEntry | null = null;
   private tickAccum = 0;
   private population = 0;
 
@@ -49,30 +59,61 @@ export class EventController implements TickableSystem {
   private forecast: ForecastEntry[] = [];
   private forecastGenerated = false;
   private compoundEventFired = false;
+  /** Mega event has been run (persisted in save). */
+  private bRanMegaEvent = false;
+  /** Previous events for history. */
+  private prevEvents: { sEventType: string; nCompletionTime: number }[] = [];
+
+  /** Galaxy values from landing zone (0-1 per key). */
+  private galaxyValues: Record<string, number> = {
+    population: 0.5,
+    asteroids: 0.5,
+    hostility: 0.5,
+  };
+  /** Average time between events (computed from galaxy position). */
+  private nTimeBetween = 300;
 
   // ── Callbacks ──────────────────────────────────────────────────
-  /** Callback to spawn immigrant characters. Set from main.ts. */
   onImmigration: SpawnCharacterFn | null = null;
-  /** Callback when a meteor lands. Set from main.ts. */
   onMeteorLand: MeteorLandFn | null = null;
-  /** Callback to spawn hostile raiders. Set from main.ts. */
   onHostileSpawn: SpawnHostileFn | null = null;
-  /** Callback when raiders breach a wall. Set from main.ts. */
   onBreachWall: BreachWallFn | null = null;
-  /** Callback for friendly docking. */
   onDocking: DockingFn | null = null;
 
   init() {
     GameRules.registerSystem(1, this);
   }
 
+  /** Set galaxy position values from landing zone. */
+  setGalaxyValues(values: Record<string, number>) {
+    this.galaxyValues = { ...this.galaxyValues, ...values };
+    this.nTimeBetween = computeTimeBetweenEvents(this.galaxyValues);
+    this.applySpawnModifiers();
+  }
+
+  /** Apply galaxy-position spawn modifiers to event weights. */
+  private applySpawnModifiers() {
+    for (const def of Object.values(EVENT_DEFS)) {
+      const expMod = getExpMod(this.galaxyValues[def.sExpMod] ?? 0.5);
+      let hostileMultiplier = 1;
+      if (def.nChanceObey + def.nChanceHostile > 0) {
+        if (def.bHostile) {
+          hostileMultiplier = 1 / getExpMod(this.galaxyValues['hostility'] ?? 0.5);
+        } else {
+          hostileMultiplier = getExpMod(this.galaxyValues['hostility'] ?? 0.5);
+        }
+      }
+      def.weight = def.nDefaultWeight * expMod * hostileMultiplier;
+    }
+  }
+
   setPopulation(pop: number) {
     this.population = pop;
   }
 
-  /** Current difficulty factor (0-1) based on elapsed time. */
+  /** Current difficulty factor (0-1) using Lua-exact formula. */
   getDifficulty(): number {
-    return Math.min(1, GameRules.simTime / DIFFICULTY_MAX_TIME);
+    return getDifficulty(GameRules.elapsedTime, this.population);
   }
 
   /** Get raider count scaled by difficulty. */
@@ -89,72 +130,156 @@ export class EventController implements TickableSystem {
 
   onTick(dt: number) {
     // Generate forecast on first tick after delay
-    if (!this.forecastGenerated && GameRules.simTime >= FIRST_EVENT_DELAY) {
+    if (!this.forecastGenerated && GameRules.elapsedTime >= FIRST_EVENT_TIME_MIN) {
       this.generateForecast();
       this.forecastGenerated = true;
     }
 
-    // Update active events
-    for (let i = this.activeEvents.length - 1; i >= 0; i--) {
-      const event = this.activeEvents[i];
-      event.update(dt);
-      if (!event.isActive()) {
-        this.activeEvents.splice(i, 1);
+    // Tick current event (Lua: single event at a time)
+    if (this.currentEvent) {
+      this.currentEvent.update(dt);
+      if (!this.currentEvent.isActive()) {
+        this._eventCompleted();
+      }
+    } else {
+      // No active event — process forecast queue
+      this.tickAccum += dt;
+      if (this.tickAccum >= EVENT_CHECK_INTERVAL) {
+        this.tickAccum -= EVENT_CHECK_INTERVAL;
+        this.processForecast();
       }
     }
 
-    // Process forecast queue
-    this.tickAccum += dt;
-    if (this.tickAccum >= EVENT_CHECK_INTERVAL) {
-      this.tickAccum -= EVENT_CHECK_INTERVAL;
-      this.processForecast();
-    }
-
     // Check for compound event (final siege at 6 hours)
-    if (!this.compoundEventFired && GameRules.simTime >= COMPOUND_EVENT_TIME && this.population >= 8) {
+    if (!this.compoundEventFired && GameRules.elapsedTime >= COMPOUND_EVENT_TIME && this.population >= 8) {
       this.fireCompoundEvent();
       this.compoundEventFired = true;
     }
   }
 
-  /** Pre-generate a forecast of future events. */
+  /** Called when the current event finishes. Regenerates forecast and pops next. */
+  private _eventCompleted() {
+    const entry = this.currentEventEntry;
+
+    // Track in previous events
+    if (entry) {
+      this.prevEvents.push({
+        sEventType: entry.def.sEventType,
+        nCompletionTime: GameRules.elapsedTime,
+      });
+      while (this.prevEvents.length > PREV_EVENTS_COUNT) {
+        this.prevEvents.shift();
+      }
+    }
+
+    this.currentEvent = null;
+    this.currentEventEntry = null;
+
+    // Regenerate forecast after event completes (Lua: EventController._eventCompleted)
+    this.generateForecast();
+
+    // Pop next event from forecast
+    if (this.forecast.length > 0) {
+      // Already generated — next event will be processed in processForecast()
+    }
+  }
+
+  /** Pre-generate a forecast of future events with population delta accumulation. */
   private generateForecast() {
     this.forecast = [];
-    let nextTime = GameRules.simTime + MIN_EVENT_GAP + Math.random() * (MAX_EVENT_GAP - MIN_EVENT_GAP);
+    // First event uses the specific Lua range
+    const firstDelay = FIRST_EVENT_TIME_MIN + Math.random() * (FIRST_EVENT_TIME_MAX - FIRST_EVENT_TIME_MIN);
+    let nextTime = Math.max(GameRules.elapsedTime + 10, firstDelay);
+    if (this.forecastGenerated) {
+      nextTime = GameRules.elapsedTime + getNextEventTimeDelta(GameRules.elapsedTime, this.nTimeBetween);
+    }
+
+    let lastEventType = '';
+    let consecutiveCount = 0;
+    let populationEstimate = this.population;
 
     for (let i = 0; i < FORECAST_SIZE; i++) {
-      const def = this.pickWeightedEvent(nextTime);
+      const def = this.pickWeightedEvent(nextTime, lastEventType, consecutiveCount, populationEstimate);
       if (def) {
+        const alertTime = nextTime - (FORECAST_ALERT_TIME + Math.random() * 10);
         this.forecast.push({
           def,
           scheduledTime: nextTime,
+          alertTime,
           alerted: false,
+          nFailures: 0,
+          bFailed: false,
         });
+        if (def.name === lastEventType) {
+          consecutiveCount++;
+        } else {
+          lastEventType = def.name;
+          consecutiveCount = 1;
+        }
+        // Accumulate population delta estimate (Lua: nPopulationDeltaEstimate)
+        populationEstimate += def.nPopulationDelta ?? 0;
       }
-      // Gap oscillates between min and max
-      nextTime += MIN_EVENT_GAP + Math.random() * (MAX_EVENT_GAP - MIN_EVENT_GAP);
+      nextTime += getNextEventTimeDelta(nextTime, this.nTimeBetween);
     }
   }
 
   /** Pick a weighted random event eligible at the given time. */
-  private pickWeightedEvent(atTime: number): EventDef | null {
+  private pickWeightedEvent(
+    atTime: number,
+    lastType: string,
+    consecutiveCount: number,
+    populationEstimate: number,
+  ): EventDef | null {
     const eligible: EventDef[] = [];
     let totalWeight = 0;
 
     for (const key of Object.keys(EVENT_DEFS)) {
       const def = EVENT_DEFS[key];
-      // Use a projected population (current + some growth)
-      if (this.population < def.minPopulation) continue;
-      if (atTime < def.minTime) continue;
+
+      // Population gates (use estimate for forecast)
+      if (def.minPopulation >= 0 && populationEstimate < def.minPopulation) continue;
+      if (def.maxPopulation >= 0 && populationEstimate > def.maxPopulation) continue;
+
+      // Time gate
+      if (def.minTime >= 0 && atTime < def.minTime) continue;
+
+      // Max consecutive same-event
+      if (def.name === lastType && consecutiveCount >= MAX_CONSECUTIVE_SAME) continue;
+
+      // Room gates (Lua: nMaxUndiscoveredRooms, nMaxExteriorRooms)
+      // These would require room manager access — skip for now (most events don't use them)
+
+      let weight = def.weight;
+
+      // Immigration early-game boost (Lua: 1.5x when < 25 min and pop < 12)
+      if (def.sEventType === 'immigrationEvents' && atTime < 1500 && populationEstimate < 12) {
+        weight *= 1.5;
+      }
+
+      // Mega event boost (CompoundEvent weight → 60 after siege time)
+      if (def.sEventType === 'CompoundEvent' && atTime > COMPOUND_EVENT_TIME && !this.bRanMegaEvent) {
+        weight = MEGA_EVENT_WEIGHT;
+      }
+
       eligible.push(def);
-      totalWeight += def.weight;
+      totalWeight += weight;
     }
 
-    if (eligible.length === 0 || totalWeight === 0) return null;
+    // Fallback to immigration if nothing eligible (Lua: line 619)
+    if (eligible.length === 0 || totalWeight === 0) {
+      return EVENT_DEFS['Immigration'] ?? null;
+    }
 
     let pick = Math.random() * totalWeight;
     for (const def of eligible) {
-      pick -= def.weight;
+      let weight = def.weight;
+      if (def.sEventType === 'immigrationEvents' && atTime < 1500 && populationEstimate < 12) {
+        weight *= 1.5;
+      }
+      if (def.sEventType === 'CompoundEvent' && atTime > COMPOUND_EVENT_TIME && !this.bRanMegaEvent) {
+        weight = MEGA_EVENT_WEIGHT;
+      }
+      pick -= weight;
       if (pick <= 0) return def;
     }
     return eligible[eligible.length - 1];
@@ -163,33 +288,72 @@ export class EventController implements TickableSystem {
   /** Process the forecast queue — fire events at scheduled times. */
   private processForecast() {
     if (this.forecast.length === 0) {
-      // Refill if exhausted
       if (this.forecastGenerated) {
         this.generateForecast();
       }
       return;
     }
 
-    const now = GameRules.simTime;
+    const now = GameRules.elapsedTime;
 
     // Alert for upcoming events
     for (const entry of this.forecast) {
-      if (!entry.alerted && now >= entry.scheduledTime - FORECAST_ALERT_TIME) {
+      if (!entry.alerted && !entry.def.bSkipAlert && now >= entry.alertTime) {
         entry.alerted = true;
         Base.addAlert('event', `Incoming: ${entry.def.name} in ${Math.ceil(entry.scheduledTime - now)}s`);
       }
     }
 
-    // Fire events that are due
-    while (this.forecast.length > 0 && this.forecast[0].scheduledTime <= now) {
-      const entry = this.forecast.shift()!;
-      this.spawnEvent(entry.def);
+    // Attempt to execute the next event when due (single event at a time)
+    if (this.currentEvent) return; // Already running an event
+
+    const next = this.forecast[0];
+    if (next && next.scheduledTime <= now) {
+      this.forecast.shift();
+      if (next.bFailed) {
+        // Skip failed events — move to next
+        return;
+      }
+      this.attemptExecuteEvent(next);
     }
   }
 
-  private spawnEvent(def: EventDef) {
-    let event: Event | null = null;
+  /** Attempt to execute an event. Handles failure/retry (Lua: attemptExecuteEvent). */
+  private attemptExecuteEvent(entry: ForecastEntry) {
+    const event = this.createEvent(entry.def);
+    if (!event) {
+      this._eventFailed(entry);
+      return;
+    }
 
+    // Event created successfully — start execution
+    event.start(GameRules.simTime);
+    this.currentEvent = event;
+    this.currentEventEntry = entry;
+    Base.addAlert('event', `Event: ${entry.def.name}`);
+  }
+
+  /** Handle event setup failure (Lua: EventController._failed). */
+  private _eventFailed(entry: ForecastEntry) {
+    entry.nFailures++;
+    const maxFailures = entry.def.nAllowedSetupFailures ?? DEFAULT_ALLOWED_FAILURES;
+    if (entry.nFailures > maxFailures) {
+      entry.bFailed = true;
+      // Treat as completed to move on
+      this.prevEvents.push({
+        sEventType: entry.def.sEventType,
+        nCompletionTime: GameRules.elapsedTime,
+      });
+      while (this.prevEvents.length > PREV_EVENTS_COUNT) {
+        this.prevEvents.shift();
+      }
+    } else {
+      // Re-queue for retry next tick
+      this.forecast.unshift(entry);
+    }
+  }
+
+  private createEvent(def: EventDef): Event | null {
     switch (def.name) {
       case 'Immigration': {
         const immEvent = new ImmigrationEvent();
@@ -198,16 +362,14 @@ export class EventController implements TickableSystem {
           this.onImmigration?.(count);
           Base.addAlert('immigration', `${count} new crew member${count > 1 ? 's' : ''} arrived!`);
         };
-        event = immEvent;
-        break;
+        return immEvent;
       }
       case 'Meteor Shower': {
         const meteorEvent = new MeteorEvent();
         meteorEvent.onMeteorLandCallback = () => {
           this.onMeteorLand?.();
         };
-        event = meteorEvent;
-        break;
+        return meteorEvent;
       }
       case 'Hostile Immigration': {
         const hostileEvent = new HostileImmigrationEvent(this.getScaledRaiderCount());
@@ -217,29 +379,33 @@ export class EventController implements TickableSystem {
           this.onHostileSpawn?.(count, hp);
           Base.addAlert('hostile', `${count} raider${count > 1 ? 's' : ''} have arrived!`);
         };
-        event = hostileEvent;
-        break;
+        return hostileEvent;
       }
       case 'Breaching': {
         const breachEvent = new BreachingEvent();
         breachEvent.onCompleteCallback = () => {
           this.onBreachWall?.();
-          // Also spawn a raider through the breach
           this.onHostileSpawn?.(1, this.getScaledRaiderHP());
           Base.incrementStat('nBreachShipsDestroyed');
           Base.addAlert('breach', 'Raiders have breached the hull!');
         };
-        event = breachEvent;
-        break;
+        return breachEvent;
       }
       case 'Derelict Ship': {
         const derelictEvent = new DerelictEvent();
         derelictEvent.onCompleteCallback = () => {
-          // Derelict provides matter reward when explored (auto-complete for now)
           Base.addAlert('derelict', 'Derelict ship detected — salvage opportunities available');
         };
-        event = derelictEvent;
-        break;
+        return derelictEvent;
+      }
+      case 'Hostile Derelict': {
+        const hostileDerelictEvent = new HostileImmigrationEvent(this.getScaledRaiderCount());
+        hostileDerelictEvent.onCompleteCallback = () => {
+          const count = hostileDerelictEvent.getRaiderCount();
+          this.onHostileSpawn?.(count, this.getScaledRaiderHP());
+          Base.addAlert('hostile', `Hostile derelict — ${count} raider${count > 1 ? 's' : ''} aboard!`);
+        };
+        return hostileDerelictEvent;
       }
       case 'Docking': {
         const count = 1 + Math.floor(Math.random() * 2);
@@ -248,8 +414,7 @@ export class EventController implements TickableSystem {
           this.onDocking?.(count);
           Base.addAlert('docking', `Friendly ship docked — ${count} immigrant${count > 1 ? 's' : ''} arriving`);
         };
-        event = dockEvent;
-        break;
+        return dockEvent;
       }
       case 'Hostile Docking': {
         const hostileDockEvent = new HostileDockingEvent(this.getScaledRaiderCount());
@@ -259,17 +424,14 @@ export class EventController implements TickableSystem {
           this.onHostileSpawn?.(count, hp);
           Base.addAlert('hostile', `Hostile ship has docked — ${count} raider${count > 1 ? 's' : ''} boarding!`);
         };
-        event = hostileDockEvent;
-        break;
+        return hostileDockEvent;
+      }
+      case 'Compound Event': {
+        this.fireCompoundEvent();
+        return null;
       }
       default:
-        return;
-    }
-
-    if (event) {
-      event.start(GameRules.simTime);
-      this.activeEvents.push(event);
-      Base.addAlert('event', `Event: ${def.name}`);
+        return null;
     }
   }
 
@@ -277,7 +439,6 @@ export class EventController implements TickableSystem {
   private fireCompoundEvent() {
     const compound = new CompoundEvent();
 
-    // Multiple hostile events at once
     const raiderEvent = new HostileImmigrationEvent(this.getScaledRaiderCount() + 2);
     raiderEvent.onCompleteCallback = () => {
       this.onHostileSpawn?.(raiderEvent.getRaiderCount(), this.getScaledRaiderHP());
@@ -298,12 +459,15 @@ export class EventController implements TickableSystem {
     compound.addSubEvent(meteorEvent);
 
     compound.start(GameRules.simTime);
-    this.activeEvents.push(compound);
+    this.currentEvent = compound;
+    this.currentEventEntry = null;
+    this.bRanMegaEvent = true;
     Base.addAlert('siege', 'COMPOUND EVENT: Multiple threats detected!');
   }
 
+  /** Get active events (compat — returns current event in array or empty). */
   getActiveEvents(): Event[] {
-    return this.activeEvents;
+    return this.currentEvent ? [this.currentEvent] : [];
   }
 
   getForecast(): { name: string; scheduledTime: number; alerted: boolean }[] {
@@ -314,11 +478,23 @@ export class EventController implements TickableSystem {
     }));
   }
 
+  /** Get galaxy values (for test/debug). */
+  getGalaxyValues(): Record<string, number> {
+    return { ...this.galaxyValues };
+  }
+
+  /** Get computed time between events (for test/debug). */
+  getTimeBetweenEvents(): number {
+    return this.nTimeBetween;
+  }
+
   /** Get save data for persistence. */
   getSaveData() {
     return {
       forecastGenerated: this.forecastGenerated,
       compoundEventFired: this.compoundEventFired,
+      bRanMegaEvent: this.bRanMegaEvent,
+      galaxyValues: { ...this.galaxyValues },
       forecast: this.forecast.map(f => ({
         defName: Object.keys(EVENT_DEFS).find(k => EVENT_DEFS[k].name === f.def.name) ?? '',
         scheduledTime: f.scheduledTime,
@@ -331,10 +507,19 @@ export class EventController implements TickableSystem {
   loadSaveData(data: ReturnType<typeof this.getSaveData>) {
     this.forecastGenerated = data.forecastGenerated;
     this.compoundEventFired = data.compoundEventFired;
+    this.bRanMegaEvent = data.bRanMegaEvent ?? false;
+    if (data.galaxyValues) {
+      this.galaxyValues = { ...this.galaxyValues, ...data.galaxyValues };
+      this.nTimeBetween = computeTimeBetweenEvents(this.galaxyValues);
+      this.applySpawnModifiers();
+    }
     this.forecast = data.forecast.map(f => ({
       def: EVENT_DEFS[f.defName] ?? EVENT_DEFS['Immigration'],
       scheduledTime: f.scheduledTime,
+      alertTime: f.scheduledTime - FORECAST_ALERT_TIME,
       alerted: f.alerted,
+      nFailures: 0,
+      bFailed: false,
     }));
   }
 }

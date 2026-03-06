@@ -5,6 +5,7 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
+import { addLog } from '../../characters/Log';
 
 export class RampageTantrum extends Task {
   readonly name = 'RampageTantrum';
@@ -16,6 +17,9 @@ export class RampageTantrum extends Task {
 
   protected onStart() {
     this.duration = 10;
+    if (this.character) {
+      addLog('RAMPAGE_START', this.character);
+    }
   }
 
   protected onUpdate(dt: number) {

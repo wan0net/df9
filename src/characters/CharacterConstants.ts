@@ -30,6 +30,75 @@ export const THREAT_LEVEL = {
   Monster: 4,
 } as const;
 
+// ── Races (Lua CharacterConstants.RACE_*) ───────────────────────────────
+export const RACE_HUMAN = 1;
+export const RACE_JELLY = 2;
+export const RACE_TOBIAN = 3;
+export const RACE_CAT = 4;
+export const RACE_BIRDSHARK = 5;
+export const RACE_CHICKEN = 6;
+export const RACE_MONSTER = 7;
+export const RACE_SHAMON = 8;
+export const RACE_MURDERFACE = 9;
+export const RACE_KILLBOT = 10;
+
+/** Spawn rate: 60% human, 2% cat, rest split among others */
+export const HUMAN_RACE_PCT = 60;
+export const CAT_RACE_PCT = 2;
+
+/** Rig types (for rendering) */
+export const RIG_BASE = 1;
+export const RIG_ALIEN = 2;
+export const RIG_CUBE = 3;
+export const RIG_MONSTER = 4;
+export const RIG_KILLBOT = 5;
+export const RIG_SPHERE = 6;
+
+/** Melee damage by race */
+export const HUMAN_MELEE_DAMAGE = 20;
+export const MONSTER_MELEE_DAMAGE = 40;
+
+/** Race type definitions (Lua CharacterConstants.RACE_TYPE) */
+export interface RaceTypeDef {
+  sName: string;
+  nRig: number;
+  /** Non-breathing races (MONSTER, KILLBOT) don't consume O2 */
+  bBreathes: boolean;
+  /** Can be cuffed/imprisoned */
+  bCanBeCuffed: boolean;
+  /** Can receive medical treatment */
+  bCanBeTreated: boolean;
+  /** Melee damage */
+  nMeleeDamage: number;
+}
+
+export const RACE_TYPE: Record<number, RaceTypeDef> = {
+  [RACE_HUMAN]:     { sName: 'human',      nRig: RIG_BASE,    bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_JELLY]:     { sName: 'jelly',      nRig: RIG_BASE,    bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_TOBIAN]:    { sName: 'tobian',     nRig: RIG_ALIEN,   bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_CAT]:       { sName: 'cat',        nRig: RIG_BASE,    bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_BIRDSHARK]: { sName: 'birdshark',  nRig: RIG_BASE,    bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_CHICKEN]:   { sName: 'chicken',    nRig: RIG_ALIEN,   bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_MONSTER]:   { sName: 'badalien',   nRig: RIG_MONSTER,  bBreathes: false, bCanBeCuffed: false, bCanBeTreated: false, nMeleeDamage: MONSTER_MELEE_DAMAGE },
+  [RACE_SHAMON]:    { sName: 'shamon',     nRig: RIG_BASE,    bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_MURDERFACE]:{ sName: 'murderface', nRig: RIG_ALIEN,   bBreathes: true,  bCanBeCuffed: true,  bCanBeTreated: true,  nMeleeDamage: HUMAN_MELEE_DAMAGE },
+  [RACE_KILLBOT]:   { sName: 'killbot',    nRig: RIG_KILLBOT, bBreathes: false, bCanBeCuffed: false, bCanBeTreated: false, nMeleeDamage: HUMAN_MELEE_DAMAGE },
+};
+
+/** Race name strings (Lua CharacterConstants.tRaceNames) */
+export const RACE_NAMES: Record<number, string> = {
+  [RACE_HUMAN]: 'Human',
+  [RACE_JELLY]: 'Jelly',
+  [RACE_TOBIAN]: 'Tobian',
+  [RACE_CAT]: 'Cat',
+  [RACE_BIRDSHARK]: 'Birdshark',
+  [RACE_CHICKEN]: 'Chicken',
+  [RACE_MONSTER]: 'Monster',
+  [RACE_SHAMON]: 'Shamon',
+  [RACE_MURDERFACE]: 'Murderface',
+  [RACE_KILLBOT]: 'Killbot',
+};
+
 // ── Jobs ────────────────────────────────────────────────────────────────
 export const UNEMPLOYED = 1;
 export const BUILDER = 2;
@@ -117,6 +186,7 @@ export const CAUSE_OF_DEATH = {
   STARVATION: 9,
   COMBAT_MELEE: 10,
   THING: 11,
+  STUNNER: 12,
 } as const;
 
 // ── Needs ───────────────────────────────────────────────────────────────
@@ -159,6 +229,23 @@ export const MORALE_ATE_MEAL_MAX = 10;
 export const MORALE_HAPPY_CHAT_BASE = 1;
 export const MORALE_HAPPY_CHAT_MAX = 10;
 
+// Morale task events — mirrors CharacterConstants.lua (most are 0 in original)
+export const MORALE_NICE_CHAT = 0;
+export const MORALE_MINE_ASTEROID = 0;
+export const MORALE_MAINTAIN_OBJECT = 0;
+export const MORALE_MAINTAIN_PLANT = 0;
+export const MORALE_REPAIR_OBJECT = 0;
+export const MORALE_BUILD_BASE = 0;
+export const MORALE_DID_HOBBY = 0;
+export const MORALE_DELIVERED_FOOD = 0;
+export const MORALE_BAD_CHAT = 0;
+
+// Non-zero morale modifiers from CharacterConstants.lua
+export const MORALE_NEEDS_MET_BONUS = 0.5;
+export const MORALE_LOW_OXYGEN = -0.1;
+/** Lua nAverageOxygen threshold (0–65535 tile scale) below which low-O2 morale fires */
+export const MORALE_LOW_OXYGEN_THRESHOLD = 550;
+
 // Morale events (negative)
 export const MORALE_SLEPT_ON_FLOOR = -1;
 export const MORALE_CITIZEN_DIES_MIN = -4;
@@ -198,8 +285,7 @@ export const UNNECESSARY_SPACESUIT_REMOVE = 10;
 export const BASE_SPEED = 1.5;
 export const RUN_SPEED = 2.2;
 export const MELEE_RANGE = 2;
-export const HUMAN_MELEE_DAMAGE = 20;
-export const MONSTER_MELEE_DAMAGE = 40;
+// HUMAN_MELEE_DAMAGE and MONSTER_MELEE_DAMAGE defined above in Race section
 
 export const ATTACK_TYPE = {
   Grapple: 1,
@@ -271,3 +357,46 @@ export const PERSONALITY_LIKELIHOOD: Record<string, number> = {
   bLowerCase: 0.05,
   bCompetitive: 0.3,
 };
+
+// ── Log / Journal System ──────────────────────────────────────────
+export const MAX_LOG_ENTRIES = 100;
+export const LOG_RECENT_HISTORY = 5;
+export const LOG_RATE_MIN = 5;
+export const LOG_RATE_MAX = 15;
+export const LOG_MORALE_NEEDS_RATE = 180;
+export const MORALE_EVENTS_LOG_MAX = 100;
+export const ROOM_MORALE_LOG_THRESHOLD = 0.8;
+export const INFESTATION_LOG_TIME = 300;
+export const GENERIC_LOG_FREQUENCY = 240;
+export const STUFF_NEED_LOG_FREQUENCY = 800;
+export const PATROL_LOG_FREQUENCY = 120;
+export const BASE_LOG_SKILL_UP_DURATION = 30;
+
+export const LOG_DEFAULT_PRIORITY = 0;
+export const LOG_PRIORITY_ALWAYS_POST = 4;
+
+// Memory keys for log rate-limiting
+export const MEMORY_LOGGED_RECENTLY = 'bLoggedRecently';
+export const MEMORY_LOGGED_MORALE_RECENTLY = 'bLoggedMoraleRecently';
+export const MEMORY_GENERIC_LOG = 'bMadeGenericLogRecently';
+export const MEMORY_STUFF_NEED = 'bMadeStuffNeedLogRecently';
+export const MEMORY_ATTEMPTED_MONSTER_LOG_RECENTLY = 'bRecentLogAboutParasite';
+export const MEMORY_LOGGED_PATROL_RECENTLY = 'bLoggedPatrolRecently';
+export const MEMORY_LOGGED_RESEARCH_RECENTLY = 'bLoggedResearchRecently';
+
+// Memory keys for room/event context
+export const MEMORY_ROOM_BREACHED_PREFIX = 'bRoomBreached';
+export const MEMORY_ROOM_COMBAT_PREFIX = 'bCombatInRoom';
+export const MEMORY_ROOM_FIRE_PREFIX = 'bFireInRoom';
+export const MEMORY_ROOM_LOWO2_PREFIX = 'bLowOxygenInRoom';
+export const MEMORY_PRISON_ANGER_RECENTLY = 'bPrisonAngerRecently';
+export const MEMORY_EXPLORED_RECENTLY = 'bExploredRecently';
+export const MEMORY_TOOK_DAMAGE_RECENTLY = 'bTookDamageRecently';
+export const MEMORY_ENTERED_COMBAT_RECENTLY = 'bEnteredCombatRecently';
+export const MEMORY_WORKED_OUT_RECENTLY = 'bWorkedOutRecently';
+export const MEMORY_PLAYED_GAME_RECENTLY = 'bPlayedGameRecently';
+export const MEMORY_LAST_BED = 'tLastSleptInBed';
+export const MEMORY_SENT_TO_HOSPITAL = 'bSentToHospital';
+export const MEMORY_STARTLED_RECENTLY = 'bStartledRecently';
+export const MEMORY_STARTLED_RECENTLY_DURATION = 15;
+export const MEMORY_SAW_TANTRUM_RECENTLY = 'tSawTantrum';

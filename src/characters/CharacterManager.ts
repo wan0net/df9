@@ -1,10 +1,12 @@
 import { Character } from './Character';
+import { addLog } from './Log';
 import {
   MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
   RAIDER,
-  CAUSE_OF_DEATH, MORALE_CITIZEN_DIES_MIN, MORALE_CITIZEN_DIES_MAX,
+  CAUSE_OF_DEATH, FAMILIARITY_TICK_RATE, FAMILIARITY_TICK_INCREASE,
   ANGER_MAX, VIOLENT_RAMPAGE_CHANCE, HURT_THRESHOLD,
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
+  STATUS_DEAD,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -64,6 +66,10 @@ import { SquadList } from '../combat/SquadList';
 import { FIRE_DAMAGE_PER_SECOND } from '../hazards/Fire';
 import type { Fire } from '../hazards/Fire';
 import { Malady } from '../malady/Malady';
+import {
+  addTopic, generateCharacterAffinities, getRandomImmigrationCategory,
+  IMMIGRATION_ADD_TOPIC_CHANCE,
+} from './Topics';
 import type { Task } from '../utility/Task';
 import type { CharacterRenderer } from '../renderer/CharacterRenderer';
 import type { CrewSpawnPoint } from '../world/WorldGen';
@@ -102,6 +108,9 @@ export class CharacterManager {
   /** Contagion range in tiles (manhattan distance). */
   private static readonly CONTAGION_RANGE = 3;
 
+  /** Familiarity tick accumulator (seconds). */
+  private familiarityAccum = 0;
+
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
     this.roomManager = roomManager;
@@ -135,6 +144,12 @@ export class CharacterManager {
     return this.characters;
   }
 
+  /** Get all characters whose current tile belongs to the given room. */
+  getCharactersAt(room: { tiles: { x: number; y: number }[] }): Character[] {
+    const tileSet = new Set(room.tiles.map(t => `${t.x},${t.y}`));
+    return this.characters.filter(c => tileSet.has(`${c.tileX},${c.tileY}`));
+  }
+
   /**
    * Spawn the initial crew at given positions (from WorldGen).
    * Original: 3 SpacewalkingSettlers in open space near the seed pod.
@@ -154,6 +169,12 @@ export class CharacterManager {
 
     // Update characters
     const dtSec = delta / 1000;
+
+    // Clear room character sets before re-populating
+    for (const room of this.roomManager.getRooms()) {
+      room.tCharacters.clear();
+    }
+
     for (const char of this.characters) {
       char.update(delta);
       char.needs.decay(dtSec);
@@ -166,9 +187,18 @@ export class CharacterManager {
         char.currentTask.update(dtSec);
       }
 
+      // Register character with room — add to current room's tCharacters
+      // (Old room removal happens via room rebuild clearing tCharacters, or
+      //  we clear all rooms' tCharacters at start of this loop — see below.)
+      if (charRoom) charRoom.tCharacters.add(char.id);
+
       // Update O2 need from room
-      const room = this.roomManager.getRoomAt(char.tileX, char.tileY);
-      if (room && room.sealed && room.oxygen > 50) {
+      const room = charRoom;
+      // Non-breathing races (MONSTER, KILLBOT) don't need O2
+      if (!char.doesBreathe()) {
+        char.needs.updateOxygen(255);
+        if (char.bSpacewalking) char.bSpacewalking = false;
+      } else if (room && room.sealed && room.oxygen > 50) {
         // Safe sealed room — breathable
         char.needs.updateOxygen(room.oxygen);
         if (char.bSpacewalking) {
@@ -186,14 +216,19 @@ export class CharacterManager {
       this.characterRenderer?.updateCharacter(char);
     }
 
-    // Fire damage to characters on fire tiles
+    // Fire damage (Lua tickFireDamage: onFire OR standing on fire tile)
     if (this.fire) {
       const fireTiles = this.fire.getFireTiles();
       for (const char of this.characters) {
         if (!char.isAlive()) continue;
         const key = `${char.tileX},${char.tileY}`;
-        if (fireTiles.has(key)) {
+        const onFireTile = fireTiles.has(key);
+        if (char.bOnFire || onFireTile) {
           char.damage(FIRE_DAMAGE_PER_SECOND * dtSec, CAUSE_OF_DEATH.FIRE);
+        }
+        // Douse if not on a fire tile anymore (Lua: douseFire when moving off)
+        if (char.bOnFire && !onFireTile) {
+          char.douseFire();
         }
       }
     }
@@ -210,6 +245,13 @@ export class CharacterManager {
 
     // Handle dead characters → corpse conversion
     this.processDeaths();
+
+    // Familiarity tick — characters in same room gain familiarity
+    this.familiarityAccum += dtSec;
+    if (this.familiarityAccum >= FAMILIARITY_TICK_RATE) {
+      this.familiarityAccum -= FAMILIARITY_TICK_RATE;
+      this.tickFamiliarity();
+    }
 
     // AI tick
     this.aiTickAccum += delta;
@@ -286,13 +328,12 @@ export class CharacterManager {
         Base.addAlert('death', `${char.getName()} has died (${causeName.toLowerCase()})`);
 
         // Morale hit on all living player characters (not for enemy deaths)
+        // Lua-exact: lerp(-4, -60, (familiarity * affinity) / (100 * 10))
         if (char.tStats.nTeam === TEAM_ID_PLAYER) {
           for (const other of this.characters) {
             if (other === char || !other.isAlive()) continue;
             if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue;
-            const affinity = other.tAffinity.get(char.id) ?? 0;
-            const scale = Math.min(1, affinity / 10);
-            const hit = MORALE_CITIZEN_DIES_MIN + scale * (MORALE_CITIZEN_DIES_MAX - MORALE_CITIZEN_DIES_MIN);
+            const hit = other.getDeathMoraleLoss(char.id);
             other.nMorale = Math.max(-100, other.nMorale + hit);
           }
         }
@@ -315,6 +356,23 @@ export class CharacterManager {
     char.bSpacewalking = spacewalking;
     this.characterRenderer?.createCharacter(char);
     this.characters.push(char);
+
+    // Topics wiring (Lua CharacterManager:onImmigration)
+    addTopic('People', String(char.id));
+    generateCharacterAffinities(char);
+    // Random chance to add a new topic on immigration
+    if (Math.random() < IMMIGRATION_ADD_TOPIC_CHANCE) {
+      const category = getRandomImmigrationCategory();
+      if (category) addTopic(category);
+    }
+
+    // Log: character joined (Lua: JOINED for player team, ENEMY_JOINED for hostiles)
+    if (char.tStats.nTeam === TEAM_ID_PLAYER) {
+      addLog('JOINED', char);
+    } else {
+      addLog('ENEMY_JOINED', char);
+    }
+
     return char;
   }
 
@@ -422,8 +480,8 @@ export class CharacterManager {
         char.bViolentRampage = false;
       }
 
-      // Emergency: seek oxygen if suffocating
-      if (char.needs.oxygen < 50) {
+      // Emergency: seek oxygen if suffocating (needs range -100..+100; 0 = midpoint)
+      if (char.needs.oxygen < 0) {
         this.seekOxygenatedRoom(char);
         processed++;
         continue;
@@ -490,7 +548,10 @@ export class CharacterManager {
         if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue; // Don't chat with hostiles
         const otherRoom = this.roomManager.getRoomAt(other.tileX, other.tileY);
         if (otherRoom === room) {
-          const chatPriority = 2 + character.tStats.personality.nGregariousness * 4;
+          // nGregariousness scales priority — gregarious chars chat more
+          let chatPriority = 2 + character.tStats.personality.nGregariousness * 4;
+          // _chatUtilityOverride (Character.lua:6529-6543): on-duty target halves attractiveness
+          if (other.onDuty()) chatPriority *= 0.5;
           options.push(new ActivityOption(
             new Chat(),
             other.tileX, other.tileY,
@@ -600,7 +661,7 @@ export class CharacterManager {
     if (job === EMERGENCY) {
       for (const other of this.characters) {
         if (other === character || !other.isAlive()) continue;
-        if (other.bRampaging && other.tStats.nTeam === TEAM_ID_PLAYER) {
+        if (other.bRampaging && other.tStats.nTeam === TEAM_ID_PLAYER && other.canBeCuffed()) {
           options.push(new ActivityOption(
             new Cuff(other.id),
             other.tileX, other.tileY,
@@ -611,7 +672,7 @@ export class CharacterManager {
     }
 
     // ── Job-specific tasks ────────────────────────────────────
-    const shiftBoost = character.bOnShift ? 2 : 0;
+    const shiftBoost = character.onDuty() ? 2 : 0;
 
     // BARTENDER: Serve drink at bar
     if (job === BARTENDER) {
@@ -657,6 +718,7 @@ export class CharacterManager {
       for (const other of this.characters) {
         if (other === character || !other.isAlive()) continue;
         if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue; // Don't heal hostiles
+        if (!other.canBeTreated()) continue; // MONSTER/KILLBOT can't be treated
         if (other.tStats.nHP < HURT_THRESHOLD) {
           options.push(new ActivityOption(
             new FieldScanAndHeal(other),
@@ -974,6 +1036,7 @@ export class CharacterManager {
   /** Assign a task to a character and start pathfinding if needed. */
   private assignTask(char: Character, task: Task) {
     char.currentTask = task;
+    char.onNewTaskStarted(task);
     task.start(char);
 
     // Path to task target if not already there
@@ -1067,6 +1130,38 @@ export class CharacterManager {
     const path = findPath(this.grid, char.tileX, char.tileY, target.x, target.y);
     if (path && path.length > 0) {
       char.startPath(path);
+    }
+  }
+
+  /**
+   * Passive familiarity tick (Lua: Character._tickFamiliarity).
+   * Characters in the same room gain FAMILIARITY_TICK_INCREASE toward each other.
+   */
+  private tickFamiliarity() {
+    // Group living characters by room
+    const roomChars = new Map<Room, Character[]>();
+    for (const c of this.characters) {
+      if (c.tStats.nStatus === STATUS_DEAD) continue;
+      if (c.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+      const room = this.roomManager.getRoomAt(c.tileX, c.tileY);
+      if (!room) continue;
+      let list = roomChars.get(room);
+      if (!list) {
+        list = [];
+        roomChars.set(room, list);
+      }
+      list.push(c);
+    }
+
+    // For each room with 2+ characters, add familiarity between all pairs
+    for (const chars of roomChars.values()) {
+      if (chars.length < 2) continue;
+      for (let i = 0; i < chars.length; i++) {
+        for (let j = i + 1; j < chars.length; j++) {
+          chars[i].addFamiliarity(chars[j].id, FAMILIARITY_TICK_INCREASE);
+          chars[j].addFamiliarity(chars[i].id, FAMILIARITY_TICK_INCREASE);
+        }
+      }
     }
   }
 }

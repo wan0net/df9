@@ -4,6 +4,7 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
+import { MORALE_DID_HOBBY } from '../../characters/CharacterConstants';
 
 export class ListenToJukebox extends Task {
   readonly name = 'ListenToJukebox';
@@ -22,6 +23,8 @@ export class ListenToJukebox extends Task {
 
   protected onUpdate(dt: number) {
     if (this.elapsedTime >= this.duration) {
+      // mirrors ListenToJukebox.lua:35
+      this.character?.addMorale(MORALE_DID_HOBBY);
       this.complete();
     }
   }

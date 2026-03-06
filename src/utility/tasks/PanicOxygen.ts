@@ -4,6 +4,7 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
+import { addLog } from '../../characters/Log';
 
 export class PanicOxygen extends Task {
   readonly name = 'PanicOxygen';
@@ -15,6 +16,7 @@ export class PanicOxygen extends Task {
 
   protected onStart() {
     this.duration = 5;
+    if (this.character) addLog('DISASTER_BREACH', this.character);
   }
 
   protected onUpdate(dt: number) {

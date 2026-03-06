@@ -125,8 +125,9 @@ export class TileRenderer3D {
   private grid: TileGrid;
   private scene: THREE.Scene;
   private roomManager: RoomManager | null = null;
-  /** Callback to get the correct door sprite key for a tile position. */
-  getDoorSpriteAt: ((x: number, y: number) => string) | null = null;
+  /** Callback to get the correct door sprite key for a tile position.
+   *  Return null to suppress the sprite (secondary tiles of 2-wide doors). */
+  getDoorSpriteAt: ((x: number, y: number) => string | null) | null = null;
 
   private visMinX = 0;
   private visMaxX = 0;
@@ -344,10 +345,13 @@ export class TileRenderer3D {
       const flip = dir === WallDirection.NWSE;
 
       const doorSpriteKey = this.getDoorSpriteAt?.(x, y) ?? 'tile_door_closed';
-      const door = this.createWallSprite(doorSpriteKey, x, y, DEPTH_WALL_TOP(y), flip);
-      if (door) {
-        this.scene.add(door);
-        result.push(door);
+      // null = secondary tile of a 2-wide door — no sprite here, primary tile covers it
+      if (doorSpriteKey !== null) {
+        const door = this.createWallSprite(doorSpriteKey, x, y, DEPTH_WALL_TOP(y), flip);
+        if (door) {
+          this.scene.add(door);
+          result.push(door);
+        }
       }
 
     } else if (tileType === TileType.FLOOR_PENDING) {

@@ -6,6 +6,7 @@ import { Task, type NeedAdvertisement } from '../Task';
 import type { EnvObject } from '../../envobjects/EnvObject';
 import { researchSystem } from '../../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../../research/ResearchData';
+import { MORALE_MAINTAIN_OBJECT } from '../../characters/CharacterConstants';
 
 export class MaintainEnvObject extends Task {
   readonly name = 'MaintainEnvObject';
@@ -45,6 +46,7 @@ export class MaintainEnvObject extends Task {
           }
         }
       }
+      this.character?.addMorale(MORALE_MAINTAIN_OBJECT);
       this.complete();
     }
   }

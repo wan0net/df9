@@ -1,22 +1,24 @@
 /**
  * GoalSystem.ts — Achievement/goal tracking.
- * Mirrors GoalData.lua: check conditions, fire completion alerts.
+ * Mirrors GoalData.lua: 16 goals with Lua-exact check conditions.
  */
 
-import { GOAL_DEFS, type GoalDef } from './GoalData';
+import { GOAL_DEFS, TARGET_HAPPY_MORALE, type GoalDef } from './GoalData';
 import { Base } from '../core/Base';
-import { GameRules } from '../core/GameRules';
 
 /** Callback providers for checking goal conditions. */
 export interface GoalCheckProviders {
-  getRoomCount: () => number;
   getPopulation: () => number;
-  getResearchCompleted: () => number;
-  getHostilesDefeated: () => number;
   getMatter: () => number;
-  getUniqueZones: () => number;
-  getSiegeSurvived: () => number;
-  getAllMoraleAbove: (threshold: number) => boolean;
+  getOwnedTileCount: () => number;
+  /** Count of unique env object types built (showInObjectMenu only). */
+  getBuiltObjectTypeCount: () => { built: number; total: number };
+  /** Count of non-discover-only techs researched. */
+  getResearchedTechCount: () => { researched: number; total: number };
+  /** Count citizens with morale > threshold. */
+  getHappyCitizenCount: (moraleThreshold: number) => number;
+  /** Check final siege: mega-event ran + 120s + friendly alive in safe room + all hostiles dead. */
+  checkFinalSiege: () => boolean;
 }
 
 export class GoalSystem {
@@ -26,11 +28,6 @@ export class GoalSystem {
   /** Check one goal per second to spread load. */
   private static readonly CHECK_INTERVAL = 1;
   private checkIndex = 0;
-
-  /** Track hostiles defeated (incremented externally). */
-  hostilesDefeated = 0;
-  /** Track siege survived (set externally). */
-  siegeSurvived = 0;
 
   constructor(providers: GoalCheckProviders) {
     this.providers = providers;
@@ -56,25 +53,45 @@ export class GoalSystem {
   }
 
   private checkGoal(goal: GoalDef): boolean {
+    const stats = Base.getStats();
     switch (goal.checkType) {
-      case 'roomCount':
-        return this.providers.getRoomCount() >= goal.nThreshold;
-      case 'population':
+      case 'citizens':
         return this.providers.getPopulation() >= goal.nThreshold;
-      case 'researchCompleted':
-        return this.providers.getResearchCompleted() >= goal.nThreshold;
-      case 'hostilesDefeated':
-        return this.hostilesDefeated >= goal.nThreshold;
-      case 'simTime':
-        return GameRules.simTime >= goal.nThreshold;
       case 'matter':
         return this.providers.getMatter() >= goal.nThreshold;
-      case 'uniqueZones':
-        return this.providers.getUniqueZones() >= goal.nThreshold;
-      case 'siegeSurvived':
-        return this.siegeSurvived >= goal.nThreshold;
-      case 'allMoraleAbove':
-        return this.providers.getAllMoraleAbove(goal.nThreshold);
+      case 'builtEverything': {
+        const { built, total } = this.providers.getBuiltObjectTypeCount();
+        return built >= total;
+      }
+      case 'hostilesKilled':
+        return stats.nHostilesKilled >= goal.nThreshold;
+      case 'baseTiles':
+        return this.providers.getOwnedTileCount() >= goal.nThreshold;
+      case 'mealsServed':
+        return stats.nMealsServed >= goal.nThreshold;
+      case 'curesResearched':
+        return stats.nCuresResearched >= goal.nThreshold;
+      case 'allTechs': {
+        const { researched, total } = this.providers.getResearchedTechCount();
+        return researched >= total;
+      }
+      case 'happyCitizens':
+        return this.providers.getHappyCitizenCount(TARGET_HAPPY_MORALE) >= goal.nThreshold;
+      case 'breachShipsDestroyed':
+        return stats.nBreachShipsDestroyed >= goal.nThreshold;
+      case 'allPossessions':
+        // TODO: implement when possession tracking is complete
+        return false;
+      case 'raidersConverted':
+        return stats.nRaidersConverted >= goal.nThreshold;
+      case 'hostilesAsphyxiated':
+        return stats.nHostilesAsphyxiated >= goal.nThreshold;
+      case 'hostilesKilledByTurrets':
+        return stats.nHostilesKilledByTurret >= goal.nThreshold;
+      case 'bodiesRefined':
+        return stats.nCorpsesRecycled >= goal.nThreshold;
+      case 'finalSiege':
+        return this.providers.checkFinalSiege();
       default:
         return false;
     }
@@ -100,15 +117,11 @@ export class GoalSystem {
   getSaveData() {
     return {
       completed: Array.from(this.completed),
-      hostilesDefeated: this.hostilesDefeated,
-      siegeSurvived: this.siegeSurvived,
     };
   }
 
   /** Load data. */
-  loadSaveData(data: { completed: string[]; hostilesDefeated: number; siegeSurvived: number }) {
+  loadSaveData(data: { completed: string[] }) {
     this.completed = new Set(data.completed);
-    this.hostilesDefeated = data.hostilesDefeated;
-    this.siegeSurvived = data.siegeSurvived;
   }
 }

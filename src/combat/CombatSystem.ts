@@ -1,6 +1,6 @@
 /**
  * CombatSystem.ts — Combat resolution for melee and ranged attacks.
- * Mirrors Combat logic from CharacterManager.lua + Projectile.lua.
+ * Mirrors Combat logic from CharacterManager.lua + AttackEnemy.lua + GridUtil.lua.
  */
 
 import { Character } from '../characters/Character';
@@ -12,15 +12,28 @@ import {
 import { WEAPON_DEFS, type WeaponDef } from './WeaponData';
 import type { ProjectileManager } from '../hazards/Projectile';
 import { Base } from '../core/Base';
+import type { TileGrid } from '../world/TileGrid';
+import { TileType } from '../world/TileTypes';
 
 /** Grapple duration before melee damage is applied. */
 const GRAPPLE_TIME = 3;
 /** Cooldown between attacks. */
 const ATTACK_COOLDOWN = 2;
+/** Default aim time range if weapon has none. */
+const DEFAULT_MIN_AIM = 0.35;
+const DEFAULT_MAX_AIM = 0.65;
+/** Default cooldown range if weapon has none. */
+const DEFAULT_MIN_COOLDOWN = 0.1;
+const DEFAULT_MAX_COOLDOWN = 0.4;
 
-/** Manhattan distance between two tiles. */
+/** Chebyshev distance between two tiles. */
 function tileDist(ax: number, ay: number, bx: number, by: number): number {
-  return Math.abs(ax - bx) + Math.abs(ay - by);
+  return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
+}
+
+/** Random float in [min, max]. */
+function randomFloat(min: number, max: number): number {
+  return min + Math.random() * (max - min);
 }
 
 /** Check if two teams are hostile to each other (delegates to Base alliance matrix). */
@@ -34,18 +47,85 @@ export function isFriendly(teamA: number, teamB: number): boolean {
   return Base.isFriendly(teamA, teamB);
 }
 
+// ── Line-of-sight (mirrors GridUtil.CheckLineOfSight) ────────────────
+
+/**
+ * Get tiles along a line from (x0,y0) to (x1,y1) using Bresenham.
+ * Returns array of [x, y] tile coordinates.
+ */
+function getTilesForLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
+  const tiles: [number, number][] = [];
+  let dx = Math.abs(x1 - x0);
+  let dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  let cx = x0, cy = y0;
+
+  while (true) {
+    tiles.push([cx, cy]);
+    if (cx === x1 && cy === y1) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; cx += sx; }
+    if (e2 < dx) { err += dx; cy += sy; }
+  }
+  return tiles;
+}
+
+/**
+ * Check line of sight between two tiles (Lua GridUtil.CheckLineOfSight).
+ * Returns true if path is clear. Walls, closed doors, and asteroids block LoS.
+ * @param bWallsOnly — if true, only walls block (not doors/asteroids).
+ */
+export function checkLineOfSight(
+  grid: TileGrid,
+  tx0: number, ty0: number, tx1: number, ty1: number,
+  bWallsOnly = false,
+): boolean {
+  const tiles = getTilesForLine(tx0, ty0, tx1, ty1);
+  for (const [x, y] of tiles) {
+    // Skip endpoints (Lua: two walls facing each other technically have LoS)
+    if (x === tx0 && y === ty0) continue;
+    if (x === tx1 && y === ty1) continue;
+
+    const tileValue = grid.get(x, y);
+    if (bWallsOnly) {
+      if (tileValue === TileType.WALL) return false;
+    } else {
+      if (tileValue === TileType.WALL) return false;
+      if (tileValue === TileType.SPACE) return false;
+      // Closed doors block LoS in Lua (if rDoor and not rDoor:isOpen()).
+      // DOOR tiles treated as passable for now since we don't have door state here.
+    }
+  }
+  return true;
+}
+
+// ── Combat engagement ────────────────────────────────────────────────
+
 /** Active combat engagement between two characters. */
 interface CombatEngagement {
   attackerId: number;
   defenderId: number;
   grappleTimer: number;
-  attackCooldown: number;
+  /** Aim phase timer — must complete before shooting (Lua nNextShootAimTime). */
+  aimTimer: number;
+  /** Target aim time for this shot. */
+  aimTarget: number;
+  /** Cooldown timer after each shot (Lua nNextShootCooldownTime). */
+  cooldownTimer: number;
+  /** Target cooldown for this shot. */
+  cooldownTarget: number;
+  /** Whether currently in cooldown (vs aiming). */
+  bCoolingDown: boolean;
   weapon: WeaponDef;
 }
 
 export class CombatSystem {
   private engagements: CombatEngagement[] = [];
   private projectileManager: ProjectileManager | null = null;
+  /** Optional grid reference for LoS checks. */
+  grid: TileGrid | null = null;
 
   setProjectileManager(pm: ProjectileManager) {
     this.projectileManager = pm;
@@ -60,13 +140,30 @@ export class CombatSystem {
     const dist = tileDist(attacker.tileX, attacker.tileY, defender.tileX, defender.tileY);
 
     // Range check
-    if (dist > weapon.nRange) return false;
+    if (dist > weapon.nRange && weapon.nAttackType !== ATTACK_TYPE.Grapple) return false;
+
+    // LoS check for ranged weapons
+    if (weapon.nAttackType === ATTACK_TYPE.Ranged || weapon.nAttackType === ATTACK_TYPE.Stunner) {
+      if (this.grid && !checkLineOfSight(this.grid, attacker.tileX, attacker.tileY, defender.tileX, defender.tileY)) {
+        return false;
+      }
+    }
+
+    // Compute initial aim/cooldown times from weapon data
+    const minAim = weapon.nMinAimTime ?? DEFAULT_MIN_AIM;
+    const maxAim = weapon.nMaxAimTime ?? DEFAULT_MAX_AIM;
+    const minCool = weapon.nMinCoolDown ?? DEFAULT_MIN_COOLDOWN;
+    const maxCool = weapon.nMaxCoolDown ?? DEFAULT_MAX_COOLDOWN;
 
     this.engagements.push({
       attackerId: attacker.id,
       defenderId: defender.id,
       grappleTimer: 0,
-      attackCooldown: 0,
+      aimTimer: 0,
+      aimTarget: randomFloat(minAim, maxAim),
+      cooldownTimer: 0,
+      cooldownTarget: randomFloat(minCool, maxCool),
+      bCoolingDown: false,
       weapon,
     });
     return true;
@@ -82,7 +179,7 @@ export class CombatSystem {
     return this.engagements.some(e => e.attackerId === charId || e.defenderId === charId);
   }
 
-  /** Update all combat engagements. Returns array of [attackerId, defenderId, damage, damageType] for hits. */
+  /** Update all combat engagements. Returns array of hits for damage processing. */
   update(dt: number, getCharById: (id: number) => Character | undefined): {
     attackerId: number; defenderId: number; damage: number; damageType: number;
   }[] {
@@ -110,7 +207,8 @@ export class CombatSystem {
         }
 
         eng.grappleTimer += dt;
-        if (eng.grappleTimer >= GRAPPLE_TIME) {
+        const meleeCooldown = eng.weapon.nMeleeCoolDown ?? GRAPPLE_TIME;
+        if (eng.grappleTimer >= meleeCooldown) {
           eng.grappleTimer = 0;
           hits.push({
             attackerId: eng.attackerId,
@@ -120,35 +218,62 @@ export class CombatSystem {
           });
         }
       } else {
-        // Ranged: fire rate cooldown, then fire projectile
+        // Ranged/Stunner: aim phase → shoot → cooldown → aim → shoot...
         if (dist > eng.weapon.nRange) {
           toRemove.push(i);
           continue;
         }
 
-        eng.attackCooldown += dt;
-        const fireInterval = 1 / eng.weapon.nFireRate;
-        if (eng.attackCooldown >= fireInterval) {
-          eng.attackCooldown = 0;
-
-          if (this.projectileManager) {
-            // Fire a projectile
-            this.projectileManager.fire(
-              attacker.tileX, attacker.tileY,
-              defender.tileX, defender.tileY,
-              eng.weapon.nProjectileSpeed,
-              eng.weapon.nDamage,
-              eng.weapon.nDamageType,
-            );
+        if (eng.bCoolingDown) {
+          // Cooldown phase
+          eng.cooldownTimer += dt;
+          if (eng.cooldownTimer >= eng.cooldownTarget) {
+            eng.bCoolingDown = false;
+            eng.aimTimer = 0;
+            const minAim = eng.weapon.nMinAimTime ?? DEFAULT_MIN_AIM;
+            const maxAim = eng.weapon.nMaxAimTime ?? DEFAULT_MAX_AIM;
+            eng.aimTarget = randomFloat(minAim, maxAim);
           }
+        } else {
+          // Aim phase
+          eng.aimTimer += dt;
+          if (eng.aimTimer >= eng.aimTarget) {
+            // Re-check LoS before firing
+            let hasLoS = true;
+            if (this.grid) {
+              hasLoS = checkLineOfSight(this.grid, attacker.tileX, attacker.tileY, defender.tileX, defender.tileY);
+            }
 
-          // For simplicity, register hit immediately (projectile travel is visual only)
-          hits.push({
-            attackerId: eng.attackerId,
-            defenderId: eng.defenderId,
-            damage: eng.weapon.nDamage,
-            damageType: eng.weapon.nDamageType,
-          });
+            if (hasLoS) {
+              // Fire!
+              if (this.projectileManager) {
+                this.projectileManager.fire(
+                  attacker.tileX, attacker.tileY,
+                  defender.tileX, defender.tileY,
+                  eng.weapon.nProjectileSpeed,
+                  eng.weapon.nDamage,
+                  eng.weapon.nDamageType,
+                );
+              }
+
+              hits.push({
+                attackerId: eng.attackerId,
+                defenderId: eng.defenderId,
+                damage: eng.weapon.nDamage,
+                damageType: eng.weapon.nDamageType,
+              });
+
+              // Enter cooldown
+              eng.bCoolingDown = true;
+              eng.cooldownTimer = 0;
+              const minCool = eng.weapon.nMinCoolDown ?? DEFAULT_MIN_COOLDOWN;
+              const maxCool = eng.weapon.nMaxCoolDown ?? DEFAULT_MAX_COOLDOWN;
+              eng.cooldownTarget = randomFloat(minCool, maxCool);
+            } else {
+              // No LoS — disengage
+              toRemove.push(i);
+            }
+          }
         }
       }
     }
@@ -166,7 +291,13 @@ export class CombatSystem {
     if (char.weapon && WEAPON_DEFS[char.weapon]) {
       return WEAPON_DEFS[char.weapon];
     }
-    return WEAPON_DEFS['Fists'];
+    // Use race melee damage for unarmed combat (Lua: MONSTER=40, HUMAN=20)
+    const raceDamage = char.getMeleeDamage();
+    const fists = WEAPON_DEFS['Fists'];
+    if (raceDamage !== fists.nDamage) {
+      return { ...fists, nDamage: raceDamage };
+    }
+    return fists;
   }
 
   /** Find the nearest hostile character to the given character. */
@@ -188,14 +319,44 @@ export class CombatSystem {
     return nearest;
   }
 
-  /** Get damage cause from damage type. */
+  /** Get damage cause from damage type. Stunner → STUNNER cause. */
   static getCauseFromDamageType(damageType: number): number {
     switch (damageType) {
       case DAMAGE_TYPE.Melee: return CAUSE_OF_DEATH.COMBAT_MELEE;
       case DAMAGE_TYPE.Laser: return CAUSE_OF_DEATH.COMBAT_RANGED;
       case DAMAGE_TYPE.Fire: return CAUSE_OF_DEATH.FIRE;
+      case DAMAGE_TYPE.Stunner: return CAUSE_OF_DEATH.STUNNER;
       default: return CAUSE_OF_DEATH.UNSPECIFIED;
     }
+  }
+
+  /**
+   * Process a hit: applies damage, handles stunner incapacitation.
+   * Lua: stunner damage type knocks out instead of killing (creates KnockedOut malady).
+   * Returns true if character died, false if incapacitated.
+   */
+  static processHit(
+    defender: Character, damage: number, damageType: number,
+    _attacker?: Character,
+  ): boolean {
+    defender.takeDamage(damage);
+    if (!defender.isAlive()) {
+      // Stunner damage type → incapacitate instead of kill (Lua Character.lua:5592-5617)
+      if (damageType === DAMAGE_TYPE.Stunner) {
+        // Revive with 10 HP and apply KnockedOut
+        defender.setHP(10);
+        defender.bIncapacitated = true;
+        return false; // Not dead, just stunned
+      }
+      // Melee has 50% chance to stun (Lua: random stun)
+      if (damageType === DAMAGE_TYPE.Melee && Math.random() < 0.5) {
+        defender.setHP(10);
+        defender.bIncapacitated = true;
+        return false;
+      }
+      return true; // Actually dead
+    }
+    return false;
   }
 
   getEngagementCount(): number {

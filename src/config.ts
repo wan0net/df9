@@ -18,6 +18,21 @@ export const O2_DRAIN_RATE = 4;   // per tick, breached rooms
 // Characters
 export const INITIAL_CREW = 3;
 
+// ── Tile damage — mirrors WorldConstants.lua:14-24 ──────────────────────────
+export const TILE_STARTING_HIT_POINTS = 100;
+/** nHealth state: undamaged (75-100% HP) */
+export const TILE_DAMAGE_HEALTHY      = 4;
+/** nHealth state: light damage (50-75% HP) */
+export const TILE_DAMAGE_LIGHT_DAMAGE = 3;
+/** nHealth state: heavy damage (25-50% HP) */
+export const TILE_DAMAGE_HEAVY_DAMAGE = 2;
+/** nHealth state: near-destroyed (1-25% HP) */
+export const TILE_DAMAGE_DESTROYED    = 1;
+/** HP recovered per second (passive heal in powered rooms) */
+export const TILE_HEAL_OVER_TIME      = 0.05;
+/** Minimum tile clearance from world edge for player construction */
+export const CHARACTER_SAFETY_TOLERANCE = 2;
+
 // Camera
 export const ZOOM_MIN = 0.25;
 export const ZOOM_MAX = 4;

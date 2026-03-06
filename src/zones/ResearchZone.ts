@@ -5,6 +5,7 @@
 
 import { Zone } from './Zone';
 import { ZoneType } from '../world/ZoneType';
+import { researchSystem } from '../research/ResearchSystem';
 
 export class ResearchZone extends Zone {
   private activeResearch: string | null = null;
@@ -31,5 +32,14 @@ export class ResearchZone extends Zone {
 
   hasActiveResearch(): boolean {
     return this.activeResearch !== null;
+  }
+
+  /** Mirrors Lua ResearchZone:onTick — clear stale activeResearch if no longer valid.
+   * Matches: if sCurrentResearch and not Base.canResearch(sCurrentResearch) → nil */
+  override onTick(dt: number) {
+    super.onTick(dt);
+    if (this.activeResearch && researchSystem.isCompleted(this.activeResearch)) {
+      this.activeResearch = null;
+    }
   }
 }

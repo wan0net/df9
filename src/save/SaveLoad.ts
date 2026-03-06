@@ -11,6 +11,7 @@ import type { CharacterManager } from '../characters/CharacterManager';
 import type { EnvObjectManager as EnvObjMgrType } from '../envobjects/EnvObjectManager';
 import type { EventController } from '../events/EventController';
 import type { MaladyInstance } from '../malady/Malady';
+import type { LogEntry } from '../characters/Log';
 
 // ── Save data interfaces ────────────────────────────────────────
 
@@ -21,6 +22,7 @@ export interface CharSaveData {
   name: string;
   job: number;
   team: number;
+  race?: number;
   hp: number;
   maxHP: number;
   status: number;
@@ -28,11 +30,14 @@ export interface CharSaveData {
   competency: Record<number, number>;
   morale: number;
   anger: number;
-  bOnShift: boolean;
+  nRemainingDutyTime: number;
   weapon: string | null;
   bSpacesuit: boolean;
   nSuitOxygen: number;
   maladies: MaladyInstance[];
+  tLog?: LogEntry[];
+  needs?: { hunger: number; energy: number; amusement: number; social: number; oxygen: number };
+  inventory?: { sTemplate: string; sName: string; nCount: number }[];
 }
 
 export interface ObjSaveData {
@@ -57,8 +62,9 @@ export interface SaveData {
   characters: CharSaveData[];
   objects: ObjSaveData[];
   research: { active: string | null; progress: number; completed: string[] };
-  roomZones: { roomId: number; zone: string }[];
+  roomZones: { roomId: number; zone: string; oxygen?: number }[];
   events?: ReturnType<EventController['getSaveData']>;
+  topics?: { tTopics: Record<string, { name: string; category: string }>; counter: number };
   tStats?: BaseStats;
   factionData?: { teamFactions: [number, number][]; nNextTeamID: number };
 }
@@ -72,11 +78,13 @@ export class SaveLoadSystem {
   getObjectData: (() => ObjSaveData[]) | null = null;
   getResearchData: (() => { active: string | null; progress: number; completed: string[] }) | null = null;
   getEventData: (() => ReturnType<EventController['getSaveData']>) | null = null;
+  getTopicsData: (() => { tTopics: Record<string, { name: string; category: string }>; counter: number }) | null = null;
 
   loadCharacterData: ((data: CharSaveData[]) => void) | null = null;
   loadObjectData: ((data: ObjSaveData[]) => void) | null = null;
   loadResearchData: ((data: { active: string | null; progress: number; completed: string[] }) => void) | null = null;
   loadEventData: ((data: ReturnType<EventController['getSaveData']>) => void) | null = null;
+  loadTopicsData: ((data: { tTopics: Record<string, { name: string; category: string }>; counter: number }) => void) | null = null;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -97,6 +105,7 @@ export class SaveLoadSystem {
     const roomZones = this.roomManager.getRooms().map(r => ({
       roomId: r.id,
       zone: r.zone as string,
+      oxygen: r.oxygen,
     }));
 
     return {
@@ -114,6 +123,7 @@ export class SaveLoadSystem {
       research: this.getResearchData?.() ?? { active: null, progress: 0, completed: [] },
       roomZones,
       events: this.getEventData?.(),
+      topics: this.getTopicsData?.(),
       tStats: { ...Base.tStats },
       factionData: Base.getFactionSaveData(),
     };
@@ -181,6 +191,7 @@ export class SaveLoadSystem {
     if (data.objects) this.loadObjectData?.(data.objects);
     if (data.research) this.loadResearchData?.(data.research);
     if (data.events) this.loadEventData?.(data.events);
+    if (data.topics) this.loadTopicsData?.(data.topics);
 
     return true;
   }
@@ -193,5 +204,51 @@ export class SaveLoadSystem {
   /** Delete a save. */
   deleteSave(slotName = 'SpacebaseDF9AutoSave') {
     localStorage.removeItem(slotName);
+  }
+
+  /** Export save data as a downloadable .json file. */
+  exportToFile(filename = 'spacebase-df9-save.json') {
+    const data = this.save();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /** Import save data from a .json file via file picker. Returns a promise. */
+  importFromFile(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) { resolve(false); return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result as string) as SaveData;
+            const ok = this.load(data);
+            resolve(ok);
+          } catch (e) {
+            console.error('Import failed:', e);
+            resolve(false);
+          }
+        };
+        reader.onerror = () => resolve(false);
+        reader.readAsText(file);
+      });
+      document.body.appendChild(input);
+      input.click();
+      document.body.removeChild(input);
+    });
   }
 }

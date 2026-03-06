@@ -3,6 +3,7 @@ import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { tileToScreen, screenToTile, offsetToIso, isoToOffset } from '../world/IsometricUtils';
 import { getTexture } from '../renderer/AssetLoader';
+import { CHARACTER_SAFETY_TOLERANCE } from '../config';
 
 export class BuildCursor {
   private scene: THREE.Scene;
@@ -80,6 +81,9 @@ export class BuildCursor {
 
   canPlace(x: number, y: number, mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish'): boolean {
     if (!this.grid.inBounds(x, y)) return false;
+    // Mirrors WorldConstants.CHARACTER_SAFETY_TOLERANCE = 2: no building within 2 tiles of world edge
+    const tol = CHARACTER_SAFETY_TOLERANCE;
+    if (x < tol || y < tol || x >= this.grid.width - tol || y >= this.grid.height - tol) return false;
     const current = this.grid.get(x, y);
     switch (mode) {
       case 'room':

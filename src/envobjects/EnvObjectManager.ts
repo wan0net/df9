@@ -91,11 +91,21 @@ class EnvObjectManagerClass implements TickableSystem {
     return Array.from(this.objects.values());
   }
 
+  /** Get any EnvObject occupying a tile.
+   * Mirrors Lua: ObjectList.getObjAtTile(tx, ty, ObjectList.ENVOBJECT) */
+  getObjectAt(tileX: number, tileY: number): EnvObject | null {
+    for (const obj of this.objects.values()) {
+      if (obj.tileX === tileX && obj.tileY === tileY) return obj;
+    }
+    return null;
+  }
+
   /** Get the Door at a tile position, or null if none. */
   getDoorAt(tileX: number, tileY: number): Door | null {
     for (const obj of this.objects.values()) {
-      if (obj instanceof Door && obj.tileX === tileX && obj.tileY === tileY) {
-        return obj;
+      if (obj instanceof Door) {
+        if (obj.tileX === tileX && obj.tileY === tileY) return obj;
+        if (obj.secondTileX === tileX && obj.secondTileY === tileY) return obj;
       }
     }
     return null;

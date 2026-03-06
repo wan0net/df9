@@ -18,7 +18,7 @@ export type SelectedEntity =
   | { type: 'room'; data: Room }
   | null;
 
-type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'actions';
+type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'log' | 'actions';
 
 export class InspectorPanel {
   private el: HTMLDivElement;
@@ -179,6 +179,7 @@ export class InspectorPanel {
       { label: 'Stats', tab: 'stats' },
       { label: 'Needs', tab: 'needs' },
       { label: 'Psych', tab: 'psych' },
+      { label: 'Log', tab: 'log' },
       { label: 'Actions', tab: 'actions' },
     ];
     for (const t of tabs) {
@@ -212,6 +213,9 @@ export class InspectorPanel {
         break;
       case 'psych':
         this.renderPsychTab(body, char);
+        break;
+      case 'log':
+        this.renderLogTab(body, char);
         break;
       case 'actions':
         this.renderActionsTab(body, char);
@@ -281,10 +285,13 @@ export class InspectorPanel {
     ];
 
     for (const n of needs) {
-      const color = n.value > 60 ? '#4f4' : n.value > 30 ? '#ff0' : '#f44';
+      // Needs range -100..+100; remap to 0..100% for display
+      const displayPct = (n.value + 100) / 2;
+      const color = n.value > 30 ? '#4f4' : n.value > -30 ? '#ff0' : '#f44';
       const row = document.createElement('div');
       row.style.cssText = 'margin-bottom:6px;';
-      row.innerHTML = this.bar(n.label, Math.max(0, n.value), 100, color);
+      // Note: bar() uses only numeric values derived from game state, not user input
+      row.innerHTML = this.bar(n.label, Math.max(0, displayPct), 100, color);
       container.appendChild(row);
     }
   }
@@ -347,6 +354,31 @@ export class InspectorPanel {
         traitDiv.appendChild(tag);
       }
       container.appendChild(traitDiv);
+    }
+  }
+
+  private renderLogTab(container: HTMLDivElement, char: Character) {
+    const log = char.tLog;
+    if (log.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:#888;font-style:italic;';
+      empty.textContent = 'No log entries yet.';
+      container.appendChild(empty);
+      return;
+    }
+
+    // Show most recent entries first, up to 20
+    const maxEntries = 20;
+    const start = Math.max(0, log.length - maxEntries);
+    for (let i = log.length - 1; i >= start; i--) {
+      const entry = log[i];
+      const row = document.createElement('div');
+      row.style.cssText = `
+        margin-bottom:4px;padding:3px 4px;border-bottom:1px solid #222;
+        font-size:11px;line-height:1.3;color:#ccc;
+      `;
+      row.textContent = entry.sLine;
+      container.appendChild(row);
     }
   }
 

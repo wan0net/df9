@@ -40,6 +40,9 @@ export abstract class Task {
   targetX = -1;
   targetY = -1;
 
+  /** Activity tags (set from ActivityOption when task is created). */
+  tags: Record<string, boolean> = {};
+
   /** Called when the task starts. */
   start(character: Character) {
     this.character = character;

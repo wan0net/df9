@@ -138,14 +138,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
   // ── Doors ─────────────────────────────────────────────────────
   Door: def({
     spriteName: 'door_closed', friendlyName: 'Door', matterCost: 25,
-    againstWall: true, door: true, bBlocksOxygen: true,
+    door: true, bBlocksOxygen: true,
     customClass: 'Door', noRoom: true, sidebarIcon: 'icon_door',
     layer: 'worldWall', clickSound: 'spacedoor', placeSound: 'placedoor',
     portrait: 'Env_Door', sFlavorText: 'OBFLAV018TEXT',
   }),
   HeavyDoor: def({
     spriteName: 'door_heavy_closed', friendlyName: 'Heavy Door', matterCost: 100,
-    againstWall: true, door: true, bBlocksPathing: true, bBlocksOxygen: true,
+    door: true, bBlocksPathing: true, bBlocksOxygen: true,
     customClass: 'HeavyDoor', noRoom: true, researchPrereq: 'DoorLevel2',
     sidebarIcon: 'icon_heavydoor', layer: 'worldWall',
     clickSound: 'spacedoor', placeSound: 'placedoor',
@@ -154,7 +154,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
   }),
   Airlock: def({
     spriteName: 'airlock_door_closed', friendlyName: 'Airlock Door', matterCost: 75,
-    width: 2, againstWall: true, door: true, bBlocksOxygen: true,
+    width: 2, door: true, bBlocksOxygen: true,
     customClass: 'Airlock', noRoom: true, sidebarIcon: 'icon_airlock_door',
     layer: 'worldWall', clickSound: '', placeSound: 'placeairlock',
     portrait: 'Env_Airlock_Door', sFlavorText: 'OBFLAV016TEXT',

@@ -6,7 +6,7 @@
 
 import type { Task, NeedAdvertisement } from './Task';
 import type { Character } from '../characters/Character';
-import { TEAM_ID_PLAYER } from '../characters/CharacterConstants';
+import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT } from '../characters/CharacterConstants';
 import { isoSquareDist } from '../core/MiscUtil';
 
 /** Distance penalty factor for utility scoring. */
@@ -129,7 +129,7 @@ export class ActivityOption {
     const t = this.tags;
 
     // Work shift check: if tagged, only available when on shift
-    if (t.WorkShift && !character.bOnShift) return false;
+    if (t.WorkShift && !character.wantsWorkShiftTask()) return false;
 
     // Job restriction: only available to characters with matching job
     if (t.Job !== undefined && character.getJob() !== t.Job) return false;
@@ -186,7 +186,8 @@ export class ActivityOption {
     for (const adv of advertisedNeeds) {
       const currentValue = this.getNeedValue(character, adv.need);
       // Lower current value = higher utility for satisfying it
-      const urgency = Math.max(0, 100 - currentValue) / 100;
+      // Needs range -100..+100, so urgency maps to 0..1 across full range
+      const urgency = Math.max(0, 100 - currentValue) / 200;
       score += urgency * adv.amount;
     }
 
@@ -194,6 +195,13 @@ export class ActivityOption {
     const dist = isoSquareDist(character.tileX, character.tileY, this.targetX, this.targetY);
     const distFactor = this.tags.HighDistPenalty ? HIGH_DIST_PENALTY_FACTOR : DISTANCE_PENALTY_FACTOR;
     score -= dist * distFactor;
+
+    // Activity affinity modifier (Lua: ±20% from topic affinity)
+    const activityAff = character.getAffinityForActivity(this.task.constructor.name);
+    if (activityAff !== null) {
+      const affinityBonus = activityAff / STARTING_AFFINITY;
+      score += score * (ACTIVITY_AFFINITY_CHANGE_PCT * affinityBonus);
+    }
 
     // Minimum score enforcement
     if (score < this.minimumScore) return -Infinity;

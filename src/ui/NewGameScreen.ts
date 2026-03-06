@@ -4,16 +4,30 @@ import { SoundManager } from '../audio/SoundManager';
 
 const AMBER_HEX = '#dfa200';
 const GREEN_HEX = '#a5d318';
-const RED_HEX = '#ff3d00';
+const RED_HEX   = '#ff3d00';
 
-const MAP_GRID = 16;
-const END_ANIM_INITIAL_DELAY = 2.0;
-const END_ANIM_ZOOM_TIME = 2.5;
-const END_ANIM_YEARS_DELAY = 0.5;
+/** INFO_MAP_SIZE — mirrors NewBase.lua:31 */
+const INFO_MAP_SIZE = 64;
+
+const END_ANIM_INITIAL_DELAY          = 2.0;
+const END_ANIM_ZOOM_TIME              = 2.5;
+const END_ANIM_YEARS_DELAY            = 0.5;
 const END_ANIM_BEFORE_COUNTDOWN_DELAY = 2.0;
-const END_ANIM_COUNTDOWN_TIME = 2.5;
-const END_ANIM_FADE_OUT_TIME = 0.5;
+const END_ANIM_COUNTDOWN_TIME         = 2.5;
+const END_ANIM_FADE_OUT_TIME          = 0.5;
 const MAX_YEARS = 358042;
+
+/** Tutorial marker grid coords — NewBase.lua:228 */
+const TUTORIAL_X = 12;
+const TUTORIAL_Y = 34;
+
+/**
+ * Sidebar widths — scaled from native sprite sizes.
+ * Original sprites: left=295px, right=156px for ~1920 viewport.
+ * We scale to ~50% so they work well at 960-1440 typical viewports.
+ */
+const LEFT_SIDEBAR_W = 148;
+const RIGHT_SIDEBAR_W = 78;
 
 type GameState = 'Initial' | 'SelectedLandingZone' | 'ConfirmedLandingZone' | 'Deploying' | 'Deployed';
 
@@ -23,11 +37,119 @@ interface LandingZone {
   density: number;
   threat: number;
   distance: number;
+  interference: number;
+}
+
+// ── Word lists — NewBaseInspector.lua + MainGame_enUS.lua ─────────────────────
+
+const REGION_ADJECTIVES = [
+  // NEWBAS023-034, NEWBAS041, NEWBAS043
+  'Puce','Dark','Cute','Green','Yummy','Gold','Scary','Purple','Viridian','Wobbly','Black','Lost','Gravy','Belt',
+  // NEWBAS060-099
+  'Empty','Deep','Uncharted','Forgotten','Forbidden','Discouraged','Unrecommended','Far',
+  'Rift','Ring','Pearl','Jade','Ruby','Aluminum','Platinum','Lithium','Iridium','Calcium',
+  'Barium','Tin','Ghost','Skull','Helix','Spider','Dwarf','Divine','Shadow','Intercourse',
+  'Peculiar','Knob','Spinward','Darrian','Regina','Allel','Reaver','Scarran','Neutral',
+  'Breakaway','Demilitarized','Excalibur',
+  // NEWBAS100-151
+  'Caduceus','Reserved','Unremarkable','Aromatic','Odorous','Accidental','Corpulent',
+  'Execrable','Obnoxious','Irksome','Creepy','Foul','Rude','Ridiculous','Dreadful',
+  'Abrasive','Limp','Spasmodic','Swollen','Turgid','Moist','Conjugal','Gelatinous',
+  'Chartreuse','Congealed','Bulbous','Slimy','Lugubrious','Viscous','Clogged','Abnormal',
+  'Indescribable','Nameless','Non-Euclidean','Stygian','Unmentionable','Unnameable',
+  'Unutterable','Spectral','Loathsome','Cyclopean','Amorphous','Antique','Dank','Gibbous',
+  'Iridescent','Blasphemous','Tedious','Wafer-thin','Unladened','Farcical','Ruthless',
+  // Greek letters (ZONEUI018-033)
+  'Epsilon','Zeta','Alpha','Beta','Gamma','Delta','Theta','Iota','Lambda','Mu','Omicron',
+  'Rho','Sigma','Tau','Upsilon','Omega',
+  // Colors (ZONEUI073-084)
+  'Cobalt','Viridian','Alizarin','Yellow','Blue','Green','Red','Orange','Violet','Magenta','Cyan','Emerald',
+];
+
+const REGION_NOUNS = [
+  // NEWBAS035-040, NEWBAS044-059
+  'Region','Zone','Sector','Quadrant','Nebula','Cluster',
+  'Quarter','Field','Subsector','Pocket','Territories','District',
+  'Arm','Rim','Expanse','Corridor','Worlds','Systems','Marches','Wastes','Space','Cloud',
+];
+
+/** Severity labels — MiscUtil.tSeverityCodes (9 steps, low→high) */
+const SEVERITY_LABELS = [
+  'Ridiculously Low','Extremely Low','Low',
+  'Semi-Low','Average','Semi-High',
+  'High','Really High','Extremely High',
+];
+
+/** Distance labels — MiscUtil.tDistanceCodes (5 steps) */
+const DISTANCE_LABELS = ['Very Distant','Distant','Proximal','Close','Very Close'];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function cellHash(x: number, y: number, salt: number): number {
+  const n = (x * 73856093 ^ y * 19349663 ^ salt * 83492791) >>> 0;
+  return (n * 2654435761 >>> 0) / 4294967296;
+}
+
+function severityText(v: number): string {
+  return SEVERITY_LABELS[Math.min(SEVERITY_LABELS.length - 1, Math.floor(v * SEVERITY_LABELS.length))];
+}
+
+function distanceText(v: number): string {
+  return DISTANCE_LABELS[Math.min(DISTANCE_LABELS.length - 1, Math.floor(v * DISTANCE_LABELS.length))];
+}
+
+/** density color: high=green, low=red — NewBaseInspector.lua:105-107 */
+function densityColor(v: number): string {
+  return v > 0.66 ? GREEN_HEX : v < 0.33 ? RED_HEX : AMBER_HEX;
+}
+
+/** threat color: high=red, low=green — NewBaseInspector.lua:113-116 */
+function threatColor(v: number): string {
+  return v > 0.66 ? RED_HEX : v < 0.33 ? GREEN_HEX : AMBER_HEX;
 }
 
 /**
+ * Region name: "Adjective Noun X-Y" — NewBaseInspector.lua:172-176
+ * Deterministic from grid coordinates.
+ */
+function getRegionName(x: number, y: number): string {
+  const adj  = REGION_ADJECTIVES[Math.floor(cellHash(x, y, 1) * REGION_ADJECTIVES.length)];
+  const noun = REGION_NOUNS[Math.floor(cellHash(x, y, 2) * REGION_NOUNS.length)];
+  return `${adj} ${noun} ${x}-${y}`;
+}
+
+/**
+ * Age in billion years — NewBaseInspector.lua:102:
+ *   math.abs(math.sin(math.rad(x*15))) * 10 + 5
+ */
+function getAge(x: number): number {
+  return Math.round(Math.abs(Math.sin((x * 15) * Math.PI / 180)) * 10 + 5);
+}
+
+/** Set a DOM element's text and color in one call. */
+function setColored(el: HTMLElement, label: string, value: string, color: string) {
+  el.textContent = '';
+  const lbl = document.createElement('span');
+  lbl.textContent = label + ': ';
+  lbl.style.color = AMBER_HEX;
+  const val = document.createElement('span');
+  val.textContent = value;
+  val.style.color = color;
+  el.append(lbl, val);
+}
+
+/** Load an image from a URL. Returns null if not found. */
+function loadImg(src: string): HTMLImageElement {
+  const img = new Image();
+  img.src = src;
+  return img;
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+/**
  * Galaxy map landing zone selection + deployment animation.
- * Pure HTML/Canvas implementation replacing NewGameScene.ts.
+ * Mirrors NewBase.lua + NewBaseLayout.lua + NewBaseInspector.lua.
  */
 export class NewGameScreenState implements SceneState {
   private ctx!: SceneContext;
@@ -42,28 +164,57 @@ export class NewGameScreenState implements SceneState {
   private mapSize = 0;
   private mapX = 0;
   private mapY = 0;
-
   private hoverGx = -1;
   private hoverGy = -1;
 
-  private onStartGame: (landingZone: LandingZone) => void;
+  /** Inspector slide-in timer — NewBaseInspector.lua:150-169 */
+  private inspectorTimer  = 0;
+  private inspectorActive = false;
+
+  private onStartGame: (lz: LandingZone) => void;
   private onBack: () => void;
 
-  // UI elements
+  // DOM refs
   private infoPanel!: HTMLDivElement;
-  private confirmBtn!: HTMLButtonElement;
-  private declineBtn!: HTMLButtonElement;
-  private deployBtn!: HTMLButtonElement;
-  private cancelBtn!: HTMLButtonElement;
+  private panelName!: HTMLDivElement;
+  private panelAge!: HTMLDivElement;
+  private panelDensity!: HTMLDivElement;
+  private panelDistance!: HTMLDivElement;
+  private panelThreat!: HTMLDivElement;
+  private panelInterference!: HTMLDivElement;
   private helpText!: HTMLDivElement;
   private deployOverlay!: HTMLDivElement;
+  private deployMsg!: HTMLDivElement;
+  private deployEta!: HTMLDivElement;
+  private deployYears!: HTMLDivElement;
+
+  // Sprite buttons — Lua layout elements
+  private confirmBtnEl!: HTMLDivElement;
+  private declineBtnEl!: HTMLDivElement;
+  private launchCoverEl!: HTMLImageElement;
+  private launchActiveEl!: HTMLDivElement;
+  private cancelBtnEl!: HTMLDivElement;
+  private leftSidebar!: HTMLDivElement;
+  private rightSidebar!: HTMLDivElement;
 
   private galaxyImg: HTMLImageElement | null = null;
 
-  constructor(handlers: {
-    onStartGame: (landingZone: LandingZone) => void;
-    onBack: () => void;
-  }) {
+  // Preload sprite images for snappy display
+  private _preloads = [
+    loadImg('/assets/ui/newgame/launchbutton_cover.png'),
+    loadImg('/assets/ui/newgame/launchbutton_active.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_buttonConfirm_off.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_buttonConfirm_active.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_buttonDecline_off.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_buttonDecline_active.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_sidebarLeft.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_sidebarRight.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_sidebarRight_bottom.png'),
+  ];
+
+  constructor(handlers: { onStartGame: (lz: LandingZone) => void; onBack: () => void }) {
     this.onStartGame = handlers.onStartGame;
     this.onBack = handlers.onBack;
   }
@@ -73,182 +224,336 @@ export class NewGameScreenState implements SceneState {
     this.state = 'Initial';
     this.selectedZone = null;
     this.deployTime = 0;
+    this.inspectorTimer = 0;
+    this.inspectorActive = false;
 
-    // Load galaxy map image
+    SoundManager.playUI('Intro_LaunchScreen');  // Lua: cursorappear
+
     const galaxyTex = getTexture('galaxy_map');
-    if (galaxyTex?.image instanceof HTMLImageElement) {
-      this.galaxyImg = galaxyTex.image;
-    }
+    if (galaxyTex?.image instanceof HTMLImageElement) this.galaxyImg = galaxyTex.image;
 
     this.overlay = document.createElement('div');
     this.overlay.id = 'new-game';
-    this.overlay.style.cssText = `
-      position:absolute;top:0;left:0;width:100%;height:100%;
-      background:#000;z-index:100;font-family:monospace;
-    `;
+    this.overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;font-family:'Orbitron',monospace;overflow:hidden;`;
 
-    // Canvas for galaxy map
     this.canvas = document.createElement('canvas');
-    this.canvas.width = window.innerWidth;
+    this.canvas.width  = window.innerWidth;
     this.canvas.height = window.innerHeight;
     this.canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
     this.canvasCtx = this.canvas.getContext('2d')!;
     this.overlay.appendChild(this.canvas);
 
-    // Calculate map position
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.mapSize = Math.min(w, h) * 0.7;
-    this.mapX = (w - this.mapSize) / 2;
-    this.mapY = (h - this.mapSize) / 2 - 20;
+    // Galaxy map fills available space between sidebars, with room for title/helptext
+    const availW = w - LEFT_SIDEBAR_W - RIGHT_SIDEBAR_W - 20;
+    const availH = h - 110; // 50px title + 60px help bar at bottom
+    this.mapSize = Math.min(availW, availH);
+    this.mapX = LEFT_SIDEBAR_W + (availW - this.mapSize) / 2 + 10;
+    this.mapY = 55; // below title
 
-    // Title
-    const title = document.createElement('div');
-    title.textContent = 'SELECT LANDING ZONE';
-    title.style.cssText = `
-      position:absolute;top:24px;width:100%;text-align:center;
-      color:${AMBER_HEX};font-size:24px;font-weight:bold;z-index:1;
-    `;
-    this.overlay.appendChild(title);
+    this.buildSidebars();
+    this.buildInfoPanel();
+    this.buildConfirmDecline();
+    this.buildLaunchButton();
+    this.buildHelpText();
+    this.buildDeployOverlay();
 
-    // Help text
-    this.helpText = document.createElement('div');
-    this.helpText.textContent = 'Click a region on the galaxy map';
-    this.helpText.style.cssText = `
-      position:absolute;bottom:40px;width:100%;text-align:center;
-      color:${AMBER_HEX};font-size:18px;z-index:1;
-    `;
-    this.overlay.appendChild(this.helpText);
+    // Title — mirrors "FlavorTextALabel" at top of galaxy area
+    this.overlay.appendChild(this.el('div',
+      `position:absolute;top:20px;width:100%;text-align:center;color:${AMBER_HEX};font-size:22px;font-weight:700;letter-spacing:3px;z-index:5;`,
+      'SELECT LANDING ZONE'));
 
-    // Info panel (right side)
-    const panelX = this.mapX + this.mapSize + 20;
-    this.infoPanel = document.createElement('div');
-    this.infoPanel.style.cssText = `
-      position:absolute;left:${panelX}px;top:${this.mapY}px;
-      width:220px;padding:14px;background:rgba(0,0,0,0.85);
-      border:1px solid rgba(223,162,0,0.5);color:${AMBER_HEX};
-      font-size:15px;line-height:2;z-index:1;display:none;
-    `;
-    this.overlay.appendChild(this.infoPanel);
-
-    // Confirm / Decline buttons
-    this.confirmBtn = this.createButton('Confirm', GREEN_HEX, () => this.onConfirm());
-    this.confirmBtn.style.cssText += `position:absolute;left:${panelX}px;top:${this.mapY + 240}px;display:none;z-index:1;`;
-    this.overlay.appendChild(this.confirmBtn);
-
-    this.declineBtn = this.createButton('Decline', RED_HEX, () => this.onDecline());
-    this.declineBtn.style.cssText += `position:absolute;left:${panelX + 120}px;top:${this.mapY + 240}px;display:none;z-index:1;`;
-    this.overlay.appendChild(this.declineBtn);
-
-    // Deploy / Cancel (centered)
-    this.deployBtn = this.createButton('DEPLOY', GREEN_HEX, () => this.onDeploy());
-    this.deployBtn.style.cssText += `position:absolute;left:50%;top:50%;transform:translate(-50%,30px);display:none;z-index:2;font-size:36px;padding:14px 40px;`;
-    this.overlay.appendChild(this.deployBtn);
-
-    this.cancelBtn = this.createButton('Cancel', RED_HEX, () => this.onDecline());
-    this.cancelBtn.style.cssText += `position:absolute;left:50%;top:50%;transform:translate(-50%,90px);display:none;z-index:2;font-size:16px;`;
-    this.overlay.appendChild(this.cancelBtn);
-
-    // Deploy animation overlay
-    this.deployOverlay = document.createElement('div');
-    this.deployOverlay.style.cssText = `
-      position:absolute;top:0;left:0;width:100%;height:100%;
-      background:#000;z-index:50;display:none;
-      font-family:monospace;color:${AMBER_HEX};
-    `;
-    this.overlay.appendChild(this.deployOverlay);
-
-    // Back button
-    const backBtn = document.createElement('div');
-    backBtn.textContent = '< Back';
-    backBtn.style.cssText = `
-      position:absolute;bottom:40px;left:20px;color:#888;font-size:16px;
-      cursor:pointer;z-index:1;
-    `;
+    // Back
+    const backBtn = this.el('div',
+      `position:absolute;bottom:30px;left:24px;color:#888;font-size:14px;cursor:pointer;z-index:5;font-family:'Orbitron',monospace;letter-spacing:1px;`,
+      '< Back');
     backBtn.addEventListener('click', this.onBack);
+    backBtn.addEventListener('mouseenter', () => { backBtn.style.color = AMBER_HEX; });
+    backBtn.addEventListener('mouseleave', () => { backBtn.style.color = '#888'; });
     this.overlay.appendChild(backBtn);
 
-    // Mouse events
-    this.canvas.addEventListener('click', (e) => this.onMapClick(e));
+    this.canvas.addEventListener('click',     (e) => this.onMapClick(e));
     this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
 
     ctx.container.appendChild(this.overlay);
     this.draw();
   }
 
-  private createButton(label: string, color: string, onClick: () => void): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    btn.style.cssText = `
-      background:${color};color:#000;border:none;
-      font-family:monospace;font-weight:bold;font-size:18px;
-      padding:8px 14px;cursor:pointer;
-    `;
-    btn.addEventListener('click', onClick);
-    return btn;
+  // ── Build UI elements ────────────────────────────────────────────────────────
+
+  private buildSidebars() {
+    const h = window.innerHeight;
+
+    // ── Left sidebar ──────────────────────────────────────────────────
+    // Lua: top piece at left edge covering upper 809px, tiles at 542px intervals
+    // starting 758px from top, bottom piece near viewport bottom.
+    this.leftSidebar = document.createElement('div');
+    this.leftSidebar.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
+
+    // Tile background — fills the entire height seamlessly via CSS repeat
+    const lTileBg = document.createElement('div');
+    lTileBg.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png') left top repeat-y;background-size:${LEFT_SIDEBAR_W}px auto;`;
+    this.leftSidebar.appendChild(lTileBg);
+
+    // Top piece — overlays the tile background at the top
+    const lTop = document.createElement('img');
+    lTop.src = '/assets/ui/newgame/ui_newgame_sidebarLeft.png';
+    lTop.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_W}px;`;
+    this.leftSidebar.appendChild(lTop);
+
+    // Bottom piece — rounded corner cap (mirrors SideBarLeftBGBottom)
+    const lBottom = document.createElement('img');
+    lBottom.src = '/assets/ui/newgame/ui_newgame_sidebarLeft_bottom.png';
+    lBottom.style.cssText = `position:absolute;left:0;bottom:0;width:${LEFT_SIDEBAR_W}px;`;
+    this.leftSidebar.appendChild(lBottom);
+
+    this.overlay.appendChild(this.leftSidebar);
+
+    // ── Right sidebar ─────────────────────────────────────────────────
+    // Lua: top piece at right edge - 156, tiles at right edge - 126,
+    // bottom piece near viewport bottom.
+    this.rightSidebar = document.createElement('div');
+    this.rightSidebar.style.cssText = `position:absolute;right:0;top:0;width:${RIGHT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
+
+    // Tile background
+    const rTileBg = document.createElement('div');
+    rTileBg.style.cssText = `position:absolute;right:0;top:0;width:100%;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png') right top repeat-y;background-size:${RIGHT_SIDEBAR_W}px auto;`;
+    this.rightSidebar.appendChild(rTileBg);
+
+    // Top piece
+    const rTop = document.createElement('img');
+    rTop.src = '/assets/ui/newgame/ui_newgame_sidebarRight.png';
+    rTop.style.cssText = `position:absolute;right:0;top:0;width:${RIGHT_SIDEBAR_W}px;`;
+    this.rightSidebar.appendChild(rTop);
+
+    // Bottom piece — rounded corner cap
+    const rBottom = document.createElement('img');
+    rBottom.src = '/assets/ui/newgame/ui_newgame_sidebarRight_bottom.png';
+    rBottom.style.cssText = `position:absolute;right:0;bottom:0;width:${RIGHT_SIDEBAR_W}px;`;
+    this.rightSidebar.appendChild(rBottom);
+
+    this.overlay.appendChild(this.rightSidebar);
   }
+
+  private buildInfoPanel() {
+    // Info panel on right side — Lua: labels at right viewport edge - 565 to edge - 320
+    // We place it just left of the right sidebar
+    const panelRight = RIGHT_SIDEBAR_W + 10;
+    this.infoPanel = document.createElement('div');
+    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:60px;width:240px;padding:16px;color:${AMBER_HEX};font-size:13px;line-height:2;z-index:5;display:none;font-family:'Orbitron',monospace;`;
+
+    this.panelName         = document.createElement('div');
+    this.panelName.style.cssText = 'font-weight:700;font-size:15px;margin-bottom:4px;';
+    this.panelAge          = document.createElement('div');
+    this.panelAge.style.cssText  = 'color:#aaa;margin-bottom:8px;font-size:12px;';
+    const sep              = document.createElement('div');
+    sep.style.cssText      = 'border-top:1px solid rgba(223,162,0,0.3);margin:6px 0;';
+    this.panelDensity      = document.createElement('div');
+    this.panelDistance     = document.createElement('div');
+    this.panelThreat       = document.createElement('div');
+    this.panelInterference = document.createElement('div');
+    this.infoPanel.append(this.panelName, this.panelAge, sep, this.panelDensity, this.panelDistance, this.panelThreat, this.panelInterference);
+    this.overlay.appendChild(this.infoPanel);
+  }
+
+  private buildConfirmDecline() {
+    // Confirm and Decline buttons — ON the left sidebar panel
+    // Lua: left_edge + 50, top - 90 / top - 300 → buttons sit on the sidebar
+    const btnLeft = 25;   // Lua 50 at native / 2
+    const btnTop = 45;    // Lua 90 at native / 2
+    const btnSize = 77;   // 154px native / 2
+
+    // Confirm button
+    this.confirmBtnEl = document.createElement('div');
+    this.confirmBtnEl.setAttribute('role', 'button');
+    this.confirmBtnEl.setAttribute('aria-label', 'Confirm');
+    this.confirmBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${btnTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;display:none;`;
+    const confirmImg = document.createElement('img');
+    confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
+    confirmImg.style.cssText = `width:100%;height:100%;`;
+    this.confirmBtnEl.appendChild(confirmImg);
+
+    // Label below confirm
+    const confirmLabel = this.el('div', `color:rgba(0,0,0,0.7);font-size:10px;text-align:center;margin-top:2px;font-weight:700;letter-spacing:1px;`, 'ACCEPT');
+    this.confirmBtnEl.appendChild(confirmLabel);
+
+    this.confirmBtnEl.addEventListener('mouseenter', () => {
+      confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_active.png';
+      SoundManager.playUI('UI_Hilight');
+    });
+    this.confirmBtnEl.addEventListener('mouseleave', () => {
+      confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
+    });
+    this.confirmBtnEl.addEventListener('click', () => this.onConfirm());
+    this.overlay.appendChild(this.confirmBtnEl);
+
+    // Decline button — below confirm
+    this.declineBtnEl = document.createElement('div');
+    // Lua: decline at top - 300 → 150 at half scale
+    const declineTop = 150;
+    this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;display:none;`;
+    const declineImg = document.createElement('img');
+    declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
+    declineImg.style.cssText = `width:100%;height:100%;`;
+    this.declineBtnEl.appendChild(declineImg);
+
+    const declineLabel = this.el('div', `color:rgba(0,0,0,0.7);font-size:10px;text-align:center;margin-top:2px;font-weight:700;letter-spacing:1px;`, 'DECLINE');
+    this.declineBtnEl.appendChild(declineLabel);
+
+    this.declineBtnEl.addEventListener('mouseenter', () => {
+      declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_active.png';
+      SoundManager.playUI('UI_Hilight');
+    });
+    this.declineBtnEl.addEventListener('mouseleave', () => {
+      declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
+    });
+    this.declineBtnEl.addEventListener('click', () => this.onDecline());
+    this.overlay.appendChild(this.declineBtnEl);
+  }
+
+  private buildLaunchButton() {
+    // Lua positions at half scale (native / 2):
+    //   Housing (launchbutton_active): left=55, bottom=102, 203x176
+    //   Cover (launchbutton_cover):    left=-20, bottom=126, 183x111
+    //   Cancel hitbox:                 left=5, bottom=151, 30x25
+    // The cover sits over the red button area of the housing.
+    // CANCEL label is baked into the housing sprite at top-left.
+    const housingW = 203;
+    const housingH = 176;
+    const housingLeft = 55;    // Lua: (left_edge + 110) / 2
+    const housingBottom = 102; // Lua: 204 / 2
+    const coverW = 183;        // Lua: 366 / 2
+    const coverLeft = -20;     // Lua: -40 / 2
+    const coverBottom = 126;   // Lua: 252 / 2
+
+    // Launch cover (hazard stripes "LAUNCH" — shown until confirmed)
+    this.launchCoverEl = document.createElement('img') as HTMLImageElement;
+    this.launchCoverEl.src = '/assets/ui/newgame/launchbutton_cover.png';
+    this.launchCoverEl.style.cssText = `position:absolute;left:${coverLeft}px;bottom:${coverBottom}px;width:${coverW}px;z-index:6;pointer-events:none;transition:transform 0.5s ease-in-out, opacity 0.5s;`;
+    this.overlay.appendChild(this.launchCoverEl);
+
+    // Deploy housing (red button + CANCEL — hidden until confirmed)
+    this.launchActiveEl = document.createElement('div');
+    this.launchActiveEl.style.cssText = `position:absolute;left:${housingLeft}px;bottom:${housingBottom}px;width:${housingW}px;height:${housingH}px;z-index:5;display:none;cursor:pointer;`;
+
+    const activeImg = document.createElement('img');
+    activeImg.src = '/assets/ui/newgame/launchbutton_active.png';
+    activeImg.style.cssText = 'width:100%;height:100%;pointer-events:none;';
+    this.launchActiveEl.appendChild(activeImg);
+
+    // DEPLOY label centered over the red button area (center of housing)
+    const deployLabel = this.el('div', `position:absolute;top:55%;left:50%;transform:translate(-50%,-50%);color:white;font-size:14px;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, 'DEPLOY');
+    this.launchActiveEl.appendChild(deployLabel);
+
+    this.launchActiveEl.addEventListener('mouseenter', () => {
+      activeImg.style.filter = 'brightness(1.3)';
+      SoundManager.playUI('UI_Hilight');
+    });
+    this.launchActiveEl.addEventListener('mouseleave', () => {
+      activeImg.style.filter = 'brightness(1)';
+    });
+    this.launchActiveEl.addEventListener('click', () => this.onDeploy());
+    this.overlay.appendChild(this.launchActiveEl);
+
+    // Cancel button — separate element over the CANCEL text in the housing sprite.
+    // Positioned absolutely in the overlay, NOT as a child of the deploy housing,
+    // so clicks don't bubble to the deploy handler.
+    this.cancelBtnEl = document.createElement('div');
+    const cancelLeft = housingLeft;        // Aligned with left edge of housing
+    const cancelBottom = housingBottom + housingH - 30; // Near top of housing sprite
+    this.cancelBtnEl.style.cssText = `position:absolute;left:${cancelLeft}px;bottom:${cancelBottom}px;width:80px;height:30px;z-index:8;display:none;cursor:pointer;`;
+    this.cancelBtnEl.addEventListener('click', () => this.onCancel());
+    this.overlay.appendChild(this.cancelBtnEl);
+  }
+
+  private buildHelpText() {
+    // Help text — bottom center, amber background bar
+    this.helpText = document.createElement('div') as HTMLDivElement;
+    this.helpText.style.cssText = `position:absolute;bottom:60px;left:50%;transform:translateX(-50%);color:#000;font-size:14px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:8px 24px;font-family:'Orbitron',monospace;letter-spacing:1px;`;
+    this.helpText.textContent = 'CLICK A REGION ON THE GALAXY MAP';
+    this.overlay.appendChild(this.helpText);
+  }
+
+  private buildDeployOverlay() {
+    // Deploy overlay (black screen + countdown text)
+    this.deployOverlay = document.createElement('div');
+    this.deployOverlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;font-family:'Orbitron',monospace;color:${AMBER_HEX};`;
+    this.deployMsg   = this.el('div', 'font-size:20px;margin-bottom:20px;letter-spacing:2px;') as HTMLDivElement;
+    this.deployEta   = this.el('div', 'font-size:16px;margin-bottom:20px;letter-spacing:1px;', 'ESTIMATED ARRIVAL IN...') as HTMLDivElement;
+    this.deployYears = this.el('div', 'font-size:48px;font-weight:bold;letter-spacing:3px;') as HTMLDivElement;
+    this.deployOverlay.append(this.deployMsg, this.deployEta, this.deployYears);
+    this.overlay.appendChild(this.deployOverlay);
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  private el(tag: string, css: string, text = ''): HTMLElement {
+    const d = document.createElement(tag);
+    d.style.cssText = css;
+    if (text) d.textContent = text;
+    return d;
+  }
+
+  private makeLandingZone(gx: number, gy: number): LandingZone {
+    return {
+      x: gx, y: gy,
+      density:      cellHash(gx, gy, 10),
+      threat:       cellHash(gx, gy, 20),
+      distance:     cellHash(gx, gy, 30),
+      interference: cellHash(gx, gy, 40),
+    };
+  }
+
+  private showInspector(zone: LandingZone) {
+    const { x, y, density, threat, distance, interference } = zone;
+
+    this.panelName.textContent    = getRegionName(x, y);
+    this.panelName.style.color    = AMBER_HEX;
+
+    this.panelAge.textContent  = `Age: ${getAge(x)} Billion Years`;
+
+    setColored(this.panelDensity,      'Stellar Density', severityText(density),      densityColor(density));
+    setColored(this.panelDistance,     'Distance',        distanceText(distance),     AMBER_HEX);
+    setColored(this.panelThreat,       'Threat',          severityText(threat),       threatColor(threat));
+    setColored(this.panelInterference, 'Interference',    severityText(interference), AMBER_HEX);
+
+    // Only trigger slide-in animation on first appearance
+    const wasHidden = this.infoPanel.style.display === 'none';
+    this.infoPanel.style.display = 'block';
+    if (wasHidden) {
+      this.inspectorTimer  = 0;
+      this.inspectorActive = true;
+    }
+  }
+
+  // ── Events ───────────────────────────────────────────────────────────────────
 
   private onMapClick(e: MouseEvent) {
     if (this.state !== 'Initial') return;
-
     const rect = this.canvas.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
+    const cellSize = this.mapSize / INFO_MAP_SIZE;
+    const gx = Math.floor((e.clientX - rect.left - this.mapX) / cellSize);
+    const gy = Math.floor((e.clientY - rect.top  - this.mapY) / cellSize);
+    if (gx < 0 || gx >= INFO_MAP_SIZE || gy < 0 || gy >= INFO_MAP_SIZE) return;
 
-    const cellSize = this.mapSize / MAP_GRID;
-    const gx = Math.floor((px - this.mapX) / cellSize);
-    const gy = Math.floor((py - this.mapY) / cellSize);
-    if (gx < 0 || gx >= MAP_GRID || gy < 0 || gy >= MAP_GRID) return;
-
-    const seed = gx * 73 + gy * 137;
-    this.selectedZone = {
-      x: gx, y: gy,
-      density: ((seed * 2654435761) >>> 0) / 4294967296,
-      threat: ((seed * 340573321) >>> 0) / 4294967296,
-      distance: (((seed + 7) * 1103515245) >>> 0) / 4294967296,
-    };
-
+    this.selectedZone = this.makeLandingZone(gx, gy);
     this.state = 'SelectedLandingZone';
-    this.helpText.textContent = 'Review region and confirm';
-    SoundManager.playUI('UI_Select');
-
-    const z = this.selectedZone;
-    this.infoPanel.innerHTML = `
-      Region (${gx}, ${gy})<br><br>
-      Density: ${label3(z.density)}<br>
-      Distance: ${label3(z.distance)}<br>
-      Threat: ${label3(z.threat)}<br>
-      Asteroids: ${Math.floor(z.density * 100)}%
-    `;
-    this.infoPanel.style.display = 'block';
-    this.confirmBtn.style.display = 'block';
-    this.declineBtn.style.display = 'block';
+    this.helpText.textContent = 'REVIEW REGION AND CONFIRM';
+    SoundManager.playUI('Intro_UIAppear');  // Lua: previewappear
+    this.showInspector(this.selectedZone);
+    this.confirmBtnEl.style.display = 'block';
+    this.declineBtnEl.style.display = 'block';
   }
 
   private onMouseMove(e: MouseEvent) {
     if (this.state !== 'Initial') return;
     const rect = this.canvas.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
-
-    const cellSize = this.mapSize / MAP_GRID;
-    this.hoverGx = Math.floor((px - this.mapX) / cellSize);
-    this.hoverGy = Math.floor((py - this.mapY) / cellSize);
-
-    if (this.hoverGx >= 0 && this.hoverGx < MAP_GRID && this.hoverGy >= 0 && this.hoverGy < MAP_GRID) {
-      const seed = this.hoverGx * 73 + this.hoverGy * 137;
-      const density = ((seed * 2654435761) >>> 0) / 4294967296;
-      const threat = ((seed * 340573321) >>> 0) / 4294967296;
-      const distance = (((seed + 7) * 1103515245) >>> 0) / 4294967296;
-
-      this.infoPanel.innerHTML = `
-        Region (${this.hoverGx}, ${this.hoverGy})<br><br>
-        Density: ${label3(density)}<br>
-        Distance: ${label3(distance)}<br>
-        Threat: ${label3(threat)}<br>
-        Asteroids: ${Math.floor(density * 100)}%
-      `;
-      this.infoPanel.style.display = 'block';
+    const cellSize = this.mapSize / INFO_MAP_SIZE;
+    this.hoverGx = Math.floor((e.clientX - rect.left - this.mapX) / cellSize);
+    this.hoverGy = Math.floor((e.clientY - rect.top  - this.mapY) / cellSize);
+    if (this.hoverGx >= 0 && this.hoverGx < INFO_MAP_SIZE && this.hoverGy >= 0 && this.hoverGy < INFO_MAP_SIZE) {
+      this.showInspector(this.makeLandingZone(this.hoverGx, this.hoverGy));
     } else {
       this.infoPanel.style.display = 'none';
     }
@@ -256,162 +561,221 @@ export class NewGameScreenState implements SceneState {
 
   private onConfirm() {
     if (this.state !== 'SelectedLandingZone') return;
-    SoundManager.playUI('UI_Confirm');
+    SoundManager.playUI('Intro_AcceptButton');  // Lua: accept
+    SoundManager.playUI('Intro_LaunchOpen');     // Lua: launchopen
     this.state = 'ConfirmedLandingZone';
-    this.confirmBtn.style.display = 'none';
-    this.declineBtn.style.display = 'none';
-    this.helpText.style.display = 'none';
-    this.deployBtn.style.display = 'block';
-    this.cancelBtn.style.display = 'block';
+    this.confirmBtnEl.style.display = 'none';
+    this.declineBtnEl.style.display = 'none';
+    this.helpText.style.display   = 'none';
+
+    // Slide launch cover away to reveal active button
+    this.launchCoverEl.style.transform = 'translateX(-300px)';
+    this.launchCoverEl.style.opacity = '0';
+    this.launchActiveEl.style.display  = 'block';
+    this.cancelBtnEl.style.display     = 'block';
   }
 
   private onDecline() {
-    SoundManager.playUI('Intro_CancelButton');
+    SoundManager.playUI('Intro_AcceptButton');   // Lua: accept
+    SoundManager.playUI('Intro_UIDisappear');     // Lua: previewdissappear
     this.state = 'Initial';
     this.selectedZone = null;
-    this.infoPanel.style.display = 'none';
-    this.confirmBtn.style.display = 'none';
-    this.declineBtn.style.display = 'none';
-    this.deployBtn.style.display = 'none';
-    this.cancelBtn.style.display = 'none';
-    this.helpText.textContent = 'Click a region on the galaxy map';
-    this.helpText.style.display = 'block';
+    this.infoPanel.style.display       = 'none';
+    this.confirmBtnEl.style.display    = 'none';
+    this.declineBtnEl.style.display    = 'none';
+    this.launchActiveEl.style.display  = 'none';
+    this.cancelBtnEl.style.display     = 'none';
+
+    // Reset launch cover
+    this.launchCoverEl.style.transform = 'none';
+    this.launchCoverEl.style.opacity   = '1';
+
+    this.helpText.textContent      = 'CLICK A REGION ON THE GALAXY MAP';
+    this.helpText.style.display    = 'block';
+  }
+
+  private onCancel() {
+    // Lua: cancel + launchclose + previewdissappear
+    SoundManager.playUI('Intro_CancelButton');   // cancel
+    SoundManager.playUI('Intro_LaunchClose');     // launchclose
+    SoundManager.playUI('Intro_UIDisappear');     // previewdissappear
+    this.state = 'Initial';
+    this.selectedZone = null;
+    this.infoPanel.style.display       = 'none';
+    this.confirmBtnEl.style.display    = 'none';
+    this.declineBtnEl.style.display    = 'none';
+    this.launchActiveEl.style.display  = 'none';
+    this.cancelBtnEl.style.display     = 'none';
+
+    // Reset launch cover
+    this.launchCoverEl.style.transform = 'none';
+    this.launchCoverEl.style.opacity   = '1';
+
+    this.helpText.textContent      = 'CLICK A REGION ON THE GALAXY MAP';
+    this.helpText.style.display    = 'block';
   }
 
   private onDeploy() {
     if (this.state !== 'ConfirmedLandingZone') return;
-    SoundManager.playUI('Intro_LaunchButton');
-    this.state = 'Deploying';
+    SoundManager.playUI('Intro_LaunchButton');  // Lua: launchbutton
+    SoundManager.stopMusic();                    // Lua: stopMusic()
+    this.state      = 'Deploying';
     this.deployTime = 0;
-    this.deployBtn.style.display = 'none';
-    this.cancelBtn.style.display = 'none';
-    this.infoPanel.style.display = 'none';
+    this.launchActiveEl.style.display = 'none';
+    this.cancelBtnEl.style.display    = 'none';
+    this.infoPanel.style.display      = 'none';
+    this.leftSidebar.style.display    = 'none';
+    this.rightSidebar.style.display   = 'none';
+    this.launchCoverEl.style.display  = 'none';
+
+    const name = this.selectedZone ? getRegionName(this.selectedZone.x, this.selectedZone.y) : 'Unknown';
+    this.deployMsg.textContent    = `SEED POD DEPLOYED TO ${name.toUpperCase()}`;
+    this.deployEta.style.opacity  = '0';
+    this.deployYears.style.opacity = '0';
     this.deployOverlay.style.display = 'flex';
-    this.deployOverlay.style.flexDirection = 'column';
-    this.deployOverlay.style.alignItems = 'center';
-    this.deployOverlay.style.justifyContent = 'center';
-    this.deployOverlay.innerHTML = '';
+    this.deployOverlay.style.opacity = '0';
   }
+
+  // ── Update ───────────────────────────────────────────────────────────────────
 
   update(dt: number) {
     if (this.state === 'Deploying') {
       this.deployTime += dt;
       this.updateDeployAnimation();
     }
+    // Inspector slide-in — NewBaseInspector.lua:154-168
+    if (this.inspectorActive) {
+      this.inspectorTimer += dt;
+      const STEP = 0.25, TOTAL = 1.0;
+      const t = Math.min(this.inspectorTimer / TOTAL, 1);
+      const stepped = Math.floor(t / STEP) * STEP / TOTAL;
+      this.infoPanel.style.opacity   = String(Math.min(stepped * (TOTAL / STEP), 1));
+      this.infoPanel.style.transform = `translateX(${(1 - Math.min(stepped * (TOTAL / STEP), 1)) * 30}px)`;
+      if (this.inspectorTimer >= TOTAL) {
+        this.inspectorTimer  = 0;
+        this.inspectorActive = false;
+        this.infoPanel.style.opacity   = '1';
+        this.infoPanel.style.transform = 'none';
+      }
+    }
     this.draw();
   }
 
   private updateDeployAnimation() {
     const t = this.deployTime;
-    const w = window.innerWidth;
 
-    // Phase 1: Fade to black
+    // Phase 1: fade overlay in
     if (t < END_ANIM_INITIAL_DELAY) {
-      this.deployOverlay.style.opacity = String(Math.min(1, t / END_ANIM_INITIAL_DELAY));
+      this.deployOverlay.style.opacity = String(t / END_ANIM_INITIAL_DELAY);
       return;
     }
-
     this.deployOverlay.style.opacity = '1';
 
-    // Phase 2: "Seed Pod Deployed"
+    // Phase 2: show seed pod message
     const t2 = t - END_ANIM_INITIAL_DELAY;
-    if (t2 < END_ANIM_ZOOM_TIME) {
-      if (this.deployOverlay.children.length === 0) {
-        const name = this.selectedZone ? `Region (${this.selectedZone.x}, ${this.selectedZone.y})` : 'Unknown';
-        this.deployOverlay.innerHTML = `<div style="font-size:22px;margin-bottom:20px;">Seed Pod Deployed to ${name}</div>`;
-      }
-      return;
-    }
+    if (t2 < END_ANIM_ZOOM_TIME) return;
 
-    // Phase 3: "Estimated arrival"
+    // Phase 3: show "Estimated arrival"
     const t3 = t2 - END_ANIM_ZOOM_TIME - END_ANIM_YEARS_DELAY;
     if (t3 < END_ANIM_BEFORE_COUNTDOWN_DELAY) {
-      if (this.deployOverlay.children.length < 3) {
-        this.deployOverlay.innerHTML += `
-          <div style="font-size:18px;margin-bottom:20px;">Estimated arrival in...</div>
-          <div id="years-text" style="font-size:48px;font-weight:bold;">${MAX_YEARS} YEARS</div>
-        `;
-      }
+      this.deployEta.style.opacity   = '1';
+      this.deployYears.style.opacity = '1';
+      this.deployYears.textContent   = `${MAX_YEARS} YEARS`;
       return;
     }
 
-    // Phase 4: Countdown
+    // Phase 4: countdown
     const t4 = t3 - END_ANIM_BEFORE_COUNTDOWN_DELAY;
     if (t4 < END_ANIM_COUNTDOWN_TIME) {
       const years = Math.floor(MAX_YEARS * (1 - t4 / END_ANIM_COUNTDOWN_TIME));
-      const yearsEl = this.deployOverlay.querySelector('#years-text');
-      if (yearsEl) yearsEl.textContent = `${years} YEARS`;
+      this.deployYears.textContent = `${years} YEARS`;
       return;
     }
 
-    // Phase 5: Fade out
+    // Phase 5: fade out text
     const t5 = t4 - END_ANIM_COUNTDOWN_TIME;
     if (t5 < END_ANIM_FADE_OUT_TIME) {
-      const yearsEl = this.deployOverlay.querySelector('#years-text');
-      if (yearsEl) yearsEl.textContent = '0 YEARS';
-      const alpha = 1 - t5 / END_ANIM_FADE_OUT_TIME;
-      for (const child of this.deployOverlay.children) {
-        (child as HTMLElement).style.opacity = String(alpha);
-      }
+      this.deployYears.textContent = '0 YEARS';
+      const alpha = String(1 - t5 / END_ANIM_FADE_OUT_TIME);
+      this.deployMsg.style.opacity   = alpha;
+      this.deployEta.style.opacity   = alpha;
+      this.deployYears.style.opacity = alpha;
       return;
     }
 
-    // Done
     this.state = 'Deployed';
-    if (this.selectedZone) {
-      this.onStartGame(this.selectedZone);
-    }
+    if (this.selectedZone) this.onStartGame(this.selectedZone);
   }
+
+  // ── Draw ─────────────────────────────────────────────────────────────────────
 
   private draw() {
     const ctx = this.canvasCtx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Galaxy map image
     if (this.galaxyImg) {
       ctx.drawImage(this.galaxyImg, this.mapX, this.mapY, this.mapSize, this.mapSize);
     }
 
-    // Grid overlay
-    ctx.strokeStyle = `rgba(223,162,0,0.15)`;
-    ctx.lineWidth = 1;
-    const cellSize = this.mapSize / MAP_GRID;
-    for (let i = 0; i <= MAP_GRID; i++) {
-      const x = this.mapX + i * cellSize;
-      const y = this.mapY + i * cellSize;
-      ctx.beginPath();
-      ctx.moveTo(x, this.mapY);
-      ctx.lineTo(x, this.mapY + this.mapSize);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(this.mapX, y);
-      ctx.lineTo(this.mapX + this.mapSize, y);
-      ctx.stroke();
+    // Grid lines
+    const cellSize = this.mapSize / INFO_MAP_SIZE;
+    ctx.strokeStyle = 'rgba(223,162,0,0.1)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= INFO_MAP_SIZE; i++) {
+      ctx.beginPath(); ctx.moveTo(this.mapX + i * cellSize, this.mapY); ctx.lineTo(this.mapX + i * cellSize, this.mapY + this.mapSize); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.mapX, this.mapY + i * cellSize); ctx.lineTo(this.mapX + this.mapSize, this.mapY + i * cellSize); ctx.stroke();
     }
 
-    // Crosshair (hover)
-    if (this.state === 'Initial' && this.hoverGx >= 0 && this.hoverGx < MAP_GRID) {
-      ctx.strokeStyle = `rgba(223,162,0,0.5)`;
-      ctx.lineWidth = 1;
+    // Tutorial marker at (12, 34) — Lua: small radio_pressed icon + label beside it
+    {
+      const tx = this.mapX + TUTORIAL_X * cellSize + cellSize * 0.5;
+      const ty = this.mapY + TUTORIAL_Y * cellSize + cellSize * 0.5;
+      // Small dot marker
+      ctx.fillStyle = GREEN_HEX;
+      ctx.beginPath();
+      ctx.arc(tx, ty, Math.max(3, cellSize * 0.3), 0, Math.PI * 2);
+      ctx.fill();
+      // Label to the right of the dot
+      const fs = Math.max(7, cellSize * 0.6);
+      ctx.font         = `bold ${fs}px monospace`;
+      ctx.fillStyle    = GREEN_HEX;
+      ctx.textAlign    = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('QUICK-START MODE', tx + cellSize * 0.6, ty);
+      ctx.textAlign    = 'left';
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    // Hover crosshair — mirrors NewBaseLayout CursorLineHorizontal/Vertical
+    if (this.state === 'Initial' && this.hoverGx >= 0 && this.hoverGx < INFO_MAP_SIZE) {
       const hx = this.mapX + (this.hoverGx + 0.5) * cellSize;
       const hy = this.mapY + (this.hoverGy + 0.5) * cellSize;
-      ctx.beginPath();
-      ctx.moveTo(hx, this.mapY);
-      ctx.lineTo(hx, this.mapY + this.mapSize);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(this.mapX, hy);
-      ctx.lineTo(this.mapX + this.mapSize, hy);
-      ctx.stroke();
+
+      // Full-width crosshair lines (amber)
+      ctx.strokeStyle = 'rgba(223,162,0,0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(this.mapX, hy); ctx.lineTo(this.mapX + this.mapSize, hy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx, this.mapY); ctx.lineTo(hx, this.mapY + this.mapSize); ctx.stroke();
+
+      // Coordinate label at cursor — mirrors CursorText
+      ctx.font = `bold 10px monospace`;
+      ctx.fillStyle = AMBER_HEX;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`${this.hoverGx}`, hx, hy - 6);
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${this.hoverGy}`, hx, hy + 6);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
     }
 
     // Selection marker
     if (this.selectedZone) {
-      ctx.strokeStyle = AMBER_HEX;
-      ctx.fillStyle = `rgba(223,162,0,0.3)`;
-      ctx.lineWidth = 2;
       const sx = this.mapX + this.selectedZone.x * cellSize;
       const sy = this.mapY + this.selectedZone.y * cellSize;
+      ctx.fillStyle   = 'rgba(223,162,0,0.25)';
+      ctx.strokeStyle = AMBER_HEX;
+      ctx.lineWidth   = 2;
       ctx.fillRect(sx, sy, cellSize, cellSize);
       ctx.strokeRect(sx, sy, cellSize, cellSize);
     }
@@ -420,10 +784,4 @@ export class NewGameScreenState implements SceneState {
   exit() {
     this.overlay?.remove();
   }
-}
-
-function label3(v: number): string {
-  if (v > 0.66) return 'High';
-  if (v > 0.33) return 'Medium';
-  return 'Low';
 }

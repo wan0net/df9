@@ -72,6 +72,8 @@ export class UIManager {
   private getHoveredInfo: () => string;
   private onSave: () => void;
   private onLoad: () => void;
+  private onExport: () => void;
+  private onImport: () => Promise<boolean>;
   private onSpawn: () => void;
   private onObjectSelected: (name: string) => void;
   private getCharacters: () => Character[];
@@ -148,6 +150,8 @@ export class UIManager {
     getHoveredInfo: () => string;
     onSave: () => void;
     onLoad: () => void;
+    onExport: () => void;
+    onImport: () => Promise<boolean>;
     onSpawn: () => void;
     onObjectSelected: (name: string) => void;
     getCharacters: () => Character[];
@@ -171,6 +175,8 @@ export class UIManager {
     this.getHoveredInfo = callbacks.getHoveredInfo;
     this.onSave = callbacks.onSave;
     this.onLoad = callbacks.onLoad;
+    this.onExport = callbacks.onExport;
+    this.onImport = callbacks.onImport;
     this.onSpawn = callbacks.onSpawn;
     this.onObjectSelected = callbacks.onObjectSelected;
     this.getCharacters = callbacks.getCharacters;
@@ -568,6 +574,8 @@ export class UIManager {
     const utilBtns = [
       { label: 'Save', action: () => { this.onSave(); Base.addAlert('system', 'Game saved.'); } },
       { label: 'Load', action: () => { this.onLoad(); Base.addAlert('system', 'Game loaded.'); } },
+      { label: 'Export', action: () => { this.onExport(); Base.addAlert('system', 'Save exported to file.'); } },
+      { label: 'Import', action: () => { this.onImport().then(ok => { Base.addAlert('system', ok ? 'Save imported.' : 'Import failed.'); }); } },
       { label: 'Spawn Crew', action: this.onSpawn },
     ];
     for (const ub of utilBtns) {

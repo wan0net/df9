@@ -30,6 +30,10 @@ export class UtilityAI {
       const task = bestOption.task;
       task.targetX = bestOption.targetX;
       task.targetY = bestOption.targetY;
+      // Copy activity tags to task for duty cycle checks
+      if (bestOption.tags) {
+        task.tags = { ...bestOption.tags } as Record<string, boolean>;
+      }
       return task;
     }
 

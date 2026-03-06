@@ -634,20 +634,26 @@ export class CharacterRenderer {
   }
 
   private drawNeedBars(el: HTMLDivElement, char: Character) {
+    // Needs range -100..+100; remap to 0..100 for bar display
+    const remap = (v: number) => Math.max(0, Math.min(100, (v + 100) / 2));
     const bars = [
-      { value: char.needs.oxygen, color: '#4488ff' },
-      { value: char.needs.hunger, color: '#ff8844' },
-      { value: char.needs.energy, color: '#aaaa44' },
+      { value: remap(char.needs.oxygen), color: '#4488ff' },
+      { value: remap(char.needs.hunger), color: '#ff8844' },
+      { value: remap(char.needs.energy), color: '#aaaa44' },
       { value: Math.max(0, (char.nMorale + 100) / 2), color: '#44cc44' },
     ];
-    let html = '';
+    // Build bars using DOM methods to avoid innerHTML (values are game-state-derived numbers)
+    el.textContent = '';
     for (const bar of bars) {
       const color = bar.value > 30 ? bar.color : '#ff0000';
       const pct = Math.max(0, Math.min(100, bar.value));
-      html += `<div style="width:32px;height:3px;margin-bottom:1px;background:#333;position:relative;">` +
-        `<div style="width:${pct}%;height:100%;background:${color};"></div></div>`;
+      const outer = document.createElement('div');
+      outer.style.cssText = 'width:32px;height:3px;margin-bottom:1px;background:#333;position:relative;';
+      const inner = document.createElement('div');
+      inner.style.cssText = `width:${Math.round(pct)}%;height:100%;background:${color};`;
+      outer.appendChild(inner);
+      el.appendChild(outer);
     }
-    el.innerHTML = html;
   }
 
   destroyCharacter(charId: number) {
