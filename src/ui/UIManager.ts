@@ -22,6 +22,7 @@ import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 
 const AMBER = '#dfa200';
 const SIDEBAR_W = 286;
+const SIDEBAR_COLLAPSED_W = 56;
 const BUTTON_H = 56;
 
 /** Alert color mapping by category (covers all BASE_EVENT types) */
@@ -125,6 +126,10 @@ export class UIManager {
 
   // Sidebar buttons for active tracking
   private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; mode: BuildMode; btnLabel: string }[] = [];
+  /** Sidebar element for collapse/expand. */
+  private sidebarEl!: HTMLDivElement;
+  /** Whether sidebar is currently expanded (Lua: starts collapsed, expands on hover). */
+  private sidebarExpanded = false;
 
   // Build cost overlay
   private costOverlay!: HTMLDivElement;
@@ -474,10 +479,30 @@ export class UIManager {
 
   private createSidebar() {
     const sidebar = document.createElement('div');
+    this.sidebarEl = sidebar;
     sidebar.style.cssText = `
-      position:absolute;top:0;left:0;width:${SIDEBAR_W}px;height:100%;
+      position:absolute;top:0;left:0;width:${SIDEBAR_COLLAPSED_W}px;height:100%;
       background:rgba(0,0,0,0.8);pointer-events:auto;overflow-y:auto;
+      transition:width 0.15s ease;
     `;
+
+    // Collapse/expand on hover (Lua: starts collapsed, expands on hover)
+    sidebar.addEventListener('mouseenter', () => {
+      this.sidebarExpanded = true;
+      sidebar.style.width = `${SIDEBAR_W}px`;
+      for (const sb of this.sidebarBtns) {
+        sb.label.style.display = '';
+        sb.hotkey.style.display = '';
+      }
+    });
+    sidebar.addEventListener('mouseleave', () => {
+      this.sidebarExpanded = false;
+      sidebar.style.width = `${SIDEBAR_COLLAPSED_W}px`;
+      for (const sb of this.sidebarBtns) {
+        sb.label.style.display = 'none';
+        sb.hotkey.style.display = 'none';
+      }
+    });
 
     const btnDefs: { label: string; hotkey: string; mode: BuildMode; action?: string }[] = [
       { label: 'Inspect',   hotkey: 'I', mode: 'none', action: 'inspect' },
@@ -501,10 +526,10 @@ export class UIManager {
       icon.style.cssText = `font-size:24px;font-weight:bold;color:${AMBER};width:48px;text-align:center;`;
       const label = document.createElement('div');
       label.textContent = def.label;
-      label.style.cssText = `font-size:18px;color:${AMBER};flex:1;`;
+      label.style.cssText = `font-size:18px;color:${AMBER};flex:1;display:none;`;
       const hotkey = document.createElement('div');
       hotkey.textContent = def.hotkey;
-      hotkey.style.cssText = `font-size:12px;color:${AMBER};`;
+      hotkey.style.cssText = `font-size:12px;color:${AMBER};display:none;`;
 
       btn.appendChild(icon);
       btn.appendChild(label);

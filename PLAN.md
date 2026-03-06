@@ -254,7 +254,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: MEDIUM**
 
-- [ ] Implement collapse/expand hover behavior (starts collapsed, expands on hover)
+- [x] Implement collapse/expand hover behavior (starts collapsed, expands on hover)
 - [ ] Add DisasterMenu (unlocked via `bDisasterMode`)
 - [ ] Implement BeaconMenu (full submenu for character beacons)
 - [ ] Implement proper ConstructMenu/MineMenu submenus
@@ -303,7 +303,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Add character portraits in roster entries
 - [x] Add tri-state sort arrows (up/down/mid)
 - [x] Hide alert/hint pane on open
-- [ ] Add sidebar close integration on back
+- [x] Add sidebar close integration on back
 
 ### 13.3 New Game Screen
 - [x] Pass landing zone threat/density values to event system (already wired via setGalaxyValues)
