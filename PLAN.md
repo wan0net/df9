@@ -26,7 +26,7 @@ All 27 sections from the v2 plan are complete (180+ items). Key systems working:
 - Power (contiguity BFS via doors + wall-blob adjacency)
 - UI (start menu, new game, sidebar, inspector, job roster, alerts, HUD)
 - Save/Load (full state, fire, O2 grid RLE, commands, inventory, export/import)
-- 159 E2E tests passing
+- 161 E2E tests passing
 - Audio: lazy loading, WAV playback, music rotation (Revoice tracks), spatial loops
 - UI: Orbitron font everywhere, persistent coordinate display, alert panel cleanup
 
@@ -143,15 +143,19 @@ P4 — NICE-TO-HAVE (AI graphics, extra polish)
 
 ## P1: Visual Polish
 
-### P1.1 Space Background
-- [ ] **Highest visual priority** — solid black void behind station is the most jarring omission. Original has beautiful nebula/starfield `WorldBackground` layer. Add starfield + subtle nebula texture behind the station.
+### P1.1 Space Background ✅
+- [x] Nebula tile (Backgrounds.png) tiled across world with additive blending for brighter stars
+- [x] Elements.png nebula cloud overlays scattered as decorative overlays
 
-### P1.2 Character Blob Shadows
-- [ ] Lua `_setUpBlobShadow()` draws circular shadow decal under each character. Without these, characters look like they're floating. Simple circular quad mesh beneath each model.
+### P1.2 Character Blob Shadows ✅
+- [x] Procedural elliptical shadow texture under each character
+- [x] Hidden on SPACE tiles, visible on floor (matches Lua visibility logic)
+- [x] Positioned below character Z, follows movement
 
-### P1.3 Selection Highlighting
-- [ ] No visual feedback when clicking characters, objects, or rooms. Lua uses amber highlight via `g_vHighlightColor`. Add outline or tint on selected entities.
-- [ ] Room selection highlight — Lua `Lighting.setRoomHighlight(self, 0.3)` brightens selected rooms by 30%.
+### P1.3 Selection Highlighting ✅
+- [x] Amber pulsing diamond highlight on selected character/object
+- [x] Amber tile tint overlay on selected room tiles (Lua: Lighting.setRoomHighlight 0.3)
+- [x] Cached room meshes (only rebuilt on selection change, not per-frame)
 
 ### P1.4 Character Emoticon/Thought Bubbles
 - [ ] Lua has elaborate speech bubble system (`setEmoticon()` with bubble tail, caps, text, icons). Characters feel lifeless without thought bubbles showing current activity/mood.
@@ -491,3 +495,4 @@ Sprint 4 — Content & Systems (P3): Completeness
 | 2026-03-06 | 9 architectural features: per-tile O2, task interaction, reservations, doors, power, culling. |
 | 2026-03-06 | v3 plan created: comprehensive audit from 5 sources (UI screenshots, Lua file-by-file, audio system, wiki, renderer). Organized by P0-P4 priority. |
 | 2026-03-06 | Fix 3 critical bugs: door construction (WALL→DOOR deferred to build completion, pathToNearest for wall targets), wall-object placement order (SE first for NESW walls to match Lua), sprite bFlipX mirroring. 159 tests. |
+| 2026-03-06 | Sprint 2 visual polish: blob shadows (P1.2), selection highlighting (P1.3), enhanced space background (P1.1). 161 tests. |
