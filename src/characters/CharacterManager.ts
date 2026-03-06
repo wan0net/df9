@@ -154,6 +154,24 @@ export class CharacterManager {
     return this.characters;
   }
 
+  /** Get characters on a specific team (Lua CharacterManager.getTeamCharacters). */
+  getTeamCharacters(nTeam: number): Character[] {
+    return this.characters.filter(c => c.tStats.nTeam === nTeam && c.isAlive());
+  }
+
+  /** Find a living character by name. */
+  getCharacterNamed(name: string): Character | undefined {
+    return this.characters.find(c => c.getName() === name && c.isAlive());
+  }
+
+  /** Get characters with a specific active task type. */
+  getOwnedCharactersWithTask(taskName: string): Character[] {
+    return this.characters.filter(c =>
+      c.tStats.nTeam === TEAM_ID_PLAYER && c.isAlive() &&
+      c.currentTask?.name === taskName,
+    );
+  }
+
   /** Get all characters whose current tile belongs to the given room. */
   getCharactersAt(room: { tiles: { x: number; y: number }[] }): Character[] {
     const tileSet = new Set(room.tiles.map(t => `${t.x},${t.y}`));

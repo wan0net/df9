@@ -6,8 +6,10 @@
 import { Zone } from './Zone';
 import { ZoneType } from '../world/ZoneType';
 
-/** Tiles per capacity slot (from Lua: capacity = tiles / PUB_CAPACITY) */
-const PUB_CAPACITY_DIVISOR = 4;
+/** Lua CharacterConstants.PUB_CAPACITY = 3 (tiles per base capacity slot) */
+const PUB_CAPACITY = 3;
+/** Lua CharacterConstants.PUB_CITIZENS_PER_BARTENDER = 5 */
+const PUB_CITIZENS_PER_BARTENDER = 5;
 
 export class Pub extends Zone {
   private bartenders: Set<number> = new Set();
@@ -48,15 +50,17 @@ export class Pub extends Zone {
     return this.bartenders.size > 0;
   }
 
-  /** Get capacity based on room size. */
+  /** Get capacity based on room size + bartenders (Lua Pub:getCapacity). */
   getCapacity(): number {
     if (!this.room) return 0;
-    return Math.max(1, Math.floor(this.room.size / PUB_CAPACITY_DIVISOR));
+    if (!this.hasBartender()) return 0;
+    return Math.floor(this.room.size / PUB_CAPACITY) + this.bartenders.size * PUB_CITIZENS_PER_BARTENDER;
   }
 
-  /** Check if pub is at capacity (for AI decisions). */
+  /** Check if pub is at capacity (Lua: occupants - bartenders >= capacity). */
   atCapacity(): boolean {
-    // Will check against current visitor count once characters track location
-    return false;
+    if (!this.room) return false;
+    const nOccupants = this.room.nCharacters;
+    return (nOccupants - this.bartenders.size) >= this.getCapacity();
   }
 }

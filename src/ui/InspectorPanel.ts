@@ -5,6 +5,7 @@
 
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
+import { Door, DOOR_STATE } from '../envobjects/Door';
 import type { Room } from '../rooms/Room';
 import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH } from '../characters/CharacterConstants';
 import { ZONE_SPRITES } from '../world/ZoneType';
@@ -497,6 +498,17 @@ export class InspectorPanel {
 
   // ── Object Inspector ────────────────────────────────────
 
+  private getDoorStatusText(door: Door): string {
+    switch (door.state) {
+      case DOOR_STATE.OPEN: return '<span style="color:#4f4;">Open</span>';
+      case DOOR_STATE.CLOSED: return 'Closed';
+      case DOOR_STATE.LOCKED: return '<span style="color:#f44;">Locked</span>';
+      case DOOR_STATE.BROKEN_OPEN: return '<span style="color:#f44;">Broken (Open)</span>';
+      case DOOR_STATE.BROKEN_CLOSED: return '<span style="color:#f44;">Broken (Closed)</span>';
+      default: return 'Unknown';
+    }
+  }
+
   private renderObject(obj: EnvObject) {
     const header = this.makeSection();
     const condStr = obj.getConditionUIString();
@@ -516,6 +528,7 @@ export class InspectorPanel {
       ${obj.tData.nPowerOutput > 0 ? `<div style="margin-bottom:4px;">Power Output: ${obj.getPowerOutput()}</div>` : ''}
       ${obj.tData.nPowerDraw > 0 ? `<div style="margin-bottom:4px;">Power Draw: ${obj.getPowerDraw()}</div>` : ''}
       ${obj.tData.oxygenLevel > 0 ? `<div style="margin-bottom:4px;">O2 Output: ${obj.getOxygenOutput()}</div>` : ''}
+      ${obj instanceof Door ? `<div style="margin-bottom:4px;">Door: ${this.getDoorStatusText(obj)}</div>` : ''}
       ${obj.sBuilderName ? `<div style="margin-bottom:4px;">Built by: ${obj.sBuilderName}</div>` : ''}
       ${obj.sBuildTime ? `<div style="margin-bottom:4px;">Built: ${obj.sBuildTime}</div>` : ''}
       <div style="margin-bottom:4px;">Position: (${obj.tileX}, ${obj.tileY})</div>

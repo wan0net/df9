@@ -94,6 +94,7 @@ export class UIManager {
   private machineHealthText!: HTMLSpanElement;
   private corpseText!: HTMLSpanElement;
   private prevMatter = -1;
+  private displayedMatter = -1;
   private matterFlashTimer = 0;
 
   // Zone picker
@@ -856,20 +857,28 @@ export class UIManager {
     const chars = this.getCharacters();
     const envObjects = this.getEnvObjects();
 
-    // ── HUD Matter (flash green/red) ──────────────────────
+    // ── HUD Matter (animated counter ticking toward real value) ──
     const currentMatter = GameRules.nMatter;
+    if (this.displayedMatter < 0) this.displayedMatter = currentMatter;
     if (this.prevMatter >= 0 && currentMatter !== this.prevMatter) {
-      this.matterFlashTimer = 30; // frames
+      this.matterFlashTimer = 30;
       this.matterText.style.color = currentMatter > this.prevMatter ? '#4f4' : '#f44';
+    }
+    // Tick displayed value toward real value (Lua: animated counter with sound)
+    if (this.displayedMatter !== currentMatter) {
+      const diff = currentMatter - this.displayedMatter;
+      const step = Math.max(1, Math.abs(Math.floor(diff / 10)));
+      if (diff > 0) this.displayedMatter = Math.min(currentMatter, this.displayedMatter + step);
+      else this.displayedMatter = Math.max(currentMatter, this.displayedMatter - step);
     }
     if (this.matterFlashTimer > 0) {
       this.matterFlashTimer--;
-      if (this.matterFlashTimer === 0) {
+      if (this.matterFlashTimer === 0 && this.displayedMatter === currentMatter) {
         this.matterText.style.color = AMBER;
       }
     }
     this.prevMatter = currentMatter;
-    this.matterText.textContent = String(currentMatter);
+    this.matterText.textContent = String(this.displayedMatter);
 
     // ── Stardate ──────────────────────────────────────────
     this.starDateText.textContent = `${GameRules.sStarDate} ${GameRules.sStarTime}`;
