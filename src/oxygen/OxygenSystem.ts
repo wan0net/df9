@@ -45,10 +45,6 @@ export class OxygenSystem {
     const dt = this.tickInterval / 1000; // seconds elapsed this tick
 
     for (const room of this.roomManager.getRooms()) {
-      // Airlock running its own O2 cycle — mirrors Airlock:disallowO2Propagation()
-      const airlock = room.zoneObj as any;
-      if (airlock?.disallowO2Propagation?.()) continue;
-
       if (!room.sealed) {
         // Breached room: O2 drains to vacuum
         room.oxygen = Math.max(0, room.oxygen - O2_DRAIN_RATE);

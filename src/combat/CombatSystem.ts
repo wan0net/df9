@@ -10,6 +10,7 @@ import {
   DAMAGE_TYPE, ATTACK_TYPE, CAUSE_OF_DEATH,
   STARTLE_CHANCE, MEMORY_STARTLED_RECENTLY, MEMORY_STARTLED_RECENTLY_DURATION,
   RACE_HUMAN, RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK, RACE_CHICKEN, RACE_SHAMON,
+  RACE_MONSTER, RACE_KILLBOT,
   FACTION_BEHAVIOR,
 } from '../characters/CharacterConstants';
 import { WEAPON_DEFS, type WeaponDef } from './WeaponData';
@@ -17,6 +18,7 @@ import type { ProjectileManager } from '../hazards/Projectile';
 import { Base } from '../core/Base';
 import type { TileGrid } from '../world/TileGrid';
 import type { EnvObject } from '../envobjects/EnvObject';
+import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { TileType } from '../world/TileTypes';
 import { researchSystem } from '../research/ResearchSystem';
 
@@ -99,8 +101,11 @@ export function checkLineOfSight(
     } else {
       if (tileValue === TileType.WALL) return false;
       if (tileValue === TileType.SPACE) return false;
-      // Closed doors block LoS in Lua (if rDoor and not rDoor:isOpen()).
-      // DOOR tiles treated as passable for now since we don't have door state here.
+      // Closed doors block LoS (Lua: if rDoor and not rDoor:isOpen())
+      if (tileValue === TileType.DOOR) {
+        const door = EnvObjectManager.getDoorAt(x, y);
+        if (door && !door.isOpen()) return false;
+      }
     }
   }
   return true;
@@ -179,7 +184,7 @@ export class CombatSystem {
       (attacker.nRemainingDutyTime > 0);
     const race = attacker.tStats.nRace;
     if (!isEmergencyOnDuty && !bBrawling &&
-        race !== undefined && // normal character
+        race !== RACE_MONSTER && race !== RACE_KILLBOT &&
         Math.random() < STARTLE_CHANCE) {
       if (!attacker.retrieveMemory(MEMORY_STARTLED_RECENTLY)) {
         // Would play startle anim here — store memory to prevent re-startling

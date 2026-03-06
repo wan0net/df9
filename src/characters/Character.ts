@@ -523,10 +523,13 @@ export class Character {
       this.moraleTickAccum -= MORALE_TICK;
 
       // Anger reduction first (Lua tickMorale lines 5996-6001)
-      if (this.bCuffed) {
-        this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK_BRIG);
-      } else {
-        this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK);
+      // Skip if incapacitated (Lua Character.lua:5998)
+      if (!this.bIncapacitated) {
+        if (this.bCuffed) {
+          this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK_BRIG);
+        } else {
+          this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK);
+        }
       }
 
       // Hostiles skip morale
@@ -607,8 +610,10 @@ export class Character {
         this.storeMemory(MEMORY_GENERIC_LOG, true, GENERIC_LOG_FREQUENCY);
       }
 
-      // Job morale modifier (Lua Character.lua:6075 — duty affinity)
-      this.addMorale(this.getJobMoraleModifier());
+      // Job morale modifier (Lua Character.lua:6118-6123 — only when on duty or doing duty task)
+      if (this.onDuty() || this.currentTask?.tags?.WorkShift) {
+        this.addMorale(this.getJobMoraleModifier());
+      }
 
       // Room morale drift — rolling 5-sample average (Lua tRoomScores buffer)
       // Diminishing returns: no room morale bonus above morale 60 (Lua ROOM_MORALE_FALLOFF_END)

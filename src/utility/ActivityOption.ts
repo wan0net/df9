@@ -197,7 +197,7 @@ export class ActivityOption {
     score -= dist * distFactor;
 
     // Activity affinity modifier (Lua: ±20% from topic affinity)
-    const activityAff = character.getAffinityForActivity(this.task.constructor.name);
+    const activityAff = character.getAffinityForActivity(this.task.name);
     if (activityAff !== null) {
       const affinityBonus = activityAff / STARTING_AFFINITY;
       score += score * (ACTIVITY_AFFINITY_CHANGE_PCT * affinityBonus);

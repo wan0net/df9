@@ -19,7 +19,7 @@ export class DropOffCorpse extends Task {
   private deceasedName = '';
 
   getAdvertisedNeeds(): NeedAdvertisement[] {
-    return [{ need: 'duty', amount: 8 }];
+    return [{ need: 'duty', amount: 30 }];
   }
 
   /** Set corpse metadata before task starts. */
