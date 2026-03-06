@@ -623,7 +623,7 @@ export class CharacterManager {
 
       // Spacewalking characters: try outdoor tasks first, then seek nearest room
       if (char.bSpacewalking) {
-        // Check for outdoor tasks (build_tile, mine) that can be done in a spacesuit
+        // Check for outdoor tasks (build_tile, build_object, mine) in a spacesuit
         const outdoorOptions: ActivityOption[] = [];
         for (const cmd of CommandQueue.getAvailable('build_tile')) {
           outdoorOptions.push(new ActivityOption(
@@ -631,6 +631,19 @@ export class CharacterManager {
             cmd.tileX, cmd.tileY,
             9,
           ));
+        }
+        // Build objects (doors on walls, etc.) while spacewalking
+        for (const cmd of CommandQueue.getAvailable('build_object')) {
+          const obj = EnvObjectManager.getObjects().find(
+            o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
+          );
+          if (obj) {
+            outdoorOptions.push(new ActivityOption(
+              new BuildEnvObject(obj, cmd.id, this.grid),
+              cmd.tileX, cmd.tileY,
+              8,
+            ));
+          }
         }
         for (const cmd of CommandQueue.getAvailable('mine')) {
           outdoorOptions.push(new ActivityOption(

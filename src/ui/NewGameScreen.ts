@@ -414,10 +414,10 @@ export class NewGameScreenState implements SceneState {
   }
 
   private buildLaunchButton() {
-    // Lua native positions (MOAI Y-up, bottom-left anchor → CSS bottom:Y):
-    //   Housing (launchbutton_active): left=110, bottom=204, 405x351
-    //   Cover (launchbutton_cover):    left=-40, bottom=252, 366px wide
-    //   Cancel hitbox:                 left=10,  bottom=302, 60x50
+    // Lua native positions (MOAI Y-up, center anchor → CSS top:calc(100%-Y)):
+    //   Housing (launchbutton_active): left=110, Y=204 from bottom, 405x351
+    //   Cover (launchbutton_cover):    left=-40, Y=252 from bottom, 366px wide
+    //   Cancel hitbox:                 left=10,  Y=302 from bottom, 60x50
     const housingW = 405;
     const housingH = 351;
     const housingLeft = 110;
@@ -427,12 +427,12 @@ export class NewGameScreenState implements SceneState {
     // Launch cover (hazard stripes "LAUNCH" — shown until confirmed)
     this.launchCoverEl = document.createElement('img') as HTMLImageElement;
     this.launchCoverEl.src = '/assets/ui/newgame/launchbutton_cover.png';
-    this.launchCoverEl.style.cssText = `position:absolute;left:${coverLeft}px;bottom:252px;width:${coverW}px;z-index:6;pointer-events:none;transition:transform 0.5s ease-in-out, opacity 0.5s;`;
+    this.launchCoverEl.style.cssText = `position:absolute;left:${coverLeft}px;top:calc(100% - 252px);width:${coverW}px;z-index:6;pointer-events:none;transition:transform 0.5s ease-in-out, opacity 0.5s;`;
     this.overlay.appendChild(this.launchCoverEl);
 
     // Deploy housing (red button + CANCEL — hidden until confirmed)
     this.launchActiveEl = document.createElement('div');
-    this.launchActiveEl.style.cssText = `position:absolute;left:${housingLeft}px;bottom:204px;width:${housingW}px;height:${housingH}px;z-index:5;display:none;cursor:pointer;`;
+    this.launchActiveEl.style.cssText = `position:absolute;left:${housingLeft}px;top:calc(100% - 204px);width:${housingW}px;height:${housingH}px;z-index:5;display:none;cursor:pointer;`;
 
     const activeImg = document.createElement('img');
     activeImg.src = '/assets/ui/newgame/launchbutton_active.png';
@@ -455,7 +455,7 @@ export class NewGameScreenState implements SceneState {
 
     // Cancel button — Lua: pos = { '-W/2 + 10', '-(H/2) + 302' }, scale = { 60, 50 }
     this.cancelBtnEl = document.createElement('div');
-    this.cancelBtnEl.style.cssText = `position:absolute;left:10px;bottom:302px;width:60px;height:50px;z-index:8;display:none;cursor:pointer;`;
+    this.cancelBtnEl.style.cssText = `position:absolute;left:10px;top:calc(100% - 302px);width:60px;height:50px;z-index:8;display:none;cursor:pointer;`;
     this.cancelBtnEl.addEventListener('click', () => this.onCancel());
     this.overlay.appendChild(this.cancelBtnEl);
   }
