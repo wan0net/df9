@@ -23,7 +23,7 @@ export class GoalsPanel {
     this.el.style.cssText = `
       position:absolute;left:296px;top:10px;width:${PANEL_W}px;
       background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
-      color:#ccc;font-family:monospace;font-size:13px;
+      color:#ccc;font-family:'Orbitron',monospace;font-size:13px;
       display:none;pointer-events:auto;z-index:15;
       max-height:80vh;overflow-y:auto;
     `;

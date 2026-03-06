@@ -46,8 +46,13 @@ export class StartMenuState implements SceneState {
       SoundManager.generateFallbackSounds();
     }
     SoundManager.resume();
-    // Play menu music
-    SoundManager.playMusic('Intro_GuitarTrack');
+    // Preload menu audio then play
+    SoundManager.preloadCues([
+      'Intro_GuitarTrack', 'Intro_AcceptButton', 'Intro_CancelButton',
+      'Intro_LaunchButton', 'UI_Hilight', 'UI_Select',
+    ]).then(() => {
+      SoundManager.playMusic('Intro_GuitarTrack');
+    });
 
     // Load Orbitron font (matches original game's orbitronWhite style)
     if (!document.getElementById('orbitron-font')) {
@@ -110,11 +115,11 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(gradBottom);
 
-    // MOTD background panel
+    // MOTD background panel — hidden by default (no content)
     const motdBg = document.createElement('div');
     motdBg.style.cssText = `
       position:absolute;top:0;left:0;width:55%;height:100%;
-      background:rgba(0,0,0,0.5);pointer-events:none;
+      background:rgba(0,0,0,0.5);pointer-events:none;display:none;
     `;
     this.overlay.appendChild(motdBg);
 
@@ -125,7 +130,7 @@ export class StartMenuState implements SceneState {
     titleTop.style.cssText = `
       position:absolute;top:40px;left:40px;
       font-family:'Orbitron',monospace;
-      font-size:52px;font-weight:700;color:${AMBER};
+      font-size:42px;font-weight:700;color:${AMBER};
       letter-spacing:4px;
       text-shadow:0 0 30px rgba(223,162,0,0.4), 0 0 60px rgba(223,162,0,0.2);
     `;
@@ -136,7 +141,7 @@ export class StartMenuState implements SceneState {
     titleBottom.style.cssText = `
       position:absolute;top:105px;left:40px;
       font-family:'Orbitron',monospace;
-      font-size:88px;font-weight:700;color:${AMBER};
+      font-size:74px;font-weight:700;color:${AMBER};
       letter-spacing:8px;
       text-shadow:0 0 30px rgba(223,162,0,0.5), 0 0 80px rgba(223,162,0,0.3);
     `;
@@ -199,7 +204,7 @@ export class StartMenuState implements SceneState {
     version.textContent = 'v0.1';
     version.style.cssText = `
       position:absolute;bottom:10px;left:10px;
-      color:#444;font-size:12px;font-family:monospace;
+      color:#444;font-size:12px;font-family:'Orbitron',monospace;
       pointer-events:none;
     `;
     this.overlay.appendChild(version);

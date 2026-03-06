@@ -83,7 +83,7 @@ export class InspectorPanel {
     this.el.style.cssText = `
       position:absolute;right:10px;top:200px;width:${PANEL_W}px;
       background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
-      color:#ccc;font-family:monospace;font-size:13px;
+      color:#ccc;font-family:'Orbitron',monospace;font-size:13px;
       display:none;pointer-events:auto;z-index:15;
     `;
 
@@ -152,7 +152,7 @@ export class InspectorPanel {
       input.value = char.getName();
       input.style.cssText = `
         font-size:16px;font-weight:bold;color:${AMBER};background:#111;
-        border:1px solid ${AMBER};outline:none;font-family:monospace;
+        border:1px solid ${AMBER};outline:none;font-family:'Orbitron',monospace;
         width:180px;padding:1px 4px;
       `;
       input.addEventListener('keydown', (e) => {

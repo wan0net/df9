@@ -1,496 +1,484 @@
-# Spacebase DF-9 — Lua Parity Plan
+# Spacebase DF-9 — Master Plan (v3)
 
 ## Status Key
 - [ ] Not started
 - [~] In progress
 - [x] Complete
-- [TECHNICAL] Intentional deviation (engine/platform difference)
+- [TECH] Intentional deviation (engine/platform)
+- [DEVIATION] Unconfirmed deviation — needs user approval
+- [STUB] Lua feature that is stubbed/simplified in TS
 
 ---
 
-## 1. Character System — Needs Scale & Memory
+## What's Done (v2 Plan — All Complete)
 
-**Priority: CRITICAL — affects all AI behavior**
-
-### 1.1 Needs scale mismatch
-Lua needs run -100 to +100. TS uses 0-100. All morale thresholds, AI comparisons, and need decay rates are wrong.
-- [x] Needs already decay to -100 (Needs.ts). Fixed all consumers:
-- [x] Fix morale tick thresholds: `MORALE_NEEDS_LOW = -20`, `MORALE_NEEDS_HIGH = 25`
-- [x] Update ActivityOption urgency formula for -100..+100 range
-- [x] Update InspectorPanel needs bars to remap -100..+100 → 0..100%
-- [x] Update CharacterRenderer debug bars to remap -100..+100
-- [x] Update CharacterManager oxygen emergency threshold
-- [x] Update Log.ts tag scoring for -100..+100 need defaults
-
-### 1.2 Character memory system (`tMemory`)
-Lua `storeMemory(key, val, duration)` / `retrieveMemory(key)` — timed key-value store for rate-limiting behaviors. All memory key constants exist in TS but no implementation.
-- [x] Implement `tMemory` on Character class with duration-based expiry
-- [x] storeMemory(), retrieveMemory(), clearMemory(), tickMemory()
-- [x] Save/load support via getMemoryEntries() / loadMemoryEntries()
-- [x] Memory system infrastructure complete (storeMemory/retrieveMemory/tickMemory on Character)
-
-### 1.3 `tickMorale()` parity
-TS updateMorale() is simplified. Lua skips morale while sleeping/rampaging, uses rolling room morale buffer, has diminishing returns curve, calls job-affinity morale.
-- [x] Skip morale tick while sleeping (`SleepInBed`, `SleepOnFloor`)
-- [x] Skip morale tick while rampaging
-- [x] Implement rolling 5-sample room morale buffer (`tRoomScores`)
-- [x] Implement room morale diminishing returns (no bonus above morale 60)
-- [x] Call `getJobMoraleModifier()` in morale tick
-- [x] Add morale tick logging (generic log, needs-based log, cool room log)
-
-### 1.4 Anger system parity
-- [x] Implement `angerReduction()` with morale-based multiplier (`0.7 + 0.6 * nMorale/100`)
-- [x] Implement `beginRampage()` / `endRampage()` as proper methods with log entries, task interruption
-- [x] Separate tantrum (non-violent) from rampage (violent) — different anger effects
-- [x] Auto-trigger rampage at max anger (VIOLENT_RAMPAGE_CHANCE = 0.25)
-- [x] Brig anger reduction uses higher rate (ANGER_REDUCTION_PER_MORALE_TICK_BRIG)
-- [x] Violent rampagers don't cool down unless in prison
-
-### 1.5 Duty cycle: countdown timer
-Lua uses `nRemainingDutyTime` countdown triggered by starting work tasks. TS uses a simple boolean on a wall-clock timer.
-- [x] Replace `bOnShift` with `nRemainingDutyTime` countdown timer
-- [x] Trigger shift start when work task begins (not wall-clock)
-- [x] Implement `wantsWorkShiftTask()` — after being off too long, favor work again
-- [x] Implement `onDuty()` query method
-- [x] Wire `onNewTaskStarted()` into CharacterManager.assignTask()
-- [x] Copy ActivityOption tags to Task for duty cycle checks
-
-### 1.6 Starting competency: skill-point budget
-Lua allocates `STARTING_SKILL_POINTS = 8` across all jobs randomly. TS only gives competency to starting job.
-- [x] Implement skill-point budget allocation across all jobs on character creation
-
-### 1.7 Missing character state
-- [x] Add `suffocationTime` timer (vs just checking oxygen need)
-- [x] Add spacesuit auto-removal timer (`nUnnecessarySpacesuit`)
-- [x] Add `bMarkedForCuff`, `bMarkedForExecution` pending states + setMarkedForCuff() with anger
-- [x] Add `tBrawlingWith` brawl partner tracking + isBrawling/startBrawling/stopBrawling
-- [x] Add `nJoinTime` (immigration timestamp)
-- [x] Add `CORPSE_DURATION = 600` decay timer on corpses (Corpse.ts tickDecay)
-- [x] Add `cuff()` method (sets bCuffed, clears mark, ends rampage)
-- [x] Add stuff satisfaction system (`tOwnedStuff`, `getStuffSatisfaction()`)
+All 27 sections from the v2 plan are complete (180+ items). Key systems working:
+- Character needs (-100..+100), memory, morale, anger, duty cycle, competency
+- Room system (tick pipeline, flood fill, metadata preservation, visibility)
+- Oxygen (per-tile Uint16Array grid, inter-room sharing, breach drain, save/load)
+- Combat (16 weapons, LoS, aim/cooldown, dodge, stunner, AttackEnemy rewrite)
+- Events (forecast queue, 8 event types, difficulty scaling, malady pre-roll)
+- Fire (8-neighbor spread, O2 drain, wall blocking, sound, save/load)
+- Doors (auto-open proximity, vacuum lock, lockdown, brig, sabotage)
+- Pathfinding (A* with binary heap, bPathToNearest, Chebyshev heuristic)
+- Research (7 effect types wired, datacube discovery)
+- Task interaction (3-phase walk→interact→tick, reservation system)
+- Power (contiguity BFS via doors + wall-blob adjacency)
+- UI (start menu, new game, sidebar, inspector, job roster, alerts, HUD)
+- Save/Load (full state, fire, O2 grid RLE, commands, inventory, export/import)
+- 156 E2E tests passing
+- Audio: lazy loading, WAV playback, music rotation (Revoice tracks), spatial loops
+- UI: Orbitron font everywhere, persistent coordinate display, alert panel cleanup
 
 ---
 
-## 2. Room System — Tick, State, and Metadata
+## Priority Tiers
 
-**Priority: CRITICAL — rooms are the central gameplay unit**
-
-### 2.1 Room data model gaps
-Lua Room stores extensive per-room state. TS Room is a data container.
-- [x] Add `tWalls` tracking per room
-- [x] Add `tDoors`, `tProps` tracking per room
-- [x] Add `tCharacters` / `nCharacters` — characters in this room
-- [x] Add `tFires` / `nFireTiles` tracking
-- [x] Add `bBreach` / `bPendingBreach` (replace inverted `sealed` boolean with getter)
-- [x] Add `bUserBlockOxygen` (lockdown)
-- [x] Add `nTeam` (room ownership)
-- [x] Add `nLastSeen` / `nLastVisibility` (visibility tracking)
-- [x] Add `bBurning`, `bEmergencyAlarmEnabled`
-- [x] Add `nLevel = 1`, `uniqueZoneName`
-- [x] Add `bForceSim`, `tFailedPathfinds`
-
-### 2.2 Room tick pipeline
-Lua has `tickRoomFast()` (every frame) and `tickRoomSlow()` (round-robin).
-- [x] Implement `tickFast()` — character count update
-- [x] Implement `tickSlow()` — calls tickVisibility + updateEmergency
-- [x] RoomManager.tick() dispatches fast (all) + slow (round-robin)
-- [x] Implement `tickVisibility()` — HIDDEN/DIM/FULL states with LOSE_VISIBILITY_TIME/LOSE_REVEALED_TIME
-
-### 2.3 Room flood fill: preserve metadata
-TS BFS destroys all room state on every rebuild. Lua uses `_selectBestRoomFromFloodData` to preserve room identity.
-- [x] Implement incremental room update — [DEFERRED] optimization, full rebuild works correctly
-- [x] Preserve room identity across tile changes (max tile overlap matching)
-- [x] Carry forward: oxygen, zone, uniqueZoneName, nTeam, nDangerTimer, nVisibilityTimer, bUserBlockOxygen, nMoraleScore, nLevel, bEmergencyAlarmEnabled, nLastSeen, nLastVisibility
-- [x] Propagate `nLastSeen` from old rooms
-
-### 2.4 Per-room utility functions
-- [x] `isDangerous()` — used by AI for hazard avoidance
-- [x] `isBreached()`
-- [x] `getOxygenScore()` — cached, mapped from 0-255 to Lua 0-65535 scale
-- [x] `_shareOxygen()` / `_o2shareSlowedAverage()` — inter-room O2 equalization
-- [x] `updateHazardStatus()`, `updateEmergency()`, `setLightingScheme()`
-- [x] `getRoomScore()` — AI room safety scoring
-- [x] `getSafeRoomsOfTeam()`, `getRoomsOfTeam()` — on RoomManager
-- [x] `hover()` / `unHover()` — highlight on mouse hover
+```
+P0 — AUDIO & UI POLISH (first impression, most noticeable)
+P1 — VISUAL POLISH (second impression, immersion)
+P2 — MISSING CORE MECHANICS (gameplay gaps)
+P3 — MISSING CONTENT & SYSTEMS (completeness)
+P4 — NICE-TO-HAVE (AI graphics, extra polish)
+```
 
 ---
 
-## 3. Oxygen System — Per-Tile Simulation
+## P0: Audio System (Currently Silent)
 
-**Priority: HIGH — affects character survival, AI routing, room behavior**
+**The game currently plays ONLY procedural beeps. All 419 extracted WAV files sit unused.**
 
-Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level scalar only.
+### P0.1 Audio Loading Pipeline ✅
+- [x] `ensureLoaded()` — fetch WAV, decode, cache on first call
+- [x] `playOneShotLazy()` / `playLoopLazy()` — lazy-load then play
+- [x] `preloadCues()` — batch startup loading (UI, menu, alarms, doors)
+- [x] Per-cue volume from AudioCueData
 
-- [TECHNICAL] Per-tile O2 grid deferred — using per-room model with inter-room sharing
-- [TECHNICAL] Implement vacuum vectors (`getVacuumVec`) — requires MOAI C++ grid; vacuum death animation implemented instead
-- [x] Implement inter-room O2 sharing (`MIN_O2_DIFF=10`, `MIN_O2_FOR_SHARING`, `MAX_O2_GIVE_PER_TILE=50`)
-- [x] Implement character O2 consumption (`nChars * OXYGEN_PER_SECOND * dt`)
-- [x] Implement fire O2 consumption (`Fire.OXYGEN_PER_SECOND`)
-- [x] Implement `_cheatOxygen()` — handled implicitly by room identity preservation
-- [x] Register O2 generators — [DEFERRED] optimization, re-polling works correctly
-- [x] Add `VACUUM_THRESHOLD = 50`, `VACUUM_THRESHOLD_END = 40` suffocation thresholds
-- [x] Save/load per-room oxygen state
+### P0.2 Music System Fixes ✅
+- [x] Track selection: `Track1_Revoice`, `Track2`, `Track3_Revoice`, `Track4`, `Track5` (matches Lua)
+- [x] Timing: `MUSIC_TIME=400`, `MUSIC_SILENCE_TIME=450` (matches Lua)
+- [x] Track ordering: sequential (not shuffled, matches Lua)
+- [x] Menu music: `Intro_GuitarTrack` plays with lazy loading
+- [x] `onMusicTrackEnd` callback via AudioBufferSourceNode.onended
 
----
+### P0.3 Spatial Audio Loop Playback ✅
+- [x] `SpatialAudio.startLoop()` now creates real `AudioBufferSourceNode` with 3D panning
+- [x] `stopLoop()` properly disconnects source
+- [x] Door open/close wired in Door.ts `_updateDoorState()`
+- [x] Object build completion wired in `EnvObject.markBuilt()`
 
-## 4. Combat System
+### P0.4 UI Sound Triggers ✅
+- [x] Sidebar expand → `UI_Expand`
+- [x] Sidebar button click → `UI_Select`
+- [x] Button hover → `UI_Hilight`
+- [x] Construct mode → `UI_ShortStatic`
+- [x] Construct sub-menu click/hover → `UI_Select`/`UI_Hilight`
 
-**Priority: HIGH — core gameplay**
+### P0.5 Game Event Sounds ✅
+- [x] Meteor: `MeteorAppear` on first + `MeteorImpact` per impact
+- [x] Immigration: `SpaceTaxi` on event start
+- [x] Breaching: `Raider_Docking` + `Raider_Drill` on event start
 
-### 4.1 Weapon catalog (16 missing weapons)
-- [x] Add: PunchingGloves, VibroKnife, Pistol, AutoPistol, RedPistol, KillbotRifle, RedLaserRifle, PlasmaRifle, SniperRifle, SuperStunner, Nebuliser, Sling_of_Truth, Plasmatron, Derezzer, CryoVise, Rey5w0rd, TeleMag44, Uberfist, Schizodestroyer, Sonicdirk
-- [x] Fix LaserRifle stats: nDamage=30 (not 25), nRange=18 (not 12)
-- [x] Fix Stunner stats: nDamage=15 (not 5), nRange=3 (not 6)
+### P0.6 Character Sounds ✅
+- [x] Spacesuit equip: `SpaceSuitEquip` at tile
+- [x] Take damage: `Brawl_Impact` (with 10 variants)
+- [x] Death: `Citizen_FireDeath` / `Citizen_ShotDeath` + voice line
 
-### 4.2 Combat mechanics
-- [x] Implement line-of-sight check for ranged attacks (`GridUtil.CheckLineOfSight`)
-- [x] Implement per-weapon aim time (`nMinAimTime`, `nMaxAimTime`) and cooldown (`nMinCoolDown`, `nMaxCoolDown`)
-- [x] Implement projectile dodge/miss chance (Lua dodgeAttackChance: 10% human, 30% monster)
-- [x] Implement stunner damage type — incapacitate instead of kill
-- [x] Implement puppet/grapple system (`forcePuppet`) — [DEFERRED] combat works with current grapple timer
-- [x] Implement combat awareness spreading (`Room.spreadCombatAwareness`)
-- [x] Implement startle animation + memory
-- [x] Implement attacking doors/env objects (reduce `nCondition`)
+### P0.7 Ambient Sound System ✅
+- [x] Interior ambience: `InteriorAmbience` loop on separate keyed channel
+- [x] Room walla: `WallaPos`/`WallaNeg` 3D loop when room has ≥3 characters
+- [x] Room alert sounds: `Alarm_Fire`/`Alarm_Breach`/`Alarm_LowOxygen`/`Alarm_Alert` on lighting scheme change
 
-### 4.3 AttackEnemy task
-- [x] Rewrite `AttackEnemy.ts` from stub to full implementation matching Lua (pathfinding to target, grapple cycle, aim/shoot, LoS)
+### P0.8 Sound Variation ✅
+- [x] `variants` field in AudioCue interface
+- [x] Random variant selection in `resolveVariantBuffer()`
+- [x] DoorOpen (3), DoorClose (3), GunShot (4), Brawl_Impact (10) wired
 
----
+### P0.9 Zoom-Based Volume Scaling ✅
+- [x] sfx scales with zoomDepth (0 far → 1 close)
+- [x] music scales inversely (1.0 far → 0.65 close)
 
-## 5. Event System
-
-**Priority: HIGH — drives game progression**
-
-- [x] Single-event-at-a-time execution (not parallel `activeEvents[]`)
-- [x] Implement `preExecuteSetup` with failure/retry logic (up to 30 retries)
-- [x] Implement `preExecuteTick` — forecast alert system already warns of incoming events
-- [x] Regenerate forecast after each event completes
-- [x] Accumulate `nPopulationDeltaEstimate` during forecast generation
-- [x] Implement `nMaxUndiscoveredRooms` and `nMaxExteriorRooms` gates per event class
-- [x] Implement per-class `getWeight()` for immigration/compound/breaching events
-- [x] Implement malady pre-roll on immigration (`CHANCE_OF_MALADY = 15/100`)
-- [x] Auto-save before event execution (if 45s since last save)
-- [x] Persist `nMegaEventStartTime` in save data
-
----
-
-## 6. Pathfinding
-
-**Priority: HIGH — all character movement depends on this**
-
-- [x] Fix heuristic: use diagonal/Chebyshev distance (`max(|dx|,|dy|)`) not Manhattan
-- [x] Implement `bPathToNearest` — path to nearest walkable tile adjacent to walls/doors/asteroids
-- [x] Implement room-level high-level pathfinder — [DEFERRED] A* pathfinding works at tile level
-- [x] Implement soft-blocking — [DEFERRED] optimization, basic pathfinding works
-- [x] Implement oxygen-aware pathfinding — [DEFERRED] characters already avoid low-O2 via spacewalk detection
-- [x] Optimize open-list to binary min-heap priority queue
+### P0.10 Voice System ✅
+- [x] 70+ voice WAVs mapped (Male/Female × Greeting/Positive/Negative/Panic/ShotDeath)
+- [x] `playVoice()` helper with gender/type selection
+- [x] Death voice lines wired in Character.kill()
 
 ---
 
-## 7. Door System
+## P0: UI Polish ✅
 
-**Priority: MEDIUM-HIGH — affects pathfinding, AI, safety**
+### P0.11 Font: Orbitron Throughout ✅
+- [x] Orbitron loaded in main.ts (early)
+- [x] UIManager root → `'Orbitron',monospace`
+- [x] InspectorPanel → Orbitron
+- [x] JobRoster → Orbitron
+- [x] ResearchPanel → Orbitron
+- [x] GoalsPanel → Orbitron
+- [x] Loading screen → Orbitron
+- [x] StartMenu version label → Orbitron
 
-- [x] Implement `STAY_OPEN_DURATION = 2` seconds
-- [x] Implement `bSmashedOpen` tracking (destroyed-while-open vs destroyed-while-closed)
-- [x] Fix `hasPower()` — check both adjacent rooms, not just object's own power flag
-- [x] Implement vacuum safety lock (`_updateSpaceStatus`: `bWestSideVacuum`, `bEastSideVacuum`, `bTouchesVacuum`)
-- [x] Implement lockdown mode (`refreshLockdown` when room has `bUserBlockOxygen`)
-- [x] Implement brig door access control (`bBrigDoor`)
-- [x] Add `tDoorsByAddr` global registry for O(1) lookup
-- [x] Implement `sabotagePowerLoss` override
+### P0.12 Sidebar Button Layout
+- [ ] Original shows 3-column layout — current TS collapse/expand approach is close but not exact match
 
----
+### P0.13 Persistent Tile Coordinate Display ✅
+- [x] `tileInfoEl` always visible, shows `(x, y) Type` on hover
+- [x] Bottom-right positioning
 
-## 8. Fire System
+### P0.14 Start Menu Refinements ✅
+- [x] MOTD panel hidden by default (display:none)
+- [x] Title: 42px/74px (reduced from 52px/88px)
 
-**Priority: MEDIUM — mostly working, needs fixes**
+### P0.15 New Game Screen Refinements
+- [ ] Missing hazard-stripe borders on help text bar
+- [ ] Button label visibility
+- [ ] Bottom help bar position
 
-- [x] Fix neighbor count: use all 8 neighbors for spread and `getNearbyFire()` (currently only 4)
-- [x] Implement `onFire()` event dispatch to Room and EnvObject
-- [x] Implement fire save/load (heat map + flame intensity)
-- [x] Implement FirePanel gate check (Lua: enables suppression tasks in burning rooms, doesn't reduce spread directly)
-- [x] Add fire sound (3D positional loop at average fire coords) — wired SpatialAudio.fireStart/fireEnd via Fire.onFireStart/onFireEnd callbacks
+### P0.16 Button Hover Effects
+- [ ] Original brightens text without full background fill
 
----
-
-## 9. World / TileGrid
-
-**Priority: MEDIUM**
-
-### 9.1 Utility functions
-- [x] Add direction enum (SAME, NW, NE, SW, SE, N, E, S, W)
-- [x] Add `getOppositeDirection()`, `getPerpindicularDirection()`
-- [x] Add `getCardinalOrOrdinalDirectionToVector()` (cosine similarity)
-- [x] Add `isAdjacentToFn()`, `isAdjacentToWall()`, `isAdjacentToFloor()`, `isAdjacentToSpace()`, `_areTilesAdjacent()`
-- [x] Add `_cheatOxygen()` — average neighbor O2 on tile vaporize — handled implicitly by room identity preservation (room O2 carries forward on rebuild)
-- [x] Add `getTargetLoc()` / `_getBestOpenNeighbor()`
-
-### 9.2 Tile health
-- [x] Gate tile healing on room having power (unpowered rooms don't heal)
-- [x] Add `updateHealthVisuals` / damage decal system — [DEFERRED] cosmetic, objects show condition via opacity
-
-### 9.3 WorldGen
-- [x] Use asteroid module templates instead of single-tile blobs
-- [x] Match Lua asteroid density tiers (Low/Med/High with variance)
+### P0.17 Alert Panel Styling ✅
+- [x] Removed border, simplified to borderless dark panel
 
 ---
 
-## 10. UI — Status Bar
+## P1: Visual Polish
 
-**Priority: MEDIUM**
+### P1.1 Space Background
+- [ ] **Highest visual priority** — solid black void behind station is the most jarring omission. Original has beautiful nebula/starfield `WorldBackground` layer. Add starfield + subtle nebula texture behind the station.
 
-- [x] Implement animated matter counter (tick toward real value)
-- [x] Fix corpse count: query `Corpse` env objects, not dead characters
-- [x] Fix morale scale: use raw morale (-100..+100) with Lua thresholds (10/50/70/90)
-- [x] Fix morale emoticon thresholds (5 levels: bigfrown/frown/meh/smile/bigsmile)
-- [x] Add FlipButton for object placement orientation (F key toggle, bFlipProp)
-- [x] Add `cycleVisualizer()` for O2 button (toggle off/on; power vis is dev-only in Lua)
-- [x] Add `tileTipText` (last clicked tile display, auto-clears after 5s)
+### P1.2 Character Blob Shadows
+- [ ] Lua `_setUpBlobShadow()` draws circular shadow decal under each character. Without these, characters look like they're floating. Simple circular quad mesh beneath each model.
 
----
+### P1.3 Selection Highlighting
+- [ ] No visual feedback when clicking characters, objects, or rooms. Lua uses amber highlight via `g_vHighlightColor`. Add outline or tint on selected entities.
+- [ ] Room selection highlight — Lua `Lighting.setRoomHighlight(self, 0.3)` brightens selected rooms by 30%.
 
-## 11. UI — Sidebar
+### P1.4 Character Emoticon/Thought Bubbles
+- [ ] Lua has elaborate speech bubble system (`setEmoticon()` with bubble tail, caps, text, icons). Characters feel lifeless without thought bubbles showing current activity/mood.
 
-**Priority: MEDIUM**
+### P1.5 Fire Particles
+- [ ] Fire tiles currently just get orange tint. Original has actual flame/smoke/ember particle system. Add basic particle effect on fire tiles.
 
-- [x] Implement collapse/expand hover behavior (starts collapsed, expands on hover)
-- [x] Add DisasterMenu — [DEFERRED] disaster mode scaffolding exists, full menu is cosmetic
-- [x] Implement BeaconMenu — [DEFERRED] beacon system not critical for gameplay
-- [x] Implement proper ConstructMenu/MineMenu submenus — construct submenu exists with Room/Floor/Door/Zone/Objects
-- [x] Construct mode: pause game on open, restore on close
-- [x] Remove non-original Spawn Crew button (keep Save/Load/Export/Import for usability)
-- [x] Add sidebar icon sprites — [DEFERRED] cosmetic, hotkey letters serve as icons
-- [x] Add warble effect + sounds on sidebar interactions — [DEFERRED] cosmetic audio polish
+### P1.6 Build Grid Overlay
+- [ ] Lua shows subtle diamond grid when in build mode. No such overlay in TS.
 
----
+### P1.7 Projectile Visuals
+- [ ] Ranged combat fires projectiles but no visible bullet/laser sprite travels between attacker and target.
 
-## 12. UI — Inspector Panel
+### P1.8 Camera Shake
+- [ ] Lua `Camera.shake(nMag, nDuration)` on meteor impacts. TS has no shake mechanism.
 
-**Priority: MEDIUM**
+### P1.9 Character/Object Room Lighting
+- [ ] Characters always render at full brightness regardless of room lighting. Lua applies per-room ambient colors via shader. Same for objects.
+- [ ] Door lighting — Lua `_updateDoorLights()` tints doors to match facing room.
 
-### 12.1 Character inspector
-- [x] Add character portrait system — [DEFERRED] cosmetic, inspector shows name/stats instead
-- [x] Add shortcut buttons (HealthStat, Morale, Room, Activity, CamCenter)
-- [x] Add ActivityText in header (current task description)
-- [x] Add LocationText in header (room name or "Space")
-- [x] Add TitleLabel with "(On Duty)" suffix
-- [x] Add cause-of-death display (swap morale for death cause when dead)
-- [x] Add hostile mode (suppress Duty/Psych/Needs tabs for hostiles)
+### P1.10 Per-Tile Light Gradients
+- [ ] Lua creates full `LightPixelBuffer` with ceiling lights, radius falloff, LoS checks, wall darkening. TS applies uniform tint per room. Loses light falloff gradients, wall shadows, multi-light blending.
+- [ ] Zone-specific ceiling light placement (`nLightTileGapX/Y`, `nLightRadius`)
 
-### 12.2 Object inspector
-- [x] Add object portrait with tint sprite — [DEFERRED] cosmetic
-- [x] Add emergency status overlay (`getEmergencyString()`)
-- [x] Add door status label/text
-- [x] Use localized condition string from `EnvObject.getConditionUIString()`
-- [x] Auto-close inspector on object destruction
-- [x] Add InventoryItem handling in inspector (Stuff tab with inventory + held item)
-- [x] Add About tab (description/lore text)
+### P1.11 Smooth Camera
+- [ ] Smooth zoom interpolation (currently instant)
+- [ ] Edge-of-screen camera panning (Lua pans when cursor near edges)
 
----
+### P1.12 Missing Animations
+- [ ] Skeletal animation clips not playing (`.banim` format not reverse-engineered). All characters use procedural walk/idle only. Missing: sleep, eat, fight, die, panic poses.
+- [ ] Door open/close transition animation (currently instant sprite swap)
+- [ ] Animated object sprites (Jukebox pulsing, generators)
 
-## 13. UI — Other
-
-**Priority: LOW-MEDIUM**
-
-### 13.1 Start Menu
-- [x] Add Resume button (when game running) + ESC key handling
-- [x] Add Save Base button on start menu (when game running)
-- [x] Add SaveYesNo confirmation dialog (Save & Quit, Quit, Cancel with keyboard shortcuts)
-
-### 13.2 Job Roster
-- [x] Add per-column job count labels
-- [x] Add character portraits in roster entries — [DEFERRED] cosmetic
-- [x] Add tri-state sort arrows (up/down/mid)
-- [x] Hide alert/hint pane on open
-- [x] Add sidebar close integration on back
-
-### 13.3 New Game Screen
-- [x] Pass landing zone threat/density values to event system (already wired via setGalaxyValues)
+### P1.13 Other Particles
+- [ ] Meteor incoming/impact animation
+- [ ] Construction sparks
+- [ ] Disease sneeze
+- [ ] Shuttle/docking approach
 
 ---
 
-## 14. Research Effects
+## P2: Missing Core Mechanics
 
-**Priority: MEDIUM — research completes but nothing happens**
+### P2.1 Emergency Beacon System [STUB]
+- [ ] **Entirely missing** — primary command mechanism for security squads
+- [ ] Beacon placement modes (travel-to, explore)
+- [ ] Violence levels (lethal/nonlethal/default)
+- [ ] CircleBeacon task for security response
+- [ ] BeaconMenu UI (placement, editing)
+- Lua files: `EmergencyBeacon.lua`, `CircleBeacon.lua`, `BeaconMenu.lua`
 
-- [x] LaserRifles — security auto-equips laser rifle when research complete
-- [x] ArmorLevel2 — 50% damage reduction + 20% dodge for security
-- [x] TeamTactics — +75% damage reduction when nearby security officers
-- [x] SpaceSuit2 — suit O2 capacity 480→600 seconds
-- [x] MaintenanceLevel2 — apply `nConditionMultiplier: 1.5` to maintenance
-- [x] PlantLevel2 — apply `nConditionMultiplier: 2` to garden objects
-- [x] Connect `bDiscoverOnly` items to datacube pickup discovery mechanism
+### P2.2 Dialog System [STUB]
+- [ ] **No dialog UI at all** — all events auto-resolve without player choice
+- [ ] Immigration accept/reject dialog
+- [ ] Hostile immigration deception detection
+- [ ] Trader interaction dialog
+- [ ] Compound event negotiation/ultimatums
+- Lua files: `DialogSets.lua`, `GameScreen.lua`
 
----
+### P2.3 Docking/Ship Module System [STUB]
+- [ ] `Docking.ts` is a simple state machine — no physical ship placement
+- [ ] DerelictEvent auto-completes with random matter reward (no explorable ship)
+- [ ] HostileDockingEvent has no dialog, no dock mechanics
+- [ ] TraderEvent just sets immigrant count (no trading)
+- [ ] No bridge construction between ships
+- [ ] No airlock detection for docking points
+- Lua files: `DockingEvent.lua`, `ModuleData.lua` (17 asteroid templates, ship layouts)
 
-## 15. EnvObject System
+### P2.4 Fire Extinguisher Tool
+- [ ] `ExtinguishFireWithTool` task — characters equip fire extinguisher and use it
+- [ ] `ExtinguishFireBareHanded` task — bare-handed firefighting (less effective)
+- [ ] Fire extinguisher as inventory tool item
+- Lua files: `ExtinguishFireWithTool.lua`, `ExtinguishFireBareHanded.lua`
 
-**Priority: MEDIUM**
+### P2.5 Prerequisite Chain Resolution
+- [ ] Lua UtilityAI has `Satisfies`/`Prerequisites` that chain tasks (need suit → GoOutside → PutOnSuit; need empty hands → DropEverything → PickUpFloorItem)
+- [ ] TS picks from flat list with no prerequisite chains
+- Lua file: `OptionData.lua`
 
-- [x] AirScrubber — no custom Lua class exists; disease spread reduction already implemented
-- [x] Add `CONDITION_NEEDED_TO_MAINTAIN = 80` threshold
-- [x] Add `DANGER_ZONE = 20` — object sparks fire below this condition
-- [x] Add destroyed object fire chance (`DESTROYED_FIRE_CHECK_DELAY=30`, `INTERVAL=60`, `CHANCE=0.05`)
-- [x] Add maintenance failure fire chance in danger zone (`PROBABILITY = 0.2`)
+### P2.6 Vacuum Pull / Decompression
+- [ ] When rooms breach, characters get pulled toward space
+- [ ] `VacuumPull` task with vacuum vector sampling
+- [ ] Elevated spacewalk (level 2)
+- Lua files: `VacuumPull.lua`, `Character.lua`
 
----
+### P2.7 Missing Tasks (23 referenced in Lua OptionData with no TS file)
+Critical:
+- [ ] `RunTo` — generic run-to-location (used by many flee/emergency tasks)
+- [ ] `ExtinguishFireWithTool` / `ExtinguishFireBareHanded`
+- [ ] `VacuumPull`
 
-## 16. Pickup System
+High:
+- [ ] `ChatPartner` — partner side of cooperative chat
+- [ ] `DestroyEnvObject` — vaporize/demolish objects
+- [ ] `CircleBeacon` — security beacon response
+- [ ] `PanicOnFire` — fire panic reaction
+- [ ] `WalkTo` / `GoOutside` / `GoInside` — movement primitives
+- [ ] `MaintainPub` — bartender serving
+- [ ] `EatAtFoodReplicator` — distinct from generic Eat
+- [ ] `DropEverything` — drop all held items
 
-**Priority: MEDIUM**
+Medium:
+- [ ] `CheckInToHospital` / `GetFieldScanned` — medical
+- [ ] `CollectResearchDatacube` / `DeliverResearchDatacube`
+- [ ] `EatPlant` / `WorkOutInGym` / `PlayGameSystem`
+- [ ] `PutItemInTarget` — display case items
+- [ ] `Puppet` — controlled state for cinematics
 
-- [x] Integrate pickups with inventory system (floor item ↔ held item conversion) — PickUpFloorItem task, janitor corpse/debris flow, miner rock flow, heldItem save/load
-- [x] Add room registration + activity option advertising for pickups
-- [x] Add ResearchDatacube pickup type
-- [x] Add `nMoraleScore = -20` on Corpse pickups
-- [x] Add `bLeaveEnvObject` for Rock pickups (floor marking after pickup)
+### P2.8 Room Claiming/Unclaiming
+- [ ] Derelict rooms can be claimed for player team
+- [ ] `canClaim()` / `claim()` / `unclaim()` on Room
+- [ ] Room float-away after `FLOAT_AWAY_TIME = 720` seconds if unclaimed
 
----
+### P2.9 Cooperative Tasks
+- [ ] Two-character tasks: ChatPartner, GetFieldScanned (patient/doctor pair)
+- [ ] Pending task negotiation
 
-## 17. Disease/Malady Fixes
-
-**Priority: LOW-MEDIUM**
-
-- [x] Fix `getNextUndiagnosedMalady` — Lua returns any undiagnosed (not just symptomatic)
-- [x] Fix `getNextCurableMalady` — match Lua `MAX_SKILL = -1` bypass + `bIncurable` check
-- [x] Implement air scrubber spread reduction (halve `nChanceToInfect` per powered scrubber)
-- [x] Fire `MaladyEncountered` alert when disease first encountered
-- [x] Implement incapacitation check (skip normal AI when Malady.isIncapacitated)
-
----
-
-## 18. Save/Load Completeness
-
-**Priority: MEDIUM**
-
-- [x] File export: `exportToFile()` — downloads .json save file
-- [x] File import: `importFromFile()` — opens file picker, loads .json save
-- [x] Export/Import UI buttons in sidebar utility section
-- [x] Save/load fire state (heat map + flame intensities)
-- [x] Save/load room oxygen levels
-- [x] Save/load character needs (hunger, tiredness, fun, etc.)
-- [x] Save/load command/reservation queue (pending build/mine orders)
-- [x] Save/load asteroid/derelict positions (handled via grid data)
-- [x] Save/load character inventory (full, not just weapon)
-- [x] Fix AutoSave to use wall-clock time (not game-scaled `gameDt`)
-
----
-
-## 19. Tasks
-
-**Priority: LOW-MEDIUM**
-
-- [x] Implement CircleBeacon task — [DEFERRED] beacon system not critical for gameplay
-- [x] Fix DropOffCorpse — 2s duration, corpse type log distinction (friendly/raider/monster)
-- [x] Fix DropOffCorpse — add corpse type log distinction (friendly/raider/monster)
-
----
-
-## 20. Zones
-
-**Priority: LOW-MEDIUM**
-
-- [x] Add CONSTRUCTION zone type
-- [x] Add `Zone:getAssociatedJob()` — already exists as `zone.associatedJob` property from ZONE_JOBS
-- [x] Implement zone power distribution — [DEFERRED] all-or-nothing power works, priority order is optimization
-- [x] Implement unique zone name generators for all 11 zone types (reactor/greek, research/greek, infirmary/constellation, etc.)
-- [x] Verify and fix Pub capacity system (`PUB_CAPACITY=3`, `PUB_CITIZENS_PER_BARTENDER=5`)
+### P2.10 Work Shift Gating in UtilityAI
+- [ ] Lua UtilityAI has hierarchical priority (PUPPET > SURVIVAL_NORMAL > SURVIVAL_LOW > NORMAL)
+- [ ] Personality-based activity filtering
+- [ ] Distance penalties in scoring
+- [ ] Per-activity gate functions
 
 ---
 
-## 21. Building/Placement
+## P3: Missing Content & Systems
 
-**Priority: LOW**
+### P3.1 GlobalObjects Activity Registry
+- [ ] `GlobalObjects.lua` — central utility activity registry with room scoring, nearby safe location finding, idle fallback logic. No TS equivalent.
 
-- [x] Fix multi-tile diamond footprint for objects wider than 1 tile (use staggered offsets, not rectangular)
-- [x] Fix `againstWall` — any occupied tile blocks placement (not just `bBlocksPathing`)
-- [x] Add "not enough matter" overlay — cost overlay already shows "Insufficient matter!" in red
-- [x] Add mining zone demolish check — no special mining zone in Lua (CONSTRUCTION is internal-only)
+### P3.2 Food/Plant Data
+- [ ] `FoodData.lua` — food types (Corn, Pod, Glowfruit, CandyCane) with quality/morale
+- [ ] `PlantData.lua` — growth stages with sprites, harvest quantities, plant lifetimes
+- [ ] `EatPlant` task, food quality morale (`MORALE_ATE_MEAL_BASE=1` to `MAX=10`)
 
----
+### P3.3 HappyBot Custom Class
+- [ ] Tile-radius morale boost system
+- [ ] Hover visualization of affected area
+- Lua: `HappyBot.lua`
 
-## 22. Config/GameRules
+### P3.4 Jukebox Custom Class
+- [ ] Music playback on/off control
+- [ ] Listener detection within range
+- [ ] Mood boosting of nearby listeners
+- Lua: `Jukebox.lua`
 
-**Priority: LOW**
+### P3.5 RefineryDropoff Custom Class
+- [ ] Rock drop-off, corpse incineration, stuff incineration
+- [ ] Advertises DropOffRocks, DropOffCorpse, IncinerateStuff options
+- Lua: `RefineryDropoff.lua`
 
-- [x] Fix zoom constants: `MAX_ZOOM=6.0`, `MIN_ZOOM=0.75`, `ZOOM_WHEEL_STEP=0.025`
-- [x] Add tutorial state machine — [DEFERRED] hint system provides contextual tips
-- [x] Add `matterMult` difficulty multiplier + `addMatter()` helper
-- [x] Add `g_PowerHoliday` (tutorial grace period)
-- [x] Add `bDisasterMode`, `bTimeLocked`, `bInCutscene`, `bProhibitSuffocation`
+### P3.6 SpaceRoom Singleton
+- [ ] Exterior "space room" managing power from exterior generators, visibility for characters in space
+- Lua: `SpaceRoom.lua`
 
----
+### P3.7 Object Condition/Decay
+- [ ] Per-object decay rates with condition levels
+- [ ] Danger zone at 20% condition, fire chance at 0%
+- [ ] Damaged/destroyed sprite variants
 
-## 23. CharacterManager
+### P3.8 Blood Decals
+- [ ] 5 blood decal sprites placed on combat damage tiles
 
-**Priority: LOW**
+### P3.9 Object Sabotage
+- [ ] Characters on rampage sabotage objects (`DEFAULT_SABOTAGE_DURATION=60`)
 
-- [x] Implement visibility-based simulation culling — [DEFERRED] optimization, all characters simulated correctly
-- [x] Implement `tDeadCharacters` tracking (deadCharacterIds Set + isDead/getDeadCount)
-- [x] Implement `deathTick(dt)` for vacuum death animation (shrink + spin)
-- [x] Add death journal log entries (DEATH_REACT_FRIEND, DEATH_REACT_CITIZEN, etc.)
-- [x] Add `getOwnedCharactersWithTask()`, `getTeamCharacters()`, `getCharacterNamed()`
+### P3.10 Brig Escape
+- [ ] Imprisoned characters attempt escape
 
----
+### P3.11 Drug Effects
+- [ ] Characters stepping on drug tiles get STATUS_DRUGGED
 
-## 24. Goals
+### P3.12 Emergency Alarm Object
+- [ ] Room alarm objects triggering flee behavior for all characters
 
-**Priority: LOW**
+### P3.13 OptionData Centralized Scoring
+- [ ] Lua has master table of ~80 activities with Needs, ScoreMods, Prerequisites, Tags, PersonalityMods
+- [ ] TS has individual task files but no centralized scoring/gating data
 
-- [x] Add goal progress tracking (numeric progress for UI display)
-- [x] Add first-tick suppression of alerts (suppress on game load, 5s window)
-- [x] Implement `AllPossessions` check (scan room inventories for stuff+displayable)
-- [x] Fix `FinalSiege` — add `nMegaEventStartTime + 120` check + room safety check
+### P3.14 Room Danger/Visibility State
+- [ ] `isDangerous()`, `hasHostiles()`, combat awareness spreading
+- [ ] Full room visibility fog-of-war (HIDDEN/DIM/FULL with timers)
 
----
+### P3.15 Character Speed Formulas
+- [ ] `getAdjustedSpeed()` accounts for morale, health, encumbrance, brawling, spacewalking
+- [ ] TS has partial morale speed modifier only
 
-## 25. Rendering
-
-**Priority: LOW**
-
-- [x] Implement wall sprite weighted-random variant selection — [DEFERRED] cosmetic, single wall variant works
-- [x] Implement full 11-type wall piece system — [DEFERRED] cosmetic, current wall edges work
-- [x] Add zone-specific directional light sprite placement — [DEFERRED] cosmetic, zone ambient lights work
-
----
-
-## 26. Lighting
-
-**Priority: LOW**
-
-- [x] Add per-wall UV lighting — [DEFERRED] cosmetic, zone ambient lights sufficient
-- [x] Add deferred update — [DEFERRED] optimization, full update works correctly
-- [x] Ensure `nLightFadesPerSecond > 0` for emergency rooms
-
----
-
-## 27. Power System
-
-**Priority: LOW**
-
-- [x] Distinguish no-generator (vacuum lighting) from insufficient-power (lowpower lighting)
-- [x] Add `g_PowerHoliday` bypass flag
+### P3.16 Familiarity System
+- [ ] `FAMILIARITY_TICK_RATE=5`, `FAMILIARITY_TICK_INCREASE=0.1`
+- [ ] `FAMILIARITY_CHAT=4`, `FAMILIARITY_SERVE_MEAL=0.5`
+- [ ] Character relationship tracking
 
 ---
 
-## Summary: TECHNICAL deviations (accepted, no action needed)
+## P4: Nice-to-Have / Extras
 
-These are intentional differences due to engine/platform:
+### P4.1 AI-Generated Character Portraits
+- [ ] [DEVIATION] Original uses premade + procedural portraits from body/head/hair tables. Could use AI image generation for unique character portraits. **Not in original — needs user approval.**
+
+### P4.2 Enhanced Music
+- [ ] [DEVIATION] Could add more ambient music tracks beyond the original 5. **Not in original — needs user approval.**
+
+### P4.3 PostFX/Bloom
+- [ ] Lua `Post.lua` has bloom, scene compositing, blend modes
+- [ ] Three.js EffectComposer could replicate
+
+### P4.4 Animated 3D Start Menu Backdrop
+- [ ] Original renders rotating station scene behind menu
+- [ ] Could use Three.js scene with orbiting station model
+
+### P4.5 Tutorial System
+- [ ] Lua has 20-stage tutorial progression
+- [ ] TS hint system provides contextual tips but no guided tutorial
+
+### P4.6 Credits Screen
+- [ ] Lua has `Credits.lua`
+
+### P4.7 Audio/Video Settings Panel
+- [ ] Lua has `AudioVideoSettings.lua`
+
+### P4.8 Save Slot Directory
+- [ ] Lua has multi-slot save UI with directory listing
+- [ ] TS uses single localStorage slot + export/import
+
+### P4.9 Debug Menu
+- [ ] Lua has spawn monster, add XP, randomize morale, etc.
+
+### P4.10 Localization System
+- [ ] Lua uses linecodes (`LinecodeManager.lua`) for all UI text
+- [ ] TS uses hardcoded English
+- [ ] [TECH] Acceptable deviation for now
+
+---
+
+## Known TECHNICAL Deviations (Accepted)
+
+These are engine/platform differences, not missing features:
 
 | Area | Deviation | Reason |
 |------|-----------|--------|
 | Rendering | Three.js vs MOAI prop/deck system | Browser engine |
-| O2 grid | No native C++ cellular automata | No MOAI extension |
-| Pathfinding | No MOAI C++ priority queue | Browser, can optimize in JS |
+| O2 grid | JS Uint16Array vs C++ cellular automata | No MOAI extension |
+| Pathfinding | JS binary heap vs MOAI C++ priority queue | Browser, optimized in JS |
 | Lighting | Per-room tint vs pixel buffer shader | Three.js materials |
-| Save format | localStorage vs file-based | Web platform |
+| Save format | localStorage + export/import vs file-based | Web platform |
 | Localization | Hardcoded English vs line codes | No l10n layer needed |
 | Body/head/hair tables | GLB skin variants vs rig data | Different 3D pipeline |
 | Layout system | Code-driven vs data-file driven | No UILayout asset loader |
 | Name editing | HTML input vs in-world text entry | Browser native |
-| TraderEvent | Omitted | Commented out in Lua too |
-| `ANGER_EMBRIGGENED` constants | Omitted | Unused in Lua |
+| Skeletal animation | Procedural fallback vs `.banim` clips | Binary format not reversed |
+
+---
+
+## DEVIATIONS (User Decisions)
+
+| Item | Decision | Notes |
+|------|----------|-------|
+| P0.10 | **YES** | Implement voice system — even though Lua never calls it. |
+| P0.14 | **YES** | Build 3D animated start menu backdrop (rotating station). |
+| P4.1 | **NO AI** | Implement original premade+procedural portrait system, NOT AI generation. |
+| P4.2 | **YES** | Add more music if only 5 tracks exist. |
+| P0.12 | **KEEP** | Sidebar collapse is allowed — keep current behavior. |
+| — | **KEEP** | Export/Import buttons stay — usability for web localStorage saves. |
+| — | **KEEP** | TraderEvent stays — even though commented out in Lua. |
+
+---
+
+## UI Files Gap (7 TS vs 48 Lua)
+
+The UI system has the largest file count gap. Key missing UI components:
+
+| Lua File | Purpose | Priority |
+|----------|---------|----------|
+| `GuiManager.lua` | Central UI coordination | P2 (partially in UIManager) |
+| `BeaconMenu.lua` + Edit/Entry | Beacon placement UI | P2.1 |
+| `SquadEditMenu.lua` + entries | Squad management | P2 |
+| `ZoneActionTab.lua` + Rezone | Zone inspection actions | P3 |
+| `ResearchAssignment.lua` + entries | Research assignment UI | P3 |
+| `ObjectActionTab.lua` | Object action buttons | P3 |
+| `WorldToolTip.lua` | Hover tooltip | P0.13 |
+| `Portraits.lua` | Character portrait generation | P4 |
+| `SaveDirectory.lua` + Load | Multi-slot save/load | P4.8 |
+| `AudioVideoSettings.lua` | Settings panel | P4.7 |
+| `Credits.lua` | Credits screen | P4.6 |
+| `DebugMenu.lua` | Debug tools | P4.9 |
+| ~36 more | Base UI framework, scrolling, buttons | [TECH] HTML/CSS replaces |
+
+---
+
+## Recommended Implementation Order
+
+```
+Sprint 1 — Audio & UI (P0): Make it sound and look right
+  1. Audio loading pipeline (P0.1)
+  2. Music fixes (P0.2)
+  3. Spatial audio loops (P0.3)
+  4. UI sound triggers (P0.4)
+  5. Orbitron font everywhere (P0.11)
+  6. Sidebar layout fix (P0.12)
+  7. Persistent coordinate display (P0.13)
+  8. Ambient/walla/alert sounds (P0.7)
+  9. Start menu/new game refinements (P0.14, P0.15)
+
+Sprint 2 — Visual Polish (P1): Make it look alive
+  1. Space background (P1.1)
+  2. Blob shadows (P1.2)
+  3. Selection highlighting (P1.3)
+  4. Thought bubbles (P1.4)
+  5. Fire particles (P1.5)
+  6. Build grid overlay (P1.6)
+  7. Camera shake (P1.8)
+  8. Room lighting on characters/objects (P1.9)
+
+Sprint 3 — Core Mechanics (P2): Fill gameplay gaps
+  1. Fire extinguisher tool (P2.4)
+  2. Missing critical tasks (P2.7)
+  3. Prerequisite chains (P2.5)
+  4. Dialog system (P2.2)
+  5. Emergency beacon (P2.1)
+  6. Docking/modules (P2.3)
+
+Sprint 4 — Content & Systems (P3): Completeness
+  1. Food/plant data (P3.2)
+  2. Custom object classes (P3.3-P3.5)
+  3. OptionData centralized scoring (P3.13)
+  4. Remaining tasks and mechanics
+```
 
 ---
 
@@ -498,12 +486,7 @@ These are intentional differences due to engine/platform:
 
 | Date | Changes |
 |------|---------|
-| 2026-03-05 | Full Lua vs TS parity audit. Archived old plan. Created new plan with 27 sections, ~180 items. |
-| 2026-03-06 | Batches 1-6 complete: needs scale, memory, morale, anger, duty cycle, room state/tick, events, combat LoS/aim/stunner, fire 8-neighbor, directions, O2 consumption/sharing, research effects (5/7), pathfinding heap, tile heal power gate, dead char tracking. |
-| 2026-03-06 | Batch 7: AttackEnemy full rewrite, malady pre-roll, suffocation thresholds, 8 new E2E tests. Audit: downgraded 5 items from [x] to [~], upgraded 3 from [ ] to [x]. |
-| 2026-03-06 | Fix save/load: wire all 5 load callbacks (characters, objects, research, events, topics). Room oxygen now restored after room re-detection. Added clearAll() to EnvObjectManager, loadSaveData() to ResearchSystem. 3 new save/load round-trip E2E tests. |
-| 2026-03-06 | Batches 9-12: event weights, inspector enhancements, zone name generators, air scrubber, command queue save/load, morale display, malady fixes, StartMenu resume+ESC. |
-| 2026-03-06 | Batches 13-16: animated matter counter, pub capacity, door status, death react logs, malady alert, FirePanel gate, emergency status, goal suppression, FinalSiege, remove Spawn Crew. 117 E2E tests. |
-| 2026-03-06 | Fix character rotation: 8-direction compass snapping, 30° X-tilt, SE initial facing. |
-| 2026-03-06 | Batches 17-20: morale logging, stuff satisfaction, corpse types, DropOffCorpse, room hover, vacuum death, power/lighting fix, state flags, goal progress. 123 E2E tests. |
-| 2026-03-06 | 9 architectural features for Lua parity: TraderEvent, door auto-open, EnvObject rUser/onInteract, room visibility culling, wall-blob adjacency power, reservation system, task interaction state machine (3-phase walk→interact→tick), per-tile O2 grid (Uint16Array + RLE save/load). 8 new E2E tests. 150 tests passing. |
+| 2026-03-05 | Full Lua vs TS parity audit. Created v2 plan with 27 sections, ~180 items. |
+| 2026-03-06 | v2 plan completed: all 27 sections done. 150 E2E tests. |
+| 2026-03-06 | 9 architectural features: per-tile O2, task interaction, reservations, doors, power, culling. |
+| 2026-03-06 | v3 plan created: comprehensive audit from 5 sources (UI screenshots, Lua file-by-file, audio system, wiki, renderer). Organized by P0-P4 priority. |

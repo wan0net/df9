@@ -85,6 +85,32 @@ class CharacterTickAdapter implements TickableSystem {
   onTick(dt: number) { this.manager.update(dt * 1000); }
 }
 
+// ── Load Orbitron font early ──────────────────────────────────
+if (!document.getElementById('orbitron-font')) {
+  const link = document.createElement('link');
+  link.id = 'orbitron-font';
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap';
+  document.head.appendChild(link);
+}
+
+// ── Critical cues to preload at startup ──────────────────────
+const PRELOAD_CUES = [
+  // UI sounds
+  'UI_Select', 'UI_Confirm', 'UI_Disallow', 'UI_Expand', 'UI_Hilight',
+  'UI_GridShow', 'UI_BuildScroll', 'UI_MatterScroll', 'UI_InspectorShow',
+  'UI_InspectorFolder', 'UI_ShortStatic', 'UI_MapScreen',
+  // Menu sounds
+  'Intro_AcceptButton', 'Intro_CancelButton', 'Intro_LaunchButton',
+  'Intro_LaunchOpen', 'Intro_LaunchClose', 'Intro_UIAppear', 'Intro_UIDisappear',
+  // Menu music
+  'Intro_GuitarTrack',
+  // Alarms
+  'Alarm_Alert', 'Alarm_Breach', 'Alarm_Fire', 'Alarm_LowOxygen',
+  // Door sounds
+  'DoorOpen', 'DoorClose',
+];
+
 // ── Main ──────────────────────────────────────────────────────
 
 const container = document.body;
@@ -93,7 +119,7 @@ const container = document.body;
 const loadingEl = document.createElement('div');
 loadingEl.style.cssText = `
   position:fixed;top:0;left:0;width:100%;height:100%;
-  background:#000;color:#dfa200;font-family:monospace;
+  background:#000;color:#dfa200;font-family:'Orbitron',monospace;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   z-index:9999;font-size:24px;
 `;
@@ -166,6 +192,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   }
   SoundManager.resume();
   SoundManager.stopMusic(); // Stop menu music
+  // Preload critical audio cues (non-blocking)
+  SoundManager.preloadCues(PRELOAD_CUES);
   const musicSystem = new MusicSystem();
   musicSystem.startGame();
 
@@ -757,6 +785,20 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Build input
     handleBuildInput();
+
+    // Update coordinate display
+    {
+      const hov = buildCursor.hoveredTile;
+      if (hov) {
+        const tileVal = grid.get(hov.x, hov.y);
+        const names: Record<number, string> = {
+          [TileType.SPACE]: 'Space', [TileType.WALL]: 'Wall', [TileType.DOOR]: 'Door',
+          [TileType.WALL_DESTROYED]: 'Destroyed Wall', [TileType.FLOOR]: 'Floor',
+          [TileType.FLOOR_PENDING]: 'Floor (Pending)', [TileType.WALL_PENDING]: 'Wall (Pending)',
+        };
+        uiManager.updateTileInfo(hov.x, hov.y, names[tileVal] ?? 'Unknown');
+      }
+    }
 
     // Tile visibility culling
     const viewW = window.innerWidth / cameraController.zoom;

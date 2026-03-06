@@ -4,6 +4,7 @@
  */
 
 import { EnvObject } from './EnvObject';
+import { SpatialAudio } from '../audio/SpatialAudio';
 import type { Room } from '../rooms/Room';
 
 export const DOOR_STATE = {
@@ -215,9 +216,20 @@ export class Door extends EnvObject {
     }
 
     if (newState !== this.state || bForce) {
+      const oldState = this.state;
       this.state = newState;
       this._updateBlockingFlags();
       this._notifyRenderer();
+      // Door audio: detect open/close transitions
+      if (!bForce && oldState !== newState) {
+        const wasOpen = oldState === DOOR_STATE.OPEN || oldState === DOOR_STATE.BROKEN_OPEN;
+        const isNowOpen = newState === DOOR_STATE.OPEN || newState === DOOR_STATE.BROKEN_OPEN;
+        if (!wasOpen && isNowOpen) {
+          SpatialAudio.doorOpen(this.tileX, this.tileY);
+        } else if (wasOpen && !isNowOpen) {
+          SpatialAudio.doorClose(this.tileX, this.tileY);
+        }
+      }
     } else {
       this.state = newState;
       this._updateBlockingFlags();

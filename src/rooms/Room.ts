@@ -3,6 +3,8 @@ import type { ObjectTag } from '../core/ObjectList';
 import type { Zone } from '../zones/Zone';
 import { TEAM_ID_PLAYER, OXYGEN_LOW, OXYGEN_SUFFOCATING } from '../characters/CharacterConstants';
 import { GameRules } from '../core/GameRules';
+import { SoundManager } from '../audio/SoundManager';
+import { SpatialAudio } from '../audio/SpatialAudio';
 
 // ── Room constants — mirrors Room.lua:46-59 ─────────────────────────────────
 export const LIGHTING_SCHEME_OFF      = 0;
@@ -250,9 +252,23 @@ export class Room {
   /** Set lighting scheme (Lua Room:setLightingScheme). */
   setLightingScheme(nNewScheme: number): void {
     if (this.nLightingScheme !== nNewScheme) {
+      const oldScheme = this.nLightingScheme;
       this.nLightingScheme = nNewScheme;
       this.nLightFadeTimer = 0;
       this.nLightFadesPerSecond = 0.5;
+
+      // Room alarm sounds on emergency scheme transitions
+      if (nNewScheme === LIGHTING_SCHEME_FIRE && oldScheme !== LIGHTING_SCHEME_FIRE) {
+        if (this.bBurning) {
+          SoundManager.playSfx('Alarm_Fire');
+        } else if (this.bBreach || this.bPendingBreach) {
+          SoundManager.playSfx('Alarm_Breach');
+        } else if (this.getOxygenScore() < OXYGEN_SUFFOCATING) {
+          SoundManager.playSfx('Alarm_LowOxygen');
+        } else {
+          SoundManager.playSfx('Alarm_Alert');
+        }
+      }
     }
   }
 
@@ -307,9 +323,39 @@ export class Room {
     this.nCharacters = this.tCharacters.size;
   }
 
+  /** Whether walla loop is active for this room. */
+  private wallaActive = false;
+
   /** Slow tick: update hazard status, visibility, lighting. Round-robin'd by RoomManager. */
   tickSlow(_dt: number): void {
     this.tickVisibility();
+    this._updateWalla();
+  }
+
+  /** Update room walla (background crowd noise). Lua: rooms with ≥3 characters. */
+  private _updateWalla(): void {
+    const charCount = this.tCharacters.size;
+    const wallaKey = `walla_room_${this.id}`;
+
+    if (charCount >= 3 && !this.wallaActive) {
+      // Determine positive vs negative walla based on average morale placeholder
+      // (simplified: use positive walla for player rooms)
+      const cue = this.nTeam === TEAM_ID_PLAYER ? 'WallaPos' : 'WallaNeg';
+      const center = this._getRoomCenter();
+      SpatialAudio.startLoop(wallaKey, cue, center.x, center.y);
+      this.wallaActive = true;
+    } else if (charCount < 3 && this.wallaActive) {
+      SpatialAudio.stopLoop(wallaKey);
+      this.wallaActive = false;
+    }
+  }
+
+  /** Get approximate center tile of the room. */
+  private _getRoomCenter(): { x: number; y: number } {
+    if (this.tiles.length === 0) return { x: 0, y: 0 };
+    let sx = 0, sy = 0;
+    for (const t of this.tiles) { sx += t.x; sy += t.y; }
+    return { x: Math.round(sx / this.tiles.length), y: Math.round(sy / this.tiles.length) };
   }
 
   /** Last combat alert timestamp. */

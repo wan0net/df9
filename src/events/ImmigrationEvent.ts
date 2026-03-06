@@ -4,6 +4,7 @@
  */
 
 import { Event } from './Event';
+import { SoundManager } from '../audio/SoundManager';
 
 export class ImmigrationEvent extends Event {
   readonly name: string = 'Immigration';
@@ -26,7 +27,13 @@ export class ImmigrationEvent extends Event {
     this.immigrantCount = count;
   }
 
+  private soundPlayed = false;
+
   protected onUpdate(dt: number) {
+    if (!this.soundPlayed) {
+      SoundManager.playSfx('SpaceTaxi');
+      this.soundPlayed = true;
+    }
     // Event completes after docking period (simplified: immediate)
     if (this.elapsedTime >= 10) {
       this.complete();

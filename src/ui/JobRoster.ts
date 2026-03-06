@@ -41,7 +41,7 @@ export class JobRoster {
     this.el.style.cssText = `
       position:fixed;top:0;left:0;width:100%;height:100%;
       background:rgba(0,0,0,0.9);z-index:100;display:none;
-      font-family:monospace;pointer-events:auto;
+      font-family:'Orbitron',monospace;pointer-events:auto;
       display:flex;align-items:center;justify-content:center;
     `;
     this.el.style.display = 'none';

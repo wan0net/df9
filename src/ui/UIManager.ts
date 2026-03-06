@@ -19,11 +19,17 @@ import type { EnvObject } from '../envobjects/EnvObject';
 import type { Room } from '../rooms/Room';
 import type { GoalSystem } from '../goals/GoalSystem';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
+import { SoundManager } from '../audio/SoundManager';
 
 const AMBER = '#dfa200';
 const SIDEBAR_W = 286;
-const SIDEBAR_COLLAPSED_W = 56;
-const BUTTON_H = 56;
+const SIDEBAR_COLLAPSED_W = 60;
+const BUTTON_H = 60;
+
+// CSS filter to tint white/gray icons to amber (#dfa200)
+// brightness(0) → black, then invert+sepia+saturate+hue-rotate to amber
+const ICON_FILTER_AMBER = 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);';
+const ICON_FILTER_BLACK = 'filter:brightness(0);';
 
 /** Alert color mapping by category (covers all BASE_EVENT types) */
 const ALERT_COLORS: Record<string, string> = {
@@ -113,6 +119,7 @@ export class UIManager {
 
   // Tile tip text (Lua: StatusBar.tileTipText — shows last-clicked tile info)
   private tileTipEl!: HTMLDivElement;
+  private tileInfoEl!: HTMLDivElement;
   private tileTipClearTimer = 0;
   private readonly TILE_TIP_DURATION = 5; // seconds before auto-clear
 
@@ -125,7 +132,7 @@ export class UIManager {
   private alertMinimized = false;
 
   // Sidebar buttons for active tracking
-  private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; mode: BuildMode; btnLabel: string }[] = [];
+  private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; iconImg: HTMLImageElement | null; mode: BuildMode; btnLabel: string }[] = [];
   /** Sidebar element for collapse/expand. */
   private sidebarEl!: HTMLDivElement;
   /** Whether sidebar is currently expanded (Lua: starts collapsed, expands on hover). */
@@ -217,7 +224,7 @@ export class UIManager {
     this.uiRoot.id = 'game-ui';
     this.uiRoot.style.cssText = `
       position:absolute;top:0;left:0;width:100%;height:100%;
-      pointer-events:none;z-index:10;font-family:monospace;
+      pointer-events:none;z-index:10;font-family:'Orbitron',monospace;
     `;
 
     this.createSidebar();
@@ -429,10 +436,20 @@ export class UIManager {
     this.tileTipEl = document.createElement('div');
     this.tileTipEl.style.cssText = `
       position:absolute;bottom:50px;right:10px;
-      color:${AMBER};font-size:12px;font-family:monospace;
+      color:${AMBER};font-size:12px;font-family:'Orbitron',monospace;
       pointer-events:none;display:none;
     `;
     this.uiRoot.appendChild(this.tileTipEl);
+
+    // Persistent coordinate display — always shows hovered tile coords + type
+    this.tileInfoEl = document.createElement('div');
+    this.tileInfoEl.style.cssText = `
+      position:absolute;bottom:8px;right:10px;
+      color:${AMBER};font-size:11px;font-family:'Orbitron',monospace;
+      pointer-events:none;opacity:0.7;
+    `;
+    this.tileInfoEl.textContent = '';
+    this.uiRoot.appendChild(this.tileInfoEl);
   }
 
   /** Create a bottom-bar icon button with inactive/active sprite swap on hover. */
@@ -494,6 +511,7 @@ export class UIManager {
         sb.label.style.display = '';
         sb.hotkey.style.display = '';
       }
+      SoundManager.playUI('UI_Expand');
     });
     sidebar.addEventListener('mouseleave', () => {
       this.sidebarExpanded = false;
@@ -504,14 +522,14 @@ export class UIManager {
       }
     });
 
-    const btnDefs: { label: string; hotkey: string; mode: BuildMode; action?: string }[] = [
-      { label: 'Inspect',   hotkey: 'I', mode: 'none', action: 'inspect' },
-      { label: 'Assign',    hotkey: 'R', mode: 'none', action: 'roster' },
-      { label: 'Research',  hotkey: 'E', mode: 'none', action: 'research' },
-      { label: 'Goals',     hotkey: 'G', mode: 'none', action: 'goals' },
-      { label: 'Construct', hotkey: 'C', mode: 'room', action: 'construct' },
-      { label: 'Mine',      hotkey: 'M', mode: 'mine' },
-      { label: 'Beacon',    hotkey: 'N', mode: 'none', action: 'stub' },
+    const btnDefs: { label: string; hotkey: string; mode: BuildMode; action?: string; iconImg?: string }[] = [
+      { label: 'Inspect',   hotkey: 'I', mode: 'none', action: 'inspect', iconImg: 'ui_iconIso_inspect.png' },
+      { label: 'Assign',    hotkey: 'R', mode: 'none', action: 'roster', iconImg: 'ui_iconIso_assign.png' },
+      { label: 'Research',  hotkey: 'E', mode: 'none', action: 'research', iconImg: 'ui_iconIso_research.png' },
+      { label: 'Goals',     hotkey: 'G', mode: 'none', action: 'goals', iconImg: 'ui_iconIso_confirm.png' },
+      { label: 'Construct', hotkey: 'C', mode: 'room', action: 'construct', iconImg: 'ui_iconIso_construct.png' },
+      { label: 'Mine',      hotkey: 'M', mode: 'mine', iconImg: 'ui_iconIso_mine.png' },
+      { label: 'Beacon',    hotkey: 'N', mode: 'none', action: 'stub', iconImg: 'ui_iconIso_beacon.png' },
       { label: 'Demolish',  hotkey: 'X', mode: 'demolish' },
     ];
 
@@ -519,11 +537,21 @@ export class UIManager {
       const btn = document.createElement('div');
       btn.style.cssText = `
         height:${BUTTON_H}px;display:flex;align-items:center;
-        padding:0 16px;cursor:pointer;position:relative;
+        padding:0 8px;cursor:pointer;position:relative;
       `;
+      // Icon: use <img> with CSS filter for tinting, or text fallback
       const icon = document.createElement('div');
-      icon.textContent = def.hotkey;
-      icon.style.cssText = `font-size:24px;font-weight:bold;color:${AMBER};width:48px;text-align:center;`;
+      icon.style.cssText = `width:44px;height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;`;
+      let iconImg: HTMLImageElement | null = null;
+      if (def.iconImg) {
+        iconImg = document.createElement('img');
+        iconImg.src = `assets/ui/icons/${def.iconImg}`;
+        iconImg.style.cssText = `width:40px;height:40px;object-fit:contain;${ICON_FILTER_AMBER}`;
+        icon.appendChild(iconImg);
+      } else {
+        icon.style.cssText = `font-size:24px;font-weight:bold;color:${AMBER};width:44px;text-align:center;flex-shrink:0;`;
+        icon.textContent = def.hotkey;
+      }
       const label = document.createElement('div');
       label.textContent = def.label;
       label.style.cssText = `font-size:18px;color:${AMBER};flex:1;display:none;`;
@@ -536,6 +564,7 @@ export class UIManager {
       btn.appendChild(hotkey);
 
       btn.addEventListener('click', () => {
+        SoundManager.playUI('UI_Select');
         if (def.action === 'roster') {
           this.jobRoster.toggle();
           return;
@@ -555,6 +584,7 @@ export class UIManager {
         if (def.action === 'construct') {
           // Toggle construct mode — show/hide sub-menu
           // Lua: pause game + enable cutaway on open, restore on close
+          SoundManager.playUI('UI_ShortStatic');
           if (this.getBuildMode() === 'room' || this.getBuildMode() === 'floor' ||
               this.getBuildMode() === 'door' || this.getBuildMode() === 'zone' ||
               this.getBuildMode() === 'object') {
@@ -581,20 +611,29 @@ export class UIManager {
       });
 
       btn.addEventListener('mouseenter', () => {
+        SoundManager.playUI('UI_Hilight');
         btn.style.background = AMBER;
-        icon.style.color = '#000';
+        if (iconImg) {
+          iconImg.style.filter = 'brightness(0)';
+        } else {
+          icon.style.color = '#000';
+        }
         label.style.color = '#000';
         hotkey.style.color = '#000';
       });
       btn.addEventListener('mouseleave', () => {
         btn.style.background = 'transparent';
-        icon.style.color = AMBER;
+        if (iconImg) {
+          iconImg.style.cssText = `width:40px;height:40px;object-fit:contain;${ICON_FILTER_AMBER}`;
+        } else {
+          icon.style.color = AMBER;
+        }
         label.style.color = AMBER;
         hotkey.style.color = AMBER;
       });
 
       sidebar.appendChild(btn);
-      this.sidebarBtns.push({ el: btn, label, hotkey, icon, mode: def.mode, btnLabel: def.label });
+      this.sidebarBtns.push({ el: btn, label, hotkey, icon, iconImg, mode: def.mode, btnLabel: def.label });
     }
 
     // Construct sub-menu (hidden by default)
@@ -615,10 +654,14 @@ export class UIManager {
         padding:5px 10px;margin-bottom:2px;cursor:pointer;
       `;
       el.addEventListener('click', () => {
+        SoundManager.playUI('UI_Select');
         this.setBuildMode(this.getBuildMode() === sb.mode ? 'none' : sb.mode);
         this.refreshObjectPicker();
       });
-      el.addEventListener('mouseenter', () => { el.style.background = 'rgba(223,162,0,0.2)'; });
+      el.addEventListener('mouseenter', () => {
+        SoundManager.playUI('UI_Hilight');
+        el.style.background = 'rgba(223,162,0,0.2)';
+      });
       el.addEventListener('mouseleave', () => { el.style.background = 'rgba(0,0,0,0.6)'; });
       this.constructSub.appendChild(el);
     }
@@ -790,8 +833,8 @@ export class UIManager {
   private createAlertLog() {
     this.alertContainer = document.createElement('div');
     this.alertContainer.style.cssText = `
-      position:absolute;bottom:10px;right:10px;width:360px;
-      background:rgba(0,0,0,0.8);border:1px solid #333;
+      position:absolute;bottom:28px;right:10px;width:360px;
+      background:rgba(0,0,0,0.7);
       pointer-events:auto;font-size:12px;
     `;
 
@@ -799,7 +842,7 @@ export class UIManager {
     const headerRow = document.createElement('div');
     headerRow.style.cssText = `
       display:flex;justify-content:space-between;align-items:center;
-      padding:4px 8px;border-bottom:1px solid #333;
+      padding:4px 8px;
     `;
     headerRow.innerHTML = `<span style="color:${AMBER};font-size:11px;font-weight:bold;">ALERTS</span>`;
     const minBtn = document.createElement('span');
@@ -829,7 +872,7 @@ export class UIManager {
     this.costOverlay.style.cssText = `
       position:absolute;bottom:10px;left:${SIDEBAR_W + 10}px;
       background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
-      color:${AMBER};font-family:monospace;font-size:13px;
+      color:${AMBER};font-family:'Orbitron',monospace;font-size:13px;
       padding:6px 12px;display:none;pointer-events:none;z-index:15;
     `;
     this.uiRoot.appendChild(this.costOverlay);
@@ -853,6 +896,11 @@ export class UIManager {
     this.tileTipEl.textContent = `Last clicked: ${text}`;
     this.tileTipEl.style.display = 'block';
     this.tileTipClearTimer = this.TILE_TIP_DURATION;
+  }
+
+  /** Update persistent coordinate display with hovered tile info. */
+  updateTileInfo(tileX: number, tileY: number, typeName: string) {
+    this.tileInfoEl.textContent = `(${tileX}, ${tileY}) ${typeName}`;
   }
 
   /** Toggle job roster visibility. Hides alert/hint pane when opening (Lua). */
@@ -1021,7 +1069,12 @@ export class UIManager {
       }
 
       sb.el.style.background = active ? AMBER : 'transparent';
-      sb.icon.style.color = active ? '#000' : AMBER;
+      if (sb.iconImg) {
+        sb.iconImg.style.filter = active ? 'brightness(0)' : '';
+        if (!active) sb.iconImg.style.cssText = `width:40px;height:40px;object-fit:contain;${ICON_FILTER_AMBER}`;
+      } else {
+        sb.icon.style.color = active ? '#000' : AMBER;
+      }
       sb.label.style.color = active ? '#000' : AMBER;
       sb.hotkey.style.color = active ? '#000' : AMBER;
     }

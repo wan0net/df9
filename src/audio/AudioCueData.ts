@@ -15,6 +15,8 @@ export interface AudioCue {
   category: AudioCategory;
   /** Whether this sound should be spatially positioned. */
   spatial: boolean;
+  /** Variant paths for random selection. If set, path is ignored and a random variant is picked. */
+  variants?: string[];
 }
 
 /**
@@ -86,8 +88,10 @@ export const AUDIO_CUES: Record<string, AudioCue> = {
   Alarm_LowOxygen:  { path: 'sfx/Spacebase_Alarm_Low_O2.wav',  volume: 1.0, loop: false, category: 'sfx', spatial: false },
 
   // ── SFX (spatial) ─────────────────────────────────────────────
-  DoorOpen:         { path: 'sfx/DoorOpen1_Short.wav',          volume: 0.7, loop: false, category: 'sfx', spatial: true },
-  DoorClose:        { path: 'sfx/DoorClose1.wav',               volume: 0.7, loop: false, category: 'sfx', spatial: true },
+  DoorOpen:         { path: 'sfx/DoorOpen1_Short.wav',          volume: 0.7, loop: false, category: 'sfx', spatial: true,
+                      variants: ['sfx/DoorOpen1_Short.wav', 'sfx/DoorOpen2_Short.wav', 'sfx/DoorOpen3_Short.wav'] },
+  DoorClose:        { path: 'sfx/DoorClose1.wav',               volume: 0.7, loop: false, category: 'sfx', spatial: true,
+                      variants: ['sfx/DoorClose1.wav', 'sfx/DoorClose2.wav', 'sfx/DoorClose3.wav'] },
   AirlockOpen:      { path: 'sfx/AirlockOpen_Short.wav',        volume: 0.8, loop: false, category: 'sfx', spatial: true },
   AirlockClose:     { path: 'sfx/AirlockClose_Short.wav',       volume: 0.8, loop: false, category: 'sfx', spatial: true },
   ReactorLoop:      { path: 'sfx/ReactorLoop.wav',              volume: 0.4, loop: true,  category: 'sfx', spatial: true },
@@ -114,12 +118,18 @@ export const AUDIO_CUES: Record<string, AudioCue> = {
   TimeWarp:         { path: 'sfx/Spacebase_TimeWarpA.wav',       volume: 0.5, loop: false, category: 'sfx', spatial: false },
 
   // ── Gun sounds ────────────────────────────────────────────────
-  GunShot:          { path: 'sfx/GunShot1.wav',                  volume: 0.9, loop: false, category: 'sfx', spatial: true },
+  GunShot:          { path: 'sfx/GunShot1.wav',                  volume: 0.9, loop: false, category: 'sfx', spatial: true,
+                      variants: ['sfx/GunShot1.wav', 'sfx/GunShot2.wav', 'sfx/GunShot3.wav', 'sfx/GunShot4.wav'] },
   TurretFire:       { path: 'sfx/Spacebase_TurretGuns_Fire_A.wav', volume: 0.8, loop: false, category: 'sfx', spatial: true },
   TurretRotate:     { path: 'sfx/Spacebase_TurretGuns_Rotate_A.wav', volume: 0.5, loop: false, category: 'sfx', spatial: true },
 
   // ── Combat sounds ─────────────────────────────────────────────
-  Brawl_Impact:     { path: 'ambience/Spacebase_Brawllmpact_A.wav', volume: 0.8, loop: false, category: 'sfx', spatial: true },
+  Brawl_Impact:     { path: 'ambience/Spacebase_Brawllmpact_A.wav', volume: 0.8, loop: false, category: 'sfx', spatial: true,
+                      variants: ['ambience/Spacebase_Brawllmpact_A.wav', 'ambience/Spacebase_Brawllmpact_B.wav',
+                                 'ambience/Spacebase_Brawllmpact_C.wav', 'ambience/Spacebase_Brawllmpact_D.wav',
+                                 'ambience/Spacebase_Brawllmpact_E.wav', 'ambience/Spacebase_Brawllmpact_F.wav',
+                                 'ambience/Spacebase_Brawllmpact_G.wav', 'ambience/Spacebase_Brawllmpact_H.wav',
+                                 'ambience/Spacebase_Brawllmpact_I.wav', 'ambience/Spacebase_Brawllmpact_J.wav'] },
   Laser_Impact:     { path: 'ambience/Spacebase_Laserlmpact_A.wav', volume: 0.9, loop: false, category: 'sfx', spatial: true },
   Taser_Impact:     { path: 'ambience/Spacebase_Taserlmpact_A.wav', volume: 0.7, loop: false, category: 'sfx', spatial: true },
   Citizen_Drink:    { path: 'sfx/Citizen_Drink1.wav',             volume: 0.5, loop: false, category: 'sfx', spatial: true },
@@ -168,4 +178,34 @@ export const AUDIO_CUES: Record<string, AudioCue> = {
 
   // ── Jukebox ───────────────────────────────────────────────────
   Jukebox_Music:    { path: 'music/SpaceBase_Track2.wav',            volume: 0.5, loop: true,  category: 'sfx', spatial: true },
+
+  // ── Voice (Male) ─────────────────────────────────────────────
+  Voice_Male_Greeting:  { path: 'voice/Greeting_1.wav', volume: 0.5, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/Greeting_1.wav', 'voice/Greeting_2.wav', 'voice/Greeting_3.wav', 'voice/Greeting_4.wav', 'voice/Greeting_5.wav'] },
+  Voice_Male_Positive:  { path: 'voice/Positive_1.wav', volume: 0.4, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/Positive_1.wav', 'voice/Positive_2.wav', 'voice/Positive_3.wav', 'voice/Positive_4.wav', 'voice/Positive_5.wav',
+               'voice/Positive_6.wav', 'voice/Positive_7.wav', 'voice/Positive_8.wav', 'voice/Positive_9.wav', 'voice/Positive_10.wav', 'voice/Positive_11.wav'] },
+  Voice_Male_Negative:  { path: 'voice/Negative_1.wav', volume: 0.5, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/Negative_1.wav', 'voice/Negative_2.wav', 'voice/Negative_3.wav', 'voice/Negative_4.wav', 'voice/Negative_5.wav',
+               'voice/Negative_6.wav', 'voice/Negative_7.wav'] },
+  Voice_Male_Panic:     { path: 'voice/Panic_1.wav', volume: 0.6, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/Panic_1.wav', 'voice/Panic_2.wav', 'voice/Panic_3.wav', 'voice/Panic_4.wav', 'voice/Panic_5.wav', 'voice/Panic_6.wav'] },
+  Voice_Male_ShotDeath: { path: 'voice/ShotDeath_1.wav', volume: 0.7, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/ShotDeath_1.wav', 'voice/ShotDeath_2.wav', 'voice/ShotDeath_3.wav', 'voice/ShotDeath_4.wav', 'voice/ShotDeath_5.wav', 'voice/ShotDeath_6.wav'] },
+
+  // ── Voice (Female) ───────────────────────────────────────────
+  Voice_Female_Greeting:  { path: 'voice/FemaleGreeting_1.wav', volume: 0.5, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/FemaleGreeting_1.wav', 'voice/FemaleGreeting_2.wav', 'voice/FemaleGreeting_3.wav',
+               'voice/FemaleGreeting_4.wav', 'voice/FemaleGreeting_5.wav', 'voice/FemaleGreeting_6.wav'] },
+  Voice_Female_Positive:  { path: 'voice/FemalePositive_1.wav', volume: 0.4, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/FemalePositive_1.wav', 'voice/FemalePositive_2.wav', 'voice/FemalePositive_3.wav', 'voice/FemalePositive_4.wav',
+               'voice/FemalePositive_5.wav', 'voice/FemalePositive_6.wav', 'voice/FemalePositive_7.wav', 'voice/FemalePositive_8.wav', 'voice/FemalePositive_9.wav'] },
+  Voice_Female_Negative:  { path: 'voice/FemaleNegative_1.wav', volume: 0.5, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/FemaleNegative_1.wav', 'voice/FemaleNegative_2.wav', 'voice/FemaleNegative_3.wav', 'voice/FemaleNegative_4.wav',
+               'voice/FemaleNegative_5.wav', 'voice/FemaleNegative_6.wav', 'voice/FemaleNegative_7.wav'] },
+  Voice_Female_Panic:     { path: 'voice/FemalePanic_1.wav', volume: 0.6, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/FemalePanic_1.wav', 'voice/FemalePanic_2.wav', 'voice/FemalePanic_3.wav'] },
+  Voice_Female_ShotDeath: { path: 'voice/FemaleShotDeath_1.wav', volume: 0.7, loop: false, category: 'sfx', spatial: true,
+    variants: ['voice/FemaleShotDeath_1.wav', 'voice/FemaleShotDeath_2.wav', 'voice/FemaleShotDeath_3.wav', 'voice/FemaleShotDeath_4.wav',
+               'voice/FemaleShotDeath_5.wav', 'voice/FemaleShotDeath_6.wav', 'voice/FemaleShotDeath_7.wav'] },
 };

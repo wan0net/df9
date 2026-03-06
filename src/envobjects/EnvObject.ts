@@ -5,6 +5,7 @@
 
 import { EnvObjectDef, tObjects } from './EnvObjectData';
 import { ObjectList, OBJ_ENVOBJECT, type ObjectTag, type TaggableObject } from '../core/ObjectList';
+import { SpatialAudio } from '../audio/SpatialAudio';
 import type { Room } from '../rooms/Room';
 import type { Character } from '../characters/Character';
 import { researchSystem } from '../research/ResearchSystem';
@@ -301,6 +302,7 @@ export class EnvObject implements TaggableObject {
   markBuilt() {
     this.bBuilt = true;
     this._notifyRenderer();
+    SpatialAudio.playAtTile('BuildObject', this.tileX, this.tileY);
   }
 
   /** Notify the renderer of visual state changes. */

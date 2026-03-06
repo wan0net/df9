@@ -3,6 +3,8 @@
  * Mirrors SoundManager.lua: 4 category gains, lazy loading, volume persistence.
  */
 
+import { AUDIO_CUES, type AudioCue } from './AudioCueData';
+
 export type AudioCategory = 'music' | 'sfx' | 'ambience' | 'ui';
 
 interface AudioSettings {
@@ -37,11 +39,15 @@ class SoundManagerClass {
 
   private settings: AudioSettings = { ...DEFAULT_SETTINGS };
   private bufferCache: Map<string, AudioBuffer> = new Map();
+  private loadingPromises: Map<string, Promise<AudioBuffer | null>> = new Map();
   private activeSources: Map<string, AudioBufferSourceNode> = new Map();
   private initialized = false;
 
   /** Current zoom depth (0=zoomed out, 1=zoomed in). */
   private zoomDepth = 0;
+
+  /** Callback when music track ends naturally. */
+  onMusicTrackEnd: (() => void) | null = null;
 
   /** Initialize Web Audio context. Must be called after user interaction. */
   init() {
@@ -80,45 +86,96 @@ class SoundManagerClass {
 
   // ── Playback ──────────────────────────────────────────────────
 
-  /** Play a UI sound effect (non-positional). */
-  playUI(cue: string) {
-    this.playOneShot(cue, 'ui');
-  }
-
-  /** Play a sound effect (non-positional). */
-  playSfx(cue: string) {
-    this.playOneShot(cue, 'sfx');
-  }
-
-  /** Play a sound effect with 3D positioning. */
+  /** Play a sound effect with 3D positioning (lazy-loads if needed). */
   playSfx3D(cue: string, worldX: number, worldY: number) {
     if (!this.ctx || !this.categoryGains.sfx) return;
 
-    const buffer = this.bufferCache.get(cue);
-    if (!buffer) {
-      // Lazy load would go here — for now, just skip
-      return;
+    const play3d = (buffer: AudioBuffer) => {
+      if (!this.ctx || !this.categoryGains.sfx) return;
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+
+      const cueData = AUDIO_CUES[cue];
+      const panner = this.ctx.createPanner();
+      panner.panningModel = 'equalpower';
+      panner.distanceModel = 'linear';
+      panner.refDistance = 256;
+      panner.maxDistance = 1024;
+      panner.rolloffFactor = 1;
+      panner.setPosition(worldX, worldY, 0);
+
+      if (cueData && cueData.volume < 1.0) {
+        const vol = this.ctx.createGain();
+        vol.gain.value = cueData.volume;
+        source.connect(vol);
+        vol.connect(panner);
+      } else {
+        source.connect(panner);
+      }
+      panner.connect(this.categoryGains.sfx!);
+      source.start(0);
+    };
+
+    const buffer = this.resolveVariantBuffer(cue);
+    if (buffer) {
+      play3d(buffer);
+    } else {
+      this.ensureLoaded(cue).then(() => {
+        const buf = this.resolveVariantBuffer(cue);
+        if (buf) play3d(buf);
+      });
     }
-
-    const source = this.ctx.createBufferSource();
-    source.buffer = buffer;
-
-    const panner = this.ctx.createPanner();
-    panner.panningModel = 'equalpower';
-    panner.distanceModel = 'linear';
-    panner.refDistance = 256;
-    panner.maxDistance = 1024;
-    panner.rolloffFactor = 1;
-    panner.setPosition(worldX, worldY, 0);
-
-    source.connect(panner);
-    panner.connect(this.categoryGains.sfx);
-    source.start(0);
   }
 
-  /** Play a music track (looping). */
+  /** Create a looping 3D-positioned source. Returns source key for stopping. */
+  playLoop3D(cue: string, worldX: number, worldY: number, sourceKey: string): void {
+    if (!this.ctx || !this.categoryGains.sfx) return;
+    this.stopLoop(sourceKey);
+
+    const startLoop3d = (buffer: AudioBuffer) => {
+      if (!this.ctx || !this.categoryGains.sfx) return;
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+
+      const cueData = AUDIO_CUES[cue];
+      const panner = this.ctx.createPanner();
+      panner.panningModel = 'equalpower';
+      panner.distanceModel = 'linear';
+      panner.refDistance = 256;
+      panner.maxDistance = 1024;
+      panner.rolloffFactor = 1;
+      panner.setPosition(worldX, worldY, 0);
+
+      if (cueData && cueData.volume < 1.0) {
+        const vol = this.ctx.createGain();
+        vol.gain.value = cueData.volume;
+        source.connect(vol);
+        vol.connect(panner);
+      } else {
+        source.connect(panner);
+      }
+      panner.connect(this.categoryGains.sfx!);
+      source.start(0);
+      this.activeSources.set(sourceKey, source);
+    };
+
+    const buffer = this.bufferCache.get(cue);
+    if (buffer) {
+      startLoop3d(buffer);
+    } else {
+      this.ensureLoaded(cue).then(buf => { if (buf) startLoop3d(buf); });
+    }
+  }
+
+  /** Stop a loop by key. */
+  stopLoopByKey(sourceKey: string) {
+    this.stopLoop(sourceKey);
+  }
+
+  /** Play a music track (non-looping, fires onMusicTrackEnd when done). */
   playMusic(track: string) {
-    this.playLoop(track, 'music', 'music_current');
+    this.playMusicTrack(track, 'music_current');
   }
 
   /** Stop current music. */
@@ -136,7 +193,129 @@ class SoundManagerClass {
     this.stopLoop('ambience_current');
   }
 
+  /** Play an additional ambience loop on a separate key. */
+  playAmbienceKeyed(loop: string, key: string) {
+    this.playLoop(loop, 'ambience', key);
+  }
+
+  /** Stop a keyed ambience loop. */
+  stopAmbienceKeyed(key: string) {
+    this.stopLoop(key);
+  }
+
+  // ── Lazy loading ─────────────────────────────────────────────
+
+  /** Ensure a cue's audio buffer is loaded. Returns cached or freshly loaded buffer. */
+  async ensureLoaded(cueName: string): Promise<AudioBuffer | null> {
+    if (!this.ctx) return null;
+    const cached = this.bufferCache.get(cueName);
+    if (cached) return cached;
+
+    // Deduplicate in-flight loads
+    const existing = this.loadingPromises.get(cueName);
+    if (existing) return existing;
+
+    const cue = AUDIO_CUES[cueName];
+    if (!cue) return null;
+
+    const promise = this.loadBuffer(cueName, `assets/audio/${cue.path}`);
+    const wrapped = promise.then(ok => ok ? (this.bufferCache.get(cueName) ?? null) : null);
+    this.loadingPromises.set(cueName, wrapped);
+    wrapped.finally(() => this.loadingPromises.delete(cueName));
+
+    // Also preload all variants in the background
+    if (cue.variants) {
+      for (const vPath of cue.variants) {
+        const vKey = `${cueName}__${vPath}`;
+        if (!this.bufferCache.has(vKey) && !this.loadingPromises.has(vKey)) {
+          this.loadBuffer(vKey, `assets/audio/${vPath}`);
+        }
+      }
+    }
+
+    return wrapped;
+  }
+
+  /** Resolve a cue name to a buffer, picking a random variant if available. */
+  private resolveVariantBuffer(cueName: string): AudioBuffer | null {
+    const cue = AUDIO_CUES[cueName];
+    if (cue?.variants && cue.variants.length > 0) {
+      const vPath = cue.variants[Math.floor(Math.random() * cue.variants.length)];
+      const vKey = `${cueName}__${vPath}`;
+      const vBuf = this.bufferCache.get(vKey);
+      if (vBuf) return vBuf;
+    }
+    return this.bufferCache.get(cueName) ?? null;
+  }
+
+  /** Play a one-shot, lazy-loading the buffer if needed. Picks random variant if available. */
+  playOneShotLazy(cue: string, category: AudioCategory) {
+    if (!this.ctx) return;
+    const buffer = this.resolveVariantBuffer(cue);
+    if (buffer) {
+      this.playOneShotBuffer(buffer, category, cue);
+    } else {
+      this.ensureLoaded(cue).then(() => {
+        const buf = this.resolveVariantBuffer(cue);
+        if (buf) this.playOneShotBuffer(buf, category, cue);
+      });
+    }
+  }
+
+  /** Play a loop, lazy-loading the buffer if needed. */
+  playLoopLazy(cue: string, category: AudioCategory, sourceKey: string) {
+    if (!this.ctx) return;
+    const buffer = this.bufferCache.get(cue);
+    if (buffer) {
+      this.playLoopBuffer(buffer, category, sourceKey);
+    } else {
+      this.ensureLoaded(cue).then(buf => { if (buf) this.playLoopBuffer(buf, category, sourceKey); });
+    }
+  }
+
+  /** Batch preload cues. */
+  async preloadCues(names: string[]): Promise<void> {
+    await Promise.all(names.map(n => this.ensureLoaded(n)));
+  }
+
+  // ── Convenience helpers ─────────────────────────────────────
+
+  /** Play a UI sound (lazy). */
+  playUI(cue: string) {
+    this.playOneShotLazy(cue, 'ui');
+  }
+
+  /** Play a SFX sound (lazy, non-positional). */
+  playSfx(cue: string) {
+    this.playOneShotLazy(cue, 'sfx');
+  }
+
+  /** Play a voice line at a tile position. Picks gender prefix automatically. */
+  playVoice(type: 'Greeting' | 'Positive' | 'Negative' | 'Panic' | 'ShotDeath', female: boolean, worldX: number, worldY: number) {
+    const prefix = female ? 'Voice_Female' : 'Voice_Male';
+    const cue = `${prefix}_${type}`;
+    this.playSfx3D(cue, worldX, worldY);
+  }
+
   // ── Internal playback ─────────────────────────────────────────
+
+  private playOneShotBuffer(buffer: AudioBuffer, category: AudioCategory, cueName?: string) {
+    if (!this.ctx || !this.categoryGains[category]) return;
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    // Per-cue volume
+    const cueData = cueName ? AUDIO_CUES[cueName] : undefined;
+    if (cueData && cueData.volume < 1.0) {
+      const vol = this.ctx.createGain();
+      vol.gain.value = cueData.volume;
+      source.connect(vol);
+      vol.connect(this.categoryGains[category]!);
+    } else {
+      source.connect(this.categoryGains[category]!);
+    }
+    source.start(0);
+  }
 
   private playOneShot(cue: string, category: AudioCategory) {
     if (!this.ctx || !this.categoryGains[category]) return;
@@ -144,20 +323,12 @@ class SoundManagerClass {
     const buffer = this.bufferCache.get(cue);
     if (!buffer) return; // Not loaded yet
 
-    const source = this.ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(this.categoryGains[category]!);
-    source.start(0);
+    this.playOneShotBuffer(buffer, category, cue);
   }
 
-  private playLoop(cue: string, category: AudioCategory, sourceKey: string) {
+  private playLoopBuffer(buffer: AudioBuffer, category: AudioCategory, sourceKey: string) {
     if (!this.ctx || !this.categoryGains[category]) return;
-
-    // Stop existing loop
     this.stopLoop(sourceKey);
-
-    const buffer = this.bufferCache.get(cue);
-    if (!buffer) return;
 
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
@@ -167,9 +338,53 @@ class SoundManagerClass {
     this.activeSources.set(sourceKey, source);
   }
 
+  private playLoop(cue: string, category: AudioCategory, sourceKey: string) {
+    if (!this.ctx || !this.categoryGains[category]) return;
+
+    // Stop existing loop
+    this.stopLoop(sourceKey);
+
+    const buffer = this.bufferCache.get(cue);
+    if (!buffer) {
+      // Lazy load, then play
+      this.ensureLoaded(cue).then(buf => { if (buf) this.playLoopBuffer(buf, category, sourceKey); });
+      return;
+    }
+
+    this.playLoopBuffer(buffer, category, sourceKey);
+  }
+
+  /** Play a music track (non-looping) and fire onMusicTrackEnd callback when done. */
+  private playMusicTrack(cue: string, sourceKey: string) {
+    if (!this.ctx || !this.categoryGains.music) return;
+    this.stopLoop(sourceKey);
+
+    const startTrack = (buffer: AudioBuffer) => {
+      if (!this.ctx || !this.categoryGains.music) return;
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = false;
+      source.connect(this.categoryGains.music!);
+      source.start(0);
+      this.activeSources.set(sourceKey, source);
+      source.onended = () => {
+        this.activeSources.delete(sourceKey);
+        this.onMusicTrackEnd?.();
+      };
+    };
+
+    const buffer = this.bufferCache.get(cue);
+    if (buffer) {
+      startTrack(buffer);
+    } else {
+      this.ensureLoaded(cue).then(buf => { if (buf) startTrack(buf); });
+    }
+  }
+
   private stopLoop(sourceKey: string) {
     const source = this.activeSources.get(sourceKey);
     if (source) {
+      source.onended = null;
       try { source.stop(); } catch { /* already stopped */ }
       this.activeSources.delete(sourceKey);
     }
@@ -314,9 +529,13 @@ class SoundManagerClass {
     this.masterGain?.gain.setValueAtTime(master, this.ctx?.currentTime ?? 0);
 
     const ct = this.ctx?.currentTime ?? 0;
+    // Lua: zoom 1 (close)→sfx=1.0,music=0.65; zoom 0 (far out)→sfx=0,music=1.0
+    const sfxScale = this.zoomDepth; // 0 far → 1 close
+    const musicScale = 1.0 - this.zoomDepth * 0.35; // 1.0 far → 0.65 close
     this.categoryGains.music?.gain.setValueAtTime(
-      this.settings.musicVolume * (1 - this.zoomDepth * 0.2), ct);
-    this.categoryGains.sfx?.gain.setValueAtTime(this.settings.sfxVolume, ct);
+      this.settings.musicVolume * musicScale, ct);
+    this.categoryGains.sfx?.gain.setValueAtTime(
+      this.settings.sfxVolume * sfxScale, ct);
     this.categoryGains.ambience?.gain.setValueAtTime(this.settings.ambienceVolume, ct);
     this.categoryGains.ui?.gain.setValueAtTime(this.settings.uiVolume, ct);
   }

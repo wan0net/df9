@@ -14,6 +14,7 @@ interface SpatialLoop {
   tileY: number;
   worldX: number;
   worldY: number;
+  sourceKey: string;
 }
 
 class SpatialAudioClass {
@@ -25,23 +26,29 @@ class SpatialAudioClass {
     SoundManager.playSfx3D(cue, pos.x + TILE_HALF_W, pos.y + TILE_HALF_H);
   }
 
-  /** Start a looping sound at a tile (e.g., machine hum). */
+  /** Start a looping sound at a tile (e.g., machine hum, fire). */
   startLoop(key: string, cue: string, tileX: number, tileY: number) {
     if (this.activeLoops.has(key)) return;
     const pos = tileToScreen(tileX, tileY);
+    const worldX = pos.x + TILE_HALF_W;
+    const worldY = pos.y + TILE_HALF_H;
+    const sourceKey = `spatial_${key}`;
+
+    // Actually create the looping audio source
+    SoundManager.playLoop3D(cue, worldX, worldY, sourceKey);
+
     this.activeLoops.set(key, {
-      cue,
-      tileX, tileY,
-      worldX: pos.x + TILE_HALF_W,
-      worldY: pos.y + TILE_HALF_H,
+      cue, tileX, tileY, worldX, worldY, sourceKey,
     });
-    // Note: actual looping audio requires AudioBufferSourceNode management
-    // For now, just track the loop state
   }
 
   /** Stop a looping sound. */
   stopLoop(key: string) {
-    this.activeLoops.delete(key);
+    const loop = this.activeLoops.get(key);
+    if (loop) {
+      SoundManager.stopLoopByKey(loop.sourceKey);
+      this.activeLoops.delete(key);
+    }
   }
 
   /** Check if a loop is active. */

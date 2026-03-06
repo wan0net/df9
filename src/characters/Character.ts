@@ -1,5 +1,7 @@
 import { Needs } from './Needs';
 import { Base } from '../core/Base';
+import { SpatialAudio } from '../audio/SpatialAudio';
+import { SoundManager } from '../audio/SoundManager';
 import { tileToScreen } from '../world/IsometricUtils';
 import { TILE_HALF_W, TILE_HALF_H } from '../config';
 import { generateName } from './CitizenNames';
@@ -232,6 +234,13 @@ export class Character {
   // ── Accessors ──────────────────────────────────────────────
 
   getName(): string { return this.tStats.sName; }
+  /** Determine voice gender from name hash (consistent per character). */
+  _isFemaleVoice(): boolean {
+    let h = 0;
+    const n = this.tStats.sName;
+    for (let i = 0; i < n.length; i++) h = ((h << 5) - h + n.charCodeAt(i)) | 0;
+    return (h & 1) === 0;
+  }
   getRace(): number { return this.tStats.nRace; }
   getRaceDef(): RaceTypeDef { return RACE_TYPE[this.tStats.nRace] ?? RACE_TYPE[RACE_HUMAN]; }
   getJob(): number { return this.tStats.nJob; }
@@ -241,6 +250,7 @@ export class Character {
   /** Apply damage to this character. Kills if HP drops to 0. */
   takeDamage(amount: number) {
     this.tStats.nHP = Math.max(0, this.tStats.nHP - amount);
+    SpatialAudio.playAtTile('Brawl_Impact', this.tileX, this.tileY);
   }
   /** Whether character has been stunned/knocked out (Lua KnockedOut malady). */
   bIncapacitated = false;
@@ -290,6 +300,7 @@ export class Character {
     this.bSpacesuit = true;
     const seconds = researchSystem.isCompleted('SpaceSuit2') ? 600 : 480;
     this.nSuitOxygen = seconds * 200; // OXYGEN_PER_SECOND = 200
+    SpatialAudio.playAtTile('SpaceSuitEquip', this.tileX, this.tileY);
   }
 
   // ── Affinity methods (mirrors Lua Character:getAffinity/addAffinity) ──
@@ -889,6 +900,15 @@ export class Character {
     if (this.currentTask) {
       this.currentTask = null;
     }
+
+    // Death sound + voice
+    if (cause === CAUSE_OF_DEATH.FIRE) {
+      SpatialAudio.playAtTile('Citizen_FireDeath', this.tileX, this.tileY);
+    } else {
+      SpatialAudio.playAtTile('Citizen_ShotDeath', this.tileX, this.tileY);
+    }
+    const pos = tileToScreen(this.tileX, this.tileY);
+    SoundManager.playVoice('ShotDeath', this._isFemaleVoice(), pos.x + TILE_HALF_W, pos.y + TILE_HALF_H);
 
     // Vacuum death animation — shrink + spin (Lua Character:_vacuumDisappear)
     if (cause === CAUSE_OF_DEATH.SUCKED_INTO_SPACE) {
