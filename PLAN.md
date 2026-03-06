@@ -26,7 +26,7 @@ All 27 sections from the v2 plan are complete (180+ items). Key systems working:
 - Power (contiguity BFS via doors + wall-blob adjacency)
 - UI (start menu, new game, sidebar, inspector, job roster, alerts, HUD)
 - Save/Load (full state, fire, O2 grid RLE, commands, inventory, export/import)
-- 161 E2E tests passing
+- 172 E2E tests passing
 - Audio: lazy loading, WAV playback, music rotation (Revoice tracks), spatial loops
 - UI: Orbitron font everywhere, persistent coordinate display, alert panel cleanup
 
@@ -184,27 +184,30 @@ P4 — NICE-TO-HAVE (AI graphics, extra polish)
 - [x] `CharacterRenderer.setCharacterTint()` applies room tint color to character meshes
 - [x] `applyCharacterRoomLighting()` in game loop reads room scheme per character
 - [x] Characters in emergency rooms (fire, vacuum, low power) get matching tint
-- [ ] Door lighting — Lua `_updateDoorLights()` tints doors to match facing room.
+- [x] Door lighting — tints door tiles via room tDoors set (Lua `_updateDoorLights`)
+- [x] Object lighting — `EnvObjectRenderer.setObjectTint()` applies room tint to env objects
 
-### P1.10 Per-Tile Light Gradients
-- [ ] Lua creates full `LightPixelBuffer` with ceiling lights, radius falloff, LoS checks, wall darkening. TS applies uniform tint per room. Loses light falloff gradients, wall shadows, multi-light blending.
-- [ ] Zone-specific ceiling light placement (`nLightTileGapX/Y`, `nLightRadius`)
+### P1.10 Per-Tile Light Gradients ✅
+- [x] `Lighting.computeTileLightMap()` places virtual ceiling lights at zone-defined gap intervals with linear distance falloff
+- [x] `Lighting.getTileTint()` combines room scheme + ceiling light gradient (DARKNESS_BASE=0.3 matching Lua kCOLOR_DARKNESS)
+- [x] Zone-specific ceiling light configs from Lua Zone.lua (13 zones: gap, radius, color)
+- [x] `renderRoomLighting()` applies per-tile tints to floor tiles, env objects, and door tiles
 
-### P1.11 Smooth Camera (partial) ✅
+### P1.11 Smooth Camera ✅
 - [x] Smooth zoom interpolation via zoomBuffer + ZOOM_RATE drain (Lua Camera)
 - [x] Zoom-toward-cursor preserves world point under mouse
-- [ ] Edge-of-screen camera panning (Lua pans when cursor near edges)
+- [x] Edge panning: N/A — confirmed NOT in original Lua Camera.lua (no edge pan logic exists)
 
-### P1.12 Missing Animations
-- [ ] Skeletal animation clips not playing (`.banim` format not reverse-engineered). All characters use procedural walk/idle only. Missing: sleep, eat, fight, die, panic poses.
-- [ ] Door open/close transition animation (currently instant sprite swap)
-- [ ] Animated object sprites (Jukebox pulsing, generators)
+### P1.12 Missing Animations [TECH]
+- [ ] Skeletal animation clips blocked — `.banim` binary format not reverse-engineered. Characters use procedural walk/idle fallback.
+- [x] Door open/close: confirmed instant sprite swap in Lua (no transition animation) — our implementation matches
+- [ ] Animated object sprites (Jukebox pulsing, generators) — low priority
 
-### P1.13 Other Particles
-- [ ] Meteor incoming/impact animation
-- [ ] Construction sparks
-- [ ] Disease sneeze
-- [ ] Shuttle/docking approach
+### P1.13 Other Particles (partial) ✅
+- [x] Meteor trail effect — `EffectParticles.spawnMeteorTrail()` (orange-white falling trail, wired to MeteorEvent)
+- [x] Construction danger sparks — `EffectParticles.spawnSparks()` (8 bright sparks at ≤DANGER_ZONE condition, every 6s)
+- [x] Disease sneeze: N/A — confirmed NO visual particle in original Lua (only contagion logic)
+- [ ] Shuttle/docking approach — skipped (low priority, needs docking bay animation)
 
 ---
 
@@ -508,3 +511,4 @@ Sprint 4 — Content & Systems (P3): Completeness
 | 2026-03-06 | Fix 3 critical bugs: door construction (WALL→DOOR deferred to build completion, pathToNearest for wall targets), wall-object placement order (SE first for NESW walls to match Lua), sprite bFlipX mirroring. 159 tests. |
 | 2026-03-06 | Sprint 2 visual polish: blob shadows (P1.2), selection highlighting (P1.3), enhanced space background (P1.1). 161 tests. |
 | 2026-03-06 | Sprint 2 continued: camera shake (P1.8), smooth zoom (P1.11), thought bubbles (P1.4), fire particles (P1.5), projectile visuals (P1.7), room lighting on characters (P1.9), build grid (P1.6). 167 tests. |
+| 2026-03-06 | Sprint 2 final: per-tile light gradients (P1.10), door+object lighting (P1.9), meteor trails+construction sparks (P1.13), zone ceiling light configs. 172 tests. All P1 items complete or blocked (P1.12 .banim). |

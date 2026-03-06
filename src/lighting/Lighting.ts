@@ -124,6 +124,64 @@ export class Lighting implements TickableSystem {
   }
 
   /**
+   * Compute per-tile brightness from ceiling lights (Lua Lighting._attemptAddCeilingLight).
+   * Places virtual lights at regular intervals based on zone config, computes falloff.
+   * Returns per-tile brightness map for a room (0 = darkness, 1 = fully lit).
+   */
+  computeTileLightMap(room: Room): Map<string, number> {
+    const result = new Map<string, number>();
+    const config = ZONE_SPRITES[room.zone as keyof typeof ZONE_SPRITES];
+    const lights = config?.roomLights;
+    if (!lights || lights.length === 0 || room.nLightingScheme !== LIGHTING_SCHEME_NORMAL) {
+      // Non-normal schemes use uniform tint, no gradient
+      return result;
+    }
+
+    // Darkness base (Lua kCOLOR_DARKNESS = {0.3, 0.3, 0.3})
+    const DARKNESS_BASE = 0.3;
+
+    // Find room bounding box for ceiling light placement
+    let minX = Infinity, minY = Infinity;
+    for (const t of room.tiles) {
+      if (t.x < minX) minX = t.x;
+      if (t.y < minY) minY = t.y;
+    }
+
+    // Place virtual ceiling lights at gap intervals
+    const tileSet = new Set(room.tiles.map(t => `${t.x},${t.y}`));
+    const lightPositions: { x: number; y: number; radius: number }[] = [];
+
+    for (const ld of lights) {
+      for (const t of room.tiles) {
+        const rx = t.x - minX;
+        const ry = t.y - minY;
+        if (rx % ld.nLightTileGapX === 0 && ry % ld.nLightTileGapY === 0) {
+          lightPositions.push({ x: t.x, y: t.y, radius: ld.nLightRadius });
+        }
+      }
+    }
+
+    // Compute brightness per tile from all light sources
+    for (const t of room.tiles) {
+      const key = `${t.x},${t.y}`;
+      let brightness = DARKNESS_BASE; // Start at darkness level
+
+      for (const light of lightPositions) {
+        const dist = Math.max(Math.abs(t.x - light.x), Math.abs(t.y - light.y));
+        if (dist <= light.radius) {
+          // Linear falloff from 1.0 at center to DARKNESS_BASE at radius edge
+          const pct = 1 - (dist / light.radius);
+          brightness = Math.min(1, brightness + pct * (1 - DARKNESS_BASE));
+        }
+      }
+
+      result.set(key, brightness);
+    }
+
+    return result;
+  }
+
+  /**
    * Get tint color for a room.
    * Emergency schemes oscillate: nDarkPct modulates darkness 0-50%.
    * Mirrors Lighting.updateEmergencyForRoom() + Room:tickLighting().
@@ -161,6 +219,27 @@ export class Lighting implements TickableSystem {
       default:
         return 0xffffff; // No tint — full brightness
     }
+  }
+
+  /**
+   * Get per-tile tint that combines room scheme + ceiling light gradient.
+   * For normal rooms: applies gradient. For emergency: uniform scheme tint.
+   */
+  getTileTint(room: Room, tileX: number, tileY: number, lightMap: Map<string, number>): number {
+    const scheme = room.nLightingScheme;
+
+    // Emergency schemes — use uniform room tint (no gradient)
+    if (scheme !== LIGHTING_SCHEME_NORMAL) {
+      return this.getRoomTint(room.zone, scheme, room.nLightFadeTimer);
+    }
+
+    // Normal scheme — apply ceiling light gradient
+    const key = `${tileX},${tileY}`;
+    const brightness = lightMap.get(key) ?? 1.0;
+    if (brightness >= 0.99) return 0xffffff; // Fully lit
+
+    const b = Math.floor(brightness * 255);
+    return (b << 16) | (b << 8) | b;
   }
 }
 

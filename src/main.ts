@@ -13,6 +13,7 @@ import { PropRenderer } from './renderer/PropRenderer';
 import { SelectionHighlight } from './renderer/SelectionHighlight';
 import { FireParticles } from './renderer/FireParticles';
 import { ProjectileRenderer } from './renderer/ProjectileRenderer';
+import { EffectParticles } from './renderer/EffectParticles';
 import { SceneManager } from './renderer/SceneManager';
 import { loadAllAssets, getTexture } from './renderer/AssetLoader';
 import { InputManager } from './input/InputManager';
@@ -31,7 +32,7 @@ import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
 import { Door, tDoorsByAddr } from './envobjects/Door';
-import { EnvObject } from './envobjects/EnvObject';
+import { EnvObject, DANGER_ZONE, DANGER_SPARK_FREQUENCY } from './envobjects/EnvObject';
 import { tObjects, resolveAlias, getObjectData, getObjectsByFunctionality as getObjsByFunc } from './envobjects/EnvObjectData';
 import { ObjectPlacement } from './building/ObjectPlacement';
 import { Base } from './core/Base';
@@ -235,6 +236,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Projectile renderer (visible beams between attacker → target)
   const projectileRenderer = new ProjectileRenderer(threeRenderer.scene);
+
+  // Effect particles (meteor trails, construction sparks)
+  const effectParticles = new EffectParticles(threeRenderer.scene);
   propRenderer.preload([
     'BodyBag', 'FoodBar', 'FoodCrate', 'AsteroidChunk',
     'Pistol', 'Rifle', 'SpaceGun', 'Builder', 'Weldammer',
@@ -343,6 +347,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Camera shake on meteor impact (Lua Camera:shake(15, 0.2))
     cameraController.shake(15, 0.2);
+
+    // Meteor trail particles (Lua AnimatedSprite "asteroid01_")
+    effectParticles.spawnMeteorTrail(tile.x, tile.y);
 
     // Force room re-detection (breach)
     roomManager.markDirty([tile]);
@@ -888,6 +895,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Projectile visuals
     projectileRenderer.update(projectileManager.getActiveProjectiles());
 
+    // Effect particles (meteor trails, construction sparks)
+    effectParticles.update(delta / 1000);
+    // Construction danger sparks: objects with condition <= 20 emit sparks every 6s (Lua DANGER_SPARK_FREQUENCY)
+    checkDangerSparks(delta / 1000);
+
     // Room lighting on characters (Lua: room ambient → character shader)
     applyCharacterRoomLighting();
 
@@ -1079,19 +1091,39 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }
   }
 
-  /** Apply room-based lighting tints via the Lighting system. */
+  /** Apply room-based lighting tints via the Lighting system.
+   *  Normal rooms use per-tile ceiling light gradients (Lua LightPixelBuffer).
+   *  Emergency rooms use uniform flashing tint. */
   const prevLitTiles = new Set<string>();
   function renderRoomLighting() {
     const currentLit = new Set<string>();
     for (const room of roomManager.getRooms()) {
-      // scheme + flash timer are updated each frame by Lighting.onTick()
-      const tint = lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
-      // Only apply tint if not full white (normal lit)
-      if (tint !== 0xffffff) {
-        for (const t of room.tiles) {
-          const key = `${t.x},${t.y}`;
+      // Compute per-tile light map for gradient lighting
+      const lightMap = lighting.computeTileLightMap(room);
+
+      for (const t of room.tiles) {
+        const key = `${t.x},${t.y}`;
+        const tint = lightMap.size > 0
+          ? lighting.getTileTint(room, t.x, t.y, lightMap)
+          : lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
+        if (tint !== 0xffffff) {
           currentLit.add(key);
           tileRenderer.setTileTint(t.x, t.y, tint);
+        }
+      }
+
+      // Door lighting: tint door tiles to match facing room (Lua Lighting._updateDoorLights)
+      if (room.tDoors && room.tDoors.size > 0) {
+        for (const doorAddr of room.tDoors) {
+          const key = doorAddr;
+          const [dx, dy] = doorAddr.split(',').map(Number);
+          const tint = lightMap.size > 0
+            ? lighting.getTileTint(room, dx, dy, lightMap)
+            : lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
+          if (tint !== 0xffffff) {
+            currentLit.add(key);
+            tileRenderer.setTileTint(dx, dy, tint);
+          }
         }
       }
     }
@@ -1133,6 +1165,19 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   }
 
   /** Apply room lighting tint to characters based on which room they're in (Lua room ambient → character shader). */
+  /** Construction danger sparks: objects at ≤20 condition spark every 6s (Lua EnvObject.sSparkFX). */
+  let sparkTimer = 0;
+  function checkDangerSparks(dt: number) {
+    sparkTimer += dt;
+    if (sparkTimer < DANGER_SPARK_FREQUENCY) return;
+    sparkTimer -= DANGER_SPARK_FREQUENCY;
+    for (const obj of EnvObjectManager.getObjects()) {
+      if (obj.bBuilt && obj.bHasPower && obj.nCondition > 0 && obj.nCondition <= DANGER_ZONE) {
+        effectParticles.spawnSparks(obj.tileX, obj.tileY);
+      }
+    }
+  }
+
   function applyCharacterRoomLighting() {
     for (const char of characterManager.getAllCharacters()) {
       const room = roomManager.getRoomAt(char.tileX, char.tileY);
@@ -1142,6 +1187,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       } else {
         // In space — no tint
         characterRenderer.setCharacterTint(char.id, 0xffffff);
+      }
+    }
+    // Env object lighting (Lua tPropLightColor)
+    for (const obj of EnvObjectManager.getObjects()) {
+      const room = roomManager.getRoomAt(obj.tileX, obj.tileY);
+      if (room) {
+        const tint = lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
+        envObjRenderer.setObjectTint(String(obj.id), tint);
+      } else {
+        envObjRenderer.setObjectTint(String(obj.id), 0xffffff);
       }
     }
   }
@@ -1728,6 +1783,27 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (!room) return null;
       return lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
     },
+    /** Per-tile light map for a room (ceiling light gradients). */
+    getRoomLightMap: (roomId: number) => {
+      const room = roomManager.getRooms().find(r => r.id === roomId);
+      if (!room) return null;
+      const map = lighting.computeTileLightMap(room);
+      const result: Record<string, number> = {};
+      for (const [key, val] of map) result[key] = val;
+      return result;
+    },
+    /** Spawn meteor trail effect at tile. */
+    spawnMeteorTrail: (x: number, y: number) => {
+      effectParticles.spawnMeteorTrail(x, y);
+      return true;
+    },
+    /** Spawn construction sparks at tile. */
+    spawnSparks: (x: number, y: number) => {
+      effectParticles.spawnSparks(x, y);
+      return true;
+    },
+    /** Get effect particles count. */
+    getEffectCount: () => (effectParticles as any).effects?.length ?? 0,
   };
 
   requestAnimationFrame(gameLoop);

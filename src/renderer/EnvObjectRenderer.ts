@@ -118,6 +118,17 @@ export class EnvObjectRenderer {
     }
   }
 
+  /** Apply room lighting tint to an object (Lua Lighting → tPropLightColor). */
+  setObjectTint(id: string, tint: number) {
+    const obj = this.objects.get(id);
+    if (!obj) return;
+    const mat = obj.mesh.material as THREE.MeshBasicMaterial;
+    const r = ((tint >> 16) & 0xFF) / 255;
+    const g = ((tint >> 8) & 0xFF) / 255;
+    const b = (tint & 0xFF) / 255;
+    mat.color.setRGB(r, g, b);
+  }
+
   removeObject(id: string) {
     const obj = this.objects.get(id);
     if (obj) {

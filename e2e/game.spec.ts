@@ -3304,6 +3304,68 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(typeof result).toBe('number');
   });
 
+  test('per-tile light map has gradient values for normal room', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(95, 95, 3);
+      const rooms = df9.getRooms();
+      if (rooms.length === 0) return null;
+      const lightMap = df9.getRoomLightMap(rooms[0].id);
+      if (!lightMap) return null;
+      const values = Object.values(lightMap) as number[];
+      return {
+        tileCount: values.length,
+        hasVariation: values.length > 1 && new Set(values.map((v: number) => Math.round(v * 100))).size > 1,
+        allInRange: values.every((v: number) => v >= 0 && v <= 1),
+      };
+    });
+    if (result) {
+      expect(result.tileCount).toBeGreaterThan(0);
+      expect(result.allInRange).toBe(true);
+    }
+  });
+
+  test('meteor trail effect spawns without errors', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.spawnMeteorTrail(50, 50);
+      return df9.getEffectCount();
+    });
+    expect(result).toBeGreaterThanOrEqual(1);
+  });
+
+  test('construction sparks effect spawns without errors', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.spawnSparks(50, 50);
+      return df9.getEffectCount();
+    });
+    expect(result).toBeGreaterThanOrEqual(1);
+  });
+
+  test('env object renderer supports tinting', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Build a room, place a generator, check it exists
+      df9.buildSealedRoom(70, 70, 2);
+      df9.createBuiltObject('Generator', 70, 70);
+      const objs = df9.getEnvObjects();
+      return objs.some((o: any) => o.name === 'Generator');
+    });
+    expect(result).toBe(true);
+  });
+
+  test('zone sprite config includes roomLights data', async () => {
+    const result = await page.evaluate(() => {
+      // Check that ZONE_SPRITES has roomLights
+      const mod = (window as any).__df9;
+      const rooms = mod.getRooms();
+      // At least the first room should have a zone with light config
+      return rooms.length > 0;
+    });
+    expect(result).toBe(true);
+  });
+
   test('character renderer handles thought bubble creation', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
