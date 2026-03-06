@@ -16,6 +16,9 @@ import {
   MORALE_SPEED_THRESHOLD, MORALE_LOW_SPEED_MODIFIER, MORALE_HIGH_SPEED_MODIFIER,
   MORALE_LOW_OXYGEN, MORALE_LOW_OXYGEN_THRESHOLD, MORALE_NEEDS_MET_BONUS,
   MORALE_NEEDS_LOW, MORALE_NEEDS_DECREASE, MORALE_NEEDS_HIGH, MORALE_NEEDS_INCREASE,
+  NEEDS_STUFF_LOW, STUFF_NEED_LOG_FREQUENCY, MEMORY_STUFF_NEED,
+  LOG_MORALE_NEEDS_RATE, MEMORY_LOGGED_MORALE_RECENTLY,
+  ROOM_MORALE_LOG_THRESHOLD, GENERIC_LOG_FREQUENCY, MEMORY_GENERIC_LOG,
   EXPERIENCE_PER_LEVEL, MAX_COMPETENCY, STARTING_SKILL_POINTS,
   MAX_CHANCE_TO_FAIL, NO_FAIL_COMPETENCY_THRESHOLD,
   STATUS_HEALTHY, STATUS_DEAD, STATUS_SICK, STATUS_ILL, STATUS_INCAPACITATED,
@@ -36,6 +39,7 @@ import {
 import { GameRules } from '../core/GameRules';
 import { Malady, type MaladyInstance } from '../malady/Malady';
 import { CharacterInventory, createRandomStartingStuff } from '../inventory/Inventory';
+import { ITEM_TEMPLATES } from '../inventory/InventoryData';
 import type { Task } from '../utility/Task';
 import { type LogEntry, addLog, postLogFromQueue, getLogCooldown, setElapsedTimeProvider } from './Log';
 import { researchSystem } from '../research/ResearchSystem';
@@ -390,6 +394,21 @@ export class Character {
     return -DUTY_AFFINITY_MORALE_MAX + 2 * DUTY_AFFINITY_MORALE_MAX * norm;
   }
 
+  /**
+   * Get stuff satisfaction score (-100 to +100).
+   * Lua Character:getStuffSatisfaction — based on owned items and affinity.
+   * Simplified: counts owned stuff items, applies log10 curve.
+   */
+  getStuffSatisfaction(): number {
+    // Count stuff items in inventory (check template bStuff flag)
+    const nStuff = this.inventory.getAll().filter(i => ITEM_TEMPLATES[i.sTemplate]?.bStuff).length;
+    // Base value 1, each stuff item adds ~1 (simplified from affinity * 0.1)
+    let nTotal = 1 + nStuff;
+    nTotal = Math.max(1, Math.min(10, nTotal));
+    // Log10 curve: [1,10] → [0,1], then remap to [-100, +100]
+    return Math.log10(nTotal) * 200 - 100;
+  }
+
   // ── Memory system ──────────────────────────────────────────
 
   /** Store a memory with a duration in seconds (Lua Character:storeMemory). */
@@ -489,7 +508,7 @@ export class Character {
   }
 
   /** Update morale and anger per tick. dt in seconds (game-scaled). */
-  updateMorale(dt: number, roomMoraleScore = 0) {
+  updateMorale(dt: number, roomMoraleScore = 0, roomZoneName?: string) {
     this.moraleTickAccum += dt;
     if (this.moraleTickAccum >= MORALE_TICK) {
       this.moraleTickAccum -= MORALE_TICK;
@@ -519,19 +538,64 @@ export class Character {
       }
 
       // Morale drifts based on needs (needs range -100..+100)
-      const avgNeed = (this.needs.hunger + this.needs.energy + this.needs.amusement + this.needs.social) / 4;
+      // Lua tickMorale lines 6036-6061
+      let bLogged = false;
+      const needValues = {
+        Hunger: this.needs.hunger,
+        Energy: this.needs.energy,
+        Fun: this.needs.amusement,
+        Social: this.needs.social,
+      };
+      const avgNeed = (needValues.Hunger + needValues.Energy + needValues.Fun + needValues.Social) / 4;
+      let sLowestNeed: string | null = null;
+      let sHighestNeed: string | null = null;
+      let nLowest = Infinity;
+      let nHighest = -Infinity;
+      for (const [name, val] of Object.entries(needValues)) {
+        if (val < nLowest) { nLowest = val; sLowestNeed = name; }
+        if (val > nHighest) { nHighest = val; sHighestNeed = name; }
+      }
+
       if (avgNeed < MORALE_NEEDS_LOW) {
         this.addMorale(MORALE_NEEDS_DECREASE);
       } else if (avgNeed > MORALE_NEEDS_HIGH) {
         this.addMorale(MORALE_NEEDS_INCREASE);
       }
 
+      // Needs-based log (Lua Character.lua:6049-6061, rate-limited)
+      if ((sLowestNeed || sHighestNeed) && !this.retrieveMemory(MEMORY_LOGGED_MORALE_RECENTLY)) {
+        if (avgNeed < MORALE_NEEDS_LOW && sLowestNeed) {
+          addLog('MORALE_LOW_NEED', this);
+          bLogged = true;
+        } else if (avgNeed > MORALE_NEEDS_HIGH && sHighestNeed) {
+          addLog('MORALE_HIGH_NEED', this);
+          bLogged = true;
+        }
+        if (bLogged) {
+          this.storeMemory(MEMORY_LOGGED_MORALE_RECENTLY, true, LOG_MORALE_NEEDS_RATE);
+        }
+      }
+
       // Needs-met bonus — mirrors Character.lua:6067-6069
-      // When all needs positive (met in -100..+100 scale) and morale negative
       const bAllNeedsMet = this.needs.hunger > 0 && this.needs.energy > 0 &&
         this.needs.amusement > 0 && this.needs.social > 0;
       if (bAllNeedsMet && this.nMorale < 0) {
         this.addMorale(MORALE_NEEDS_MET_BONUS);
+      }
+
+      // Stuff satisfaction log (Lua Character.lua:6072-6076)
+      const nStuffNeed = this.getStuffSatisfaction();
+      if (nStuffNeed < NEEDS_STUFF_LOW && !this.retrieveMemory(MEMORY_STUFF_NEED) &&
+          Math.random() < (this.tStats.personality.nChattiness ?? 0.5)) {
+        this.storeMemory(MEMORY_STUFF_NEED, true, STUFF_NEED_LOG_FREQUENCY);
+        addLog('MORALE_LOW_STUFF', this);
+      }
+
+      // Generic/social logs (Lua Character.lua:6078-6108, rate-limited)
+      if (!bLogged && Math.random() < (this.tStats.personality.nChattiness ?? 0.5) &&
+          !this.retrieveMemory(MEMORY_GENERIC_LOG)) {
+        addLog('GENERIC', this);
+        this.storeMemory(MEMORY_GENERIC_LOG, true, GENERIC_LOG_FREQUENCY);
       }
 
       // Job morale modifier (Lua Character.lua:6075 — duty affinity)
@@ -550,6 +614,17 @@ export class Character {
           }
         } else {
           this.nMorale = Math.max(MORALE_MIN, this.nMorale - drift);
+        }
+      }
+
+      // Room morale log (Lua Character.lua:6153-6167)
+      if (!bLogged && avgRoomMorale > ROOM_MORALE_LOG_THRESHOLD && roomZoneName) {
+        if (roomZoneName === 'PUB') {
+          addLog('MORALE_COOL_PUB', this);
+        } else if (roomZoneName === 'GARDEN') {
+          addLog('MORALE_COOL_GARDEN', this);
+        } else {
+          addLog('MORALE_COOL_ROOM_GENERIC', this);
         }
       }
     }

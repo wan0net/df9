@@ -1370,6 +1370,28 @@ export const LOG_TYPES: Record<string, LogTypeDef> = {
     ],
   },
 
+  MORALE_LOW_NEED: {
+    category: 'morale',
+    priority: 2,
+    lines: [
+      { sLine: "I'm not doing so great right now.", tTags: ['sad'] },
+      { sLine: "Things could be better. A lot better.", tTags: ['sad'] },
+      { sLine: "I need something. Food, sleep, fun... anything.", tTags: ['sad'] },
+      { sLine: "Running on empty over here.", tTags: ['sad'] },
+      { sLine: "I can't remember the last time I felt satisfied.", tTags: ['sad'] },
+    ],
+  },
+
+  MORALE_HIGH_NEED: {
+    category: 'morale',
+    lines: [
+      { sLine: "Life's pretty good right now, all things considered.", tTags: ['happy'] },
+      { sLine: "Fed, rested, entertained. What more could you ask for?", tTags: ['happy'] },
+      { sLine: "I'm feeling great today!", tTags: ['happy'] },
+      { sLine: "All my needs are met. This is the life.", tTags: ['happy'] },
+    ],
+  },
+
   MORALE_LOW_STUFF: {
     category: 'morale',
     priority: 2,

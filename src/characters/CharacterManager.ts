@@ -14,6 +14,7 @@ import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { RoomManager } from '../rooms/RoomManager';
 import { Room } from '../rooms/Room';
+import { ZoneType } from '../world/ZoneType';
 import { findPath, WALKABLE_DEFAULT, WALKABLE_SPACEWALK } from '../pathfinding/AStar';
 import { INITIAL_CREW } from '../config';
 import { UtilityAI } from '../utility/UtilityAI';
@@ -62,7 +63,7 @@ import { PRIORITY } from '../utility/ActivityOption';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { Base } from '../core/Base';
-import { Corpse } from '../pickups/Corpse';
+import { Corpse, CORPSE_TYPE_FRIENDLY, CORPSE_TYPE_RAIDER, CORPSE_TYPE_MONSTER } from '../pickups/Corpse';
 import { CombatSystem, isHostile } from '../combat/CombatSystem';
 import { SquadList } from '../combat/SquadList';
 import { FIRE_DAMAGE_PER_SECOND } from '../hazards/Fire';
@@ -208,7 +209,7 @@ export class CharacterManager {
       char.needs.decay(dtSec);
       // Pass room morale score to character morale update
       const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
-      char.updateMorale(dtSec, charRoom?.nMoraleScore ?? 0);
+      char.updateMorale(dtSec, charRoom?.nMoraleScore ?? 0, charRoom ? ZoneType[charRoom.zone] : undefined);
 
       // Update active task
       if (char.currentTask && char.currentTask.isActive()) {
@@ -380,8 +381,15 @@ export class CharacterManager {
     for (let i = this.characters.length - 1; i >= 0; i--) {
       const char = this.characters[i];
       if (!char.isAlive()) {
+        // Determine corpse type from team/race (Lua Corpse.TYPE_*)
+        let corpseType = CORPSE_TYPE_FRIENDLY;
+        if (char.tStats.nTeam !== TEAM_ID_PLAYER) {
+          // Check if monster race
+          const raceDef = char.getRaceDef();
+          corpseType = !raceDef.bCanBeCuffed ? CORPSE_TYPE_MONSTER : CORPSE_TYPE_RAIDER;
+        }
         // Create corpse pickup at death tile
-        const corpse = new Corpse(char.tileX, char.tileY, char.getName(), char.nCauseOfDeath);
+        const corpse = new Corpse(char.tileX, char.tileY, char.getName(), char.nCauseOfDeath, corpseType);
         this.pickups.push(corpse);
 
         // Disengage from combat
