@@ -9,6 +9,7 @@ import { Door, DOOR_STATE } from '../envobjects/Door';
 import type { Room } from '../rooms/Room';
 import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH } from '../characters/CharacterConstants';
 import { ZONE_SPRITES } from '../world/ZoneType';
+import { ITEM_TEMPLATES } from '../inventory/InventoryData';
 
 /** Human-readable cause of death names. */
 const DEATH_CAUSE_NAMES: Record<number, string> = {
@@ -35,7 +36,7 @@ export type SelectedEntity =
   | { type: 'room'; data: Room }
   | null;
 
-type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'log' | 'actions';
+type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'log' | 'actions' | 'stuff';
 
 export class InspectorPanel {
   private el: HTMLDivElement;
@@ -50,6 +51,8 @@ export class InspectorPanel {
   private onDemolishObject: ((obj: EnvObject) => void) | null = null;
   private getBrigRooms: (() => Room[]) | null = null;
   private getRoomForChar: ((char: Character) => Room | null) | null = null;
+  private onCenterCamera: ((char: Character) => void) | null = null;
+  private onSelectRoom: ((room: Room) => void) | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -61,6 +64,8 @@ export class InspectorPanel {
       onDemolishObject?: (obj: EnvObject) => void;
       getBrigRooms?: () => Room[];
       getRoomForChar?: (char: Character) => Room | null;
+      onCenterCamera?: (char: Character) => void;
+      onSelectRoom?: (room: Room) => void;
     },
   ) {
     this.onSetJob = callbacks.onSetJob;
@@ -70,6 +75,8 @@ export class InspectorPanel {
     this.onDemolishObject = callbacks.onDemolishObject ?? null;
     this.getBrigRooms = callbacks.getBrigRooms ?? null;
     this.getRoomForChar = callbacks.getRoomForChar ?? null;
+    this.onCenterCamera = callbacks.onCenterCamera ?? null;
+    this.onSelectRoom = callbacks.onSelectRoom ?? null;
 
     this.el = document.createElement('div');
     this.el.id = 'inspector-panel';
@@ -132,6 +139,7 @@ export class InspectorPanel {
 
   private renderCharacter(char: Character) {
     const isDead = !char.isAlive();
+    const isPlayer = char.tStats.nTeam === 1; // TEAM_ID_PLAYER
 
     // Header with editable name
     const header = this.makeSection();
@@ -213,6 +221,36 @@ export class InspectorPanel {
     locationDiv.innerHTML = `<span>${moraleText}</span><span style="color:#888">${this.escapeHtml(locationText)}</span>`;
     header.appendChild(locationDiv);
 
+    // Shortcut buttons (Lua: HealthStatButton, MoraleButton, RoomButton, ActivityButton, CamCenterButton)
+    if (isPlayer && !isDead) {
+      const shortcuts = document.createElement('div');
+      shortcuts.style.cssText = 'display:flex;gap:4px;margin-top:4px;padding:0 8px;';
+      const shortcutDefs: { label: string; title: string; action: () => void }[] = [
+        { label: 'HP', title: 'View Stats', action: () => { this.currentTab = 'stats'; this.update(); } },
+        { label: 'MOR', title: 'View Morale/Psych', action: () => { this.currentTab = 'psych'; this.update(); } },
+        { label: 'ROOM', title: 'View Room', action: () => {
+          const room = this.getRoomForChar?.(char);
+          if (room && this.onSelectRoom) this.onSelectRoom(room);
+        }},
+        { label: 'ACT', title: 'View Actions', action: () => { this.currentTab = 'actions'; this.update(); } },
+        { label: 'CAM', title: 'Center Camera', action: () => { this.onCenterCamera?.(char); } },
+      ];
+      for (const sd of shortcutDefs) {
+        const btn = document.createElement('div');
+        btn.textContent = sd.label;
+        btn.title = sd.title;
+        btn.style.cssText = `
+          font-size:10px;color:${AMBER};border:1px solid ${AMBER};
+          padding:2px 5px;cursor:pointer;
+        `;
+        btn.addEventListener('click', sd.action);
+        btn.addEventListener('mouseenter', () => { btn.style.background = `rgba(223,162,0,0.2)`; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+        shortcuts.appendChild(btn);
+      }
+      this.contentEl.appendChild(shortcuts);
+    }
+
     this.contentEl.appendChild(header);
 
     // Tab row
@@ -220,13 +258,13 @@ export class InspectorPanel {
     tabRow.style.cssText = `
       display:flex;border-top:1px solid #333;border-bottom:1px solid #333;
     `;
-    const isPlayer = char.tStats.nTeam === 1; // TEAM_ID_PLAYER
     const tabs: { label: string; tab: InspectorTab }[] = isPlayer
       ? [
           { label: 'Duty', tab: 'duty' },
           { label: 'Stats', tab: 'stats' },
           { label: 'Needs', tab: 'needs' },
           { label: 'Psych', tab: 'psych' },
+          { label: 'Stuff', tab: 'stuff' },
           { label: 'Log', tab: 'log' },
           { label: 'Actions', tab: 'actions' },
         ]
@@ -265,6 +303,9 @@ export class InspectorPanel {
         break;
       case 'psych':
         this.renderPsychTab(body, char);
+        break;
+      case 'stuff':
+        this.renderStuffTab(body, char);
         break;
       case 'log':
         this.renderLogTab(body, char);
@@ -406,6 +447,37 @@ export class InspectorPanel {
         traitDiv.appendChild(tag);
       }
       container.appendChild(traitDiv);
+    }
+  }
+
+  private renderStuffTab(container: HTMLDivElement, char: Character) {
+    const items = char.inventory.getAll();
+    const heldItem = char.heldItem;
+
+    // Held item
+    if (heldItem) {
+      const heldDiv = document.createElement('div');
+      heldDiv.style.cssText = `margin-bottom:8px;padding:4px;border:1px solid ${AMBER};`;
+      heldDiv.innerHTML = `<span style="color:${AMBER};font-size:11px;">Carrying:</span> <span style="color:#ccc;">${this.escapeHtml(heldItem)}</span>`;
+      container.appendChild(heldDiv);
+    }
+
+    if (items.length === 0 && !heldItem) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:#888;font-style:italic;';
+      empty.textContent = 'No items.';
+      container.appendChild(empty);
+      return;
+    }
+
+    for (const item of items) {
+      const tmpl = ITEM_TEMPLATES[item.sTemplate];
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom:4px;padding:2px 0;border-bottom:1px solid #222;font-size:11px;';
+      const countStr = item.nCount > 1 ? ` x${item.nCount}` : '';
+      const tagStr = tmpl?.bStuff ? ' [Stuff]' : tmpl?.bDisplayable ? ' [Display]' : '';
+      row.innerHTML = `<span style="color:#ccc;">${this.escapeHtml(item.sName)}${countStr}</span><span style="color:#666;font-size:10px;">${tagStr}</span>`;
+      container.appendChild(row);
     }
   }
 

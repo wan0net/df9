@@ -16,8 +16,10 @@ export class StartMenuState implements SceneState {
   private onNewGame!: () => void;
   private onTutorial!: () => void;
   private onLoadBase!: () => void;
+  private onSaveBase: (() => void) | null = null;
   private onResume: (() => void) | null = null;
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
+  private saveYesNoEl: HTMLDivElement | null = null;
   /** Set to true when a game session has been started (allows Resume). */
   gameRunning = false;
 
@@ -25,11 +27,13 @@ export class StartMenuState implements SceneState {
     onNewGame: () => void;
     onTutorial: () => void;
     onLoadBase: () => void;
+    onSaveBase?: () => void;
     onResume?: () => void;
   }) {
     this.onNewGame = handlers.onNewGame;
     this.onTutorial = handlers.onTutorial;
     this.onLoadBase = handlers.onLoadBase;
+    this.onSaveBase = handlers.onSaveBase ?? null;
     this.onResume = handlers.onResume ?? null;
   }
 
@@ -155,6 +159,10 @@ export class StartMenuState implements SceneState {
       { label: 'TUTORIAL', action: this.onTutorial },
       { label: 'LOAD BASE', action: this.onLoadBase },
     );
+    if (this.gameRunning && this.onSaveBase) {
+      const saveFn = this.onSaveBase;
+      buttons.push({ label: 'SAVE BASE', action: () => { saveFn(); } });
+    }
 
     for (const btn of buttons) {
       const el = document.createElement('div');
@@ -209,6 +217,81 @@ export class StartMenuState implements SceneState {
       };
       window.addEventListener('keydown', this.escHandler);
     }
+  }
+
+  /** Show SaveYesNo confirmation dialog (Lua SaveYesNo.lua). */
+  private showSaveYesNo() {
+    if (this.saveYesNoEl) return;
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      background:rgba(0,0,0,0.95);border:2px solid ${AMBER};
+      padding:30px 40px;z-index:110;text-align:center;
+      font-family:'Orbitron',monospace;
+    `;
+    const msg = document.createElement('div');
+    msg.textContent = 'SAVE BEFORE QUITTING?';
+    msg.style.cssText = `color:${AMBER};font-size:20px;margin-bottom:24px;`;
+    dialog.appendChild(msg);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:16px;justify-content:center;';
+
+    const makeDlgBtn = (label: string, action: () => void) => {
+      const btn = document.createElement('div');
+      btn.textContent = label;
+      btn.style.cssText = `
+        color:${AMBER};font-size:16px;padding:10px 20px;cursor:pointer;
+        border:1px solid ${AMBER};font-family:'Orbitron',monospace;
+      `;
+      btn.addEventListener('click', action);
+      btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(223,162,0,0.2)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+      return btn;
+    };
+
+    // [S] Save & Quit
+    btnRow.appendChild(makeDlgBtn('SAVE & QUIT (S)', () => {
+      this.onSaveBase?.();
+      this.closeSaveYesNo();
+      // Stay at start menu (game saved)
+    }));
+
+    // [Q] Quit without saving
+    btnRow.appendChild(makeDlgBtn('QUIT (Q)', () => {
+      this.closeSaveYesNo();
+      // In web: just stay at start menu
+    }));
+
+    // [ESC] Cancel
+    btnRow.appendChild(makeDlgBtn('CANCEL (ESC)', () => {
+      this.closeSaveYesNo();
+    }));
+
+    dialog.appendChild(btnRow);
+    this.overlay.appendChild(dialog);
+    this.saveYesNoEl = dialog;
+
+    // Keyboard shortcuts (Lua: S=save&quit, Q=quit, ESC=cancel)
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 's' || e.key === 'S') {
+        this.onSaveBase?.();
+        this.closeSaveYesNo();
+        window.removeEventListener('keydown', keyHandler);
+      } else if (e.key === 'q' || e.key === 'Q') {
+        this.closeSaveYesNo();
+        window.removeEventListener('keydown', keyHandler);
+      } else if (e.key === 'Escape') {
+        this.closeSaveYesNo();
+        window.removeEventListener('keydown', keyHandler);
+      }
+    };
+    window.addEventListener('keydown', keyHandler);
+  }
+
+  private closeSaveYesNo() {
+    this.saveYesNoEl?.remove();
+    this.saveYesNoEl = null;
   }
 
   update(_dt: number) {}

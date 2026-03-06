@@ -165,6 +165,8 @@ export class UIManager {
     onCuffCharacter?: (character: Character) => void;
     onExecuteCharacter?: (character: Character) => void;
     onDemolishObject?: (obj: EnvObject) => void;
+    onCenterCamera?: (char: Character) => void;
+    onSelectRoom?: (room: Room) => void;
     getPendingBuildCost?: () => { cost: number; tileCount: number; mode: BuildMode } | null;
     getCorpseCount?: () => number;
   }) {
@@ -197,6 +199,8 @@ export class UIManager {
     onCuffCharacter?: (character: Character) => void;
     onExecuteCharacter?: (character: Character) => void;
     onDemolishObject?: (obj: EnvObject) => void;
+    onCenterCamera?: (char: Character) => void;
+    onSelectRoom?: (room: Room) => void;
     getRooms: () => Room[];
   }) {
     this.uiRoot = document.createElement('div');
@@ -231,6 +235,8 @@ export class UIManager {
         const rooms = callbacks.getRooms();
         return rooms.find(r => r.tCharacters.has(char.id)) ?? null;
       },
+      onCenterCamera: callbacks.onCenterCamera,
+      onSelectRoom: callbacks.onSelectRoom,
     });
 
     // Research panel
@@ -793,6 +799,11 @@ export class UIManager {
   setSelectedEntity(entity: SelectedEntity) {
     if (entity) this.hideActivePanel();
     this.inspectorPanel.setEntity(entity);
+  }
+
+  /** Alias for setSelectedEntity — used by room/camera shortcuts. */
+  setInspected(entity: SelectedEntity) {
+    this.setSelectedEntity(entity);
   }
 
   /** Toggle job roster visibility. */

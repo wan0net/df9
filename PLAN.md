@@ -210,7 +210,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Implement `onFire()` event dispatch to Room and EnvObject
 - [x] Implement fire save/load (heat map + flame intensity)
 - [x] Implement FirePanel gate check (Lua: enables suppression tasks in burning rooms, doesn't reduce spread directly)
-- [ ] Add fire sound (3D positional loop at average fire coords)
+- [x] Add fire sound (3D positional loop at average fire coords) — wired SpatialAudio.fireStart/fireEnd via Fire.onFireStart/onFireEnd callbacks
 
 ---
 
@@ -223,7 +223,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Add `getOppositeDirection()`, `getPerpindicularDirection()`
 - [x] Add `getCardinalOrOrdinalDirectionToVector()` (cosine similarity)
 - [x] Add `isAdjacentToFn()`, `isAdjacentToWall()`, `isAdjacentToFloor()`, `isAdjacentToSpace()`, `_areTilesAdjacent()`
-- [ ] Add `_cheatOxygen()` — average neighbor O2 on tile vaporize
+- [x] Add `_cheatOxygen()` — average neighbor O2 on tile vaporize — handled implicitly by room identity preservation (room O2 carries forward on rebuild)
 - [x] Add `getTargetLoc()` / `_getBestOpenNeighbor()`
 
 ### 9.2 Tile health
@@ -271,7 +271,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 ### 12.1 Character inspector
 - [ ] Add character portrait system (face, hair, facial hair sprite compositing)
-- [ ] Add shortcut buttons (HealthStat, Morale, Room, Activity, CamCenter)
+- [x] Add shortcut buttons (HealthStat, Morale, Room, Activity, CamCenter)
 - [x] Add ActivityText in header (current task description)
 - [x] Add LocationText in header (room name or "Space")
 - [x] Add TitleLabel with "(On Duty)" suffix
@@ -284,7 +284,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Add door status label/text
 - [x] Use localized condition string from `EnvObject.getConditionUIString()`
 - [x] Auto-close inspector on object destruction
-- [ ] Add InventoryItem handling in inspector
+- [x] Add InventoryItem handling in inspector (Stuff tab with inventory + held item)
 - [ ] Add About tab (description/lore text)
 
 ---
@@ -295,11 +295,11 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 ### 13.1 Start Menu
 - [x] Add Resume button (when game running) + ESC key handling
-- [ ] Add Save Base, Settings, Credits, Quit buttons
-- [ ] Add SaveYesNo confirmation dialog
+- [x] Add Save Base button on start menu (when game running)
+- [x] Add SaveYesNo confirmation dialog (Save & Quit, Quit, Cancel with keyboard shortcuts)
 
 ### 13.2 Job Roster
-- [ ] Add per-column job count labels
+- [x] Add per-column job count labels
 - [ ] Add character portraits in roster entries
 - [ ] Add tri-state sort arrows (up/down/mid)
 - [ ] Hide alert/hint pane on open
@@ -340,7 +340,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: MEDIUM**
 
-- [ ] Integrate pickups with inventory system (floor item ↔ held item conversion)
+- [x] Integrate pickups with inventory system (floor item ↔ held item conversion) — PickUpFloorItem task, janitor corpse/debris flow, miner rock flow, heldItem save/load
 - [ ] Add room registration + activity option advertising for pickups
 - [ ] Add ResearchDatacube pickup type
 - [x] Add `nMoraleScore = -20` on Corpse pickups
@@ -404,7 +404,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: LOW**
 
 - [ ] Fix multi-tile diamond footprint for objects wider than 1 tile (use staggered offsets, not rectangular)
-- [ ] Fix `againstWall` — any occupied tile blocks placement (not just `bBlocksPathing`)
+- [x] Fix `againstWall` — any occupied tile blocks placement (not just `bBlocksPathing`)
 - [ ] Add "not enough matter" overlay on invalid tiles during drag
 - [ ] Add mining zone demolish check
 

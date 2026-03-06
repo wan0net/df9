@@ -18,6 +18,7 @@ export class JobRoster {
   private onClose: () => void;
   private sortColumn: number | null = null;
   private sortAsc = true;
+  private jobCountCells: HTMLElement[] = [];
 
   constructor(
     parent: HTMLElement,
@@ -91,7 +92,25 @@ export class JobRoster {
       });
       headerTr.appendChild(th);
     }
+    // Job count row (Lua: job1Num, job2Num, ... job10Num labels)
+    const countTr = document.createElement('tr');
+    // Name + Job columns (empty)
+    for (let i = 0; i < 2; i++) {
+      const td = document.createElement('td');
+      td.style.cssText = 'padding:2px 4px;font-size:10px;color:#666;';
+      countTr.appendChild(td);
+    }
+    this.jobCountCells = [];
+    for (let i = 0; i < tJobs.length; i++) {
+      const td = document.createElement('td');
+      td.style.cssText = `padding:2px 4px;text-align:center;font-size:10px;color:#888;border-bottom:1px solid #333;`;
+      td.textContent = '0';
+      countTr.appendChild(td);
+      this.jobCountCells.push(td);
+    }
+
     thead.appendChild(headerTr);
+    thead.appendChild(countTr);
     table.appendChild(thead);
 
     this.tableBody = document.createElement('tbody');
@@ -135,9 +154,19 @@ export class JobRoster {
   }
 
   private refresh() {
-    this.tableBody.innerHTML = '';
+    while (this.tableBody.firstChild) this.tableBody.removeChild(this.tableBody.firstChild);
 
     let chars = [...this.getCharacters()].filter(c => c.isAlive());
+
+    // Update per-column job count labels (Lua: tJobCount)
+    const jobCounts: Record<number, number> = {};
+    for (const jobId of tJobs) jobCounts[jobId] = 0;
+    for (const c of chars) jobCounts[c.getJob()] = (jobCounts[c.getJob()] ?? 0) + 1;
+    for (let i = 0; i < tJobs.length; i++) {
+      if (this.jobCountCells[i]) {
+        this.jobCountCells[i].textContent = String(jobCounts[tJobs[i]] ?? 0);
+      }
+    }
 
     // Sort
     if (this.sortColumn !== null) {

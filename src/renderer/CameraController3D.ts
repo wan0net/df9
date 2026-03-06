@@ -135,6 +135,15 @@ export class CameraController3D {
     );
   }
 
+  /** Center the camera on a world-coordinate position. */
+  centerOnWorld(worldX: number, worldY: number) {
+    const viewW = window.innerWidth / this.zoom;
+    const viewH = window.innerHeight / this.zoom;
+    this.scrollX = worldX - viewW / 2;
+    this.scrollY = worldY - viewH / 2;
+    this.updateCamera();
+  }
+
   /**
    * Convert screen pixel position to world coordinates.
    */

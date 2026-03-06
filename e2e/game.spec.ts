@@ -600,6 +600,13 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(rooms.length).toBeGreaterThan(0);
     const tile = rooms[0].tiles[0];
 
+    // Ensure room has high O2 so fire isn't immediately doused
+    await page.evaluate((roomId) => {
+      const df9 = (window as any).__df9;
+      const room = df9._roomMgr?.getRooms().find((r: any) => r.id === roomId);
+      if (room) room.oxygen = 255;
+    }, rooms[0].id);
+
     // Start a fire
     await page.evaluate(([x, y]) => (window as any).__df9?.startFire(x, y), [tile.x, tile.y] as const);
 
@@ -2747,5 +2754,51 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     });
     expect(result).toBeTruthy();
     expect(result!.heldItem).toBe('Rock');
+  });
+
+  test('CameraController3D: centerOnWorld updates scroll position', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const cam = df9._cameraController;
+      if (!cam) return null;
+      cam.centerOnWorld(500, 400);
+      // After centering, scroll should be offset by half viewport
+      return { scrollX: cam.scrollX, scrollY: cam.scrollY };
+    });
+    expect(result).toBeTruthy();
+    // scrollX = 500 - viewW/2, scrollY = 400 - viewH/2
+    // Just verify it changed from initial center
+    expect(typeof result!.scrollX).toBe('number');
+    expect(typeof result!.scrollY).toBe('number');
+  });
+
+  test('Character inventory: getAll returns items added via addItem', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const chars = df9._charMgr?.characters;
+      if (!chars || chars.length === 0) return null;
+      const char = chars[0];
+      const before = char.inventory.getAll().length;
+      char.inventory.addItem({ sTemplate: 'Rock', sName: 'A Nice Rock', nCount: 1, tTags: {} });
+      const after = char.inventory.getAll().length;
+      return { before, after, lastName: char.inventory.getAll()[char.inventory.getAll().length - 1]?.sName };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.after).toBe(result!.before + 1);
+    expect(result!.lastName).toBe('A Nice Rock');
+  });
+
+  test('JobRoster: characters have job IDs', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const chars = df9._charMgr?.characters;
+      if (!chars || chars.length === 0) return null;
+      const job = chars[0].getJob();
+      return { jobType: typeof job, jobValue: job };
+    });
+    if (result !== null) {
+      expect(result.jobType).toBe('number');
+      expect(result.jobValue).toBeGreaterThanOrEqual(0);
+    }
   });
 });

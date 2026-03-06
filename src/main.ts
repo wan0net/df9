@@ -698,6 +698,19 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       GameRules.addMatter(refund);
       Base.addAlert('build', `Demolished ${obj.tData.friendlyName}, refunded ${refund} matter`);
     },
+    onCenterCamera: (char) => {
+      const pos = tileToScreen(char.tileX, char.tileY);
+      cameraController.centerOnWorld(pos.x, pos.y);
+    },
+    onSelectRoom: (room) => {
+      // Center camera on room center tile and select the room in inspector
+      if (room.tiles.length > 0) {
+        const mid = room.tiles[Math.floor(room.tiles.length / 2)];
+        const pos = tileToScreen(mid.x, mid.y);
+        cameraController.centerOnWorld(pos.x, pos.y);
+      }
+      uiManager.setInspected({ type: 'room', data: room });
+    },
   });
 
   // Keyboard bindings for panels (must come after uiManager creation)
@@ -1098,6 +1111,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     _envMgr: EnvObjectManager,
     _roomMgr: roomManager,
     _gameRules: GameRules,
+    _cameraController: cameraController,
     getPopulation: () => characterManager.getPopulation(),
     getMatter: () => GameRules.nMatter,
     getRoomCount: () => roomManager.getRooms().length,
