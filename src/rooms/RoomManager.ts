@@ -221,4 +221,32 @@ export class RoomManager {
       }
     }
   }
+
+  /**
+   * Spread combat awareness to characters in nearby rooms.
+   * Lua Room.spreadCombatAwareness: find room at tile, notify all characters in that room + adjoining rooms.
+   * @param attackerId — ID of the attacking character
+   * @param tx — tile X of attack
+   * @param ty — tile Y of attack
+   * @param onAlert — callback invoked for each character in alert range
+   */
+  spreadCombatAwareness(attackerId: number, tx: number, ty: number, onAlert: (charId: number) => void): void {
+    const room = this.getRoomAt(tx, ty);
+    if (!room) return;
+
+    const notifyRooms = new Set<Room>();
+    notifyRooms.add(room);
+    for (const adj of room.getAdjoiningRooms()) {
+      notifyRooms.add(adj);
+    }
+
+    for (const r of notifyRooms) {
+      r.nLastCombatAlert = Date.now() / 1000; // approximate elapsed time
+      for (const charId of r.tCharacters) {
+        if (charId !== attackerId) {
+          onAlert(charId);
+        }
+      }
+    }
+  }
 }

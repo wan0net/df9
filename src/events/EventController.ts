@@ -64,6 +64,10 @@ export class EventController implements TickableSystem {
   /** Previous events for history. */
   private prevEvents: { sEventType: string; nCompletionTime: number }[] = [];
 
+  /** Room count callbacks for event eligibility gates. */
+  getHiddenRoomCount: (() => number) | null = null;
+  getExteriorRoomCount: (() => number) | null = null;
+
   /** Galaxy values from landing zone (0-1 per key). */
   private galaxyValues: Record<string, number> = {
     population: 0.5,
@@ -72,6 +76,9 @@ export class EventController implements TickableSystem {
   };
   /** Average time between events (computed from galaxy position). */
   private nTimeBetween = 300;
+
+  /** Callback: auto-save before event execution (Lua: 45s threshold). */
+  onPreEventSave: (() => void) | null = null;
 
   // ── Callbacks ──────────────────────────────────────────────────
   onImmigration: SpawnCharacterFn | null = null;
@@ -246,8 +253,12 @@ export class EventController implements TickableSystem {
       // Max consecutive same-event
       if (def.name === lastType && consecutiveCount >= MAX_CONSECUTIVE_SAME) continue;
 
-      // Room gates (Lua: nMaxUndiscoveredRooms, nMaxExteriorRooms)
-      // These would require room manager access — skip for now (most events don't use them)
+      // Room gates (Lua EventController.lua:602-607 — zero weight when room counts exceed limits)
+      const nHiddenRooms = this.getHiddenRoomCount?.() ?? 0;
+      const nExteriorRooms = this.getExteriorRoomCount?.() ?? 0;
+      if (def.nMaxUndiscoveredRooms !== undefined && def.nMaxUndiscoveredRooms >= 0 && nHiddenRooms >= def.nMaxUndiscoveredRooms) continue;
+      if (def.nMaxExteriorRooms !== undefined && def.nMaxExteriorRooms >= 0 && nExteriorRooms >= def.nMaxExteriorRooms) continue;
+      if (def.nMinExteriorRooms !== undefined && def.nMinExteriorRooms >= 0 && nExteriorRooms < def.nMinExteriorRooms) continue;
 
       let weight = def.weight;
 
@@ -325,6 +336,9 @@ export class EventController implements TickableSystem {
       this._eventFailed(entry);
       return;
     }
+
+    // Auto-save before event execution (Lua EventController:attemptExecuteEvent)
+    this.onPreEventSave?.();
 
     // Event created successfully — start execution
     event.start(GameRules.simTime);

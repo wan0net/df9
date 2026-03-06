@@ -50,6 +50,9 @@ export class Room {
   nPowerDraw = 0;
   nPowerSupply = 0;
 
+  /** Does this room have sufficient power? (Lua Room:hasPower) */
+  get hasPowerFlag(): boolean { return this.nPowerSupply >= 0 && this.nPowerOutput > 0; }
+
   /** Room morale score: sum of object morale scores / room size. */
   nMoraleScore = 0;
 
@@ -281,5 +284,13 @@ export class Room {
   /** Slow tick: update hazard status, visibility, lighting. Round-robin'd by RoomManager. */
   tickSlow(_dt: number): void {
     this.tickVisibility();
+  }
+
+  /** Last combat alert timestamp. */
+  nLastCombatAlert = 0;
+
+  /** Adjoining rooms (connected through doors). Set by RoomManager/PowerSystem contiguity. */
+  getAdjoiningRooms(): Room[] {
+    return this.tContiguousRooms;
   }
 }

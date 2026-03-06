@@ -48,6 +48,7 @@ import {
   IMMIGRATION_ADD_TOPIC_CHANCE,
 } from './characters/Topics';
 import { HintSystem } from './hints/HintSystem';
+import { AutoSave } from './save/AutoSave';
 import { SoundManager } from './audio/SoundManager';
 import { MusicSystem } from './audio/MusicSystem';
 import { SpatialAudio } from './audio/SpatialAudio';
@@ -260,6 +261,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const eventController = new EventController();
   eventController.init();
 
+  // Wire event room gates
+  eventController.getHiddenRoomCount = () => {
+    return roomManager.getRooms().filter(r => r.nLastVisibility === 0).length;
+  };
+  eventController.getExteriorRoomCount = () => {
+    return roomManager.getRooms().filter(r => !r.sealed).length;
+  };
+
   // Wire event callbacks
   eventController.onImmigration = (count) => {
     for (let i = 0; i < count; i++) {
@@ -311,6 +320,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       characterManager.spawnCharacter();
     }
   };
+
   const fire = new Fire();
   fire.init();
   lighting.setFire(fire);
@@ -334,6 +344,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   projectileManager.init();
   characterManager.setProjectileManager(projectileManager);
   const saveLoadSystem = new SaveLoadSystem(grid, roomManager);
+
+  // Auto-save system + pre-event save callback (Lua: auto-save 45s before event)
+  const autoSave = new AutoSave(saveLoadSystem);
+  eventController.onPreEventSave = () => autoSave.saveIfNeeded(45);
 
   // Goal system
   const goalSystem: GoalSystem = new GoalSystem({
@@ -474,6 +488,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   };
   saveLoadSystem.loadTopicsData = (data) => {
     topicsFromSaveData(data);
+  };
+  saveLoadSystem.getFireData = () => fire.getSaveData();
+  saveLoadSystem.loadFireData = (data) => {
+    fire.loadSaveData(data);
   };
 
   // Register subsystems
@@ -626,6 +644,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
       return null;
     },
+    getCorpseCount: () => characterManager.getPickups().filter(p => p.constructor.name === 'Corpse').length,
     onDemolishObject: (obj) => {
       const refund = obj.getVaporizeMatterYield();
       EnvObjectManager.removeObject(obj);
@@ -705,6 +724,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     Malady.updateElapsedTime(gameDt);
     goalSystem.update(gameDt);
     hintSystem.update(gameDt);
+    autoSave.onTick(delta / 1000);
     musicSystem.update(delta / 1000); // Music uses real time, not game time
 
     // Update audio listener position from camera
@@ -1028,6 +1048,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // ── Expose game state for E2E test assertions ─────────────
   (window as any).__df9 = {
     _charMgr: characterManager,
+    _envMgr: EnvObjectManager,
     getPopulation: () => characterManager.getPopulation(),
     getMatter: () => GameRules.nMatter,
     getRoomCount: () => roomManager.getRooms().length,

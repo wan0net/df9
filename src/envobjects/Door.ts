@@ -159,6 +159,18 @@ export class Door extends EnvObject {
     }
   }
 
+  // ── Power override (Lua Door:hasPower — checks EITHER adjacent room) ──
+
+  override hasPower(): boolean {
+    return (this.rEastRoom?.hasPowerFlag ?? false) || (this.rWestRoom?.hasPowerFlag ?? false);
+  }
+
+  /** Sabotage power loss — immediately recalculate door state (Lua Door:sabotagePowerLoss). */
+  sabotagePowerLoss(): void {
+    this.bHasPower = false;
+    this._updateDoorState(false);
+  }
+
   // ── Damage override (Lua Door:takeDamage) ─────────────────────
 
   /** Override damage to track bSmashedOpen. */

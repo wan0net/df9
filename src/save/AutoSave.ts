@@ -32,4 +32,19 @@ export class AutoSave {
       this.saveSystem.saveToStorage('SpacebaseDF9AutoSave');
     }
   }
+
+  /**
+   * Save if enough wall-clock time has elapsed since last save.
+   * Called before event execution (Lua: 45 seconds threshold).
+   */
+  saveIfNeeded(minElapsed = 45): boolean {
+    if (!this.enabled) return false;
+    const now = performance.now() / 1000;
+    if (now - this.lastSaveTime >= minElapsed) {
+      this.lastSaveTime = now;
+      this.saveSystem.saveToStorage('SpacebaseDF9AutoSave');
+      return true;
+    }
+    return false;
+  }
 }

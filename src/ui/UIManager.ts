@@ -81,6 +81,7 @@ export class UIManager {
   private toggleO2Overlay: () => void;
   private getRooms: () => Room[];
   private getPendingBuildCost: (() => { cost: number; tileCount: number; mode: BuildMode } | null) | null = null;
+  private getCorpseCount: (() => number) | null = null;
 
   // HUD elements
   private matterText!: HTMLSpanElement;
@@ -164,6 +165,7 @@ export class UIManager {
     onExecuteCharacter?: (character: Character) => void;
     onDemolishObject?: (obj: EnvObject) => void;
     getPendingBuildCost?: () => { cost: number; tileCount: number; mode: BuildMode } | null;
+    getCorpseCount?: () => number;
   }) {
     this.container = container;
     this.getBuildMode = callbacks.getBuildMode;
@@ -184,6 +186,7 @@ export class UIManager {
     this.toggleO2Overlay = callbacks.toggleO2Overlay;
     this.getRooms = callbacks.getRooms;
     this.getPendingBuildCost = callbacks.getPendingBuildCost ?? null;
+    this.getCorpseCount = callbacks.getCorpseCount ?? null;
 
     this.createUI(callbacks.onSetJob, callbacks);
   }
@@ -892,15 +895,14 @@ export class UIManager {
     const aliveChars = chars.filter(c => c.isAlive());
     if (aliveChars.length > 0) {
       const avgMorale = aliveChars.reduce((sum, c) => sum + c.nMorale, 0) / aliveChars.length;
-      // Map morale from [-100,100] to [0,100] for emoticon
+      // Lua StatusBar: morale 0-100 directly, 5 emoticon levels at 20/40/60/80
       const moralePct = ((avgMorale + 100) / 200) * 100;
       let emoticon: string;
-      if (moralePct <= 10) emoticon = '>:(';
-      else if (moralePct <= 30) emoticon = ':(';
-      else if (moralePct <= 50) emoticon = ':|';
-      else if (moralePct <= 70) emoticon = ':)';
-      else if (moralePct <= 90) emoticon = ':)';
-      else emoticon = ':D';
+      if (moralePct < 20) emoticon = '>:(';       // bigfrown
+      else if (moralePct < 40) emoticon = ':(';    // frown
+      else if (moralePct < 60) emoticon = ':|';    // meh
+      else if (moralePct < 80) emoticon = ':)';    // smile
+      else emoticon = ':D';                         // bigsmile
       this.moraleText.textContent = `${emoticon} ${Math.round(moralePct)}%`;
     } else {
       this.moraleText.textContent = '';
@@ -916,8 +918,8 @@ export class UIManager {
       this.machineHealthText.textContent = '';
     }
 
-    // ── Corpses ───────────────────────────────────────────
-    const corpseCount = chars.filter(c => !c.isAlive()).length;
+    // ── Corpses (Lua: count Corpse pickups, not dead characters) ──
+    const corpseCount = this.getCorpseCount?.() ?? 0;
     if (corpseCount > 0) {
       this.corpseText.textContent = `${corpseCount}`;
     } else {

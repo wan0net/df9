@@ -34,7 +34,8 @@ export const TILE_HEAL_OVER_TIME      = 0.05;
 export const CHARACTER_SAFETY_TOLERANCE = 2;
 
 // Camera
-export const ZOOM_MIN = 0.25;
-export const ZOOM_MAX = 4;
-export const ZOOM_STEP = 0.1;
+/** Lua: MIN_ZOOM=0.75, MAX_ZOOM=6.0, ZOOM_WHEEL_STEP=0.025 */
+export const ZOOM_MIN = 0.75;
+export const ZOOM_MAX = 6.0;
+export const ZOOM_STEP = 0.025;
 export const PAN_SPEED = 10;

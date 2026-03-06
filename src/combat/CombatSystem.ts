@@ -13,6 +13,7 @@ import { WEAPON_DEFS, type WeaponDef } from './WeaponData';
 import type { ProjectileManager } from '../hazards/Projectile';
 import { Base } from '../core/Base';
 import type { TileGrid } from '../world/TileGrid';
+import type { EnvObject } from '../envobjects/EnvObject';
 import { TileType } from '../world/TileTypes';
 import { researchSystem } from '../research/ResearchSystem';
 
@@ -395,6 +396,14 @@ export class CombatSystem {
       return true; // Actually dead
     }
     return false;
+  }
+
+  /**
+   * Attack an environment object (door, machine, etc.), reducing nCondition.
+   * Lua AttackEnemy.lua — rampaging characters attack objects; raiders smash doors.
+   */
+  static attackObject(obj: EnvObject, damage: number): void {
+    obj.damageCondition(damage);
   }
 
   getEngagementCount(): number {

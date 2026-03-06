@@ -67,6 +67,7 @@ export interface SaveData {
   topics?: { tTopics: Record<string, { name: string; category: string }>; counter: number };
   tStats?: BaseStats;
   factionData?: { teamFactions: [number, number][]; nNextTeamID: number };
+  fires?: { tTiles: Record<string, number>; tFlames: Record<string, number> };
 }
 
 export class SaveLoadSystem {
@@ -79,12 +80,14 @@ export class SaveLoadSystem {
   getResearchData: (() => { active: string | null; progress: number; completed: string[] }) | null = null;
   getEventData: (() => ReturnType<EventController['getSaveData']>) | null = null;
   getTopicsData: (() => { tTopics: Record<string, { name: string; category: string }>; counter: number }) | null = null;
+  getFireData: (() => { tTiles: Record<string, number>; tFlames: Record<string, number> }) | null = null;
 
   loadCharacterData: ((data: CharSaveData[]) => void) | null = null;
   loadObjectData: ((data: ObjSaveData[]) => void) | null = null;
   loadResearchData: ((data: { active: string | null; progress: number; completed: string[] }) => void) | null = null;
   loadEventData: ((data: ReturnType<EventController['getSaveData']>) => void) | null = null;
   loadTopicsData: ((data: { tTopics: Record<string, { name: string; category: string }>; counter: number }) => void) | null = null;
+  loadFireData: ((data: { tTiles: Record<string, number>; tFlames: Record<string, number> }) => void) | null = null;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -126,6 +129,7 @@ export class SaveLoadSystem {
       topics: this.getTopicsData?.(),
       tStats: { ...Base.tStats },
       factionData: Base.getFactionSaveData(),
+      fires: this.getFireData?.(),
     };
   }
 
@@ -205,6 +209,7 @@ export class SaveLoadSystem {
     if (data.research) this.loadResearchData?.(data.research);
     if (data.events) this.loadEventData?.(data.events);
     if (data.topics) this.loadTopicsData?.(data.topics);
+    if (data.fires) this.loadFireData?.(data.fires);
 
     return true;
   }
