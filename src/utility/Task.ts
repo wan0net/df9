@@ -5,6 +5,8 @@
 
 import type { Character } from '../characters/Character';
 import type { NeedName } from '../characters/Needs';
+import type { EnvObject } from '../envobjects/EnvObject';
+import { areTilesAdjacent } from '../world/TileGrid';
 
 export const TASK_STATUS = {
   PENDING: 0,
@@ -43,6 +45,9 @@ export abstract class Task {
   /** Activity tags (set from ActivityOption when task is created). */
   tags: Record<string, boolean> = {};
 
+  /** Target environment object (for reservation release on complete/fail). */
+  rTargetObject?: EnvObject;
+
   /** Called when the task starts. */
   start(character: Character) {
     this.character = character;
@@ -60,12 +65,22 @@ export abstract class Task {
   /** Complete the task successfully. */
   complete() {
     this.status = TASK_STATUS.COMPLETE;
+    this._releaseReservation();
     this.onComplete();
   }
 
   /** Fail the task. */
   fail() {
     this.status = TASK_STATUS.FAILED;
+    this._releaseReservation();
+  }
+
+  /** Release object reservation and end interaction when task ends. */
+  private _releaseReservation() {
+    this._endInteraction();
+    if (this.rTargetObject && this.character) {
+      this.rTargetObject.unreserve(this.character.id);
+    }
   }
 
   isComplete(): boolean {
@@ -85,6 +100,55 @@ export abstract class Task {
 
   /** Override: per-tick logic. */
   protected abstract onUpdate(dt: number): void;
+
+  // ── Interaction state machine (Lua Task:tickInteraction) ──────────
+  /** Remaining interaction time (null = not interacting). */
+  nInteracting: number | null = null;
+  /** Object being interacted with. */
+  rInteractionObject: EnvObject | null = null;
+
+  /**
+   * Attempt to start interacting with an object.
+   * Character must be adjacent to a footprint tile of the object.
+   * Returns true if interaction started, false if not adjacent.
+   */
+  attemptInteractWithObject(rObj: EnvObject, nDuration: number): boolean {
+    if (!this.character) return false;
+    const cx = this.character.tileX;
+    const cy = this.character.tileY;
+
+    // Check if character is on or adjacent to the object's tile
+    if (!areTilesAdjacent(cx, cy, rObj.tileX, rObj.tileY, false, true)) {
+      return false;
+    }
+
+    this.nInteracting = nDuration;
+    this.rInteractionObject = rObj;
+    rObj.onInteract(true, this.character);
+    return true;
+  }
+
+  /**
+   * Tick the interaction timer. Returns true when interaction is complete.
+   */
+  tickInteraction(dt: number): boolean {
+    if (this.nInteracting === null) return true;
+    this.nInteracting -= dt;
+    if (this.nInteracting <= 0) {
+      this._endInteraction();
+      return true;
+    }
+    return false;
+  }
+
+  /** End the current interaction and notify the object. */
+  protected _endInteraction(): void {
+    if (this.rInteractionObject && this.character) {
+      this.rInteractionObject.onInteract(false, this.character);
+    }
+    this.rInteractionObject = null;
+    this.nInteracting = null;
+  }
 
   /** Job experience granted on completion (override in subclasses). */
   nJobExperience = 10;

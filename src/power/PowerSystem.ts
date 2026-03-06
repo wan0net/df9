@@ -46,7 +46,14 @@ export class PowerSystem {
         const r = queue.shift()!;
         blob.push(r);
 
+        // Follow door connections and wall-adjacent connections for power
         for (const neighbor of r.tContiguousRooms) {
+          if (!visited.has(neighbor.id)) {
+            visited.add(neighbor.id);
+            queue.push(neighbor);
+          }
+        }
+        for (const neighbor of r.tWallAdjacentRooms) {
           if (!visited.has(neighbor.id)) {
             visited.add(neighbor.id);
             queue.push(neighbor);
@@ -81,17 +88,19 @@ export class PowerSystem {
   }
 
   /**
-   * Compute room contiguity through doors.
-   * Two rooms are contiguous if they share a door tile between them.
+   * Compute room contiguity through doors and wall adjacency.
+   * Two rooms are door-contiguous if they share a door tile between them.
+   * Two rooms are wall-adjacent if a floor tile's diagonal neighbor is a WALL
+   * tile, and that WALL tile's diagonal neighbor is a floor tile in a different room.
    */
   private computeContiguity(rooms: Room[]) {
     // Clear existing
     for (const room of rooms) {
       room.tContiguousRooms = [];
+      room.tWallAdjacentRooms = [];
     }
 
-    // For each room, check if any of its wall neighbors are doors
-    // and if so, find the room on the other side
+    // Pass 1: Door-based contiguity
     for (const room of rooms) {
       for (const tile of room.tiles) {
         const neighbors = this.grid.getDiagonalNeighbors(tile.x, tile.y);
@@ -105,6 +114,28 @@ export class PowerSystem {
             const otherRoom = this.roomManager.getRoomAt(dn.x, dn.y);
             if (otherRoom && otherRoom !== room && !room.tContiguousRooms.includes(otherRoom)) {
               room.tContiguousRooms.push(otherRoom);
+            }
+          }
+        }
+      }
+    }
+
+    // Pass 2: Wall-blob adjacency (power conducts through shared walls)
+    for (const room of rooms) {
+      for (const tile of room.tiles) {
+        const neighbors = this.grid.getDiagonalNeighbors(tile.x, tile.y);
+        for (const n of neighbors) {
+          if (this.grid.get(n.x, n.y) !== TileType.WALL) continue;
+
+          // Found a wall. Check the wall's other neighbors for floor tiles in different rooms
+          const wallNeighbors = this.grid.getDiagonalNeighbors(n.x, n.y);
+          for (const wn of wallNeighbors) {
+            if (this.grid.get(wn.x, wn.y) !== TileType.FLOOR) continue;
+            const otherRoom = this.roomManager.getRoomAt(wn.x, wn.y);
+            if (otherRoom && otherRoom !== room &&
+                !room.tWallAdjacentRooms.includes(otherRoom) &&
+                !room.tContiguousRooms.includes(otherRoom)) {
+              room.tWallAdjacentRooms.push(otherRoom);
             }
           }
         }

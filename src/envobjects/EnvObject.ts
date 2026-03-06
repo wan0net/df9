@@ -6,6 +6,7 @@
 import { EnvObjectDef, tObjects } from './EnvObjectData';
 import { ObjectList, OBJ_ENVOBJECT, type ObjectTag, type TaggableObject } from '../core/ObjectList';
 import type { Room } from '../rooms/Room';
+import type { Character } from '../characters/Character';
 import { researchSystem } from '../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../research/ResearchData';
 
@@ -63,6 +64,33 @@ export class EnvObject implements TaggableObject {
 
   // Interact sprite state
   bUseInteractSprite = false;
+
+  /** Current user interacting with this object (Lua EnvObject.rUser). */
+  rUser: Character | null = null;
+
+  // ── Reservation system (Lua EnvObject capacity gating) ──────────
+  /** Max simultaneous reservations (from tData.nCapacity or default 1). */
+  nMaxReservations = 1;
+  /** Character IDs that have reserved this object. */
+  reservedBy = new Set<number>();
+
+  /** Attempt to reserve this object for a character. Returns true if successful. */
+  reserve(charId: number): boolean {
+    if (this.reservedBy.has(charId)) return true;
+    if (this.reservedBy.size >= this.nMaxReservations) return false;
+    this.reservedBy.add(charId);
+    return true;
+  }
+
+  /** Release a character's reservation on this object. */
+  unreserve(charId: number): void {
+    this.reservedBy.delete(charId);
+  }
+
+  /** Whether this object is fully reserved. */
+  isFullyReserved(): boolean {
+    return this.reservedBy.size >= this.nMaxReservations;
+  }
 
   // Construction state
   bBuilt = true;
@@ -284,11 +312,18 @@ export class EnvObject implements TaggableObject {
 
   // ── Interact sprite ─────────────────────────────────────────
 
-  /** Toggle the interact sprite (e.g. fridge_open when character uses it). */
-  onInteract(bStart: boolean) {
-    if (!this.tData.interactSprite) return;
-    this.bUseInteractSprite = bStart;
-    this._notifyRenderer();
+  /** Toggle the interact sprite and track user (Lua EnvObject:onInteract). */
+  onInteract(bStart: boolean, rChar?: Character) {
+    if (this.tData.interactSprite) {
+      this.bUseInteractSprite = bStart;
+      this._notifyRenderer();
+    }
+    this.rUser = (bStart && rChar) ? rChar : null;
+  }
+
+  /** Get the character currently using this object (Lua EnvObject:getUser). */
+  getUser(): Character | null {
+    return this.rUser;
   }
 
   /** Logical functionality grouping. Falls back to object name. */

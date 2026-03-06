@@ -6,11 +6,11 @@
 import { Event } from './Event';
 
 export class ImmigrationEvent extends Event {
-  readonly name = 'Immigration';
-  readonly description = 'New crew members arriving';
+  readonly name: string = 'Immigration';
+  readonly description: string = 'New crew members arriving';
 
   /** Number of immigrants for this event. */
-  private immigrantCount: number;
+  protected immigrantCount: number;
 
   constructor() {
     super();
@@ -19,6 +19,11 @@ export class ImmigrationEvent extends Event {
 
   getImmigrantCount(): number {
     return this.immigrantCount;
+  }
+
+  /** Override immigrant count (used by TraderEvent). */
+  setImmigrantCount(count: number) {
+    this.immigrantCount = count;
   }
 
   protected onUpdate(dt: number) {

@@ -161,6 +161,20 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceHostile: 0.66,
     nPopulationDelta: -1,
   },
+  Trader: {
+    name: 'Trader',
+    sEventType: 'traderEvents',
+    nDefaultWeight: 25,
+    weight: 25,
+    minPopulation: 6,
+    maxPopulation: 6,
+    minTime: 720, // 60*12
+    bHostile: false,
+    sExpMod: 'population',
+    nChanceObey: 0.66,
+    nChanceHostile: 0,
+    nPopulationDelta: 1,
+  },
   CompoundEvent: {
     name: 'Compound Event',
     sEventType: 'CompoundEvent',

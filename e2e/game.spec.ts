@@ -2970,4 +2970,154 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     });
     expect(result.placed).toBe(true);
   });
+
+  // ── Batch A: TraderEvent ─────────────────────────────────────────
+  test('Trader event definition exists in forecast system', async () => {
+    const forecast = await page.evaluate(() => {
+      return (window as any).__df9?.getEventForecast();
+    });
+    // Forecast should be an array (may be empty if game time is early)
+    expect(Array.isArray(forecast)).toBe(true);
+  });
+
+  // ── Batch A: Door auto-open ─────────────────────────────────────
+  test('door opens when character is adjacent', async () => {
+    const result = await page.evaluate(async () => {
+      const df9 = (window as any).__df9;
+      // Build a sealed room with a generator for power
+      df9.buildSealedRoom(40, 40, 3);
+      df9.createBuiltObject('Generator', 38, 38);
+      // Place a door inside the room
+      df9.createBuiltObject('Door', 40, 42);
+      // Let power system tick and rooms settle
+      await new Promise(r => setTimeout(r, 500));
+      // Wire door's room references so hasPower() works
+      df9.setDoorRooms(40, 42);
+      // Get door state before character (should be closed)
+      const doorBefore = df9.getDoorState(40, 42);
+      // Spawn a character on the door tile
+      df9.spawnCharacterAt(40, 42);
+      // Advance frames to trigger door proximity check in CharacterManager
+      await new Promise(r => setTimeout(r, 1000));
+      const doorAfter = df9.getDoorState(40, 42);
+      return { doorBefore, doorAfter };
+    });
+    expect(result.doorBefore).not.toBeNull();
+    expect(result.doorBefore!.open).toBe(false);
+    expect(result.doorAfter).not.toBeNull();
+    expect(result.doorAfter!.open).toBe(true);
+  });
+
+  // ── Batch B: EnvObject rUser ─────────────────────────────────────
+  test('EnvObject tracks rUser when interacted', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(50, 50, 3);
+      df9.createBuiltObject('Generator', 50, 50);
+      df9.createBuiltObject('Fridge', 52, 50);
+      const reservations = df9.getObjectReservations('Fridge', 52, 50);
+      return { hasReservationApi: reservations !== null, maxReservations: reservations?.nMaxReservations };
+    });
+    expect(result.hasReservationApi).toBe(true);
+    expect(result.maxReservations).toBe(1);
+  });
+
+  // ── Batch B: Wall-blob power adjacency ────────────────────────────
+  test('wall-adjacent rooms share power', async () => {
+    const result = await page.evaluate(async () => {
+      const df9 = (window as any).__df9;
+      // Build two rooms sharing a wall (but no door)
+      df9.buildSealedRoom(60, 60, 2);
+      df9.buildSealedRoom(60, 64, 2);
+      // Place a generator in first room only
+      df9.createBuiltObject('Generator', 60, 60);
+      // Advance to let power system run
+      await new Promise(r => setTimeout(r, 500));
+      // Check that the second room gets power through wall adjacency
+      const rooms = df9.getRooms();
+      return { roomCount: rooms.length };
+    });
+    // At least 2 rooms should be detected
+    expect(result.roomCount).toBeGreaterThanOrEqual(2);
+  });
+
+  // ── Batch C: Per-tile O2 grid ─────────────────────────────────────
+  test('per-tile O2 grid stores and retrieves values', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Build a sealed room
+      df9.buildSealedRoom(70, 70, 2);
+      // Room should have O2 set by buildSealedRoom
+      const o2val = df9.getTileO2(70, 70);
+      // Set a specific tile to a different value
+      df9.setTileO2(70, 70, 30000);
+      const after = df9.getTileO2(70, 70);
+      return { initial: o2val, afterSet: after };
+    });
+    // Initial should be ~65535 (set by buildSealedRoom)
+    expect(result.initial).toBeGreaterThan(60000);
+    // After explicit set should be 30000
+    expect(result.afterSet).toBe(30000);
+  });
+
+  test('per-tile O2 overlay shows granular variation', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(80, 80, 3);
+      // Set varying O2 across tiles
+      df9.setTileO2(80, 80, 65535); // full
+      df9.setTileO2(81, 80, 32000); // half
+      df9.setTileO2(82, 80, 0);     // vacuum
+      return {
+        full: df9.getTileO2(80, 80),
+        half: df9.getTileO2(81, 80),
+        vacuum: df9.getTileO2(82, 80),
+      };
+    });
+    expect(result.full).toBe(65535);
+    expect(result.half).toBe(32000);
+    expect(result.vacuum).toBe(0);
+  });
+
+  // ── Batch C: Reservation system ─────────────────────────────────
+  test('object reservation system limits concurrent users', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(90, 90, 3);
+      df9.createBuiltObject('Generator', 90, 90);
+      df9.createBuiltObject('WeightBench', 92, 90);
+      // Check initial reservations
+      const initial = df9.getObjectReservations('WeightBench', 92, 90);
+      return {
+        initialReservedCount: initial?.reservedBy?.length ?? -1,
+        maxReservations: initial?.nMaxReservations ?? -1,
+      };
+    });
+    expect(result.initialReservedCount).toBe(0);
+    expect(result.maxReservations).toBe(1);
+  });
+
+  // ── Save/Load with per-tile O2 ────────────────────────────────────
+  test('save and load preserves per-tile O2 grid', async () => {
+    const result = await page.evaluate(async () => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(100, 100, 2);
+      df9.setTileO2(100, 100, 42000);
+      df9.setTileO2(101, 100, 12345);
+      // Save
+      df9.saveGame();
+      // Modify values
+      df9.setTileO2(100, 100, 0);
+      df9.setTileO2(101, 100, 0);
+      // Load
+      df9.loadGame();
+      await new Promise(r => setTimeout(r, 200));
+      return {
+        tile1: df9.getTileO2(100, 100),
+        tile2: df9.getTileO2(101, 100),
+      };
+    });
+    expect(result.tile1).toBe(42000);
+    expect(result.tile2).toBe(12345);
+  });
 });

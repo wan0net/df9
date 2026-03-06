@@ -72,6 +72,8 @@ export interface SaveData {
   commands?: { type: string; tileX: number; tileY: number; objectName?: string }[];
   pickups?: { sName: string; tileX: number; tileY: number }[];
   powerHolidayEndTime?: number | null;
+  /** Per-tile O2 grid (RLE compressed). */
+  o2Grid?: number[];
 }
 
 export class SaveLoadSystem {
@@ -141,6 +143,7 @@ export class SaveLoadSystem {
       commands: this.getCommandData?.(),
       pickups: this.getPickupData?.(),
       powerHolidayEndTime: GameRules.powerHolidayEndTime,
+      o2Grid: this.grid.getO2Data(),
     };
   }
 
@@ -206,15 +209,34 @@ export class SaveLoadSystem {
     this.roomManager.markDirty([]);
     this.roomManager.update();
 
-    // Restore per-room oxygen from saved roomZones
-    if (data.roomZones) {
+    // Restore per-tile O2 grid if available
+    if (data.o2Grid) {
+      this.grid.loadO2Data(data.o2Grid);
+    }
+
+    // Restore per-room oxygen from saved roomZones (backwards compat for saves without o2Grid)
+    if (data.roomZones && !data.o2Grid) {
       const rooms = this.roomManager.getRooms();
       for (const rz of data.roomZones) {
-        // Match by room ID (preserved via overlap matching in detectRooms)
         const room = rooms.find(r => r.id === rz.roomId);
         if (room && rz.oxygen !== undefined) {
           room.oxygen = rz.oxygen;
+          // Also initialize per-tile O2 from room-level value
+          const tileVal = Math.round((rz.oxygen / 255) * 65535);
+          for (const t of room.tiles) {
+            this.grid.setO2(t.x, t.y, tileVal);
+          }
         }
+      }
+    } else if (data.roomZones) {
+      // With o2Grid, still restore room zones but derive oxygen from tiles
+      const rooms = this.roomManager.getRooms();
+      for (const room of rooms) {
+        if (room.tiles.length === 0) continue;
+        let sum = 0;
+        for (const t of room.tiles) sum += this.grid.getO2(t.x, t.y);
+        room.oxygen = Math.round((sum / room.tiles.length / 65535) * 255);
+        room.invalidateOxygenScore();
       }
     }
 

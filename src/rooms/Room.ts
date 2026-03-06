@@ -44,6 +44,8 @@ export class Room {
 
   /** Rooms contiguous through doors (populated in Phase 6). */
   tContiguousRooms: Room[] = [];
+  /** Rooms adjacent through shared wall tiles (for power distribution). */
+  tWallAdjacentRooms: Room[] = [];
 
   /** Power fields (populated in Phase 6). */
   nPowerOutput = 0;
@@ -289,6 +291,16 @@ export class Room {
   }
 
   // ── Tick methods — mirrors Room.lua _tickRoom ─────────────────────────────
+
+  /** Whether this room should receive slow ticks (Lua Room:shouldTickRoom).
+   *  Player rooms and recently-visible rooms always tick. Others are culled. */
+  shouldTickRoom(): boolean {
+    if (this.nTeam === TEAM_ID_PLAYER) return true;
+    if (this.nLastVisibility === VISIBILITY_FULL) return true;
+    if (this.bForceSim) return true;
+    if (this.zoneObj && (this.zoneObj as any).bForceSim === true) return true;
+    return false;
+  }
 
   /** Fast tick: update character count, burning status. Called every frame. */
   tickFast(_dt: number): void {

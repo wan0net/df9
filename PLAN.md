@@ -506,3 +506,4 @@ These are intentional differences due to engine/platform:
 | 2026-03-06 | Batches 13-16: animated matter counter, pub capacity, door status, death react logs, malady alert, FirePanel gate, emergency status, goal suppression, FinalSiege, remove Spawn Crew. 117 E2E tests. |
 | 2026-03-06 | Fix character rotation: 8-direction compass snapping, 30° X-tilt, SE initial facing. |
 | 2026-03-06 | Batches 17-20: morale logging, stuff satisfaction, corpse types, DropOffCorpse, room hover, vacuum death, power/lighting fix, state flags, goal progress. 123 E2E tests. |
+| 2026-03-06 | 9 architectural features for Lua parity: TraderEvent, door auto-open, EnvObject rUser/onInteract, room visibility culling, wall-blob adjacency power, reservation system, task interaction state machine (3-phase walk→interact→tick), per-tile O2 grid (Uint16Array + RLE save/load). 8 new E2E tests. 150 tests passing. |

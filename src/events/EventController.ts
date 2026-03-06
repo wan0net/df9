@@ -13,6 +13,7 @@ import { BreachingEvent } from './BreachingEvent';
 import { DerelictEvent } from './DerelictEvent';
 import { HostileDockingEvent } from './HostileDockingEvent';
 import { CompoundEvent } from './CompoundEvent';
+import { TraderEvent } from './TraderEvent';
 import {
   EVENT_DEFS, type EventDef,
   FORECAST_SIZE, FORECAST_ALERT_TIME,
@@ -446,6 +447,14 @@ export class EventController implements TickableSystem {
           Base.addAlert('hostile', `Hostile ship has docked — ${count} raider${count > 1 ? 's' : ''} boarding!`);
         };
         return hostileDockEvent;
+      }
+      case 'Trader': {
+        const traderEvent = new TraderEvent();
+        traderEvent.onCompleteCallback = () => {
+          this.onImmigration?.(1);
+          Base.addAlert('immigration', 'A trader has arrived!');
+        };
+        return traderEvent;
       }
       case 'Compound Event': {
         this.fireCompoundEvent();

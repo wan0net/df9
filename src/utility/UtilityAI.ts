@@ -34,6 +34,10 @@ export class UtilityAI {
       if (bestOption.tags) {
         task.tags = { ...bestOption.tags } as Record<string, boolean>;
       }
+      // Transfer target object for reservation system
+      if (bestOption.targetObject) {
+        task.rTargetObject = bestOption.targetObject;
+      }
       return task;
     }
 

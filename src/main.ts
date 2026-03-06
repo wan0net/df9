@@ -27,7 +27,7 @@ import { OxygenSystem } from './oxygen/OxygenSystem';
 import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
-import { Door } from './envobjects/Door';
+import { Door, tDoorsByAddr } from './envobjects/Door';
 import { EnvObject } from './envobjects/EnvObject';
 import { tObjects, resolveAlias, getObjectData, getObjectsByFunctionality as getObjsByFunc } from './envobjects/EnvObjectData';
 import { ObjectPlacement } from './building/ObjectPlacement';
@@ -183,7 +183,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const buildCursor = new BuildCursor(threeRenderer.scene, grid);
   const roomManager = new RoomManager(grid);
   tileRenderer.setRoomManager(roomManager);
-  const oxygenSystem = new OxygenSystem(roomManager);
+  const oxygenSystem = new OxygenSystem(roomManager, grid);
   const characterManager = new CharacterManager(grid, roomManager);
   const objectPlacement = new ObjectPlacement(grid, roomManager);
 
@@ -1000,11 +1000,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   function renderO2Overlay() {
     for (const room of roomManager.getRooms()) {
-      const o2ratio = room.oxygen / 255;
-      const r = Math.floor((1 - o2ratio) * 255);
-      const g = Math.floor(o2ratio * 255);
-      const tint = (r << 16) | (g << 8) | 0x40;
       for (const t of room.tiles) {
+        const tileO2 = grid.getO2(t.x, t.y);
+        const o2ratio = tileO2 / 65535;
+        const r = Math.floor((1 - o2ratio) * 255);
+        const g = Math.floor(o2ratio * 255);
+        const tint = (r << 16) | (g << 8) | 0x40;
         tileRenderer.setTileTint(t.x, t.y, tint);
       }
     }
@@ -1431,7 +1432,36 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     },
     setRoomOxygen: (roomId: number, o2: number) => {
       const room = roomManager.getRooms().find(r => r.id === roomId);
-      if (room) { room.oxygen = o2; room.invalidateOxygenScore(); }
+      if (room) { oxygenSystem.setRoomO2(room, o2); }
+    },
+    /** Get per-tile O2 value (0-65535 Lua scale). */
+    getTileO2: (x: number, y: number) => grid.getO2(x, y),
+    /** Set per-tile O2 value. */
+    setTileO2: (x: number, y: number, val: number) => grid.setO2(x, y, val),
+    /** Get door state at tile. Returns { open, locked, operation } or null. */
+    getDoorState: (x: number, y: number) => {
+      const door = tDoorsByAddr.get(`${x},${y}`);
+      if (!door) return null;
+      return { open: door.isOpen(), locked: door.isLocked(), operation: door.getOperation(), state: door.state, hasPower: door.hasPower(), characterNearby: (door as any).characterNearby };
+    },
+    /** Force door rooms so hasPower() works in tests. */
+    setDoorRooms: (x: number, y: number) => {
+      const door = tDoorsByAddr.get(`${x},${y}`);
+      if (!door) return false;
+      const room = roomManager.getRoomAt(x, y);
+      if (room) {
+        door.updateSpaceStatus(room, room);
+        return true;
+      }
+      return false;
+    },
+    /** Get object reservation info. */
+    getObjectReservations: (name: string, x: number, y: number) => {
+      const obj = EnvObjectManager.getObjects().find(
+        (o: any) => o.sName === name && o.tileX === x && o.tileY === y
+      );
+      if (!obj) return null;
+      return { reservedBy: Array.from(obj.reservedBy), nMaxReservations: obj.nMaxReservations, rUser: obj.rUser?.id ?? null };
     },
     getCharacterSuffocation: (charId: number) => {
       const char = characterManager.getAllCharacters().find(c => c.id === charId);
@@ -1530,7 +1560,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         if (room && !seen.has(room.id)) {
           seen.add(room.id);
           room.sealed = true;
-          room.oxygen = 255;
+          oxygenSystem.setRoomO2(room, 255);
         }
       }
       return tiles;

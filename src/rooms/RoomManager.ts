@@ -72,7 +72,14 @@ export class RoomManager {
     }
     if (this.rooms.length > 0) {
       this.slowTickIdx = this.slowTickIdx % this.rooms.length;
-      this.rooms[this.slowTickIdx].tickSlow(dt);
+      const room = this.rooms[this.slowTickIdx];
+      // Always update visibility (lightweight), skip full tickSlow for culled rooms
+      if (room.shouldTickRoom()) {
+        room.tickSlow(dt);
+      } else {
+        // Still tick visibility so shouldTickRoom() stays current
+        room.tickVisibility();
+      }
       this.slowTickIdx++;
     }
   }

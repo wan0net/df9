@@ -170,11 +170,17 @@ export function getBestOpenNeighbor(
   return [options[0].nx, options[0].ny, options[0].d];
 }
 
+/** Max per-tile O2 value (Lua scale: 0-65535). */
+export const O2_MAX = 65535;
+
 export class TileGrid {
   readonly width = GRID_W;
   readonly height = GRID_H;
   private data: Uint16Array;
   private dirty: Set<number> = new Set();
+
+  /** Per-tile oxygen grid (0-65535 Lua scale). Parallel to tile data. */
+  readonly o2: Uint16Array;
 
   /**
    * Sparse per-tile HP tracking — only populated when a tile takes damage.
@@ -188,6 +194,7 @@ export class TileGrid {
   constructor() {
     this.data = new Uint16Array(GRID_W * GRID_H);
     this.data.fill(TileType.SPACE);
+    this.o2 = new Uint16Array(GRID_W * GRID_H);
   }
 
   private idx(x: number, y: number): number {
@@ -322,5 +329,55 @@ export class TileGrid {
   loadTileHPData(data: [number, number][]) {
     this.tileHP.clear();
     for (const [idx, hp] of data) this.tileHP.set(idx, hp);
+  }
+
+  // ── Per-tile O2 ──────────────────────────────────────────────────
+
+  /** Get O2 level at tile (0-65535 Lua scale). */
+  getO2(x: number, y: number): number {
+    if (!this.inBounds(x, y)) return 0;
+    return this.o2[this.idx(x, y)];
+  }
+
+  /** Set O2 level at tile (clamped to 0-65535). */
+  setO2(x: number, y: number, val: number): void {
+    if (!this.inBounds(x, y)) return;
+    this.o2[this.idx(x, y)] = Math.max(0, Math.min(O2_MAX, val)) | 0;
+  }
+
+  /** Add O2 to a tile (clamped). */
+  addO2(x: number, y: number, amount: number): void {
+    if (!this.inBounds(x, y)) return;
+    const i = this.idx(x, y);
+    this.o2[i] = Math.max(0, Math.min(O2_MAX, this.o2[i] + amount)) | 0;
+  }
+
+  /** Serialize O2 grid with RLE compression. */
+  getO2Data(): number[] {
+    const result: number[] = [];
+    let i = 0;
+    const len = this.o2.length;
+    while (i < len) {
+      const val = this.o2[i];
+      let count = 1;
+      while (i + count < len && this.o2[i + count] === val && count < 65535) {
+        count++;
+      }
+      result.push(count, val);
+      i += count;
+    }
+    return result;
+  }
+
+  /** Restore O2 grid from RLE data. */
+  loadO2Data(data: number[]): void {
+    let pos = 0;
+    for (let i = 0; i < data.length; i += 2) {
+      const count = data[i];
+      const val = data[i + 1];
+      for (let j = 0; j < count && pos < this.o2.length; j++) {
+        this.o2[pos++] = val;
+      }
+    }
   }
 }

@@ -6,6 +6,7 @@
 
 import type { Task, NeedAdvertisement } from './Task';
 import type { Character } from '../characters/Character';
+import type { EnvObject } from '../envobjects/EnvObject';
 import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT } from '../characters/CharacterConstants';
 import { isoSquareDist } from '../core/MiscUtil';
 
@@ -79,6 +80,9 @@ export class ActivityOption {
 
   /** Personality trait gates. */
   personalityGates: PersonalityGates;
+
+  /** Target environment object (for reservation system). */
+  targetObject?: EnvObject;
 
   constructor(
     task: Task,
@@ -170,6 +174,12 @@ export class ActivityOption {
     if (!this.meetsPrerequisites(character)) return -Infinity;
     if (!this.meetsTags(character)) return -Infinity;
     if (!this.meetsPersonalityGates(character)) return -Infinity;
+
+    // Reservation check: if target object is fully reserved by others, skip
+    if (this.targetObject && this.targetObject.isFullyReserved() &&
+        !this.targetObject.reservedBy.has(character.id)) {
+      return -Infinity;
+    }
 
     let score = this.basePriority;
 

@@ -17,6 +17,7 @@ import { Room } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
 import { findPath, WALKABLE_DEFAULT, WALKABLE_SPACEWALK } from '../pathfinding/AStar';
 import { INITIAL_CREW } from '../config';
+import { GameRules } from '../core/GameRules';
 import { UtilityAI } from '../utility/UtilityAI';
 import { ActivityOption } from '../utility/ActivityOption';
 import { WanderAround } from '../utility/tasks/WanderAround';
@@ -63,6 +64,7 @@ import { IncapacitatedOnFloor } from '../utility/tasks/IncapacitatedOnFloor';
 import { PRIORITY } from '../utility/ActivityOption';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
+import { tDoorsByAddr, Door } from '../envobjects/Door';
 import { Base } from '../core/Base';
 import { Corpse, CORPSE_TYPE_FRIENDLY, CORPSE_TYPE_RAIDER, CORPSE_TYPE_MONSTER } from '../pickups/Corpse';
 import { CombatSystem, isHostile } from '../combat/CombatSystem';
@@ -220,7 +222,13 @@ export class CharacterManager {
       // Register character with room — add to current room's tCharacters
       // (Old room removal happens via room rebuild clearing tCharacters, or
       //  we clear all rooms' tCharacters at start of this loop — see below.)
-      if (charRoom) charRoom.tCharacters.add(char.id);
+      if (charRoom) {
+        charRoom.tCharacters.add(char.id);
+        // Update room last-seen time when player-team character is present
+        if (char.tStats.nTeam === TEAM_ID_PLAYER) {
+          charRoom.nLastSeen = GameRules.elapsedTime;
+        }
+      }
 
       // Update O2 need from room + suffocation (Lua Character._tickOxygen)
       const room = charRoom;
@@ -276,6 +284,37 @@ export class CharacterManager {
 
       // Update renderer
       this.characterRenderer?.updateCharacter(char);
+    }
+
+    // Door auto-open proximity (Lua Door:setCharacterNearby)
+    // For each door, check if any character is on or adjacent to it
+    if (tDoorsByAddr.size > 0) {
+      for (const [key, door] of tDoorsByAddr) {
+        let nearby = false;
+        for (const char of this.characters) {
+          if (!char.isAlive()) continue;
+          // Character is on the door tile
+          if (char.tileX === door.tileX && char.tileY === door.tileY) {
+            nearby = true;
+            break;
+          }
+          // Character is on the second tile (airlock)
+          if (door.secondTileX >= 0 && char.tileX === door.secondTileX && char.tileY === door.secondTileY) {
+            nearby = true;
+            break;
+          }
+          // Character is adjacent to door (diamond neighbors)
+          const neighbors = this.grid.getDiagonalNeighbors(door.tileX, door.tileY);
+          for (const n of neighbors) {
+            if (n && char.tileX === n.x && char.tileY === n.y) {
+              nearby = true;
+              break;
+            }
+          }
+          if (nearby) break;
+        }
+        door.setCharacterNearby(nearby);
+      }
     }
 
     // Fire damage (Lua tickFireDamage: onFire OR standing on fire tile)
@@ -410,6 +449,11 @@ export class CharacterManager {
         // Register with room (Lua: Room:addProp for pickups)
         corpse.rRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
         this.pickups.push(corpse);
+
+        // Release any object reservations held by the dead character
+        if (char.currentTask?.rTargetObject) {
+          char.currentTask.rTargetObject.unreserve(char.id);
+        }
 
         // Disengage from combat
         this.combatSystem.disengage(char.id);
@@ -788,22 +832,26 @@ export class CharacterManager {
     ];
     for (const food of foodSources) {
       if (!food.bBuilt || !food.isFunctioning()) continue;
-      options.push(new ActivityOption(
+      const opt = new ActivityOption(
         new Eat(),
         food.tileX, food.tileY,
         2,
-      ));
+      );
+      opt.targetObject = food;
+      options.push(opt);
     }
 
     // ── Maintain damaged objects ─────────────────────────────
     for (const obj of EnvObjectManager.getObjects()) {
       if (!obj.bBuilt || !obj.needsMaintenance()) continue;
       const priority = job === TECHNICIAN ? 10 : 2;
-      options.push(new ActivityOption(
+      const opt = new ActivityOption(
         new MaintainEnvObject(obj),
         obj.tileX, obj.tileY,
         priority,
-      ));
+      );
+      opt.targetObject = obj;
+      options.push(opt);
     }
 
     // ── Combat response: attack hostiles ────────────────────
@@ -960,21 +1008,25 @@ export class CharacterManager {
     // ── Hobby: Listen to Jukebox ──────────────────────────────
     for (const jukebox of EnvObjectManager.getObjectsByType('Jukebox')) {
       if (!jukebox.bBuilt || !jukebox.isFunctioning()) continue;
-      options.push(new ActivityOption(
+      const opt = new ActivityOption(
         new ListenToJukebox(),
         jukebox.tileX, jukebox.tileY,
         2,
-      ));
+      );
+      opt.targetObject = jukebox;
+      options.push(opt);
     }
 
     // ── Hobby: Lift at weight bench ─────────────────────────
     for (const bench of EnvObjectManager.getObjectsByType('WeightBench')) {
       if (!bench.bBuilt || !bench.isFunctioning()) continue;
-      options.push(new ActivityOption(
+      const opt = new ActivityOption(
         new LiftAtWeightBench(),
         bench.tileX, bench.tileY,
         2,
-      ));
+      );
+      opt.targetObject = bench;
+      options.push(opt);
     }
 
     // ── Hobby: Work out (no gym needed) ─────────────────────
@@ -1166,12 +1218,14 @@ export class CharacterManager {
     if (job === BARTENDER) {
       for (const table of EnvObjectManager.getObjectsByType('StandingTable')) {
         if (!table.bBuilt) continue;
-        options.push(new ActivityOption(
+        const opt = new ActivityOption(
           new ServeFoodAtTable(),
           table.tileX, table.tileY,
           6 + shiftBoost,
           { tags: { Job: BARTENDER, WorkShift: true } },
-        ));
+        );
+        opt.targetObject = table;
+        options.push(opt);
       }
     }
 
@@ -1240,6 +1294,10 @@ export class CharacterManager {
   private assignTask(char: Character, task: Task) {
     char.currentTask = task;
     char.onNewTaskStarted(task);
+    // Reserve target object if applicable
+    if (task.rTargetObject) {
+      task.rTargetObject.reserve(char.id);
+    }
     task.start(char);
 
     // Path to task target if not already there
