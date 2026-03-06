@@ -256,7 +256,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Wire EnvObjectManager lifecycle → EnvObjectRenderer
   EnvObjectManager.onObjectCreated = (id, obj) => {
-    envObjRenderer.addObject(String(id), obj.tileX, obj.tileY, obj.sName, obj.bBuilt, obj.bFlipX);
+    envObjRenderer.addObject(String(id), obj.tileX, obj.tileY, obj.sName, obj.bBuilt, obj.bFlipX, obj.bFlipY, obj.tData.againstWall);
     // Re-render the tile so door sprite is correct immediately
     tileRenderer.rerenderTile(obj.tileX, obj.tileY);
   };

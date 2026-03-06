@@ -26,8 +26,10 @@ export class EnvObjectRenderer {
   }
 
   /** Add an object sprite at a tile position.
-   *  @param bFlipX — mirror the sprite horizontally (Lua setScl(-1,1)). */
-  addObject(id: string, tileX: number, tileY: number, objectType: string, built = true, bFlipX = false) {
+   *  @param bFlipX — mirror the sprite horizontally (Lua setScl(-1,1)).
+   *  @param bFlipY — vertical flip (determines wall direction for againstWall objects).
+   *  @param bAgainstWall — if true, shift sprite toward the adjacent wall. */
+  addObject(id: string, tileX: number, tileY: number, objectType: string, built = true, bFlipX = false, bFlipY = false, bAgainstWall = false) {
     // Remove existing if re-adding
     this.removeObject(id);
 
@@ -44,9 +46,30 @@ export class EnvObjectRenderer {
     // Position: center on the tile footprint, sprite extends upward
     const footprintW = (objDef?.width ?? 1) * TILE_W;
     const footprintH = (objDef?.height ?? 1) * TILE_H;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    // Lua anchors ALL sprites at TILE_LEFT_TOP with "left","bottom" alignment.
+    // Wall-mounted objects have artwork offset within their canvas to appear against
+    // the wall. Shift againstWall objects toward their wall edge to match.
+    // Wall direction from bFlipX/bFlipY (per _getPropFootprint):
+    //   !flipX,!flipY → wall at NW;  flipX,!flipY → wall at NE
+    //   !flipX, flipY → wall at SW;  flipX, flipY → wall at SE
+    if (bAgainstWall) {
+      // Lua anchors sprites at TILE_LEFT_TOP, but for a 1-tile-wide sprite
+      // (128px on 128px tile) horizontal positioning is identical to centering.
+      // The sprite artwork has the object drawn against one edge of its canvas,
+      // creating the visual wall-adjacency. Apply a small shift toward the wall
+      // to compensate for the vertical centering difference vs MOAI's bottom alignment.
+      const dx = bFlipX ? 1 : -1;
+      const dy = bFlipY ? 1 : -1;
+      offsetX = dx * TILE_HALF_W * 0.25;
+      offsetY = dy * TILE_HALF_H * 0.25;
+    }
+
     mesh.position.set(
-      pos.x + footprintW / 2,
-      -(pos.y + footprintH / 2),
+      pos.x + footprintW / 2 + offsetX,
+      -(pos.y + footprintH / 2 + offsetY),
       15000 + pos.y + TILE_HALF_H,
     );
 
