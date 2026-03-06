@@ -32,6 +32,7 @@ export class InspectorPanel {
   private onExecuteCharacter: ((character: Character) => void) | null = null;
   private onDemolishObject: ((obj: EnvObject) => void) | null = null;
   private getBrigRooms: (() => Room[]) | null = null;
+  private getRoomForChar: ((char: Character) => Room | null) | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -42,6 +43,7 @@ export class InspectorPanel {
       onExecuteCharacter?: (character: Character) => void;
       onDemolishObject?: (obj: EnvObject) => void;
       getBrigRooms?: () => Room[];
+      getRoomForChar?: (char: Character) => Room | null;
     },
   ) {
     this.onSetJob = callbacks.onSetJob;
@@ -50,6 +52,7 @@ export class InspectorPanel {
     this.onExecuteCharacter = callbacks.onExecuteCharacter ?? null;
     this.onDemolishObject = callbacks.onDemolishObject ?? null;
     this.getBrigRooms = callbacks.getBrigRooms ?? null;
+    this.getRoomForChar = callbacks.getRoomForChar ?? null;
 
     this.el = document.createElement('div');
     this.el.id = 'inspector-panel';
@@ -81,6 +84,16 @@ export class InspectorPanel {
     if (!this.entity) {
       this.el.style.display = 'none';
       return;
+    }
+
+    // Auto-close if inspected object was destroyed (condition <= 0)
+    if (this.entity.type === 'object' && this.entity.data.isDestroyed()) {
+      this.setEntity(null);
+      return;
+    }
+    // Auto-close if inspected character was removed
+    if (this.entity.type === 'character' && !this.entity.data.isAlive() && this.entity.data.getHP() <= 0) {
+      // Keep showing dead characters for inspection, but could auto-close after decay
     }
 
     this.contentEl.innerHTML = '';
@@ -159,13 +172,26 @@ export class InspectorPanel {
     hpDiv.innerHTML = this.bar('HP', char.getHP(), char.tStats.nMaxHP, isDead ? '#f44' : '#4f4');
     header.appendChild(hpDiv);
 
-    const infoDiv = document.createElement('div');
-    infoDiv.style.cssText = 'display:flex;justify-content:space-between;margin-top:4px;';
-    infoDiv.innerHTML = `
-      <span>Morale: ${char.nMorale}</span>
-      <span>Task: ${char.currentTask?.name ?? (isDead ? 'Dead' : 'Idle')}</span>
-    `;
-    header.appendChild(infoDiv);
+    // Activity text (current task description)
+    const activityDiv = document.createElement('div');
+    activityDiv.style.cssText = 'margin-top:4px;color:#aaa;font-size:11px;';
+    const taskName = char.currentTask?.name ?? (isDead ? 'Dead' : 'Idle');
+    activityDiv.textContent = taskName;
+    header.appendChild(activityDiv);
+
+    // Location text (room name or "Space")
+    const locationDiv = document.createElement('div');
+    locationDiv.style.cssText = 'display:flex;justify-content:space-between;margin-top:2px;';
+    let locationText = 'Space';
+    if (!char.bSpacewalking) {
+      const room = this.getRoomForChar?.(char);
+      if (room?.uniqueZoneName) locationText = room.uniqueZoneName;
+      else if (room) locationText = `Room ${room.id}`;
+      else locationText = `(${char.tileX}, ${char.tileY})`;
+    }
+    const moraleText = isDead ? 'Dead' : `Morale: ${char.nMorale}`;
+    locationDiv.innerHTML = `<span>${moraleText}</span><span style="color:#888">${this.escapeHtml(locationText)}</span>`;
+    header.appendChild(locationDiv);
 
     this.contentEl.appendChild(header);
 
@@ -448,9 +474,8 @@ export class InspectorPanel {
 
   private renderObject(obj: EnvObject) {
     const header = this.makeSection();
-    const status = obj.isDestroyed() ? 'Destroyed' :
-      obj.isDamaged() ? 'Damaged' :
-      obj.isFunctioning() ? 'Functioning' : 'Offline';
+    const condStr = obj.getConditionUIString();
+    const status = obj.isFunctioning() ? 'Functioning' : obj.isDestroyed() ? 'Destroyed' : 'Offline';
     const statusColor = obj.isDestroyed() ? '#f44' :
       obj.isDamaged() ? '#ff0' :
       obj.isFunctioning() ? '#4f4' : '#888';
@@ -462,7 +487,7 @@ export class InspectorPanel {
       <div style="margin-bottom:6px;">
         ${this.bar('Condition', Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}
       </div>
-      <div style="margin-bottom:4px;">Status: <span style="color:${statusColor};">${status}</span></div>
+      <div style="margin-bottom:4px;">Condition: ${condStr} | Status: <span style="color:${statusColor};">${status}</span></div>
       ${obj.tData.nPowerOutput > 0 ? `<div style="margin-bottom:4px;">Power Output: ${obj.getPowerOutput()}</div>` : ''}
       ${obj.tData.nPowerDraw > 0 ? `<div style="margin-bottom:4px;">Power Draw: ${obj.getPowerDraw()}</div>` : ''}
       ${obj.tData.oxygenLevel > 0 ? `<div style="margin-bottom:4px;">O2 Output: ${obj.getOxygenOutput()}</div>` : ''}
@@ -542,6 +567,10 @@ export class InspectorPanel {
     const s = document.createElement('div');
     s.style.cssText = 'padding:8px;';
     return s;
+  }
+
+  private escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   private bar(label: string, value: number, max: number, color: string): string {

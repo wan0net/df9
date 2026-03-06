@@ -155,6 +155,15 @@ export class EnvObject implements TaggableObject {
     return this.nCondition < DAMAGED_CONDITION;
   }
 
+  /** Localized condition string (Lua EnvObject:getConditionUIString). */
+  getConditionUIString(): string {
+    if (this.nCondition <= 0) return 'Destroyed';
+    if (this.nCondition <= 25) return 'Critical';
+    if (this.nCondition <= 50) return 'Damaged';
+    if (this.nCondition <= 75) return 'Worn';
+    return 'Good';
+  }
+
   needsMaintenance(): boolean {
     return this.nCondition < CONDITION_NEEDED_TO_MAINTAIN;
   }

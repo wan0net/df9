@@ -61,6 +61,8 @@ export class EventController implements TickableSystem {
   private compoundEventFired = false;
   /** Mega event has been run (persisted in save). */
   private bRanMegaEvent = false;
+  /** Game time when mega event completed (Lua: nMegaEventStartTime). */
+  private nMegaEventStartTime = 0;
   /** Previous events for history. */
   private prevEvents: { sEventType: string; nCompletionTime: number }[] = [];
 
@@ -239,6 +241,8 @@ export class EventController implements TickableSystem {
   ): EventDef | null {
     const eligible: EventDef[] = [];
     let totalWeight = 0;
+    const nHiddenRooms = this.getHiddenRoomCount?.() ?? 0;
+    const nExteriorRooms = this.getExteriorRoomCount?.() ?? 0;
 
     for (const key of Object.keys(EVENT_DEFS)) {
       const def = EVENT_DEFS[key];
@@ -254,8 +258,6 @@ export class EventController implements TickableSystem {
       if (def.name === lastType && consecutiveCount >= MAX_CONSECUTIVE_SAME) continue;
 
       // Room gates (Lua EventController.lua:602-607 — zero weight when room counts exceed limits)
-      const nHiddenRooms = this.getHiddenRoomCount?.() ?? 0;
-      const nExteriorRooms = this.getExteriorRoomCount?.() ?? 0;
       if (def.nMaxUndiscoveredRooms !== undefined && def.nMaxUndiscoveredRooms >= 0 && nHiddenRooms >= def.nMaxUndiscoveredRooms) continue;
       if (def.nMaxExteriorRooms !== undefined && def.nMaxExteriorRooms >= 0 && nExteriorRooms >= def.nMaxExteriorRooms) continue;
       if (def.nMinExteriorRooms !== undefined && def.nMinExteriorRooms >= 0 && nExteriorRooms < def.nMinExteriorRooms) continue;
@@ -267,9 +269,14 @@ export class EventController implements TickableSystem {
         weight *= 1.5;
       }
 
-      // Mega event boost (CompoundEvent weight → 60 after siege time)
-      if (def.sEventType === 'CompoundEvent' && atTime > COMPOUND_EVENT_TIME && !this.bRanMegaEvent) {
-        weight = MEGA_EVENT_WEIGHT;
+      // Mega event boost (CompoundEvent weight → 60 after siege time, 1 normally)
+      if (def.sEventType === 'CompoundEvent') {
+        weight = (atTime > COMPOUND_EVENT_TIME && !this.bRanMegaEvent) ? MEGA_EVENT_WEIGHT : 1;
+      }
+
+      // Breaching dynamic weight (Lua: 16 if no exterior rooms, 10 if there are)
+      if (def.sEventType === 'breachingEvents') {
+        weight = nExteriorRooms > 0 ? 10 : 16;
       }
 
       eligible.push(def);
@@ -281,16 +288,16 @@ export class EventController implements TickableSystem {
       return EVENT_DEFS['Immigration'] ?? null;
     }
 
+    const getWeight = (def: EventDef) => {
+      let w = def.weight;
+      if (def.sEventType === 'immigrationEvents' && atTime < 1500 && populationEstimate < 12) w *= 1.5;
+      if (def.sEventType === 'CompoundEvent') w = (atTime > COMPOUND_EVENT_TIME && !this.bRanMegaEvent) ? MEGA_EVENT_WEIGHT : 1;
+      if (def.sEventType === 'breachingEvents') w = nExteriorRooms > 0 ? 10 : 16;
+      return w;
+    };
     let pick = Math.random() * totalWeight;
     for (const def of eligible) {
-      let weight = def.weight;
-      if (def.sEventType === 'immigrationEvents' && atTime < 1500 && populationEstimate < 12) {
-        weight *= 1.5;
-      }
-      if (def.sEventType === 'CompoundEvent' && atTime > COMPOUND_EVENT_TIME && !this.bRanMegaEvent) {
-        weight = MEGA_EVENT_WEIGHT;
-      }
-      pick -= weight;
+      pick -= getWeight(def);
       if (pick <= 0) return def;
     }
     return eligible[eligible.length - 1];
@@ -508,6 +515,7 @@ export class EventController implements TickableSystem {
       forecastGenerated: this.forecastGenerated,
       compoundEventFired: this.compoundEventFired,
       bRanMegaEvent: this.bRanMegaEvent,
+      nMegaEventStartTime: this.nMegaEventStartTime,
       galaxyValues: { ...this.galaxyValues },
       forecast: this.forecast.map(f => ({
         defName: Object.keys(EVENT_DEFS).find(k => EVENT_DEFS[k].name === f.def.name) ?? '',
@@ -522,6 +530,7 @@ export class EventController implements TickableSystem {
     this.forecastGenerated = data.forecastGenerated;
     this.compoundEventFired = data.compoundEventFired;
     this.bRanMegaEvent = data.bRanMegaEvent ?? false;
+    this.nMegaEventStartTime = (data as any).nMegaEventStartTime ?? 0;
     if (data.galaxyValues) {
       this.galaxyValues = { ...this.galaxyValues, ...data.galaxyValues };
       this.nTimeBetween = computeTimeBetweenEvents(this.galaxyValues);

@@ -226,6 +226,10 @@ export class UIManager {
         const rooms = callbacks.getRooms();
         return rooms.filter(r => r.zone === 'BRIG');
       },
+      getRoomForChar: (char: Character) => {
+        const rooms = callbacks.getRooms();
+        return rooms.find(r => r.tCharacters.has(char.id)) ?? null;
+      },
     });
 
     // Research panel
