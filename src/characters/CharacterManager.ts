@@ -7,6 +7,8 @@ import {
   ANGER_MAX, VIOLENT_RAMPAGE_CHANCE, HURT_THRESHOLD,
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
   STATUS_DEAD,
+  OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH,
+  VACUUM_THRESHOLD, VACUUM_THRESHOLD_END,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -66,6 +68,7 @@ import { SquadList } from '../combat/SquadList';
 import { FIRE_DAMAGE_PER_SECOND } from '../hazards/Fire';
 import type { Fire } from '../hazards/Fire';
 import { Malady } from '../malady/Malady';
+import { CHANCE_OF_MALADY } from '../events/EventData';
 import {
   addTopic, generateCharacterAffinities, getRandomImmigrationCategory,
   IMMIGRATION_ADD_TOPIC_CHANCE,
@@ -114,6 +117,13 @@ export class CharacterManager {
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
     this.roomManager = roomManager;
+
+    // Wire AttackEnemy statics for LoS + target resolution
+    AttackEnemy.grid = grid;
+    AttackEnemy.getCharById = (id: number) => this.characters.find(c => c.id === id);
+
+    // Wire combat system grid for LoS
+    this.combatSystem.grid = grid;
 
     // Create default security squad
     SquadList.createSquad('Alpha Squad');
@@ -192,11 +202,12 @@ export class CharacterManager {
       //  we clear all rooms' tCharacters at start of this loop — see below.)
       if (charRoom) charRoom.tCharacters.add(char.id);
 
-      // Update O2 need from room
+      // Update O2 need from room + suffocation (Lua Character._tickOxygen)
       const room = charRoom;
       // Non-breathing races (MONSTER, KILLBOT) don't need O2
       if (!char.doesBreathe()) {
         char.needs.updateOxygen(255);
+        char.suffocationTime = 0;
         if (char.bSpacewalking) char.bSpacewalking = false;
       } else if (room && room.sealed && room.oxygen > 50) {
         // Safe sealed room — breathable
@@ -204,12 +215,43 @@ export class CharacterManager {
         if (char.bSpacewalking) {
           char.bSpacewalking = false;
         }
+        // Recover from suffocation if O2 score above threshold
+        const o2Score = room.getOxygenScore();
+        if (o2Score >= VACUUM_THRESHOLD * VACUUM_THRESHOLD) {
+          char.suffocationTime = 0;
+          char.bLowOxygen = false;
+        } else if (o2Score < VACUUM_THRESHOLD_END * VACUUM_THRESHOLD_END) {
+          // Still low enough to suffocate
+          char.suffocationTime += dtSec;
+          char.bLowOxygen = true;
+        }
       } else {
         // In space, on unsealed floor, or in a room with no oxygen
         char.needs.updateOxygen(room?.oxygen ?? 0);
         if (!char.bSpacewalking) {
           char.bSpacewalking = true;
         }
+        // Suffocating in vacuum (spacesuit depletes separately)
+        if (!char.bSpacesuit) {
+          char.suffocationTime += dtSec;
+          char.bLowOxygen = true;
+        } else {
+          // Consume spacesuit oxygen
+          char.nSuitOxygen -= OXYGEN_PER_SECOND * dtSec;
+          if (char.nSuitOxygen <= 0) {
+            char.nSuitOxygen = 0;
+            char.suffocationTime += dtSec;
+            char.bLowOxygen = true;
+          } else {
+            char.suffocationTime = 0;
+            char.bLowOxygen = false;
+          }
+        }
+      }
+
+      // Kill if suffocated too long
+      if (char.suffocationTime >= OXYGEN_SUFFOCATION_UNTIL_DEATH && char.isAlive()) {
+        char.kill(CAUSE_OF_DEATH.SUFFOCATION);
       }
 
       // Update renderer
@@ -357,8 +399,9 @@ export class CharacterManager {
     }
   }
 
-  /** Spawn a character at a specific tile position. Returns the new character. */
-  spawnCharacterAt(tileX: number, tileY: number, spacewalking = false): Character {
+  /** Spawn a character at a specific tile position. Returns the new character.
+   *  @param bImmigration — if true, apply malady pre-roll (Lua: CHANCE_OF_MALADY). */
+  spawnCharacterAt(tileX: number, tileY: number, spacewalking = false, bImmigration = false): Character {
     const char = new Character(this.nextId++, tileX, tileY);
     char.bSpacewalking = spacewalking;
     this.characterRenderer?.createCharacter(char);
@@ -371,6 +414,11 @@ export class CharacterManager {
     if (Math.random() < IMMIGRATION_ADD_TOPIC_CHANCE) {
       const category = getRandomImmigrationCategory();
       if (category) addTopic(category);
+    }
+
+    // Malady pre-roll on immigration (Lua: CHANCE_OF_MALADY = 15/100)
+    if (bImmigration && char.tStats.nTeam === TEAM_ID_PLAYER && Math.random() * 100 < CHANCE_OF_MALADY) {
+      Malady.infectWithRandom(char);
     }
 
     // Log: character joined (Lua: JOINED for player team, ENEMY_JOINED for hostiles)

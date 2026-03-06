@@ -107,7 +107,7 @@ TS BFS destroys all room state on every rebuild. Lua uses `_selectBestRoomFromFl
 - [x] `isDangerous()` — used by AI for hazard avoidance
 - [x] `isBreached()`
 - [x] `getOxygenScore()` — cached, mapped from 0-255 to Lua 0-65535 scale
-- [ ] `_shareOxygen()` / `_o2shareSlowedAverage()` — inter-room O2 equalization
+- [x] `_shareOxygen()` / `_o2shareSlowedAverage()` — inter-room O2 equalization
 - [x] `updateHazardStatus()`, `updateEmergency()`, `setLightingScheme()`
 - [x] `getRoomScore()` — AI room safety scoring
 - [x] `getSafeRoomsOfTeam()`, `getRoomsOfTeam()` — on RoomManager
@@ -121,15 +121,15 @@ TS BFS destroys all room state on every rebuild. Lua uses `_selectBestRoomFromFl
 
 Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level scalar only.
 
-- [ ] Implement per-tile (or at minimum per-room with spatial gradient) O2 model
+- [TECHNICAL] Per-tile O2 grid deferred — using per-room model with inter-room sharing
 - [ ] Implement vacuum vectors (`getVacuumVec`) for character knockback during breaches
-- [ ] Implement inter-room O2 sharing (`MIN_O2_DIFF=10`, `MIN_O2_FOR_SHARING`, `MAX_O2_GIVE_PER_TILE=50`)
-- [ ] Implement character O2 consumption (`nChars * OXYGEN_PER_SECOND * dt`)
-- [ ] Implement fire O2 consumption (`Fire.OXYGEN_PER_SECOND`)
+- [x] Implement inter-room O2 sharing (`MIN_O2_DIFF=10`, `MIN_O2_FOR_SHARING`, `MAX_O2_GIVE_PER_TILE=50`)
+- [x] Implement character O2 consumption (`nChars * OXYGEN_PER_SECOND * dt`)
+- [x] Implement fire O2 consumption (`Fire.OXYGEN_PER_SECOND`)
 - [ ] Implement `_cheatOxygen()` — average neighbors' O2 when tile vaporized
 - [ ] Register O2 generators properly (vs re-polling every tick)
 - [ ] Add `VACUUM_THRESHOLD = 50`, `VACUUM_THRESHOLD_END = 40` suffocation thresholds
-- [ ] Save/load per-room oxygen state
+- [x] Save/load per-room oxygen state
 
 ---
 
@@ -183,7 +183,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement room-level high-level pathfinder (plan across rooms via doors, then tile-level sub-paths)
 - [ ] Implement soft-blocking (`tagTile` / `pathSoftBlocked`) for AI route preferences
 - [ ] Implement oxygen-aware pathfinding (avoid low-O2 tiles when unsuited)
-- [ ] Optimize open-list to priority queue (currently O(n) linear scan)
+- [x] Optimize open-list to binary min-heap priority queue
 
 ---
 
@@ -227,7 +227,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Add `getTargetLoc()` / `_getBestOpenNeighbor()`
 
 ### 9.2 Tile health
-- [ ] Gate tile healing on room having power (unpowered rooms don't heal)
+- [x] Gate tile healing on room having power (unpowered rooms don't heal)
 - [ ] Add `updateHealthVisuals` / damage decal system (floor char03, wall Damage sprite)
 
 ### 9.3 WorldGen
@@ -314,11 +314,11 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: MEDIUM — research completes but nothing happens**
 
-- [ ] LaserRifles — allow security to equip laser rifles
-- [ ] ArmorLevel2 — increase character HP/damage reduction
-- [ ] TeamTactics — improve squad behavior
-- [ ] SpaceSuit2 — improve suit oxygen
-- [ ] MaintenanceLevel2 — apply `nConditionMultiplier: 1.5` to maintenance
+- [x] LaserRifles — security auto-equips laser rifle when research complete
+- [x] ArmorLevel2 — 50% damage reduction + 20% dodge for security
+- [x] TeamTactics — +75% damage reduction when nearby security officers
+- [x] SpaceSuit2 — suit O2 capacity 480→600 seconds
+- [x] MaintenanceLevel2 — apply `nConditionMultiplier: 1.5` to maintenance
 - [ ] PlantLevel2 — apply `nConditionMultiplier: 2` to garden objects
 - [ ] Connect `bDiscoverOnly` items to datacube pickup discovery mechanism
 
@@ -427,7 +427,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: LOW**
 
 - [ ] Implement visibility-based simulation culling (`tOwnedCharacters` subset)
-- [ ] Implement `tDeadCharacters` tracking + `deathTick(dt)` for corpse animation/decay
+- [x] Implement `tDeadCharacters` tracking (deadCharacterIds Set + isDead/getDeadCount)
+- [ ] Implement `deathTick(dt)` for corpse animation/decay
 - [ ] Add death journal log entries (DEATH_REACT_FRIEND, DEATH_REACT_CITIZEN, etc.)
 - [ ] Add `getOwnedCharactersWithTask()`, `getTeamCharacters()`, `getCharacterNamed()`
 
@@ -498,3 +499,4 @@ These are intentional differences due to engine/platform:
 | Date | Changes |
 |------|---------|
 | 2026-03-05 | Full Lua vs TS parity audit. Archived old plan. Created new plan with 27 sections, ~180 items. |
+| 2026-03-06 | Batches 1-6 complete: needs scale, memory, morale, anger, duty cycle, room state/tick, events, combat LoS/aim/stunner, fire 8-neighbor, directions, O2 consumption/sharing, research effects (5/7), pathfinding heap, tile heal power gate, dead char tracking. |

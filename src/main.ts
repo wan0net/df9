@@ -1244,6 +1244,33 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       char.needs.hunger = value;
       return true;
     },
+    // ── Batch 7 test helpers ─────────────────────────────────
+    completeResearch: (id: string) => {
+      // Force-complete a research for testing effects
+      (researchSystem as any).completed.add(id);
+    },
+    getDeadCount: () => characterManager.getDeadCount(),
+    isDead: (charId: number) => characterManager.isDead(charId),
+    getRoomOxygen: (roomId: number) => {
+      const room = roomManager.getRooms().find(r => r.id === roomId);
+      return room ? room.oxygen : -1;
+    },
+    setRoomOxygen: (roomId: number, o2: number) => {
+      const room = roomManager.getRooms().find(r => r.id === roomId);
+      if (room) { room.oxygen = o2; room.invalidateOxygenScore(); }
+    },
+    getCharacterSuffocation: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      return char ? { suffocationTime: char.suffocationTime, bLowOxygen: char.bLowOxygen } : null;
+    },
+    setCharacterJob: (charId: number, job: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (char) char.setJob(job);
+    },
+    getCharacterWeapon: (charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      return char ? char.weapon : null;
+    },
     // ── Inspector helpers ────────────────────────────────────
     renameCharacter: (charId: number, newName: string) => {
       const char = characterManager.getAllCharacters().find(c => c.id === charId);

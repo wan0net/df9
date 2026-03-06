@@ -5,7 +5,7 @@
 
 import {
   MALADY_DEFS, type MaladyType, type ReduceMods, type SymptomStage,
-  getInjuryList, getMinorInjuryList,
+  getInjuryList, getMinorInjuryList, getSpawnableDiseases,
 } from './MaladyData';
 import { Base } from '../core/Base';
 import {
@@ -818,6 +818,14 @@ export const Malady = {
     } catch {
       return null;
     }
+  },
+
+  /** Infect a character with a random spawnable disease (Lua: immigration pre-roll). */
+  infectWithRandom(rChar: CharacterLike): MaladyInstance | null {
+    const diseases = getSpawnableDiseases();
+    if (diseases.length === 0) return null;
+    const pick = diseases[Math.floor(Math.random() * diseases.length)];
+    return Malady.infectCharacter(rChar, pick);
   },
 
   /** Diagnose a malady (mark as identified). */

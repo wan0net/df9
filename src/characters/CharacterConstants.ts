@@ -280,6 +280,10 @@ export const OXYGEN_AVERAGE_SAMPLE = 5;
 export const SPACESUIT_MAX_OXYGEN = 480 * OXYGEN_PER_SECOND;
 export const SPACESUIT_OXYGEN_SUFFOCATING = OXYGEN_SUFFOCATION_UNTIL_DEATH * OXYGEN_PER_SECOND;
 export const UNNECESSARY_SPACESUIT_REMOVE = 10;
+/** Lua Oxygen.lua VACUUM_THRESHOLD=50 — O2 score below which suffocation starts (squared=2500). */
+export const VACUUM_THRESHOLD = 50;
+/** Lua Oxygen.lua VACUUM_THRESHOLD_END=40 — O2 score below which suffocation recovers (squared=1600). */
+export const VACUUM_THRESHOLD_END = 40;
 
 // ── Movement / Combat ───────────────────────────────────────────────────
 export const BASE_SPEED = 1.5;
