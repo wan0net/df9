@@ -2302,4 +2302,74 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result).toBeTruthy();
     expect(result!.hasRoom).toBe(true);
   });
+
+  test('Save/Load round-trip preserves character needs', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Set known needs on first character via raw character ref
+      const rawChars = df9._charMgr.getCharacters();
+      if (!rawChars || rawChars.length === 0) return null;
+      const c = rawChars[0];
+      c.needs.hunger = -42;
+      c.needs.energy = 77;
+      c.needs.amusement = -10;
+      const charId = c.id;
+      const beforeJob = c.getJob();
+      // Save
+      df9.saveGame();
+      // Mutate to prove load restores
+      c.needs.hunger = 99;
+      c.needs.energy = 99;
+      // Load
+      df9.loadGame();
+      // Check restored values via serialized API
+      const after = df9.getCharacters();
+      const restored = after.find((ch: any) => ch.id === charId);
+      if (!restored) return { found: false };
+      return {
+        found: true,
+        hunger: restored.hunger,
+        energy: restored.energy,
+        job: restored.job,
+        jobMatch: restored.job === beforeJob,
+      };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.found).toBe(true);
+    expect(result!.hunger).toBe(-42);
+    expect(result!.energy).toBe(77);
+    expect(result!.jobMatch).toBe(true);
+  });
+
+  test('Save/Load round-trip preserves room oxygen', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const rooms = df9.getRooms();
+      if (!rooms || rooms.length === 0) return null;
+      const roomId = rooms[0].id;
+      df9.setRoomOxygen(roomId, 180);
+      df9.saveGame();
+      df9.setRoomOxygen(roomId, 0);
+      df9.loadGame();
+      return { oxygen: df9.getRoomOxygen(roomId) };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.oxygen).toBe(180);
+  });
+
+  test('Save/Load round-trip preserves research state', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Complete a research and save
+      df9.completeResearch('LaserRifles');
+      df9.saveGame();
+      // Verify it persists after load
+      df9.loadGame();
+      const after = df9.getResearch();
+      return {
+        laserCompleted: after.completed.includes('LaserRifles'),
+      };
+    });
+    expect(result!.laserCompleted).toBe(true);
+  });
 });

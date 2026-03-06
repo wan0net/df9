@@ -129,7 +129,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement `_cheatOxygen()` — average neighbors' O2 when tile vaporized
 - [ ] Register O2 generators properly (vs re-polling every tick)
 - [x] Add `VACUUM_THRESHOLD = 50`, `VACUUM_THRESHOLD_END = 40` suffocation thresholds
-- [~] Save/load per-room oxygen state (oxygen saved but NOT restored on load — loadCharacterData callback unwired)
+- [x] Save/load per-room oxygen state
 
 ---
 
@@ -368,11 +368,11 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] File import: `importFromFile()` — opens file picker, loads .json save
 - [x] Export/Import UI buttons in sidebar utility section
 - [ ] Save/load fire state (heat map + flame intensities)
-- [~] Save/load room oxygen levels (saved but not restored — load callback unwired)
-- [~] Save/load character needs (serialized but loadCharacterData callback never wired in main.ts)
+- [x] Save/load room oxygen levels
+- [x] Save/load character needs (hunger, tiredness, fun, etc.)
 - [ ] Save/load command/reservation queue (pending build/mine orders)
 - [ ] Save/load asteroid/derelict positions
-- [~] Save/load character inventory (serialized but loadCharacterData callback never wired in main.ts)
+- [x] Save/load character inventory (full, not just weapon)
 - [x] Fix AutoSave to use wall-clock time (not game-scaled `gameDt`)
 
 ---
@@ -500,4 +500,5 @@ These are intentional differences due to engine/platform:
 |------|---------|
 | 2026-03-05 | Full Lua vs TS parity audit. Archived old plan. Created new plan with 27 sections, ~180 items. |
 | 2026-03-06 | Batches 1-6 complete: needs scale, memory, morale, anger, duty cycle, room state/tick, events, combat LoS/aim/stunner, fire 8-neighbor, directions, O2 consumption/sharing, research effects (5/7), pathfinding heap, tile heal power gate, dead char tracking. |
-| 2026-03-06 | Batch 7: AttackEnemy full rewrite, malady pre-roll, suffocation thresholds, 8 new E2E tests. Audit: downgraded 5 items from [x] to [~] (fire save/load unwired, event gates unenforced, save/load character data callback unwired for needs/inventory/O2). Upgraded 3 items from [ ] to [x] (VACUUM_THRESHOLD, AttackEnemy, malady pre-roll). |
+| 2026-03-06 | Batch 7: AttackEnemy full rewrite, malady pre-roll, suffocation thresholds, 8 new E2E tests. Audit: downgraded 5 items from [x] to [~], upgraded 3 from [ ] to [x]. |
+| 2026-03-06 | Fix save/load: wire all 5 load callbacks (characters, objects, research, events, topics). Room oxygen now restored after room re-detection. Added clearAll() to EnvObjectManager, loadSaveData() to ResearchSystem. 3 new save/load round-trip E2E tests. |

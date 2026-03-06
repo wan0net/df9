@@ -412,9 +412,68 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   saveLoadSystem.getEventData = () => eventController.getSaveData();
   saveLoadSystem.getTopicsData = () => getTopicsSaveData();
 
-  // Wire load callbacks (event controller has loadSaveData)
+  // Wire load callbacks
+  saveLoadSystem.loadCharacterData = (chars) => {
+    characterManager.clearAll();
+    for (const cd of chars) {
+      const char = characterManager.spawnCharacterAt(cd.tileX, cd.tileY, false, false);
+      char.tStats.sName = cd.name;
+      char.setJob(cd.job);
+      char.tStats.nTeam = cd.team;
+      if (cd.race !== undefined) char.tStats.nRace = cd.race;
+      char.setHP(cd.hp);
+      char.tStats.nMaxHP = cd.maxHP;
+      char.tStats.nStatus = cd.status;
+      char.tStats.nXP = cd.xp;
+      char.tStats.tCompetency = { ...cd.competency };
+      char.nMorale = cd.morale;
+      char.nAnger = cd.anger;
+      char.nRemainingDutyTime = cd.nRemainingDutyTime;
+      char.weapon = cd.weapon;
+      char.bSpacesuit = cd.bSpacesuit;
+      char.nSuitOxygen = cd.nSuitOxygen;
+      // Restore needs
+      if (cd.needs) {
+        char.needs.hunger = cd.needs.hunger;
+        char.needs.energy = cd.needs.energy;
+        char.needs.amusement = cd.needs.amusement;
+        char.needs.social = cd.needs.social;
+        char.needs.oxygen = cd.needs.oxygen;
+      }
+      // Restore inventory
+      if (cd.inventory) {
+        for (const item of cd.inventory) {
+          const invItem = createItem(item.sTemplate, { sName: item.sName, nCount: item.nCount });
+          char.inventory.addItem(invItem);
+        }
+      }
+      // Restore maladies
+      if (cd.maladies) {
+        char.maladies = cd.maladies.map(m => ({ ...m }));
+      }
+      // Restore log
+      if (cd.tLog) {
+        char.tLog = cd.tLog.slice();
+      }
+    }
+  };
+  saveLoadSystem.loadObjectData = (objs) => {
+    EnvObjectManager.clearAll();
+    for (const od of objs) {
+      const obj = EnvObjectManager.createObject(od.name, od.tileX, od.tileY, false, false, od.built);
+      if (obj) {
+        obj.nCondition = od.condition;
+      }
+    }
+  };
+  saveLoadSystem.loadResearchData = (data) => {
+    researchSystem.loadSaveData(data);
+  };
   saveLoadSystem.loadEventData = (data) => {
     eventController.loadSaveData(data);
+  };
+  saveLoadSystem.loadTopicsData = (data) => {
+    topicsFromSaveData(data);
   };
 
   // Register subsystems
@@ -968,6 +1027,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Expose game state for E2E test assertions ─────────────
   (window as any).__df9 = {
+    _charMgr: characterManager,
     getPopulation: () => characterManager.getPopulation(),
     getMatter: () => GameRules.nMatter,
     getRoomCount: () => roomManager.getRooms().length,

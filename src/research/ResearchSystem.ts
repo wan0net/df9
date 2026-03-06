@@ -96,6 +96,14 @@ export class ResearchSystem {
     return result;
   }
 
+  /** Restore research state from save data. */
+  loadSaveData(data: { active: string | null; progress: number; completed: string[] }) {
+    this.completed.clear();
+    for (const id of data.completed) this.completed.add(id);
+    this.activeResearch = data.active;
+    this.progress = data.progress;
+  }
+
   getActiveResearch(): string | null { return this.activeResearch; }
   getProgress(): number { return this.progress; }
   getCompletedCount(): number { return this.completed.size; }

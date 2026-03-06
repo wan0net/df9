@@ -177,8 +177,21 @@ export class SaveLoadSystem {
       }
     }
 
-    // Mark rooms dirty for re-detection
+    // Re-detect rooms from the restored grid
     this.roomManager.markDirty([]);
+    this.roomManager.update();
+
+    // Restore per-room oxygen from saved roomZones
+    if (data.roomZones) {
+      const rooms = this.roomManager.getRooms();
+      for (const rz of data.roomZones) {
+        // Match by room ID (preserved via overlap matching in detectRooms)
+        const room = rooms.find(r => r.id === rz.roomId);
+        if (room && rz.oxygen !== undefined) {
+          room.oxygen = rz.oxygen;
+        }
+      }
+    }
 
     // Restore stats
     if (data.tStats) Base.loadStats(data.tStats);

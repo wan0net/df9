@@ -219,6 +219,16 @@ class EnvObjectManagerClass implements TickableSystem {
     return this.objects.size;
   }
 
+  /** Clear all objects (for load). */
+  clearAll() {
+    for (const [id, obj] of this.objects) {
+      obj.remove();
+      this.onObjectRemoved?.(id);
+    }
+    this.objects.clear();
+    this.nextId = 1;
+  }
+
   /** Update room assignments after room re-detection. */
   updateRoomAssignments() {
     if (!this.roomManager) return;
