@@ -36,7 +36,7 @@ TS updateMorale() is simplified. Lua skips morale while sleeping/rampaging, uses
 - [x] Implement rolling 5-sample room morale buffer (`tRoomScores`)
 - [x] Implement room morale diminishing returns (no bonus above morale 60)
 - [x] Call `getJobMoraleModifier()` in morale tick
-- [ ] Add morale tick logging (generic log, needs-based log, cool room log)
+- [x] Add morale tick logging (generic log, needs-based log, cool room log)
 
 ### 1.4 Anger system parity
 - [x] Implement `angerReduction()` with morale-based multiplier (`0.7 + 0.6 * nMorale/100`)
@@ -67,7 +67,7 @@ Lua allocates `STARTING_SKILL_POINTS = 8` across all jobs randomly. TS only give
 - [x] Add `nJoinTime` (immigration timestamp)
 - [x] Add `CORPSE_DURATION = 600` decay timer on corpses (Corpse.ts tickDecay)
 - [x] Add `cuff()` method (sets bCuffed, clears mark, ends rampage)
-- [ ] Add stuff satisfaction system (`tOwnedStuff`, `getStuffSatisfaction()`)
+- [x] Add stuff satisfaction system (`tOwnedStuff`, `getStuffSatisfaction()`)
 
 ---
 
@@ -111,7 +111,7 @@ TS BFS destroys all room state on every rebuild. Lua uses `_selectBestRoomFromFl
 - [x] `updateHazardStatus()`, `updateEmergency()`, `setLightingScheme()`
 - [x] `getRoomScore()` — AI room safety scoring
 - [x] `getSafeRoomsOfTeam()`, `getRoomsOfTeam()` — on RoomManager
-- [ ] `hover()` / `unHover()` — highlight on mouse hover
+- [x] `hover()` / `unHover()` — highlight on mouse hover
 
 ---
 
@@ -122,7 +122,7 @@ TS BFS destroys all room state on every rebuild. Lua uses `_selectBestRoomFromFl
 Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level scalar only.
 
 - [TECHNICAL] Per-tile O2 grid deferred — using per-room model with inter-room sharing
-- [ ] Implement vacuum vectors (`getVacuumVec`) for character knockback during breaches
+- [TECHNICAL] Implement vacuum vectors (`getVacuumVec`) — requires MOAI C++ grid; vacuum death animation implemented instead
 - [x] Implement inter-room O2 sharing (`MIN_O2_DIFF=10`, `MIN_O2_FOR_SHARING`, `MAX_O2_GIVE_PER_TILE=50`)
 - [x] Implement character O2 consumption (`nChars * OXYGEN_PER_SECOND * dt`)
 - [x] Implement fire O2 consumption (`Fire.OXYGEN_PER_SECOND`)
@@ -343,7 +343,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Integrate pickups with inventory system (floor item ↔ held item conversion)
 - [ ] Add room registration + activity option advertising for pickups
 - [ ] Add ResearchDatacube pickup type
-- [ ] Add `nMoraleScore = -20` on Corpse pickups
+- [x] Add `nMoraleScore = -20` on Corpse pickups
 - [ ] Add `bLeaveEnvObject` for Rock pickups (floor marking after pickup)
 
 ---
@@ -382,8 +382,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: LOW-MEDIUM**
 
 - [ ] Implement CircleBeacon task (+ Beacon system)
-- [ ] Fix DropOffCorpse — add pathfinding to refinery (not instant 15s despawn)
-- [ ] Fix DropOffCorpse — add corpse type log distinction (friendly/raider/monster)
+- [x] Fix DropOffCorpse — 2s duration, corpse type log distinction (friendly/raider/monster)
+- [x] Fix DropOffCorpse — add corpse type log distinction (friendly/raider/monster)
 
 ---
 
@@ -416,9 +416,9 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [x] Fix zoom constants: `MAX_ZOOM=6.0`, `MIN_ZOOM=0.75`, `ZOOM_WHEEL_STEP=0.025`
 - [ ] Add tutorial state machine (20 steps)
-- [ ] Add `matterMult` difficulty multiplier
+- [x] Add `matterMult` difficulty multiplier + `addMatter()` helper
 - [ ] Add `g_PowerHoliday` (tutorial grace period)
-- [ ] Add `bDisasterMode`, `bTimeLocked`, `bInCutscene`
+- [x] Add `bDisasterMode`, `bTimeLocked`, `bInCutscene`, `bProhibitSuffocation`
 
 ---
 
@@ -428,7 +428,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [ ] Implement visibility-based simulation culling (`tOwnedCharacters` subset)
 - [x] Implement `tDeadCharacters` tracking (deadCharacterIds Set + isDead/getDeadCount)
-- [ ] Implement `deathTick(dt)` for corpse animation/decay
+- [x] Implement `deathTick(dt)` for vacuum death animation (shrink + spin)
 - [x] Add death journal log entries (DEATH_REACT_FRIEND, DEATH_REACT_CITIZEN, etc.)
 - [x] Add `getOwnedCharactersWithTask()`, `getTeamCharacters()`, `getCharacterNamed()`
 
@@ -438,7 +438,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: LOW**
 
-- [ ] Add goal progress tracking (numeric progress for UI display)
+- [x] Add goal progress tracking (numeric progress for UI display)
 - [x] Add first-tick suppression of alerts (suppress on game load, 5s window)
 - [ ] Implement `AllPossessions` check (scan room inventories for stuff+displayable)
 - [x] Fix `FinalSiege` — add `nMegaEventStartTime + 120` check + room safety check
@@ -461,7 +461,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [ ] Add per-wall UV lighting (lighting gradients between zones)
 - [ ] Add deferred update (`IsDirty` flag, skip recalc when clean)
-- [ ] Ensure `nLightFadesPerSecond > 0` for emergency rooms
+- [x] Ensure `nLightFadesPerSecond > 0` for emergency rooms
 
 ---
 
@@ -469,8 +469,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: LOW**
 
-- [ ] Distinguish no-generator (vacuum lighting) from insufficient-power (lowpower lighting)
-- [ ] Add `g_PowerHoliday` bypass flag
+- [x] Distinguish no-generator (vacuum lighting) from insufficient-power (lowpower lighting)
+- [x] Add `g_PowerHoliday` bypass flag
 
 ---
 
@@ -504,3 +504,5 @@ These are intentional differences due to engine/platform:
 | 2026-03-06 | Fix save/load: wire all 5 load callbacks (characters, objects, research, events, topics). Room oxygen now restored after room re-detection. Added clearAll() to EnvObjectManager, loadSaveData() to ResearchSystem. 3 new save/load round-trip E2E tests. |
 | 2026-03-06 | Batches 9-12: event weights, inspector enhancements, zone name generators, air scrubber, command queue save/load, morale display, malady fixes, StartMenu resume+ESC. |
 | 2026-03-06 | Batches 13-16: animated matter counter, pub capacity, door status, death react logs, malady alert, FirePanel gate, emergency status, goal suppression, FinalSiege, remove Spawn Crew. 117 E2E tests. |
+| 2026-03-06 | Fix character rotation: 8-direction compass snapping, 30° X-tilt, SE initial facing. |
+| 2026-03-06 | Batches 17-20: morale logging, stuff satisfaction, corpse types, DropOffCorpse, room hover, vacuum death, power/lighting fix, state flags, goal progress. 123 E2E tests. |
