@@ -613,6 +613,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   inputManager.onKeyPress('Digit1', () => { GameRules.setTimeScale(1); });
   inputManager.onKeyPress('Digit2', () => { GameRules.setTimeScale(2); });
   inputManager.onKeyPress('Digit3', () => { GameRules.setTimeScale(4); });
+  // F key: toggle flip for object placement (Lua: GameScreen.bFlipProp)
+  inputManager.onKeyPress('KeyF', () => {
+    if (buildMode === 'object') {
+      objectPlacement.bFlipProp = !objectPlacement.bFlipProp;
+      Base.addAlert('system', `Object flip: ${objectPlacement.bFlipProp ? 'ON' : 'OFF'}`);
+    }
+  });
 
   // ── UI overlay ────────────────────────────────────────────
   const uiManager = new UIManager(container, {
@@ -885,6 +892,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           selectedEntity = null;
           uiManager.setSelectedEntity(null);
         }
+        // Tile tip text (Lua: StatusBar:setTileTipText)
+        const tileType = grid.get(tile.x, tile.y);
+        uiManager.setTileTip(`(${tile.x}, ${tile.y}) ${tileName(tileType)}`);
       } else if (buildMode === 'zone') {
         const room = roomManager.getRoomAt(tile.x, tile.y);
         if (room) {

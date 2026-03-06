@@ -110,6 +110,11 @@ export class UIManager {
   /** Set true when a UI click should suppress game input for this frame. */
   uiClickConsumed = false;
 
+  // Tile tip text (Lua: StatusBar.tileTipText — shows last-clicked tile info)
+  private tileTipEl!: HTMLDivElement;
+  private tileTipClearTimer = 0;
+  private readonly TILE_TIP_DURATION = 5; // seconds before auto-clear
+
   // Tooltip
   private tooltipEl!: HTMLDivElement;
 
@@ -414,6 +419,15 @@ export class UIManager {
     hudBottom.appendChild(zoomInBtn.el);
 
     this.uiRoot.appendChild(hudBottom);
+
+    // Tile tip text — shows last-clicked tile info (Lua: StatusBar.tileTipText)
+    this.tileTipEl = document.createElement('div');
+    this.tileTipEl.style.cssText = `
+      position:absolute;bottom:50px;right:10px;
+      color:${AMBER};font-size:12px;font-family:monospace;
+      pointer-events:none;display:none;
+    `;
+    this.uiRoot.appendChild(this.tileTipEl);
   }
 
   /** Create a bottom-bar icon button with inactive/active sprite swap on hover. */
@@ -806,6 +820,13 @@ export class UIManager {
     this.setSelectedEntity(entity);
   }
 
+  /** Set tile tip text (Lua: StatusBar:setTileTipText). Auto-clears after timeout. */
+  setTileTip(text: string) {
+    this.tileTipEl.textContent = `Last clicked: ${text}`;
+    this.tileTipEl.style.display = 'block';
+    this.tileTipClearTimer = this.TILE_TIP_DURATION;
+  }
+
   /** Toggle job roster visibility. */
   toggleJobRoster() {
     this.jobRoster.toggle();
@@ -1040,6 +1061,14 @@ export class UIManager {
         this.costOverlay.style.display = 'block';
       } else {
         this.costOverlay.style.display = 'none';
+      }
+    }
+
+    // ── Tile tip text auto-clear (Lua: checkTileTipTime) ──
+    if (this.tileTipClearTimer > 0) {
+      this.tileTipClearTimer -= 1 / 60; // approximate dt at 60fps
+      if (this.tileTipClearTimer <= 0) {
+        this.tileTipEl.style.display = 'none';
       }
     }
 

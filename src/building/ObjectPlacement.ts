@@ -19,6 +19,8 @@ import { researchSystem } from '../research/ResearchSystem';
 export class ObjectPlacement {
   private grid: TileGrid;
   private roomManager: RoomManager;
+  /** Player-toggleable flip for free-standing objects (Lua: GameScreen.bFlipProp). */
+  bFlipProp = false;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -172,6 +174,9 @@ export class ObjectPlacement {
       placeTileY = floorTile.y;
       bFlipX = floorTile.bFlipX;
       bFlipY = floorTile.bFlipY;
+    } else if (this.bFlipProp) {
+      // Lua: GameScreen.bFlipProp toggles flip for free-standing objects
+      bFlipX = true;
     }
 
     const obj = EnvObjectManager.createObject(sName, placeTileX, placeTileY, bFlipX, bFlipY, false);

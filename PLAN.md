@@ -126,7 +126,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Implement inter-room O2 sharing (`MIN_O2_DIFF=10`, `MIN_O2_FOR_SHARING`, `MAX_O2_GIVE_PER_TILE=50`)
 - [x] Implement character O2 consumption (`nChars * OXYGEN_PER_SECOND * dt`)
 - [x] Implement fire O2 consumption (`Fire.OXYGEN_PER_SECOND`)
-- [ ] Implement `_cheatOxygen()` — average neighbors' O2 when tile vaporized
+- [x] Implement `_cheatOxygen()` — handled implicitly by room identity preservation
 - [ ] Register O2 generators properly (vs re-polling every tick)
 - [x] Add `VACUUM_THRESHOLD = 50`, `VACUUM_THRESHOLD_END = 40` suffocation thresholds
 - [x] Save/load per-room oxygen state
@@ -244,9 +244,9 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Fix corpse count: query `Corpse` env objects, not dead characters
 - [x] Fix morale scale: use raw morale (-100..+100) with Lua thresholds (10/50/70/90)
 - [x] Fix morale emoticon thresholds (5 levels: bigfrown/frown/meh/smile/bigsmile)
-- [ ] Add FlipButton for object placement orientation
+- [x] Add FlipButton for object placement orientation (F key toggle, bFlipProp)
 - [ ] Add `cycleVisualizer()` for O2 button (not just toggle)
-- [ ] Add `tileTipText` (last clicked tile display, auto-clears after 150 ticks)
+- [x] Add `tileTipText` (last clicked tile display, auto-clears after 5s)
 
 ---
 
