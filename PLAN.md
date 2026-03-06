@@ -148,9 +148,9 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement projectile travel with miss chance (not instant hit)
 - [x] Implement stunner damage type — incapacitate instead of kill
 - [ ] Implement puppet/grapple system (`forcePuppet`)
-- [ ] Implement combat awareness spreading (`Room.spreadCombatAwareness`)
+- [x] Implement combat awareness spreading (`Room.spreadCombatAwareness`)
 - [ ] Implement startle animation + memory
-- [ ] Implement attacking doors/env objects (reduce `nCondition`)
+- [x] Implement attacking doors/env objects (reduce `nCondition`)
 
 ### 4.3 AttackEnemy task
 - [x] Rewrite `AttackEnemy.ts` from stub to full implementation matching Lua (pathfinding to target, grapple cycle, aim/shoot, LoS)
@@ -166,10 +166,10 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement `preExecuteTick` (e.g. meteor indicator, immigration camera adjust)
 - [x] Regenerate forecast after each event completes
 - [x] Accumulate `nPopulationDeltaEstimate` during forecast generation
-- [~] Implement `nMaxUndiscoveredRooms` and `nMaxExteriorRooms` gates per event class (fields defined but not enforced in eligibility checks)
+- [x] Implement `nMaxUndiscoveredRooms` and `nMaxExteriorRooms` gates per event class
 - [ ] Implement per-class `getWeight()` for immigration/compound/breaching events
 - [x] Implement malady pre-roll on immigration (`CHANCE_OF_MALADY = 15/100`)
-- [ ] Auto-save before event execution (if 45s since last save)
+- [x] Auto-save before event execution (if 45s since last save)
 - [ ] Persist `nMegaEventStartTime` in save data
 
 ---
@@ -193,12 +193,12 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [x] Implement `STAY_OPEN_DURATION = 2` seconds
 - [x] Implement `bSmashedOpen` tracking (destroyed-while-open vs destroyed-while-closed)
-- [ ] Fix `hasPower()` — check both adjacent rooms, not just object's own power flag
+- [x] Fix `hasPower()` — check both adjacent rooms, not just object's own power flag
 - [x] Implement vacuum safety lock (`_updateSpaceStatus`: `bWestSideVacuum`, `bEastSideVacuum`, `bTouchesVacuum`)
 - [x] Implement lockdown mode (`refreshLockdown` when room has `bUserBlockOxygen`)
 - [x] Implement brig door access control (`bBrigDoor`)
 - [x] Add `tDoorsByAddr` global registry for O(1) lookup
-- [ ] Implement `sabotagePowerLoss` override
+- [x] Implement `sabotagePowerLoss` override
 
 ---
 
@@ -208,7 +208,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [x] Fix neighbor count: use all 8 neighbors for spread and `getNearbyFire()` (currently only 4)
 - [x] Implement `onFire()` event dispatch to Room and EnvObject
-- [~] Implement fire save/load (heat map + flame intensity) — getSaveData/loadSaveData exist in Fire.ts but NOT wired into SaveLoad system
+- [x] Implement fire save/load (heat map + flame intensity)
 - [ ] Implement FirePanel influence on spread reduction (Lua: FirePanel enables suppression tasks, doesn't reduce spread directly)
 - [ ] Add fire sound (3D positional loop at average fire coords)
 
@@ -241,9 +241,9 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: MEDIUM**
 
 - [ ] Implement animated matter counter (tick toward real value with sound)
-- [ ] Fix corpse count: query `Corpse` env objects, not dead characters
+- [x] Fix corpse count: query `Corpse` env objects, not dead characters
 - [ ] Fix morale scale: Lua uses 0-100 directly, not remapped from [-100,100]
-- [ ] Fix morale emoticon thresholds (5 levels: bigfrown/frown/meh/smile/bigsmile)
+- [x] Fix morale emoticon thresholds (5 levels: bigfrown/frown/meh/smile/bigsmile)
 - [ ] Add FlipButton for object placement orientation
 - [ ] Add `cycleVisualizer()` for O2 button (not just toggle)
 - [ ] Add `tileTipText` (last clicked tile display, auto-clears after 150 ticks)
@@ -367,7 +367,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] File export: `exportToFile()` — downloads .json save file
 - [x] File import: `importFromFile()` — opens file picker, loads .json save
 - [x] Export/Import UI buttons in sidebar utility section
-- [ ] Save/load fire state (heat map + flame intensities)
+- [x] Save/load fire state (heat map + flame intensities)
 - [x] Save/load room oxygen levels
 - [x] Save/load character needs (hunger, tiredness, fun, etc.)
 - [ ] Save/load command/reservation queue (pending build/mine orders)
@@ -414,7 +414,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: LOW**
 
-- [ ] Fix zoom constants: `MAX_ZOOM=6.0`, `MIN_ZOOM=0.75`, `ZOOM_WHEEL_STEP=0.025`
+- [x] Fix zoom constants: `MAX_ZOOM=6.0`, `MIN_ZOOM=0.75`, `ZOOM_WHEEL_STEP=0.025`
 - [ ] Add tutorial state machine (20 steps)
 - [ ] Add `matterMult` difficulty multiplier
 - [ ] Add `g_PowerHoliday` (tutorial grace period)

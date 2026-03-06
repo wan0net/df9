@@ -6,8 +6,24 @@
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
 import type { Room } from '../rooms/Room';
-import { JOB_NAMES, tJobs, STATUS_DEAD } from '../characters/CharacterConstants';
+import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH } from '../characters/CharacterConstants';
 import { ZONE_SPRITES } from '../world/ZoneType';
+
+/** Human-readable cause of death names. */
+const DEATH_CAUSE_NAMES: Record<number, string> = {
+  [CAUSE_OF_DEATH.UNSPECIFIED]: 'Unknown',
+  [CAUSE_OF_DEATH.DEBUG]: 'Debug Kill',
+  [CAUSE_OF_DEATH.SUFFOCATION]: 'Suffocation',
+  [CAUSE_OF_DEATH.FIRE]: 'Fire',
+  [CAUSE_OF_DEATH.DISEASE]: 'Disease',
+  [CAUSE_OF_DEATH.COMBAT_RANGED]: 'Shot',
+  [CAUSE_OF_DEATH.SUCKED_INTO_SPACE]: 'Sucked Into Space',
+  [CAUSE_OF_DEATH.PARASITE]: 'Parasite',
+  [CAUSE_OF_DEATH.STARVATION]: 'Starvation',
+  [CAUSE_OF_DEATH.COMBAT_MELEE]: 'Melee Combat',
+  [CAUSE_OF_DEATH.THING]: 'The Thing',
+  [CAUSE_OF_DEATH.STUNNER]: 'Stunner',
+};
 
 const AMBER = '#dfa200';
 const PANEL_W = 280;
@@ -189,7 +205,9 @@ export class InspectorPanel {
       else if (room) locationText = `Room ${room.id}`;
       else locationText = `(${char.tileX}, ${char.tileY})`;
     }
-    const moraleText = isDead ? 'Dead' : `Morale: ${char.nMorale}`;
+    const moraleText = isDead
+      ? `Dead: ${DEATH_CAUSE_NAMES[char.nCauseOfDeath] ?? 'Unknown'}`
+      : `Morale: ${char.nMorale}`;
     locationDiv.innerHTML = `<span>${moraleText}</span><span style="color:#888">${this.escapeHtml(locationText)}</span>`;
     header.appendChild(locationDiv);
 

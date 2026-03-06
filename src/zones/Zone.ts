@@ -85,9 +85,27 @@ export class Zone {
     this.uniqueName = this.generateUniqueName();
   }
 
-  /** Generate a unique name for this zone instance (mirrors Lua naming). */
+  /** Generate a unique name for this zone instance (mirrors Lua Zone.lua naming). */
   protected generateUniqueName(): string {
-    return this.spriteConfig.name;
+    const pick = <T>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+    const GREEK = ['Alpha','Beta','Gamma','Delta','Epsilon','Zeta','Eta','Theta','Iota','Kappa','Lambda','Mu','Nu','Xi','Omicron','Pi'];
+    const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // excludes I, O
+    switch (this.zoneType) {
+      case ZoneType.POWER:
+        return `Reactor Zone ${pick(GREEK)}`;
+      case ZoneType.GARDEN:
+        return `Garden Zone ${pick(['Red','Orange','Yellow','Green','Blue','Indigo','Violet','White','Black','Silver','Gold','Crimson'])}`;
+      case ZoneType.LIFESUPPORT: {
+        const num = Math.random() < 0.01 ? '0451' : String(Math.floor(Math.random() * 100)).padStart(2, '0');
+        return `Life Support Zone ${num}${LETTERS[Math.floor(Math.random() * LETTERS.length)]}`;
+      }
+      case ZoneType.REFINERY:
+        return `Refinery Zone ${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+      case ZoneType.PLAIN:
+        return 'Unzoned Area';
+      default:
+        return this.spriteConfig.name;
+    }
   }
 
   /** Called every tick. Override in subclasses. */
