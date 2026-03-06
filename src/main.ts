@@ -353,6 +353,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     }
   };
+  // Wire fire sounds
+  fire.onFireStart = (x, y) => {
+    SpatialAudio.fireStart(x, y);
+  };
+  fire.onFireEnd = (x, y) => {
+    SpatialAudio.fireEnd(x, y);
+  };
   const projectileManager = new ProjectileManager();
   projectileManager.init();
   characterManager.setProjectileManager(projectileManager);
@@ -688,7 +695,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     onDemolishObject: (obj) => {
       const refund = obj.getVaporizeMatterYield();
       EnvObjectManager.removeObject(obj);
-      GameRules.nMatter += refund;
+      GameRules.addMatter(refund);
       Base.addAlert('build', `Demolished ${obj.tData.friendlyName}, refunded ${refund} matter`);
     },
   });
@@ -931,7 +938,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           GameRules.nMatter -= cost;
         } else if (buildMode === 'demolish') {
           const refund = buildSystem.demolish(tiles);
-          GameRules.nMatter += refund;
+          GameRules.addMatter(refund);
         }
         onTilesChanged(tiles);
       }
@@ -1422,7 +1429,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (!obj) return false;
       const refund = obj.getVaporizeMatterYield();
       EnvObjectManager.removeObject(obj);
-      GameRules.nMatter += refund;
+      GameRules.addMatter(refund);
       return refund;
     },
     cuffCharacter: (charId: number) => {

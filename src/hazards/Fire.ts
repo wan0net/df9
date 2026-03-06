@@ -123,6 +123,8 @@ export class Fire implements TickableSystem {
   citizenIgnite: CitizenIgniteFn | null = null;
   /** Optional onFire callback — notifies room (bBurning) and env object (destroyed). */
   onFireStart: OnFireStartFn | null = null;
+  /** Optional callback when fire extinguished at tile. */
+  onFireEnd: ((x: number, y: number) => void) | null = null;
 
   /** Set of tiles with FirePanel objects (reduces spread). */
   firePanelTiles: Set<string> = new Set();
@@ -156,6 +158,7 @@ export class Fire implements TickableSystem {
     fire.nIntensity -= nDouseAmount;
     if (fire.nIntensity <= 0) {
       this.fires.delete(key);
+      this.onFireEnd?.(x, y);
       return true;
     }
     return false;
@@ -163,7 +166,10 @@ export class Fire implements TickableSystem {
 
   /** Extinguish a fire at a tile. */
   extinguish(x: number, y: number) {
-    this.fires.delete(`${x},${y}`);
+    if (this.fires.has(`${x},${y}`)) {
+      this.fires.delete(`${x},${y}`);
+      this.onFireEnd?.(x, y);
+    }
   }
 
   /** Check if a tile is on fire. */
@@ -278,7 +284,9 @@ export class Fire implements TickableSystem {
 
     // Remove extinguished fires
     for (const key of toRemove) {
+      const parts = key.split(',');
       this.fires.delete(key);
+      this.onFireEnd?.(parseInt(parts[0]), parseInt(parts[1]));
     }
 
     // Spread fires (Lua: only spread 1 fire per tick via early return)
