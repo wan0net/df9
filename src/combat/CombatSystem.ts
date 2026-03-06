@@ -266,7 +266,7 @@ export class CombatSystem {
             }
 
             if (hasLoS) {
-              // Fire!
+              // Fire projectile visual
               if (this.projectileManager) {
                 this.projectileManager.fire(
                   attacker.tileX, attacker.tileY,
@@ -277,12 +277,18 @@ export class CombatSystem {
                 );
               }
 
-              hits.push({
-                attackerId: eng.attackerId,
-                defenderId: eng.defenderId,
-                damage: eng.weapon.nDamage,
-                damageType: eng.weapon.nDamageType,
-              });
+              // Dodge check (Lua Projectile:_attemptToHitTarget)
+              const dodgeChance = defender.dodgeAttackChance();
+              if (Math.random() > dodgeChance) {
+                // Hit!
+                hits.push({
+                  attackerId: eng.attackerId,
+                  defenderId: eng.defenderId,
+                  damage: eng.weapon.nDamage,
+                  damageType: eng.weapon.nDamageType,
+                });
+              }
+              // Miss — projectile continues but no damage applied
 
               // Enter cooldown
               eng.bCoolingDown = true;

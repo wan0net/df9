@@ -28,6 +28,7 @@ const ZONE_ROOM_LIGHTS: Record<ZoneType, RoomLightDef> = {
   [ZoneType.FITNESS]: { tLightColor: [1.0, 1.0, 1.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 },
   [ZoneType.RESEARCH]: { tLightColor: [0.2, 1.0, 0.4], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 },
   [ZoneType.BRIG]: { tLightColor: [0.7, 0.5, 0.5], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 1 },
+  [ZoneType.CONSTRUCTION]: { tLightColor: [0.8, 1.0, 0.2], nLightTileGapX: 3, nLightTileGapY: 3, nLightRadius: 3 },
   [ZoneType.EXTERIOR]: { tLightColor: [0.3, 0.3, 0.3], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 },
 };
 
@@ -45,6 +46,7 @@ export const ZONE_JOBS: Record<ZoneType, number> = {
   [ZoneType.FITNESS]: -1,
   [ZoneType.RESEARCH]: 9, // SCIENTIST
   [ZoneType.BRIG]: -1,
+  [ZoneType.CONSTRUCTION]: -1,
   [ZoneType.EXTERIOR]: -1,
 };
 

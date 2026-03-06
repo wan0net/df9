@@ -36,7 +36,7 @@ export type SelectedEntity =
   | { type: 'room'; data: Room }
   | null;
 
-type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'log' | 'actions' | 'stuff';
+type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'log' | 'actions' | 'stuff' | 'about';
 
 export class InspectorPanel {
   private el: HTMLDivElement;
@@ -265,6 +265,7 @@ export class InspectorPanel {
           { label: 'Needs', tab: 'needs' },
           { label: 'Psych', tab: 'psych' },
           { label: 'Stuff', tab: 'stuff' },
+          { label: 'About', tab: 'about' },
           { label: 'Log', tab: 'log' },
           { label: 'Actions', tab: 'actions' },
         ]
@@ -306,6 +307,9 @@ export class InspectorPanel {
         break;
       case 'stuff':
         this.renderStuffTab(body, char);
+        break;
+      case 'about':
+        this.renderAboutTab(body, char);
         break;
       case 'log':
         this.renderLogTab(body, char);
@@ -478,6 +482,62 @@ export class InspectorPanel {
       const tagStr = tmpl?.bStuff ? ' [Stuff]' : tmpl?.bDisplayable ? ' [Display]' : '';
       row.innerHTML = `<span style="color:#ccc;">${this.escapeHtml(item.sName)}${countStr}</span><span style="color:#666;font-size:10px;">${tagStr}</span>`;
       container.appendChild(row);
+    }
+  }
+
+  private renderAboutTab(container: HTMLDivElement, char: Character) {
+    // Character description/lore (Lua CitizenInspector About tab)
+    const info: { label: string; value: string }[] = [
+      { label: 'Name', value: char.getName() },
+      { label: 'Race', value: char.getRaceDef().sName.charAt(0).toUpperCase() + char.getRaceDef().sName.slice(1) },
+      { label: 'Job', value: JOB_NAMES[char.getJob()] ?? 'Unknown' },
+      { label: 'Morale', value: String(Math.round(char.nMorale)) },
+      { label: 'Health', value: `${char.getHP()} / ${char.tStats.nMaxHP}` },
+      { label: 'Joined', value: `Day ${Math.floor(char.nJoinTime / (60 * 24))}` },
+    ];
+
+    for (const item of info) {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom:4px;font-size:12px;';
+      const labelSpan = document.createElement('span');
+      labelSpan.style.cssText = `color:${AMBER};`;
+      labelSpan.textContent = item.label + ': ';
+      const valueSpan = document.createElement('span');
+      valueSpan.style.cssText = 'color:#ccc;';
+      valueSpan.textContent = item.value;
+      row.appendChild(labelSpan);
+      row.appendChild(valueSpan);
+      container.appendChild(row);
+    }
+
+    // Personality traits summary
+    if (char.tStats.personality) {
+      const traitDiv = document.createElement('div');
+      traitDiv.style.cssText = 'margin-top:8px;';
+      const traitLabel = document.createElement('div');
+      traitLabel.style.cssText = `color:${AMBER};font-size:11px;margin-bottom:4px;`;
+      traitLabel.textContent = 'Personality:';
+      traitDiv.appendChild(traitLabel);
+
+      const p = char.tStats.personality;
+      const traits: string[] = [];
+      if (p.nBravery > 0.7) traits.push('Brave');
+      if (p.nBravery < 0.3) traits.push('Cautious');
+      if (p.nGregariousness > 0.7) traits.push('Sociable');
+      if (p.nGregariousness < 0.3) traits.push('Loner');
+      if (p.nPositivity > 0.7) traits.push('Optimist');
+      if (p.nPositivity < 0.3) traits.push('Pessimist');
+      if (p.nTemper > 0.7) traits.push('Hot-headed');
+      if (p.nWorkEthic > 0.7) traits.push('Hardworking');
+      if (p.bXenophobe) traits.push('Xenophobe');
+      if (p.bJoker) traits.push('Joker');
+      if (p.bGourmand) traits.push('Gourmand');
+
+      const traitText = document.createElement('div');
+      traitText.style.cssText = 'color:#ccc;font-size:11px;';
+      traitText.textContent = traits.length > 0 ? traits.join(', ') : 'Average';
+      traitDiv.appendChild(traitText);
+      container.appendChild(traitDiv);
     }
   }
 

@@ -15,6 +15,8 @@ export enum ZoneType {
   FITNESS = 'FITNESS',
   RESEARCH = 'RESEARCH',
   BRIG = 'BRIG',
+  /** Internal zone for building preview wireframe walls. Not player-assignable. */
+  CONSTRUCTION = 'CONSTRUCTION',
   /** Special zone for exterior/spacewalk areas. Not player-assignable. */
   EXTERIOR = 'EXTERIOR',
 }
@@ -131,6 +133,12 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
       { key: 'brig03', weight: 1 },
     ],
     ambientLight: [0.4, 0.45, 0.5],
+  },
+  [ZoneType.CONSTRUCTION]: {
+    name: 'Construction',
+    wallPrefix: 'Base',
+    floors: [{ key: 'tile_floor', weight: 1 }],
+    ambientLight: [0.8, 1.0, 0.2],
   },
   [ZoneType.EXTERIOR]: {
     name: 'External',

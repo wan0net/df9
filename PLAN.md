@@ -145,7 +145,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 ### 4.2 Combat mechanics
 - [x] Implement line-of-sight check for ranged attacks (`GridUtil.CheckLineOfSight`)
 - [x] Implement per-weapon aim time (`nMinAimTime`, `nMaxAimTime`) and cooldown (`nMinCoolDown`, `nMaxCoolDown`)
-- [ ] Implement projectile travel with miss chance (not instant hit)
+- [x] Implement projectile dodge/miss chance (Lua dodgeAttackChance: 10% human, 30% monster)
 - [x] Implement stunner damage type — incapacitate instead of kill
 - [ ] Implement puppet/grapple system (`forcePuppet`)
 - [x] Implement combat awareness spreading (`Room.spreadCombatAwareness`)
@@ -285,7 +285,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Use localized condition string from `EnvObject.getConditionUIString()`
 - [x] Auto-close inspector on object destruction
 - [x] Add InventoryItem handling in inspector (Stuff tab with inventory + held item)
-- [ ] Add About tab (description/lore text)
+- [x] Add About tab (description/lore text)
 
 ---
 
@@ -391,7 +391,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: LOW-MEDIUM**
 
-- [ ] Add CONSTRUCTION zone type
+- [x] Add CONSTRUCTION zone type
 - [x] Add `Zone:getAssociatedJob()` — already exists as `zone.associatedJob` property from ZONE_JOBS
 - [ ] Implement zone power distribution (powerRequest/powerUnrequest/tThingsPowered sorted by distance)
 - [x] Implement unique zone name generators for all 11 zone types (reactor/greek, research/greek, infirmary/constellation, etc.)

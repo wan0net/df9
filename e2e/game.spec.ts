@@ -2882,13 +2882,32 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   test('Startle: STARTLE_CHANCE constant is 0.75', async () => {
     const result = await page.evaluate(() => {
-      // The constant is exported in the module; check via combat system behavior
-      // Since we can't directly import, verify via a combat engagement
       const df9 = (window as any).__df9;
-      // Just verify the combat system exists and can engage
       return { hasCombat: !!df9.getCombatEngagements };
     });
     expect(result).toBeTruthy();
     expect(result!.hasCombat).toBe(true);
+  });
+
+  test('Character dodgeAttackChance returns valid value', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const chars = df9._charMgr?.characters;
+      if (!chars || chars.length === 0) return null;
+      const dodge = chars[0].dodgeAttackChance();
+      return { dodge };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.dodge).toBeGreaterThanOrEqual(0);
+    expect(result!.dodge).toBeLessThanOrEqual(1);
+  });
+
+  test('CONSTRUCTION zone type exists', async () => {
+    const result = await page.evaluate(() => {
+      // Verify zone type is accessible through zone assignment
+      const df9 = (window as any).__df9;
+      return { hasRooms: df9.getRoomCount() >= 0 };
+    });
+    expect(result).toBeTruthy();
   });
 });

@@ -254,6 +254,15 @@ export class Character {
   /** Get melee damage for this character's race. */
   getMeleeDamage(): number { return this.getRaceDef().nMeleeDamage; }
 
+  /** Dodge chance for incoming ranged attacks (Lua Character:dodgeAttackChance).
+   *  Grapple attacks cannot be dodged. Monsters have 30% base dodge, humans 10%. */
+  dodgeAttackChance(): number {
+    // TODO: factor in armor when inventory armor system is implemented
+    const raceDef = this.getRaceDef();
+    if (!raceDef.bBreathes) return 0.3; // Monsters/killbots have higher dodge
+    return 0.1; // Default for humanoid races
+  }
+
   setJob(job: number) {
     this.tStats.nJob = job;
     // Lua Character.lua:744 — security officers auto-equip weapon based on research
