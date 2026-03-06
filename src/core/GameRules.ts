@@ -94,6 +94,17 @@ class GameRulesClass {
   /** Matter cost multiplier (Lua GameRules.matterMult, default 1). */
   matterMult = 1;
 
+  /** Disaster mode unlocked (Lua GameRules.bDisasterMode). */
+  bDisasterMode = false;
+  /** Game is in a cutscene (Lua GameRules.bInCutscene). */
+  bInCutscene = false;
+  /** Time is locked (pause override, Lua GameRules.bTimeLocked). */
+  bTimeLocked = false;
+  /** Power holiday — tutorial grace period, all objects get power (Lua g_PowerHoliday). */
+  bPowerHoliday = false;
+  /** Prohibit suffocation (Lua GameRules.bProhibitSuffocation). */
+  bProhibitSuffocation = false;
+
   sStarDate = '0.0';
   sStarTime = '00';
 

@@ -8,6 +8,7 @@ import type { RoomManager } from '../rooms/RoomManager';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { TileType } from '../world/TileTypes';
 import type { TileGrid } from '../world/TileGrid';
+import { GameRules } from '../core/GameRules';
 
 /** Power draw per tile of floor (from Lua: POWER_DRAW_PER_TILE=1) */
 export const POWER_DRAW_PER_TILE = 1;
@@ -64,11 +65,12 @@ export class PowerSystem {
       }
 
       // Distribute power status
-      const hasPower = totalOutput >= totalDraw;
+      // Power holiday: all objects get power during tutorial grace period (Lua g_PowerHoliday)
+      const hasPower = GameRules.bPowerHoliday || totalOutput >= totalDraw;
       for (const r of blob) {
-        r.nPowerOutput = totalOutput;
+        r.nPowerOutput = GameRules.bPowerHoliday ? Math.max(1, totalOutput) : totalOutput;
         r.nPowerDraw = totalDraw;
-        r.nPowerSupply = totalOutput - totalDraw;
+        r.nPowerSupply = GameRules.bPowerHoliday ? 999 : totalOutput - totalDraw;
 
         // Update power status on objects in room
         for (const obj of EnvObjectManager.getObjectsInRoom(r)) {

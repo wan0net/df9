@@ -124,6 +124,52 @@ export class GoalSystem {
     return this.completed.has(goalName);
   }
 
+  /** Get numeric progress for a goal (0-1 ratio). Completed goals return 1. */
+  getGoalProgress(goal: GoalDef): number {
+    if (this.completed.has(goal.sName)) return 1;
+    const stats = Base.getStats();
+    switch (goal.checkType) {
+      case 'citizens':
+        return Math.min(1, this.providers.getPopulation() / goal.nThreshold);
+      case 'matter':
+        return Math.min(1, this.providers.getMatter() / goal.nThreshold);
+      case 'builtEverything': {
+        const { built, total } = this.providers.getBuiltObjectTypeCount();
+        return total > 0 ? Math.min(1, built / total) : 0;
+      }
+      case 'hostilesKilled':
+        return Math.min(1, stats.nHostilesKilled / goal.nThreshold);
+      case 'baseTiles':
+        return Math.min(1, this.providers.getOwnedTileCount() / goal.nThreshold);
+      case 'mealsServed':
+        return Math.min(1, stats.nMealsServed / goal.nThreshold);
+      case 'allTechs': {
+        const { researched, total } = this.providers.getResearchedTechCount();
+        return total > 0 ? Math.min(1, researched / total) : 0;
+      }
+      case 'happyCitizens':
+        return Math.min(1, this.providers.getHappyCitizenCount(TARGET_HAPPY_MORALE) / goal.nThreshold);
+      case 'bodiesRefined':
+        return Math.min(1, stats.nCorpsesRecycled / goal.nThreshold);
+      case 'hostilesAsphyxiated':
+        return Math.min(1, stats.nHostilesAsphyxiated / goal.nThreshold);
+      case 'raidersConverted':
+        return Math.min(1, stats.nRaidersConverted / goal.nThreshold);
+      default:
+        return 0;
+    }
+  }
+
+  /** Get all goals with their progress. */
+  getAllGoalProgress(): { sName: string; friendlyName: string; progress: number; completed: boolean }[] {
+    return GOAL_DEFS.map(g => ({
+      sName: g.sName,
+      friendlyName: g.friendlyName,
+      progress: this.getGoalProgress(g),
+      completed: this.completed.has(g.sName),
+    }));
+  }
+
   /** Save data. */
   getSaveData() {
     return {
