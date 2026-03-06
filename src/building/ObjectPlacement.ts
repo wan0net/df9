@@ -294,20 +294,32 @@ export class ObjectPlacement {
       return t === TileType.FLOOR || t === TileType.FLOOR_PENDING;
     };
 
+    // Flip derivation from Lua _flipsToRearDirection + _getPropFootprint:
+    // The prop's back faces the wall. bFlipX/bFlipY encode which direction the wall
+    // is relative to the FLOOR tile:
+    //   bFlipX=false, bFlipY=false → wall at NW of floor
+    //   bFlipX=true,  bFlipY=false → wall at NE of floor
+    //   bFlipX=false, bFlipY=true  → wall at SW of floor
+    //   bFlipX=true,  bFlipY=true  → wall at SE of floor
+    // Since we know the floor's position relative to the WALL tile, we invert:
+    //   floor at NW of wall → wall at SE of floor → bFlipX=true,  bFlipY=true
+    //   floor at NE of wall → wall at SW of floor → bFlipX=false, bFlipY=true
+    //   floor at SE of wall → wall at NW of floor → bFlipX=false, bFlipY=false
+    //   floor at SW of wall → wall at NE of floor → bFlipX=true,  bFlipY=false
     const results: { x: number; y: number; bFlipX: boolean; bFlipY: boolean }[] = [];
     const dir = getWallDirection(this.grid, wallX, wallY);
 
     if (dir === WallDirection.NESW) {
-      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: false });
-      if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: true  });
+      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: true  });
+      if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: false });
     } else if (dir === WallDirection.NWSE) {
-      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: false });
-      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: true  });
+      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: true  });
+      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: false });
     } else {
-      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: false });
-      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: false });
-      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: true  });
-      if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: true  });
+      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: true  });
+      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: true  });
+      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: false });
+      if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: false });
     }
     return results;
   }
