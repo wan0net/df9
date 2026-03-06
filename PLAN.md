@@ -341,7 +341,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: MEDIUM**
 
 - [x] Integrate pickups with inventory system (floor item ↔ held item conversion) — PickUpFloorItem task, janitor corpse/debris flow, miner rock flow, heldItem save/load
-- [ ] Add room registration + activity option advertising for pickups
+- [x] Add room registration + activity option advertising for pickups
 - [x] Add ResearchDatacube pickup type
 - [x] Add `nMoraleScore = -20` on Corpse pickups
 - [x] Add `bLeaveEnvObject` for Rock pickups (floor marking after pickup)

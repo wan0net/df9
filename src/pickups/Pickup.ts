@@ -11,6 +11,8 @@ export class Pickup {
   tileX: number;
   tileY: number;
   bPickedUp = false;
+  /** Room this pickup is in (set on creation). */
+  rRoom: { id: number } | null | undefined = null;
 
   constructor(sName: string, tileX: number, tileY: number) {
     this.sName = sName;

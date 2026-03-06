@@ -549,11 +549,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   }));
   saveLoadSystem.loadPickupData = (data) => {
     for (const p of data) {
+      let pickup: Pickup;
       if (p.sName === 'Corpse') {
-        characterManager.pickups.push(new Corpse(p.tileX, p.tileY, 'Unknown', 0, 1));
+        pickup = new Corpse(p.tileX, p.tileY, 'Unknown', 0, 1);
       } else {
-        characterManager.pickups.push(new Pickup(p.sName, p.tileX, p.tileY));
+        pickup = new Pickup(p.sName, p.tileX, p.tileY);
       }
+      // Register with room (Lua: Room:addProp for pickups)
+      pickup.rRoom = roomManager.getRoomAt(p.tileX, p.tileY);
+      characterManager.pickups.push(pickup);
     }
   };
 

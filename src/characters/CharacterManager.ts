@@ -407,6 +407,8 @@ export class CharacterManager {
         }
         // Create corpse pickup at death tile
         const corpse = new Corpse(char.tileX, char.tileY, char.getName(), char.nCauseOfDeath, corpseType);
+        // Register with room (Lua: Room:addProp for pickups)
+        corpse.rRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
         this.pickups.push(corpse);
 
         // Disengage from combat
