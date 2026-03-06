@@ -2697,4 +2697,55 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result!.vacuumScheme).toBe(3); // LIGHTING_SCHEME_VACUUM
     expect(result!.lowpowerScheme).toBe(5); // LIGHTING_SCHEME_LOWPOWER
   });
+
+  test('Pickup flow: heldItem save/load and removePickup work', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const chars = df9._charMgr?.characters;
+      if (!chars || chars.length === 0) return null;
+      const char = chars[0];
+
+      // Test heldItem
+      char.heldItem = 'Rock';
+      const heldBefore = char.heldItem;
+
+      // Test removePickup
+      const pickupsBefore = df9._charMgr.pickups.length;
+      // Create a fake pickup-like object
+      const fakePickup = { sName: 'Debris', tileX: 5, tileY: 5, bPickedUp: false };
+      df9._charMgr.pickups.push(fakePickup);
+      const after1 = df9._charMgr.pickups.length;
+      df9._charMgr.removePickup(fakePickup);
+      const after2 = df9._charMgr.pickups.length;
+
+      // Clean up
+      char.heldItem = null;
+
+      return {
+        heldBefore,
+        pickupAdded: after1 === pickupsBefore + 1,
+        pickupRemoved: after2 === pickupsBefore,
+      };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.heldBefore).toBe('Rock');
+    expect(result!.pickupAdded).toBe(true);
+    expect(result!.pickupRemoved).toBe(true);
+  });
+
+  test('Save/Load preserves heldItem on characters', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const chars = df9._charMgr?.characters;
+      if (!chars || chars.length === 0) return null;
+      chars[0].heldItem = 'Rock';
+      df9.saveGame();
+      chars[0].heldItem = null;
+      df9.loadGame();
+      const loaded = df9._charMgr?.characters?.[0]?.heldItem;
+      return { heldItem: loaded };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.heldItem).toBe('Rock');
+  });
 });

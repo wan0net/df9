@@ -38,6 +38,7 @@ export interface CharSaveData {
   tLog?: LogEntry[];
   needs?: { hunger: number; energy: number; amusement: number; social: number; oxygen: number };
   inventory?: { sTemplate: string; sName: string; nCount: number }[];
+  heldItem?: string | null;
 }
 
 export interface ObjSaveData {
@@ -69,6 +70,7 @@ export interface SaveData {
   factionData?: { teamFactions: [number, number][]; nNextTeamID: number };
   fires?: { tTiles: Record<string, number>; tFlames: Record<string, number> };
   commands?: { type: string; tileX: number; tileY: number; objectName?: string }[];
+  pickups?: { sName: string; tileX: number; tileY: number }[];
 }
 
 export class SaveLoadSystem {
@@ -83,6 +85,7 @@ export class SaveLoadSystem {
   getTopicsData: (() => { tTopics: Record<string, { name: string; category: string }>; counter: number }) | null = null;
   getFireData: (() => { tTiles: Record<string, number>; tFlames: Record<string, number> }) | null = null;
   getCommandData: (() => { type: string; tileX: number; tileY: number; objectName?: string }[]) | null = null;
+  getPickupData: (() => { sName: string; tileX: number; tileY: number }[]) | null = null;
 
   loadCharacterData: ((data: CharSaveData[]) => void) | null = null;
   loadObjectData: ((data: ObjSaveData[]) => void) | null = null;
@@ -91,6 +94,7 @@ export class SaveLoadSystem {
   loadTopicsData: ((data: { tTopics: Record<string, { name: string; category: string }>; counter: number }) => void) | null = null;
   loadFireData: ((data: { tTiles: Record<string, number>; tFlames: Record<string, number> }) => void) | null = null;
   loadCommandData: ((data: { type: string; tileX: number; tileY: number; objectName?: string }[]) => void) | null = null;
+  loadPickupData: ((data: { sName: string; tileX: number; tileY: number }[]) => void) | null = null;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -134,6 +138,7 @@ export class SaveLoadSystem {
       factionData: Base.getFactionSaveData(),
       fires: this.getFireData?.(),
       commands: this.getCommandData?.(),
+      pickups: this.getPickupData?.(),
     };
   }
 
@@ -215,6 +220,7 @@ export class SaveLoadSystem {
     if (data.topics) this.loadTopicsData?.(data.topics);
     if (data.fires) this.loadFireData?.(data.fires);
     if ((data as any).commands) this.loadCommandData?.((data as any).commands);
+    if (data.pickups) this.loadPickupData?.(data.pickups);
 
     return true;
   }

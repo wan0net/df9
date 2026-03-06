@@ -1,12 +1,12 @@
 /**
- * DropOffCorpse.ts — Janitor carries a corpse to the recycler for matter.
- * Mirrors Activities/DropOffCorpse.lua.
+ * DropOffCorpse.ts — Janitor carries items to the recycler for matter.
+ * Mirrors Activities/DropOffCorpse.lua — handles corpses, debris, and other items.
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
 import { GameRules, MAT_CORPSE_MIN, MAT_CORPSE_MAX } from '../../core/GameRules';
 import { Base } from '../../core/Base';
-import { MORALE_MINE_ASTEROID, JANITOR } from '../../characters/CharacterConstants';
+import { MORALE_MINE_ASTEROID } from '../../characters/CharacterConstants';
 import { addLog } from '../../characters/Log';
 import { CORPSE_TYPE_RAIDER, CORPSE_TYPE_MONSTER } from '../../pickups/Corpse';
 
@@ -34,25 +34,37 @@ export class DropOffCorpse extends Task {
 
   protected onUpdate(dt: number) {
     if (this.elapsedTime >= this.duration) {
-      // Convert corpse to matter (Lua: math.random(MAT_CORPSE_MIN, MAT_CORPSE_MAX))
-      const matter = MAT_CORPSE_MIN + Math.floor(Math.random() * (MAT_CORPSE_MAX - MAT_CORPSE_MIN + 1));
-      GameRules.nMatter += matter;
-      Base.incrementStat('nCorpsesRecycled');
+      const heldItem = this.character?.heldItem ?? 'Corpse';
 
-      // Morale reward (Lua: MORALE_MINE_ASTEROID)
-      this.character?.addMorale(MORALE_MINE_ASTEROID);
+      if (heldItem === 'Corpse') {
+        // Corpse: high matter yield (Lua: math.random(MAT_CORPSE_MIN, MAT_CORPSE_MAX))
+        const matter = MAT_CORPSE_MIN + Math.floor(Math.random() * (MAT_CORPSE_MAX - MAT_CORPSE_MIN + 1));
+        GameRules.addMatter(matter);
+        Base.incrementStat('nCorpsesRecycled');
 
-      // Log by corpse type (Lua DropOffCorpse.lua:35-46)
-      const logData = { sDeceased: this.deceasedName };
-      if (this.corpseType === CORPSE_TYPE_RAIDER) {
-        addLog('DUTY_JANITOR_REFINE_CORPSE_RAIDER', this.character!, logData);
-      } else if (this.corpseType === CORPSE_TYPE_MONSTER) {
-        addLog('DUTY_JANITOR_REFINE_CORPSE_MONSTER', this.character!, logData);
+        // Morale reward (Lua: MORALE_MINE_ASTEROID)
+        this.character?.addMorale(MORALE_MINE_ASTEROID);
+
+        // Log by corpse type
+        const logData = { sDeceased: this.deceasedName };
+        if (this.corpseType === CORPSE_TYPE_RAIDER) {
+          addLog('DUTY_JANITOR_REFINE_CORPSE_RAIDER', this.character!, logData);
+        } else if (this.corpseType === CORPSE_TYPE_MONSTER) {
+          addLog('DUTY_JANITOR_REFINE_CORPSE_MONSTER', this.character!, logData);
+        } else {
+          addLog('DUTY_JANITOR_REFINE_CORPSE_FRIENDLY', this.character!, logData);
+        }
+
+        Base.addAlert('recycle', `Corpse recycled for ${matter} matter`);
       } else {
-        addLog('DUTY_JANITOR_REFINE_CORPSE_FRIENDLY', this.character!, logData);
+        // Debris or other items: 1 matter fallback (Lua: GameRules.addMatter(1))
+        GameRules.addMatter(1);
+        Base.addAlert('recycle', `${heldItem} recycled for 1 matter`);
       }
 
-      Base.addAlert('recycle', `Corpse recycled for ${matter} matter`);
+      // Clear held item
+      if (this.character) this.character.heldItem = null;
+
       this.complete();
     }
   }

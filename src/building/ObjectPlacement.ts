@@ -84,9 +84,9 @@ export class ObjectPlacement {
         return { valid: false, reason: 'No adjacent floor tile' };
       }
 
-      // Occupied-tile check — mirrors _checkPropFit: ObjectList.getObjAtTile.
+      // Occupied-tile check — mirrors _checkPropFit: any existing object blocks placement.
       const occupant = EnvObjectManager.getObjectAt(floorTile.x, floorTile.y);
-      if (occupant && occupant.tData.bBlocksPathing) {
+      if (occupant) {
         return { valid: false, reason: 'Tile is occupied' };
       }
 

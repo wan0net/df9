@@ -116,6 +116,7 @@ export interface BaseStats {
   nHostilesKilledByTurret: number;
   nHostilesKilledByParasite: number;
   nRaidersConverted: number;
+  nRocksRecycled: number;
 }
 
 function createEmptyStats(): BaseStats {
@@ -129,6 +130,7 @@ function createEmptyStats(): BaseStats {
     nHostilesKilledByTurret: 0,
     nHostilesKilledByParasite: 0,
     nRaidersConverted: 0,
+    nRocksRecycled: 0,
   };
 }
 

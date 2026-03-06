@@ -58,6 +58,7 @@ import { HarvestAndDeliverFood } from '../utility/tasks/HarvestAndDeliverFood';
 import { ServeFoodAtTable } from '../utility/tasks/ServeFoodAtTable';
 import { EatAtTable } from '../utility/tasks/EatAtTable';
 import { DropOffRocks } from '../utility/tasks/DropOffRocks';
+import { PickUpFloorItem } from '../utility/tasks/PickUpFloorItem';
 import { IncapacitatedOnFloor } from '../utility/tasks/IncapacitatedOnFloor';
 import { PRIORITY } from '../utility/ActivityOption';
 import { CommandQueue } from '../core/CommandQueue';
@@ -526,6 +527,12 @@ export class CharacterManager {
     return this.pickups;
   }
 
+  /** Remove a pickup from the active list (after being picked up). */
+  removePickup(pickup: Pickup): void {
+    const idx = this.pickups.indexOf(pickup);
+    if (idx >= 0) this.pickups.splice(idx, 1);
+  }
+
   /** Get count of hostile characters currently alive. */
   getHostileCount(): number {
     return this.characters.filter(c => c.isAlive() && isHostile(TEAM_ID_PLAYER, c.tStats.nTeam)).length;
@@ -886,14 +893,54 @@ export class CharacterManager {
       }
     }
 
-    // JANITOR: Pick up corpses
-    if (job === JANITOR) {
+    // JANITOR: Pick up corpses and debris from floor (then deliver to refinery)
+    if (job === JANITOR && character.heldItem === null) {
       for (const pickup of this.pickups) {
-        if (pickup.sName === 'Corpse' && !pickup.bPickedUp) {
+        if ((pickup.sName === 'Corpse' || pickup.sName === 'Debris') && !pickup.bPickedUp) {
+          const task = new PickUpFloorItem(pickup, (p) => this.removePickup(p));
           options.push(new ActivityOption(
-            new DropOffCorpse(),
+            task,
             pickup.tileX, pickup.tileY,
             8 + shiftBoost,
+            {
+              tags: { Job: JANITOR, WorkShift: true },
+              prerequisites: { EmptyHands: true },
+            },
+          ));
+        }
+      }
+    }
+
+    // JANITOR: Drop off held corpse or debris at refinery
+    if (job === JANITOR && (character.heldItem === 'Corpse' || character.heldItem === 'Debris')) {
+      const refineries = [
+        ...EnvObjectManager.getObjectsByType('RefineryDropoff'),
+        ...EnvObjectManager.getObjectsByType('RefineryDropoffLevel2'),
+      ];
+      for (const ref of refineries) {
+        if (!ref.bBuilt || !ref.isFunctioning()) continue;
+        options.push(new ActivityOption(
+          new DropOffCorpse(),
+          ref.tileX, ref.tileY,
+          9 + shiftBoost,
+          { tags: { Job: JANITOR } },
+        ));
+      }
+    }
+
+    // MINER: Pick up rocks from floor
+    if (job === MINER && character.heldItem === null) {
+      for (const pickup of this.pickups) {
+        if (pickup.sName === 'Rock' && !pickup.bPickedUp) {
+          const task = new PickUpFloorItem(pickup, (p) => this.removePickup(p));
+          options.push(new ActivityOption(
+            task,
+            pickup.tileX, pickup.tileY,
+            7 + shiftBoost,
+            {
+              tags: { Job: MINER, WorkShift: true },
+              prerequisites: { EmptyHands: true },
+            },
           ));
         }
       }

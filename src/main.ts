@@ -57,6 +57,8 @@ import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
 import { tileToScreen } from './world/IsometricUtils';
 import { TileType } from './world/TileTypes';
+import { Pickup } from './pickups/Pickup';
+import { Corpse } from './pickups/Corpse';
 import { isAsteroid } from './world/Asteroid';
 import { CommandQueue } from './core/CommandQueue';
 import {
@@ -429,7 +431,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     hp: c.getHP(), maxHP: c.tStats.nMaxHP, status: c.tStats.nStatus,
     xp: c.tStats.nXP, competency: { ...c.tStats.tCompetency },
     morale: c.nMorale, anger: c.nAnger, nRemainingDutyTime: c.nRemainingDutyTime,
-    weapon: c.weapon, bSpacesuit: c.bSpacesuit, nSuitOxygen: c.nSuitOxygen,
+    weapon: c.weapon, bSpacesuit: c.bSpacesuit, nSuitOxygen: c.nSuitOxygen, heldItem: c.heldItem,
     maladies: c.maladies.map(m => ({ ...m })),
     tLog: c.tLog.slice(-100),
     needs: { ...c.needs },
@@ -467,6 +469,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       char.weapon = cd.weapon;
       char.bSpacesuit = cd.bSpacesuit;
       char.nSuitOxygen = cd.nSuitOxygen;
+      if (cd.heldItem !== undefined) char.heldItem = cd.heldItem;
       // Restore needs
       if (cd.needs) {
         char.needs.hunger = cd.needs.hunger;
@@ -517,6 +520,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   saveLoadSystem.getCommandData = () => CommandQueue.getSaveData();
   saveLoadSystem.loadCommandData = (data) => {
     CommandQueue.loadSaveData(data as any);
+  };
+  saveLoadSystem.getPickupData = () => characterManager.getPickups().map(p => ({
+    sName: p.sName, tileX: p.tileX, tileY: p.tileY,
+  }));
+  saveLoadSystem.loadPickupData = (data) => {
+    for (const p of data) {
+      if (p.sName === 'Corpse') {
+        characterManager.pickups.push(new Corpse(p.tileX, p.tileY, 'Unknown', 0, 1));
+      } else {
+        characterManager.pickups.push(new Pickup(p.sName, p.tileX, p.tileY));
+      }
+    }
   };
 
   // Register subsystems

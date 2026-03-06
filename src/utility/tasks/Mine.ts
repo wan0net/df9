@@ -74,7 +74,7 @@ export class Mine extends Task {
 
     // Mine it: yield matter, convert to space
     const yield_ = getMiningYield();
-    GameRules.nMatter += yield_;
+    GameRules.addMatter(yield_);
     this.grid.set(cmd.tileX, cmd.tileY, TileType.SPACE);
     CommandQueue.complete(this.commandId);
 
