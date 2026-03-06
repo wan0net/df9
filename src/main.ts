@@ -10,6 +10,7 @@ import { TileRenderer3D } from './renderer/TileRenderer3D';
 import { CharacterRenderer } from './renderer/CharacterRenderer';
 import { EnvObjectRenderer } from './renderer/EnvObjectRenderer';
 import { PropRenderer } from './renderer/PropRenderer';
+import { SelectionHighlight } from './renderer/SelectionHighlight';
 import { SceneManager } from './renderer/SceneManager';
 import { loadAllAssets, getTexture } from './renderer/AssetLoader';
 import { InputManager } from './input/InputManager';
@@ -217,6 +218,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Character renderer
   const characterRenderer = new CharacterRenderer(threeRenderer.scene, threeRenderer.overlayScene);
+  characterRenderer.setGrid(grid);
   characterManager.setRenderer(characterRenderer);
 
   // Env object renderer
@@ -224,6 +226,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Prop renderer for 3D pickup/held-item models
   const propRenderer = new PropRenderer(threeRenderer.scene);
+  const selectionHighlight = new SelectionHighlight(threeRenderer.scene);
   propRenderer.preload([
     'BodyBag', 'FoodBar', 'FoodCrate', 'AsteroidChunk',
     'Pistol', 'Rifle', 'SpaceGun', 'Builder', 'Weldammer',
@@ -872,6 +875,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     if (showO2Overlay) {
       renderO2Overlay();
     }
+
+    // Selection highlight
+    selectionHighlight.update(selectedEntity);
 
     // UI
     uiManager.update();
@@ -1682,16 +1688,64 @@ function createSpaceBackground(threeRenderer: ThreeRenderer) {
   const worldW = GRID_W * TILE_W;
   const worldH = GRID_H * TILE_HALF_H;
 
+  // Brighten the nebula tiles (original is very dark)
   const mat = new THREE.MeshBasicMaterial({
     map: tex,
     depthWrite: false,
+    color: 0x333344, // Slight blue-purple tint to enhance nebula visibility
   });
+  // Additive blend: brightens the underlying black scene
+  mat.blending = THREE.AdditiveBlending;
 
   for (let y = -bgH; y < worldH + bgH; y += bgH) {
     for (let x = -bgW; x < worldW + bgW; x += bgW) {
       const geo = new THREE.PlaneGeometry(bgW, bgH);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x + bgW / 2, -(y + bgH / 2), -1);
+      threeRenderer.scene.add(mesh);
+    }
+  }
+
+  // Also render a non-additive base pass for the actual nebula detail
+  const baseMat = new THREE.MeshBasicMaterial({
+    map: tex,
+    depthWrite: false,
+  });
+  for (let y = -bgH; y < worldH + bgH; y += bgH) {
+    for (let x = -bgW; x < worldW + bgW; x += bgW) {
+      const geo = new THREE.PlaneGeometry(bgW, bgH);
+      const mesh = new THREE.Mesh(geo, baseMat);
+      mesh.position.set(x + bgW / 2, -(y + bgH / 2), -2);
+      threeRenderer.scene.add(mesh);
+    }
+  }
+
+  // Scatter nebula cloud overlays from Elements.png (Lua: Backgrounds/Elements)
+  const elemTex = getTexture('space_elements');
+  if (elemTex) {
+    const elemMat = new THREE.MeshBasicMaterial({
+      map: elemTex,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.12,
+      blending: THREE.AdditiveBlending,
+    });
+    // Scatter a few large element quads at random positions
+    const rng = (seed: number) => {
+      let s = seed;
+      return () => { s = (s * 1664525 + 1013904223) & 0x7fffffff; return s / 0x7fffffff; };
+    };
+    const rand = rng(42);
+    const elemSize = 2048;
+    for (let i = 0; i < 8; i++) {
+      const ex = rand() * worldW - elemSize * 0.3;
+      const ey = rand() * worldH - elemSize * 0.3;
+      const scale = 1.5 + rand() * 2;
+      const geo = new THREE.PlaneGeometry(elemSize * scale, elemSize * scale);
+      const mesh = new THREE.Mesh(geo, elemMat);
+      mesh.position.set(ex + elemSize * scale / 2, -(ey + elemSize * scale / 2), -0.5);
+      // Random rotation for variety
+      mesh.rotation.z = rand() * Math.PI * 2;
       threeRenderer.scene.add(mesh);
     }
   }

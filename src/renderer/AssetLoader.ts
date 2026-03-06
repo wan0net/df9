@@ -148,6 +148,7 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   // Background
   entries.push(['space_bg', 'assets/tiles/space_bg.png']);
   entries.push(['stars_test', 'assets/tiles/stars_test.png']);
+  entries.push(['space_elements', 'assets/tiles/space_elements.png']);
 
   // Seed pod
   entries.push(['seedpod01', 'assets/tiles/seedpod01.png']);

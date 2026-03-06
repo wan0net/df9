@@ -3,7 +3,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { TILE_HALF_W, TILE_HALF_H } from '../config';
+import { TileType } from '../world/TileTypes';
 import type { Character } from '../characters/Character';
+import type { TileGrid } from '../world/TileGrid';
 
 /**
  * Renders characters in the Three.js scene.
@@ -33,6 +35,42 @@ const WORK_BOB_SPEED = 4;
 const WORK_BOB_AMPLITUDE = 3;
 /** Working lean (forward tilt). */
 const WORK_LEAN = 0.12;
+
+// ── Blob shadow (Lua: Character:_setUpBlobShadow) ──────────────────
+/** Shadow ellipse dimensions. */
+const SHADOW_W = 48;
+const SHADOW_H = 20;
+/** Y offset below character (Lua: setLoc(0, -25, -50)). */
+const SHADOW_OFFSET_Y = 25;
+
+/** Generate a soft elliptical shadow texture procedurally. */
+function createBlobShadowTexture(): THREE.Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 32;
+  const ctx = canvas.getContext('2d')!;
+  const cx = 32, cy = 16, rx = 28, ry = 12;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx);
+  grad.addColorStop(0, 'rgba(0,0,0,0.45)');
+  grad.addColorStop(0.6, 'rgba(0,0,0,0.2)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save();
+  ctx.scale(1, ry / rx);
+  ctx.beginPath();
+  ctx.arc(cx, cx, rx, 0, Math.PI * 2); // circle, scaled to ellipse
+  ctx.restore();
+  ctx.fillStyle = grad;
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+let blobShadowTex: THREE.Texture | null = null;
+function getBlobShadowTexture(): THREE.Texture {
+  if (!blobShadowTex) blobShadowTex = createBlobShadowTexture();
+  return blobShadowTex;
+}
 
 /**
  * Subset indices from .brig (Citizen_Base) by category.
@@ -292,6 +330,8 @@ export interface CharacterRenderHandle {
   currentAction: THREE.AnimationAction | null;
   /** Current animation state key. */
   currentAnimState: string;
+  /** Blob shadow mesh (Lua: rBlobShadow). */
+  shadow: THREE.Mesh;
 }
 
 export class CharacterRenderer {
@@ -300,10 +340,16 @@ export class CharacterRenderer {
   private handles = new Map<number, CharacterRenderHandle>();
   private pendingUpgrade: Character[] = [];
   private elapsedTime = 0;
+  private grid: TileGrid | null = null;
 
   constructor(scene: THREE.Scene, overlayScene: THREE.Scene) {
     this.scene = scene;
     this.overlayScene = overlayScene;
+  }
+
+  /** Set tile grid for shadow visibility checks. */
+  setGrid(grid: TileGrid) {
+    this.grid = grid;
   }
 
   createCharacter(char: Character): CharacterRenderHandle {
@@ -332,6 +378,11 @@ export class CharacterRenderer {
     this.positionCharacter(object, char);
     this.scene.add(object);
 
+    // Blob shadow (Lua: _setUpBlobShadow)
+    const shadow = this.createBlobShadow();
+    this.positionShadow(shadow, char);
+    this.scene.add(shadow);
+
     // Need bars
     const needBarsEl = document.createElement('div');
     needBarsEl.className = 'need-bars';
@@ -347,6 +398,7 @@ export class CharacterRenderer {
       mixer,
       currentAction: null,
       currentAnimState: '',
+      shadow,
     };
     this.handles.set(char.id, handle);
     return handle;
@@ -488,6 +540,24 @@ export class CharacterRenderer {
     );
   }
 
+  private createBlobShadow(): THREE.Mesh {
+    const geo = new THREE.PlaneGeometry(SHADOW_W, SHADOW_H);
+    const mat = new THREE.MeshBasicMaterial({
+      map: getBlobShadowTexture(),
+      transparent: true,
+      depthWrite: false,
+    });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  private positionShadow(shadow: THREE.Mesh, char: Character) {
+    shadow.position.set(
+      char.screenX,
+      -(char.screenY + SHADOW_OFFSET_Y),
+      19999 + char.screenY, // Just below character Z
+    );
+  }
+
   private positionNeedBars(obj: CSS2DObject, char: Character) {
     obj.position.set(
       char.screenX,
@@ -553,7 +623,14 @@ export class CharacterRenderer {
 
     // Base position
     this.positionCharacter(handle.object, char);
+    this.positionShadow(handle.shadow, char);
     this.positionNeedBars(handle.needBarsObj, char);
+
+    // Shadow visibility: show only on solid tiles (Lua: hide in SPACE)
+    if (this.grid) {
+      const tv = this.grid.get(char.tileX, char.tileY);
+      handle.shadow.visible = tv !== TileType.SPACE;
+    }
 
     // Rotate model to face movement direction (Lua: 30° X-tilt, Y = facing angle)
     if (handle.is3D && handle.modelGroup.children.length > 0) {
@@ -722,6 +799,11 @@ export class CharacterRenderer {
     handle.object.traverse((child) => {
       if (child instanceof THREE.Mesh) child.geometry.dispose();
     });
+    // Remove blob shadow
+    this.scene.remove(handle.shadow);
+    handle.shadow.geometry.dispose();
+    (handle.shadow.material as THREE.Material).dispose();
+
     this.overlayScene.remove(handle.needBarsObj);
     handle.needBarsEl.remove();
     this.handles.delete(charId);
