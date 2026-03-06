@@ -561,14 +561,14 @@ export class CharacterRenderer {
 
       // Vacuum death animation: shrink + spin (Lua Character:_vacuumDisappear)
       if (char.nVacuumScale >= 0) {
-        const s = Math.max(0, char.nVacuumScale);
+        const s = Math.max(0, char.nVacuumScale) * MODEL_SCALE;
         model.scale.set(s, s, s);
         model.rotation.x = 30 * (Math.PI / 180);
         model.rotation.y = char.facingAngle + char.nVacuumRotation;
         model.rotation.z = char.nVacuumRotation;
       } else {
         // Normal: Lua setRot(30, dirAngle, 0) — 30° isometric tilt on X-axis
-        model.scale.set(1, 1, 1);
+        model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
         model.rotation.x = 30 * (Math.PI / 180); // 30° = 0.5236 rad
         model.rotation.y = char.facingAngle;
         model.rotation.z = 0;
