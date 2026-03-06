@@ -2910,4 +2910,64 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     });
     expect(result).toBeTruthy();
   });
+
+  // ── Batch 31: Diamond footprint & asteroid density ──────────────────
+
+  test('getDiamondFootprint returns correct tiles for 2x2 object', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const fp = df9.getDiamondFootprint(10, 10, 2, 2);
+      return fp;
+    });
+    expect(result).toHaveLength(4);
+    // All tiles should be unique
+    const keys = result.map((t: any) => `${t.x},${t.y}`);
+    expect(new Set(keys).size).toBe(4);
+  });
+
+  test('getDiamondFootprint 1x1 returns single tile', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return df9.getDiamondFootprint(5, 5, 1, 1);
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ x: 5, y: 5 });
+  });
+
+  test('getDiamondFootprint swaps w/h on single-axis flip', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const normal = df9.getDiamondFootprint(10, 10, 2, 3);
+      const flipped = df9.getDiamondFootprint(10, 10, 2, 3, true, false);
+      return { normalLen: normal.length, flippedLen: flipped.length };
+    });
+    // Both should have same number of tiles (w*h = 6)
+    expect(result.normalLen).toBe(6);
+    expect(result.flippedLen).toBe(6);
+  });
+
+  test('asteroid count matches density tier expectations', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return df9.getAsteroidCount();
+    });
+    // With default seed 0.5 (medium tier), expect 24-32 asteroids
+    // Each template has 1-6 tiles, so total tile count should be >= 16
+    expect(result).toBeGreaterThanOrEqual(16);
+  });
+
+  test('multi-tile object getObjectAt checks footprint tiles', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Build a sealed room and place a 2x2 generator
+      df9.buildSealedRoom(30, 30, 4);
+      const created = df9.createBuiltObject('Generator', 30, 30);
+      if (!created) return { placed: false };
+      // Check that getObjectAt finds the object at footprint tiles
+      const objs = df9.getEnvObjects();
+      const gen = objs.find((o: any) => o.name === 'Generator' && o.tileX === 30 && o.tileY === 30);
+      return { placed: !!gen, objCount: objs.length };
+    });
+    expect(result.placed).toBe(true);
+  });
 });

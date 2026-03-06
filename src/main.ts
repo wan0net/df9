@@ -55,7 +55,7 @@ import { SpatialAudio } from './audio/SpatialAudio';
 import { generateWorld } from './world/WorldGen';
 import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
-import { tileToScreen } from './world/IsometricUtils';
+import { tileToScreen, getDiamondFootprint } from './world/IsometricUtils';
 import { TileType } from './world/TileTypes';
 import { Pickup } from './pickups/Pickup';
 import { Corpse } from './pickups/Corpse';
@@ -1576,6 +1576,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       // Force room re-detection
       roomManager.markDirty([]);
       roomManager.update();
+      return count;
+    },
+    // ── Diamond Footprint & Asteroid helpers ─────────────────
+    getDiamondFootprint: (tx: number, ty: number, w: number, h: number, flipX?: boolean, flipY?: boolean) =>
+      getDiamondFootprint(tx, ty, w, h, flipX, flipY),
+    getAsteroidCount: () => {
+      let count = 0;
+      for (let y = 0; y < grid.height; y++) {
+        for (let x = 0; x < grid.width; x++) {
+          if (isAsteroid(grid.get(x, y))) count++;
+        }
+      }
       return count;
     },
   };

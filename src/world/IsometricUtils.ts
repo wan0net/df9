@@ -69,3 +69,60 @@ export function isoToOffset(a: number, b: number): { x: number; y: number } {
   const col = (a - b - ((a + b) & 1)) / 2;
   return { x: col, y: row };
 }
+
+/**
+ * Get diamond-shaped footprint tiles for a multi-tile object.
+ * Mirrors Lua World._getDiamondPropFootprint:
+ *   outer loop (width steps) goes SE, inner loop (height steps) goes NE.
+ *
+ * @param tileX  Base tile X
+ * @param tileY  Base tile Y
+ * @param width  Object width in tiles
+ * @param height Object height in tiles
+ * @param bFlipX Horizontal flip
+ * @param bFlipY Vertical flip
+ * @returns Array of {x, y} tile coordinates in the footprint
+ */
+export function getDiamondFootprint(
+  tileX: number,
+  tileY: number,
+  width: number,
+  height: number,
+  bFlipX = false,
+  bFlipY = false,
+): { x: number; y: number }[] {
+  let w = width;
+  let h = height;
+
+  // Swap width/height when flipped on one axis (matches Lua)
+  if ((bFlipX || bFlipY) && !(bFlipX && bFlipY)) {
+    w = height;
+    h = width;
+  }
+
+  const tiles: { x: number; y: number }[] = [];
+  let startX = tileX;
+  let startY = tileY;
+
+  // Outer loop draws SE, inner loop draws NE
+  // Our grid: odd rows shift right (inverted from Lua's even-row shift)
+  for (let i = 0; i < w; i++) {
+    let curX = startX;
+    let curY = startY;
+    for (let j = 0; j < h; j++) {
+      tiles.push({ x: curX, y: curY });
+      if (j < h - 1) {
+        // Step NE: y-1, x+1 if odd row
+        if (curY & 1) curX++;
+        curY--;
+      }
+    }
+    if (i < w - 1) {
+      // Step SE: y+1, x+1 if odd row
+      if (startY & 1) startX++;
+      startY++;
+    }
+  }
+
+  return tiles;
+}

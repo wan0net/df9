@@ -8,6 +8,7 @@ import { EnvObject } from './EnvObject';
 import { Door } from './Door';
 import { tObjects } from './EnvObjectData';
 import { GameRules, type TickableSystem } from '../core/GameRules';
+import { getDiamondFootprint } from '../world/IsometricUtils';
 import type { Room } from '../rooms/Room';
 import type { RoomManager } from '../rooms/RoomManager';
 
@@ -96,6 +97,13 @@ class EnvObjectManagerClass implements TickableSystem {
   getObjectAt(tileX: number, tileY: number): EnvObject | null {
     for (const obj of this.objects.values()) {
       if (obj.tileX === tileX && obj.tileY === tileY) return obj;
+      // Multi-tile objects: check diamond footprint
+      if (obj.tData.width > 1 || obj.tData.height > 1) {
+        const fp = getDiamondFootprint(obj.tileX, obj.tileY, obj.tData.width, obj.tData.height, obj.bFlipX, obj.bFlipY);
+        for (let i = 1; i < fp.length; i++) {
+          if (fp[i].x === tileX && fp[i].y === tileY) return obj;
+        }
+      }
     }
     return null;
   }

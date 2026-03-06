@@ -10,6 +10,7 @@ import { GameRules, MAT_BUILD_DOOR } from '../core/GameRules';
 import { CommandQueue } from '../core/CommandQueue';
 import { TileType } from '../world/TileTypes';
 import { getWallDirection, WallDirection } from '../world/WallDirection';
+import { getDiamondFootprint } from '../world/IsometricUtils';
 import type { TileGrid } from '../world/TileGrid';
 import type { RoomManager } from '../rooms/RoomManager';
 import type { Room } from '../rooms/Room';
@@ -128,18 +129,15 @@ export class ObjectPlacement {
       // Multi-tile footprint check.
       // Mirrors _getDiamondPropFootprint + per-tile pathability check.
       if (data.width > 1 || data.height > 1) {
-        for (let dy = 0; dy < data.height; dy++) {
-          for (let dx = 0; dx < data.width; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            const tx = tileX + dx;
-            const ty = tileY + dy;
-            const tt = this.grid.get(tx, ty);
-            if (tt !== TileType.FLOOR && tt !== TileType.FLOOR_PENDING) {
-              return { valid: false, reason: 'Not enough space' };
-            }
-            const occupantAt = EnvObjectManager.getObjectAt(tx, ty);
-            if (occupantAt) return { valid: false, reason: 'Tile is occupied' };
+        const footprint = getDiamondFootprint(tileX, tileY, data.width, data.height, this.bFlipProp, false);
+        for (let i = 1; i < footprint.length; i++) {
+          const ft = footprint[i];
+          const tt = this.grid.get(ft.x, ft.y);
+          if (tt !== TileType.FLOOR && tt !== TileType.FLOOR_PENDING) {
+            return { valid: false, reason: 'Not enough space' };
           }
+          const occupantAt = EnvObjectManager.getObjectAt(ft.x, ft.y);
+          if (occupantAt) return { valid: false, reason: 'Tile is occupied' };
         }
       }
     }
