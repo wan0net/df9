@@ -164,6 +164,15 @@ export class EnvObject implements TaggableObject {
     return 'Good';
   }
 
+  /** Emergency status string for inspector overlay (Lua EnvObject:getEmergencyString). */
+  getEmergencyString(): string | null {
+    if (this.isDestroyed()) return 'DESTROYED';
+    if (!this.bHasPower && this.tData.nPowerDraw > 0) return 'NO POWER';
+    if (this.nCondition <= 20) return 'CRITICAL';
+    if (!this.bBuilt) return 'BUILDING';
+    return null;
+  }
+
   needsMaintenance(): boolean {
     return this.nCondition < CONDITION_NEEDED_TO_MAINTAIN;
   }

@@ -2511,6 +2511,59 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(cap2).toBe(14);
   });
 
+  test('Room: canSuppressFire requires FirePanel or Emergency job', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const rooms = df9._roomMgr?.getRooms() as any[];
+      if (!rooms || rooms.length === 0) return null;
+      const room = rooms[0];
+      // Room not burning → can't suppress
+      room.bBurning = false;
+      room.bHasFirePanel = false;
+      const notBurning = room.canSuppressFire(2); // BUILDER
+      // Room burning, no panel, non-emergency → can't
+      room.bBurning = true;
+      const noPanel = room.canSuppressFire(2); // BUILDER
+      // Emergency job (5) → can suppress
+      const emergency = room.canSuppressFire(5); // EMERGENCY
+      // With FirePanel → any job can suppress
+      room.bHasFirePanel = true;
+      const withPanel = room.canSuppressFire(2); // BUILDER
+      room.bBurning = false;
+      room.bHasFirePanel = false;
+      return { notBurning, noPanel, emergency, withPanel };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.notBurning).toBe(false);
+    expect(result!.noPanel).toBe(false);
+    expect(result!.emergency).toBe(true);
+    expect(result!.withPanel).toBe(true);
+  });
+
+  test('EnvObject: getEmergencyString returns status or null', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.createBuiltObject('OxygenRecycler', 31, 31);
+      const allObjs = df9._envMgr.getObjects() as any[];
+      const obj = allObjs.find((o: any) => o.tileX === 31 && o.tileY === 31);
+      if (!obj) return null;
+      // Healthy, powered → null
+      const healthy = obj.getEmergencyString();
+      // Critical condition
+      obj.nCondition = 10;
+      const critical = obj.getEmergencyString();
+      // Destroyed
+      obj.nCondition = 0;
+      const destroyed = obj.getEmergencyString();
+      obj.nCondition = 100;
+      return { healthy, critical, destroyed };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.healthy).toBeNull();
+    expect(result!.critical).toBe('CRITICAL');
+    expect(result!.destroyed).toBe('DESTROYED');
+  });
+
   test('Death react: getDeathMoraleLoss returns negative value', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;

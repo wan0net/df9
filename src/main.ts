@@ -1064,6 +1064,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   (window as any).__df9 = {
     _charMgr: characterManager,
     _envMgr: EnvObjectManager,
+    _roomMgr: roomManager,
     getPopulation: () => characterManager.getPopulation(),
     getMatter: () => GameRules.nMatter,
     getRoomCount: () => roomManager.getRooms().length,

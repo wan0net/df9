@@ -517,9 +517,11 @@ export class InspectorPanel {
       obj.isDamaged() ? '#ff0' :
       obj.isFunctioning() ? '#4f4' : '#888';
 
+    const emergencyStr = obj.getEmergencyString();
     header.innerHTML = `
       <div style="font-size:16px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
         ${obj.tData.friendlyName}
+        ${emergencyStr ? `<span style="color:#f44;font-size:11px;margin-left:8px;">[${emergencyStr}]</span>` : ''}
       </div>
       <div style="margin-bottom:6px;">
         ${this.bar('Condition', Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}

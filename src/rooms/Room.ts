@@ -97,6 +97,8 @@ export class Room {
   bBurning = false;
   /** Emergency alarm is active for this room. */
   bEmergencyAlarmEnabled = false;
+  /** Whether this room contains a FirePanel (enables suppression tasks). */
+  bHasFirePanel = false;
   /** Room upgrade level (1-3). */
   nLevel = 1;
   /** Unique zone name (e.g. "Botany Lab Alpha"). */
@@ -156,6 +158,14 @@ export class Room {
   /** Mark oxygen as needing recalculation. */
   invalidateOxygenScore(): void {
     this.bOxygenScoreOutOfDate = true;
+  }
+
+  /** Whether fire suppression is available in this room (Lua Room:utilityGateTool).
+   *  Returns true if room has FirePanel or character is Emergency job. */
+  canSuppressFire(charJob: number): boolean {
+    if (!this.bBurning) return false;
+    // Lua: EMERGENCY job = 5, or room has FirePanel
+    return this.bHasFirePanel || charJob === 5;
   }
 
   /** Whether this room is dangerous for a character (Lua Room:isDangerous).

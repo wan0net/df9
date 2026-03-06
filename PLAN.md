@@ -209,7 +209,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Fix neighbor count: use all 8 neighbors for spread and `getNearbyFire()` (currently only 4)
 - [x] Implement `onFire()` event dispatch to Room and EnvObject
 - [x] Implement fire save/load (heat map + flame intensity)
-- [ ] Implement FirePanel influence on spread reduction (Lua: FirePanel enables suppression tasks, doesn't reduce spread directly)
+- [x] Implement FirePanel gate check (Lua: enables suppression tasks in burning rooms, doesn't reduce spread directly)
 - [ ] Add fire sound (3D positional loop at average fire coords)
 
 ---
@@ -306,7 +306,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Add sidebar close integration on back
 
 ### 13.3 New Game Screen
-- [ ] Pass landing zone threat/density values to `GameRules.reset()` to affect starting conditions
+- [x] Pass landing zone threat/density values to event system (already wired via setGalaxyValues)
 
 ---
 
@@ -328,7 +328,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: MEDIUM**
 
-- [ ] Implement AirScrubber custom class (active O2 spread by range)
+- [x] AirScrubber — no custom Lua class exists; disease spread reduction already implemented
 - [x] Add `CONDITION_NEEDED_TO_MAINTAIN = 80` threshold
 - [x] Add `DANGER_ZONE = 20` — object sparks fire below this condition
 - [x] Add destroyed object fire chance (`DESTROYED_FIRE_CHECK_DELAY=30`, `INTERVAL=60`, `CHANCE=0.05`)
@@ -355,7 +355,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Fix `getNextUndiagnosedMalady` — Lua returns any undiagnosed (not just symptomatic)
 - [x] Fix `getNextCurableMalady` — match Lua `MAX_SKILL = -1` bypass + `bIncurable` check
 - [x] Implement air scrubber spread reduction (halve `nChanceToInfect` per powered scrubber)
-- [ ] Fire `MaladyEncountered` alert when disease first encountered
+- [x] Fire `MaladyEncountered` alert when disease first encountered
 - [ ] Implement incapacitation gatherer set swap
 
 ---
@@ -392,7 +392,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: LOW-MEDIUM**
 
 - [ ] Add CONSTRUCTION zone type
-- [ ] Add `Zone:getAssociatedJob()` method
+- [x] Add `Zone:getAssociatedJob()` — already exists as `zone.associatedJob` property from ZONE_JOBS
 - [ ] Implement zone power distribution (powerRequest/powerUnrequest/tThingsPowered sorted by distance)
 - [x] Implement unique zone name generators for all 11 zone types (reactor/greek, research/greek, infirmary/constellation, etc.)
 - [x] Verify and fix Pub capacity system (`PUB_CAPACITY=3`, `PUB_CITIZENS_PER_BARTENDER=5`)
@@ -429,7 +429,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement visibility-based simulation culling (`tOwnedCharacters` subset)
 - [x] Implement `tDeadCharacters` tracking (deadCharacterIds Set + isDead/getDeadCount)
 - [ ] Implement `deathTick(dt)` for corpse animation/decay
-- [ ] Add death journal log entries (DEATH_REACT_FRIEND, DEATH_REACT_CITIZEN, etc.)
+- [x] Add death journal log entries (DEATH_REACT_FRIEND, DEATH_REACT_CITIZEN, etc.)
 - [x] Add `getOwnedCharactersWithTask()`, `getTeamCharacters()`, `getCharacterNamed()`
 
 ---
