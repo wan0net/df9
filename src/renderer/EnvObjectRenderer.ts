@@ -25,8 +25,9 @@ export class EnvObjectRenderer {
     this.scene = scene;
   }
 
-  /** Add an object sprite at a tile position. */
-  addObject(id: string, tileX: number, tileY: number, objectType: string, built = true) {
+  /** Add an object sprite at a tile position.
+   *  @param bFlipX — mirror the sprite horizontally (Lua setScl(-1,1)). */
+  addObject(id: string, tileX: number, tileY: number, objectType: string, built = true, bFlipX = false) {
     // Remove existing if re-adding
     this.removeObject(id);
 
@@ -48,6 +49,11 @@ export class EnvObjectRenderer {
       -(pos.y + footprintH / 2),
       15000 + pos.y + TILE_HALF_H,
     );
+
+    // Mirror sprite horizontally (Lua: self:setScl(-1,1) when bFlipX)
+    if (bFlipX) {
+      mesh.scale.x = -1;
+    }
 
     this.scene.add(mesh);
     this.objects.set(id, { mesh, spriteName });

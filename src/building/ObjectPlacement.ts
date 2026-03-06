@@ -195,21 +195,19 @@ export class ObjectPlacement {
     const obj = EnvObjectManager.createObject(sName, placeTileX, placeTileY, bFlipX, bFlipY, false);
     if (!obj) return 0;
 
-    // Door-type objects convert wall tile(s) to DOOR.
-    // Mirrors Lua Door:setLoc → _getInteriorTiles → g_World._setTile(tx, ty, DOOR).
-    if (data.door) {
-      this.grid.set(tileX, tileY, TileType.DOOR);
-      // 2-wide doors (Airlock): second tile along the same wall axis.
-      // Mirrors _getDiamondPropFootprint for width=2, height=1.
-      if (data.width > 1) {
-        const adj = this.findAdjacentWallTile(tileX, tileY);
-        if (adj) {
-          this.grid.set(adj.x, adj.y, TileType.DOOR);
-          const door = EnvObjectManager.getDoorAt(tileX, tileY);
-          if (door instanceof Door) {
-            door.secondTileX = adj.x;
-            door.secondTileY = adj.y;
-          }
+    // Lua: WALL→DOOR conversion happens AFTER construction completes (Door:setLoc
+    // is called from EnvObject.createEnvObject, which runs on build completion).
+    // During placement, only a visual ghost exists — the wall stays WALL so the
+    // room boundary remains intact and characters don't become spacewalking.
+    // Tile conversion is handled in BuildEnvObject.onComplete.
+    if (data.door && data.width > 1) {
+      // 2-wide doors (Airlock): record the second tile for BuildEnvObject.onComplete.
+      const adj = this.findAdjacentWallTile(tileX, tileY);
+      if (adj) {
+        const door = EnvObjectManager.getDoorAt(tileX, tileY);
+        if (door instanceof Door) {
+          door.secondTileX = adj.x;
+          door.secondTileY = adj.y;
         }
       }
     }
@@ -309,17 +307,20 @@ export class ObjectPlacement {
     const results: { x: number; y: number; bFlipX: boolean; bFlipY: boolean }[] = [];
     const dir = getWallDirection(this.grid, wallX, wallY);
 
+    // Order must match Lua _findPropFit iteration (i=1..4):
+    //   NESW wall: SE first (i=1 bFlipX=F,bFlipY=F), then NW (i=4 bFlipX=T,bFlipY=T)
+    //   NWSE wall: NE first (i=2 bFlipX=F,bFlipY=T), then SW (i=3 bFlipX=T,bFlipY=F)
     if (dir === WallDirection.NESW) {
-      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: true  });
       if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: false });
+      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: true  });
     } else if (dir === WallDirection.NWSE) {
       if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: true  });
       if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: false });
     } else {
-      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: true  });
-      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: true  });
-      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: false });
       if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: false });
+      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: true  });
+      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: true  });
+      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: false });
     }
     return results;
   }

@@ -57,13 +57,13 @@ export class BuildEnvObject extends Task {
   protected onComplete() {
     super.onComplete(); // Satisfy needs
 
-    // Build the object
-    this.targetObj.markBuilt();
     if (this.character) {
       this.targetObj.sBuilderName = this.character.getName();
     }
 
-    // Door-type objects: convert wall tile(s) to DOOR when construction completes
+    // Door-type objects: convert wall tile(s) to DOOR when construction completes.
+    // Mirrors Lua Door:setLoc → _getInteriorTiles → g_World._setTile(tx, ty, DOOR).
+    // Must happen BEFORE markBuilt() so the tile re-render shows the door sprite.
     if (this.targetObj.tData.door && this.grid) {
       const convertToDoor = (tx: number, ty: number) => {
         const current = this.grid!.get(tx, ty);
@@ -85,6 +85,9 @@ export class BuildEnvObject extends Task {
         convertToDoor(this.targetObj.secondTileX, this.targetObj.secondTileY);
       }
     }
+
+    // Build the object (triggers re-render with correct DOOR tile type)
+    this.targetObj.markBuilt();
 
     CommandQueue.complete(this.commandId);
 

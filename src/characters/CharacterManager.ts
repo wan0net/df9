@@ -1313,7 +1313,12 @@ export class CharacterManager {
     if (task.targetX >= 0 && (task.targetX !== char.tileX || task.targetY !== char.tileY)) {
       const filter = char.bSpacewalking ? WALKABLE_SPACEWALK : WALKABLE_DEFAULT;
       const maxNodes = char.bSpacewalking ? 3000 : 1000;
-      const path = findPath(this.grid, char.tileX, char.tileY, task.targetX, task.targetY, maxNodes, filter);
+      // Lua Room:_refreshPropJobList sets pathToNearest=true for build tasks.
+      // If the target tile is non-walkable (e.g. WALL for door building, ASTEROID
+      // for mining), path to the nearest adjacent walkable tile instead.
+      const targetType = this.grid.get(task.targetX, task.targetY);
+      const bPathToNearest = !filter(targetType);
+      const path = findPath(this.grid, char.tileX, char.tileY, task.targetX, task.targetY, maxNodes, filter, bPathToNearest);
       if (path && path.length > 0) {
         char.startPath(path);
       }

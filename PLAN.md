@@ -26,7 +26,7 @@ All 27 sections from the v2 plan are complete (180+ items). Key systems working:
 - Power (contiguity BFS via doors + wall-blob adjacency)
 - UI (start menu, new game, sidebar, inspector, job roster, alerts, HUD)
 - Save/Load (full state, fire, O2 grid RLE, commands, inventory, export/import)
-- 156 E2E tests passing
+- 159 E2E tests passing
 - Audio: lazy loading, WAV playback, music rotation (Revoice tracks), spatial loops
 - UI: Orbitron font everywhere, persistent coordinate display, alert panel cleanup
 
@@ -490,3 +490,4 @@ Sprint 4 — Content & Systems (P3): Completeness
 | 2026-03-06 | v2 plan completed: all 27 sections done. 150 E2E tests. |
 | 2026-03-06 | 9 architectural features: per-tile O2, task interaction, reservations, doors, power, culling. |
 | 2026-03-06 | v3 plan created: comprehensive audit from 5 sources (UI screenshots, Lua file-by-file, audio system, wiki, renderer). Organized by P0-P4 priority. |
+| 2026-03-06 | Fix 3 critical bugs: door construction (WALL→DOOR deferred to build completion, pathToNearest for wall targets), wall-object placement order (SE first for NESW walls to match Lua), sprite bFlipX mirroring. 159 tests. |

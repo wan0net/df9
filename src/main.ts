@@ -256,7 +256,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Wire EnvObjectManager lifecycle → EnvObjectRenderer
   EnvObjectManager.onObjectCreated = (id, obj) => {
-    envObjRenderer.addObject(String(id), obj.tileX, obj.tileY, obj.sName, obj.bBuilt);
+    envObjRenderer.addObject(String(id), obj.tileX, obj.tileY, obj.sName, obj.bBuilt, obj.bFlipX);
     // Re-render the tile so door sprite is correct immediately
     tileRenderer.rerenderTile(obj.tileX, obj.tileY);
   };
@@ -1226,11 +1226,17 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
       return walls;
     },
+    getTileType: (tileX: number, tileY: number) => grid.get(tileX, tileY),
     placeObject: (name: string, tileX: number, tileY: number) => {
       return objectPlacement.placeObject(name, tileX, tileY);
     },
     /** Create an already-built, powered object directly (bypasses placement validation). */
     createBuiltObject: (name: string, tileX: number, tileY: number) => {
+      const data = tObjects[name];
+      // For door objects, convert WALL→DOOR immediately since this skips the build process
+      if (data?.door) {
+        grid.set(tileX, tileY, TileType.DOOR);
+      }
       const obj = EnvObjectManager.createObject(name, tileX, tileY);
       if (obj) { obj.markBuilt(); obj.bHasPower = true; return true; }
       return false;
