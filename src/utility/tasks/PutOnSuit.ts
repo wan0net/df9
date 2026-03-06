@@ -4,7 +4,6 @@
  */
 
 import { Task, type NeedAdvertisement } from '../Task';
-import { SPACESUIT_MAX_OXYGEN } from '../../characters/CharacterConstants';
 
 export class PutOnSuit extends Task {
   readonly name = 'PutOnSuit';
@@ -22,8 +21,7 @@ export class PutOnSuit extends Task {
     if (!this.character) { this.fail(); return; }
 
     if (this.elapsedTime >= this.duration) {
-      this.character.bSpacesuit = true;
-      this.character.nSuitOxygen = SPACESUIT_MAX_OXYGEN;
+      this.character.spacesuitOn();
       this.complete();
     }
   }

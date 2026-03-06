@@ -618,7 +618,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     eventController.setPopulation(characterManager.getPopulation());
 
     // Passive wall healing (WorldConstants: TILE_HEAL_OVER_TIME = 0.05 HP/sec)
-    grid.healTick(delta / 1000);
+    // Only heals in powered rooms (Lua: Room must have power supply)
+    grid.healTick(delta / 1000, (x, y) => {
+      const room = roomManager.getRoomAt(x, y);
+      return room != null && room.nPowerSupply > 0;
+    });
 
     // Zone ticks (airlock pressurisation, bed zone, etc.)
     const dtSec = delta / 1000;

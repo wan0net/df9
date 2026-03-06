@@ -304,9 +304,13 @@ export class CharacterManager {
 
     for (const hit of hits) {
       const defender = this.characters.find(c => c.id === hit.defenderId);
+      const attacker = this.characters.find(c => c.id === hit.attackerId);
       if (defender && defender.isAlive()) {
-        const cause = CombatSystem.getCauseFromDamageType(hit.damageType);
-        defender.damage(hit.damage, cause);
+        CombatSystem.processHit(defender, hit.damage, hit.damageType, attacker, this.characters);
+        if (!defender.isAlive()) {
+          const cause = CombatSystem.getCauseFromDamageType(hit.damageType);
+          defender.nCauseOfDeath = cause;
+        }
       }
     }
   }
@@ -342,6 +346,9 @@ export class CharacterManager {
         const squad = SquadList.getSquadForChar(char.id);
         if (squad) squad.removeMember(char.id);
 
+        // Track death
+        this.deadCharacterIds.add(char.id);
+
         // Remove from renderer and character list
         this.characterRenderer?.destroyCharacter(char.id);
         char.destroy();
@@ -374,6 +381,37 @@ export class CharacterManager {
     }
 
     return char;
+  }
+
+  /** Dead character IDs — tracked for morale/familiarity reference. Lua: tDeadCharacters. */
+  private deadCharacterIds: Set<number> = new Set();
+
+  /** Get count of dead characters since game start. */
+  getDeadCount(): number { return this.deadCharacterIds.size; }
+
+  /** Check if a character has died (Lua CharacterManager:isDead). */
+  isDead(charId: number): boolean { return this.deadCharacterIds.has(charId); }
+
+  /** Get character by ID (alive only). */
+  getCharacterById(id: number): Character | undefined {
+    return this.characters.find(c => c.id === id);
+  }
+
+  /** Get count of living characters on a team. */
+  getTeamCount(team: number): number {
+    return this.characters.filter(c => c.isAlive() && c.tStats.nTeam === team).length;
+  }
+
+  /** Clear all characters (for load). */
+  clearAll() {
+    for (const c of this.characters) {
+      this.characterRenderer?.destroyCharacter(c.id);
+      c.destroy();
+    }
+    this.characters = [];
+    this.pickups = [];
+    this.deadCharacterIds.clear();
+    this.nextId = 0;
   }
 
   /** Get all active pickups. */

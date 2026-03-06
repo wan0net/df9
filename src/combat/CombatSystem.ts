@@ -6,7 +6,7 @@
 import { Character } from '../characters/Character';
 import {
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, TEAM_ID_PLAYER_ABANDONED,
-  HUMAN_MELEE_DAMAGE, MELEE_RANGE,
+  HUMAN_MELEE_DAMAGE, MELEE_RANGE, EMERGENCY,
   DAMAGE_TYPE, ATTACK_TYPE, CAUSE_OF_DEATH,
 } from '../characters/CharacterConstants';
 import { WEAPON_DEFS, type WeaponDef } from './WeaponData';
@@ -14,6 +14,7 @@ import type { ProjectileManager } from '../hazards/Projectile';
 import { Base } from '../core/Base';
 import type { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
+import { researchSystem } from '../research/ResearchSystem';
 
 /** Grapple duration before melee damage is applied. */
 const GRAPPLE_TIME = 3;
@@ -331,15 +332,52 @@ export class CombatSystem {
   }
 
   /**
+   * Get damage reduction for a character.
+   * Lua Character.lua:5468-5484 — ArmorLevel2 (0.5) + TeamTactics (+0.75 if nearby security).
+   * @param allChars — all characters for team tactics proximity check.
+   */
+  static getDamageReduction(defender: Character, allChars?: Character[]): number {
+    let reduction = 0;
+    // ArmorLevel2: security officers get 0.5 damage reduction
+    if (defender.tStats.nJob === EMERGENCY && researchSystem.isCompleted('ArmorLevel2')) {
+      reduction += 0.5;
+    }
+    // TeamTactics: +0.75 if 1-5 other security officers within ~20 tiles
+    if (defender.tStats.nJob === EMERGENCY && defender.tStats.nTeam === TEAM_ID_PLAYER
+        && researchSystem.isCompleted('TeamTactics') && allChars) {
+      let nearbyCount = 0;
+      for (const other of allChars) {
+        if (other === defender || !other.isAlive()) continue;
+        if (other.tStats.nJob !== EMERGENCY || other.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+        const dist = tileDist(defender.tileX, defender.tileY, other.tileX, other.tileY);
+        if (dist <= 20) {
+          nearbyCount++;
+          if (nearbyCount >= 5) break;
+        }
+      }
+      if (nearbyCount > 0) reduction += 0.75;
+    }
+    return Math.min(reduction, 0.95); // cap at 95%
+  }
+
+  /**
    * Process a hit: applies damage, handles stunner incapacitation.
    * Lua: stunner damage type knocks out instead of killing (creates KnockedOut malady).
    * Returns true if character died, false if incapacitated.
+   * @param allChars — all characters for team tactics damage reduction.
    */
   static processHit(
     defender: Character, damage: number, damageType: number,
-    _attacker?: Character,
+    _attacker?: Character, allChars?: Character[],
   ): boolean {
-    defender.takeDamage(damage);
+    // Apply damage reduction (armor + team tactics)
+    const reduction = CombatSystem.getDamageReduction(defender, allChars);
+    const effectiveDamage = Math.max(1, Math.round(damage * (1 - reduction)));
+    // Dodge chance from ArmorLevel2 (Lua: nDodgeChance = 0.2)
+    if (defender.tStats.nJob === EMERGENCY && researchSystem.isCompleted('ArmorLevel2')) {
+      if (Math.random() < 0.2) return false; // dodged
+    }
+    defender.takeDamage(effectiveDamage);
     if (!defender.isAlive()) {
       // Stunner damage type → incapacitate instead of kill (Lua Character.lua:5592-5617)
       if (damageType === DAMAGE_TYPE.Stunner) {

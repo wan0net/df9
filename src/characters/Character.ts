@@ -38,6 +38,7 @@ import { Malady, type MaladyInstance } from '../malady/Malady';
 import { CharacterInventory, createRandomStartingStuff } from '../inventory/Inventory';
 import type { Task } from '../utility/Task';
 import { type LogEntry, addLog, postLogFromQueue, getLogCooldown, setElapsedTimeProvider } from './Log';
+import { researchSystem } from '../research/ResearchSystem';
 
 /** Character stats block (mirrors Lua tStats) */
 export interface CharacterStats {
@@ -249,6 +250,31 @@ export class Character {
 
   setJob(job: number) {
     this.tStats.nJob = job;
+    // Lua Character.lua:744 — security officers auto-equip weapon based on research
+    if (job === EMERGENCY) {
+      this.weapon = researchSystem.isCompleted('LaserRifles') ? 'LaserRifle' : 'Pistol';
+    }
+  }
+
+  /**
+   * Get the autocreate weapon template for this character's job.
+   * Lua Character.lua:744 _getAutocreateWeaponTemplate.
+   */
+  getAutocreateWeapon(): string | null {
+    if (this.tStats.nJob === EMERGENCY) {
+      return researchSystem.isCompleted('LaserRifles') ? 'LaserRifle' : 'Pistol';
+    }
+    return null;
+  }
+
+  /**
+   * Put on a spacesuit. Lua Character.lua:4167-4169.
+   * SpaceSuit2 research increases capacity from 480 to 600 seconds.
+   */
+  spacesuitOn(): void {
+    this.bSpacesuit = true;
+    const seconds = researchSystem.isCompleted('SpaceSuit2') ? 600 : 480;
+    this.nSuitOxygen = seconds * 200; // OXYGEN_PER_SECOND = 200
   }
 
   // ── Affinity methods (mirrors Lua Character:getAffinity/addAffinity) ──

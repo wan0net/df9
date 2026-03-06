@@ -28,10 +28,57 @@ export const WALKABLE_SPACEWALK: WalkableFilter = (t) =>
   t === TileType.FLOOR || t === TileType.DOOR || t === TileType.SPACE ||
   t === TileType.FLOOR_PENDING || t === TileType.WALL_PENDING;
 
+// ── Binary min-heap for O(log n) open list ───────────────────────────────
+
+class MinHeap {
+  private data: Node[] = [];
+
+  get length(): number { return this.data.length; }
+
+  push(node: Node): void {
+    this.data.push(node);
+    this.bubbleUp(this.data.length - 1);
+  }
+
+  pop(): Node {
+    const top = this.data[0];
+    const last = this.data.pop()!;
+    if (this.data.length > 0) {
+      this.data[0] = last;
+      this.sinkDown(0);
+    }
+    return top;
+  }
+
+  private bubbleUp(i: number): void {
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (this.data[i].f >= this.data[parent].f) break;
+      [this.data[i], this.data[parent]] = [this.data[parent], this.data[i]];
+      i = parent;
+    }
+  }
+
+  private sinkDown(i: number): void {
+    const n = this.data.length;
+    while (true) {
+      let smallest = i;
+      const left = 2 * i + 1;
+      const right = 2 * i + 2;
+      if (left < n && this.data[left].f < this.data[smallest].f) smallest = left;
+      if (right < n && this.data[right].f < this.data[smallest].f) smallest = right;
+      if (smallest === i) break;
+      [this.data[i], this.data[smallest]] = [this.data[smallest], this.data[i]];
+      i = smallest;
+    }
+  }
+}
+
 /**
  * A* pathfinding on the diamond isometric grid.
  * Moves through diagonal neighbors only (edge-sharing tiles).
  * Uses Chebyshev distance heuristic (Lua MiscUtil.isoDist).
+ * Open list uses a binary min-heap for O(log n) extraction.
  * @param walkableFilter — controls which tile types are traversable.
  * @param bPathToNearest — if true, path to nearest walkable tile adjacent to dest
  *   (used when dest is a wall/asteroid/door for build/mine/interact tasks).
@@ -54,8 +101,10 @@ export function findPath(
     if (!walkableFilter(endType)) return null;
   }
 
-  const open: Node[] = [];
-  const closed = new Set<string>();
+  const open = new MinHeap();
+  const closed = new Set<number>();
+  // Track best g-score per tile for duplicate detection
+  const gScores = new Map<number, number>();
 
   const startNode: Node = {
     x: startX,
@@ -67,17 +116,18 @@ export function findPath(
   };
   startNode.f = startNode.g + startNode.h;
   open.push(startNode);
+  gScores.set(startY * grid.width + startX, 0);
 
   let nodesChecked = 0;
 
   while (open.length > 0 && nodesChecked < maxNodes) {
-    // Find lowest f-cost node (linear scan like Lua)
-    let bestIdx = 0;
-    for (let i = 1; i < open.length; i++) {
-      if (open[i].f < open[bestIdx].f) bestIdx = i;
-    }
-    const current = open.splice(bestIdx, 1)[0];
-    const key = `${current.x},${current.y}`;
+    const current = open.pop();
+    const idx = current.y * grid.width + current.x;
+
+    // Skip if we already found a better path to this node
+    if (closed.has(idx)) continue;
+    closed.add(idx);
+    nodesChecked++;
 
     // Goal check
     if (current.x === endX && current.y === endY) {
@@ -94,14 +144,11 @@ export function findPath(
       }
     }
 
-    closed.add(key);
-    nodesChecked++;
-
     // Check diagonal neighbors
     const neighbors = grid.getDiagonalNeighbors(current.x, current.y);
     for (const n of neighbors) {
-      const nKey = `${n.x},${n.y}`;
-      if (closed.has(nKey)) continue;
+      const nIdx = n.y * grid.width + n.x;
+      if (closed.has(nIdx)) continue;
 
       const nType = grid.get(n.x, n.y);
 
@@ -111,15 +158,10 @@ export function findPath(
       if (!walkableFilter(nType)) continue;
 
       const g = current.g + 1;
-      const existing = open.find(o => o.x === n.x && o.y === n.y);
+      const existingG = gScores.get(nIdx);
 
-      if (existing) {
-        if (g < existing.g) {
-          existing.g = g;
-          existing.f = g + existing.h;
-          existing.parent = current;
-        }
-      } else {
+      if (existingG === undefined || g < existingG) {
+        gScores.set(nIdx, g);
         const h = heuristic(n.x, n.y, endX, endY);
         open.push({ x: n.x, y: n.y, g, h, f: g + h, parent: current });
       }

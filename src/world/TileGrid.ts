@@ -293,12 +293,17 @@ export class TileGrid {
   /**
    * Passive wall healing tick — mirrors World.TILE_HEAL_OVER_TIME.
    * Call each game frame with dt in seconds.
-   * In the original, healing only occurs in powered rooms; for now applies to all damaged walls.
+   * Healing only occurs in powered rooms (Lua: checks room power supply).
+   * @param isTilePowered — optional callback to check if tile is in a powered room.
    */
-  healTick(dt: number) {
+  healTick(dt: number, isTilePowered?: (x: number, y: number) => boolean) {
     if (this.tileHP.size === 0) return;
     const healAmount = TILE_HEAL_OVER_TIME * dt;
     for (const [idx, hp] of this.tileHP) {
+      const x = idx % this.width;
+      const y = Math.floor(idx / this.width);
+      // Only heal in powered rooms (Lua: Room must have power)
+      if (isTilePowered && !isTilePowered(x, y)) continue;
       const newHP = Math.min(TILE_STARTING_HIT_POINTS, hp + healAmount);
       if (newHP >= TILE_STARTING_HIT_POINTS) {
         this.tileHP.delete(idx);

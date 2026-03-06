@@ -6,6 +6,8 @@
 import { EnvObjectDef, tObjects } from './EnvObjectData';
 import { ObjectList, OBJ_ENVOBJECT, type ObjectTag, type TaggableObject } from '../core/ObjectList';
 import type { Room } from '../rooms/Room';
+import { researchSystem } from '../research/ResearchSystem';
+import { RESEARCH_DEFS } from '../research/ResearchData';
 
 // ── Constants matching EnvObject.lua ────────────────────────────────────
 export const MIN_PCT_HEALED_PER_MAINTAIN = 2;
@@ -135,8 +137,12 @@ export class EnvObject implements TaggableObject {
       this.damageCondition(0, true); // 0 damage but triggers fire check in danger zone
       return this.nCondition;
     }
-    const healPct = MIN_PCT_HEALED_PER_MAINTAIN +
+    let healPct = MIN_PCT_HEALED_PER_MAINTAIN +
       competence * (MAX_PCT_HEALED_PER_MAINTAIN - MIN_PCT_HEALED_PER_MAINTAIN);
+    // Lua EnvObject.lua:1397-1399 — MaintenanceLevel2 multiplier
+    if (researchSystem.isCompleted('MaintenanceLevel2')) {
+      healPct *= RESEARCH_DEFS['MaintenanceLevel2'].nConditionMultiplier ?? 1;
+    }
     this.setCondition(Math.min(100, startCondition + healPct));
     return this.nCondition;
   }
