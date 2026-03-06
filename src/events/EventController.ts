@@ -62,7 +62,7 @@ export class EventController implements TickableSystem {
   /** Mega event has been run (persisted in save). */
   private bRanMegaEvent = false;
   /** Game time when mega event completed (Lua: nMegaEventStartTime). */
-  private nMegaEventStartTime = 0;
+  nMegaEventStartTime = 0;
   /** Previous events for history. */
   private prevEvents: { sEventType: string; nCompletionTime: number }[] = [];
 

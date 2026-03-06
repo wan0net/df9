@@ -397,8 +397,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       return characterManager.getCharacters().filter(c => c.nMorale > moraleThreshold).length;
     },
     checkFinalSiege: () => {
-      // TODO: implement when mega-event tracking is complete
-      return false;
+      // Lua: mega-event started + 120s elapsed + friendly alive in safe room + all hostiles dead
+      const megaStart = eventController.nMegaEventStartTime;
+      if (megaStart <= 0) return false;
+      if (GameRules.elapsedTime < megaStart + 120) return false;
+      if (characterManager.getHostileCount() > 0) return false;
+      // At least one player character alive in a safe room
+      const safeRooms = roomManager.getSafeRoomsOfTeam(1);
+      return characterManager.getCharacters().some(c =>
+        c.isAlive() && c.tStats.nTeam === 1 && safeRooms.some(r =>
+          r.tiles.some(t => t.x === c.tileX && t.y === c.tileY),
+        ),
+      );
     },
   });
 

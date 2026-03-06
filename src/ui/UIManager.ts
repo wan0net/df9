@@ -584,7 +584,6 @@ export class UIManager {
       { label: 'Load', action: () => { this.onLoad(); Base.addAlert('system', 'Game loaded.'); } },
       { label: 'Export', action: () => { this.onExport(); Base.addAlert('system', 'Save exported to file.'); } },
       { label: 'Import', action: () => { this.onImport().then(ok => { Base.addAlert('system', ok ? 'Save imported.' : 'Import failed.'); }); } },
-      { label: 'Spawn Crew', action: this.onSpawn },
     ];
     for (const ub of utilBtns) {
       const el = document.createElement('div');

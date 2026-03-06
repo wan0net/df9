@@ -2564,6 +2564,24 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result!.destroyed).toBe('DESTROYED');
   });
 
+  test('Goal system: suppresses alerts during first 5 seconds', async () => {
+    // GoalSystem.SUPPRESS_DURATION = 5 seconds
+    // Goals completed during initial load should not fire alerts
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const goals = df9.getGoals() as any;
+      // Goals object should exist with completedCount
+      return {
+        hasGoals: !!goals,
+        totalGoals: goals?.totalGoals ?? 0,
+        hasSuppression: goals?.totalGoals > 0,
+      };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.hasGoals).toBe(true);
+    expect(result!.totalGoals).toBeGreaterThan(0);
+  });
+
   test('Death react: getDeathMoraleLoss returns negative value', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;

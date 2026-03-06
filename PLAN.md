@@ -259,7 +259,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement BeaconMenu (full submenu for character beacons)
 - [ ] Implement proper ConstructMenu/MineMenu submenus
 - [ ] Construct mode: pause game + enable cutaway mode on open, restore on close
-- [ ] Remove non-original buttons (Save/Load/Spawn Crew)
+- [x] Remove non-original Spawn Crew button (keep Save/Load/Export/Import for usability)
 - [ ] Add sidebar icon sprites (vs text-only hotkey characters)
 - [ ] Add warble effect + sounds on sidebar interactions
 
@@ -280,7 +280,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 ### 12.2 Object inspector
 - [ ] Add object portrait with tint sprite
-- [ ] Add emergency status overlay (`getEmergencyString()`)
+- [x] Add emergency status overlay (`getEmergencyString()`)
 - [x] Add door status label/text
 - [x] Use localized condition string from `EnvObject.getConditionUIString()`
 - [x] Auto-close inspector on object destruction
@@ -439,9 +439,9 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: LOW**
 
 - [ ] Add goal progress tracking (numeric progress for UI display)
-- [ ] Add first-tick suppression of alerts (suppress on game load)
+- [x] Add first-tick suppression of alerts (suppress on game load, 5s window)
 - [ ] Implement `AllPossessions` check (scan room inventories for stuff+displayable)
-- [ ] Fix `FinalSiege` — add `nMegaEventStartTime + 120` check + room safety check
+- [x] Fix `FinalSiege` — add `nMegaEventStartTime + 120` check + room safety check
 
 ---
 
@@ -502,4 +502,5 @@ These are intentional differences due to engine/platform:
 | 2026-03-06 | Batches 1-6 complete: needs scale, memory, morale, anger, duty cycle, room state/tick, events, combat LoS/aim/stunner, fire 8-neighbor, directions, O2 consumption/sharing, research effects (5/7), pathfinding heap, tile heal power gate, dead char tracking. |
 | 2026-03-06 | Batch 7: AttackEnemy full rewrite, malady pre-roll, suffocation thresholds, 8 new E2E tests. Audit: downgraded 5 items from [x] to [~], upgraded 3 from [ ] to [x]. |
 | 2026-03-06 | Fix save/load: wire all 5 load callbacks (characters, objects, research, events, topics). Room oxygen now restored after room re-detection. Added clearAll() to EnvObjectManager, loadSaveData() to ResearchSystem. 3 new save/load round-trip E2E tests. |
-| 2026-03-06 | Batches 9-12: event weights, inspector activity/location/cause-of-death/onDuty/hostile mode, zone name generators, air scrubber disease reduction, command queue save/load, morale display fix, malady diagnosis/cure fixes, StartMenu resume+ESC. |
+| 2026-03-06 | Batches 9-12: event weights, inspector enhancements, zone name generators, air scrubber, command queue save/load, morale display, malady fixes, StartMenu resume+ESC. |
+| 2026-03-06 | Batches 13-16: animated matter counter, pub capacity, door status, death react logs, malady alert, FirePanel gate, emergency status, goal suppression, FinalSiege, remove Spawn Crew. 117 E2E tests. |

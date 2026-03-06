@@ -28,12 +28,21 @@ export class GoalSystem {
   /** Check one goal per second to spread load. */
   private static readonly CHECK_INTERVAL = 1;
   private checkIndex = 0;
+  /** Suppress alerts on first few ticks (prevents alerts on game load). */
+  private suppressAlerts = true;
+  private totalElapsed = 0;
+  private static readonly SUPPRESS_DURATION = 5; // seconds
 
   constructor(providers: GoalCheckProviders) {
     this.providers = providers;
   }
 
   update(dt: number) {
+    this.totalElapsed += dt;
+    if (this.suppressAlerts && this.totalElapsed >= GoalSystem.SUPPRESS_DURATION) {
+      this.suppressAlerts = false;
+    }
+
     this.tickAccum += dt;
     if (this.tickAccum < GoalSystem.CHECK_INTERVAL) return;
     this.tickAccum -= GoalSystem.CHECK_INTERVAL;
@@ -48,7 +57,9 @@ export class GoalSystem {
 
     if (this.checkGoal(goal)) {
       this.completed.add(goal.sName);
-      Base.addAlert('goal', `Goal completed: ${goal.friendlyName} — ${goal.description}`);
+      if (!this.suppressAlerts) {
+        Base.addAlert('goal', `Goal completed: ${goal.friendlyName} — ${goal.description}`);
+      }
     }
   }
 
