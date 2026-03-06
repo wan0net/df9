@@ -91,6 +91,9 @@ class GameRulesClass {
 
   currentMode = MODE_INSPECT;
 
+  /** Matter cost multiplier (Lua GameRules.matterMult, default 1). */
+  matterMult = 1;
+
   sStarDate = '0.0';
   sStarTime = '00';
 
@@ -191,6 +194,17 @@ class GameRulesClass {
   /** Get system label for debugging */
   getSystemLabel(slot: number): string {
     return this.systemLabels[slot] ?? `System${slot}`;
+  }
+
+  // ── Matter economy ──────────────────────────────────────────────
+
+  /** Add matter (positive) or subtract (negative). Applies matterMult for gains. */
+  addMatter(amount: number): void {
+    if (amount > 0) {
+      this.nMatter += Math.floor(amount * this.matterMult);
+    } else {
+      this.nMatter += amount; // costs not multiplied
+    }
   }
 
   // ── Time scaling ──────────────────────────────────────────────────

@@ -2645,4 +2645,56 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result).toBeTruthy();
     expect(result!.correctMorale).toBe(true);
   });
+
+  test('GameRules.addMatter applies matterMult for gains', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const GameRules = df9._gameRules;
+      if (!GameRules) return null;
+      const before = GameRules.nMatter;
+      GameRules.matterMult = 2;
+      GameRules.addMatter(100);
+      const after = GameRules.nMatter;
+      GameRules.matterMult = 1;
+      // Restore
+      GameRules.nMatter = before;
+      return { gained: after - before, expected: 200 };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.gained).toBe(result!.expected);
+  });
+
+  test('Room: no-generator uses VACUUM lighting, insufficient uses LOWPOWER', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const rooms = df9._roomMgr?.getRooms() ?? [];
+      if (rooms.length === 0) return null;
+      const room = rooms[0];
+      // Save originals
+      const origPower = room.nPowerOutput;
+      const origDraw = room.nPowerDraw;
+      const origSupply = room.nPowerSupply;
+      // No generator
+      room.nPowerOutput = 0;
+      room.nPowerDraw = 1;
+      room.nPowerSupply = 0;
+      room.updateEmergency();
+      const vacuumScheme = room.nLightingScheme; // should be 3 (VACUUM)
+      // Insufficient power
+      room.nPowerOutput = 5;
+      room.nPowerDraw = 10;
+      room.nPowerSupply = 5;
+      room.updateEmergency();
+      const lowpowerScheme = room.nLightingScheme; // should be 5 (LOWPOWER)
+      // Restore
+      room.nPowerOutput = origPower;
+      room.nPowerDraw = origDraw;
+      room.nPowerSupply = origSupply;
+      room.updateEmergency();
+      return { vacuumScheme, lowpowerScheme };
+    });
+    expect(result).toBeTruthy();
+    expect(result!.vacuumScheme).toBe(3); // LIGHTING_SCHEME_VACUUM
+    expect(result!.lowpowerScheme).toBe(5); // LIGHTING_SCHEME_LOWPOWER
+  });
 });

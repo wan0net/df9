@@ -1075,6 +1075,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     _charMgr: characterManager,
     _envMgr: EnvObjectManager,
     _roomMgr: roomManager,
+    _gameRules: GameRules,
     getPopulation: () => characterManager.getPopulation(),
     getMatter: () => GameRules.nMatter,
     getRoomCount: () => roomManager.getRooms().length,

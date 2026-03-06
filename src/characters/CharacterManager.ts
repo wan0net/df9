@@ -304,6 +304,19 @@ export class CharacterManager {
     // Process combat
     this.processCombat(dtSec);
 
+    // Tick vacuum death animations (Lua CharacterManager:deathTick)
+    for (let i = this.characters.length - 1; i >= 0; i--) {
+      const char = this.characters[i];
+      if (!char.isAlive() && char.nVacuumScale >= 0) {
+        if (char.tickVacuumDeath(dtSec)) {
+          // Animation done — force immediate corpse conversion
+          char.nVacuumScale = -1;
+        }
+        // Update renderer with shrink/spin values
+        this.characterRenderer?.updateCharacter(char);
+      }
+    }
+
     // Handle dead characters → corpse conversion
     this.processDeaths();
 
@@ -381,6 +394,9 @@ export class CharacterManager {
     for (let i = this.characters.length - 1; i >= 0; i--) {
       const char = this.characters[i];
       if (!char.isAlive()) {
+        // Vacuum death: delay removal for shrink/spin animation (Lua _vacuumDisappear)
+        if (char.nVacuumScale >= 0) continue; // still animating
+
         // Determine corpse type from team/race (Lua Corpse.TYPE_*)
         let corpseType = CORPSE_TYPE_FRIENDLY;
         if (char.tStats.nTeam !== TEAM_ID_PLAYER) {

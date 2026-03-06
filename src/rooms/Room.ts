@@ -229,12 +229,16 @@ export class Room {
   updateEmergency(): void {
     if (this.nLastVisibility === VISIBILITY_DIM) {
       this.setLightingScheme(LIGHTING_SCHEME_DIM);
-    } else if (this.nPowerSupply === 0) {
+    } else if (this.nPowerOutput === 0) {
+      // No generator at all → vacuum/dark lighting (Lua: LIGHTING_SCHEME_VACUUM)
       this.setLightingScheme(LIGHTING_SCHEME_VACUUM);
     } else if (this.bBurning || this.bEmergencyAlarmEnabled || this.bPendingBreach ||
                this.bBreach || this.getOxygenScore() < OXYGEN_SUFFOCATING) {
       this.setLightingScheme(LIGHTING_SCHEME_FIRE);
+      // Emergency rooms pulse (Lua: nLightFadesPerSecond > 0)
+      if (this.nLightFadesPerSecond <= 0) this.nLightFadesPerSecond = 0.5;
     } else if (this.nPowerSupply < this.nPowerDraw) {
+      // Generator exists but insufficient power → lowpower lighting
       this.setLightingScheme(LIGHTING_SCHEME_LOWPOWER);
     } else {
       this.setLightingScheme(LIGHTING_SCHEME_NORMAL);
