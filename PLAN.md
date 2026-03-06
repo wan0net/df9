@@ -240,7 +240,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: MEDIUM**
 
-- [ ] Implement animated matter counter (tick toward real value with sound)
+- [x] Implement animated matter counter (tick toward real value)
 - [x] Fix corpse count: query `Corpse` env objects, not dead characters
 - [x] Fix morale scale: use raw morale (-100..+100) with Lua thresholds (10/50/70/90)
 - [x] Fix morale emoticon thresholds (5 levels: bigfrown/frown/meh/smile/bigsmile)
@@ -281,7 +281,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 ### 12.2 Object inspector
 - [ ] Add object portrait with tint sprite
 - [ ] Add emergency status overlay (`getEmergencyString()`)
-- [ ] Add door status label/text
+- [x] Add door status label/text
 - [x] Use localized condition string from `EnvObject.getConditionUIString()`
 - [x] Auto-close inspector on object destruction
 - [ ] Add InventoryItem handling in inspector
@@ -395,7 +395,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Add `Zone:getAssociatedJob()` method
 - [ ] Implement zone power distribution (powerRequest/powerUnrequest/tThingsPowered sorted by distance)
 - [x] Implement unique zone name generators for all 11 zone types (reactor/greek, research/greek, infirmary/constellation, etc.)
-- [ ] Verify and fix Pub capacity system (`PUB_CAPACITY=3`, `PUB_CITIZENS_PER_BARTENDER=5`)
+- [x] Verify and fix Pub capacity system (`PUB_CAPACITY=3`, `PUB_CITIZENS_PER_BARTENDER=5`)
 
 ---
 
@@ -430,7 +430,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Implement `tDeadCharacters` tracking (deadCharacterIds Set + isDead/getDeadCount)
 - [ ] Implement `deathTick(dt)` for corpse animation/decay
 - [ ] Add death journal log entries (DEATH_REACT_FRIEND, DEATH_REACT_CITIZEN, etc.)
-- [ ] Add `getOwnedCharactersWithTask()`, `getTeamCharacters()`, `getCharacterNamed()`
+- [x] Add `getOwnedCharactersWithTask()`, `getTeamCharacters()`, `getCharacterNamed()`
 
 ---
 
