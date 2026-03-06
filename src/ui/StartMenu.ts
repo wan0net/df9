@@ -19,6 +19,7 @@ export class StartMenuState implements SceneState {
   private onSaveBase: (() => void) | null = null;
   private onResume: (() => void) | null = null;
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
+  private audioUnlockHandler: (() => void) | null = null;
   private saveYesNoEl: HTMLDivElement | null = null;
   /** Set to true when a game session has been started (allows Resume). */
   gameRunning = false;
@@ -40,19 +41,35 @@ export class StartMenuState implements SceneState {
   enter(ctx: SceneContext) {
     this.ctx = ctx;
 
-    // Initialize audio on first user interaction (menu entry)
+    // Initialize audio eagerly (context will be suspended until user gesture)
     if (!SoundManager.isInitialized()) {
       SoundManager.init();
       SoundManager.generateFallbackSounds();
     }
-    SoundManager.resume();
-    // Preload menu audio then play
+    // Preload menu audio tracks
     SoundManager.preloadCues([
       'Intro_GuitarTrack', 'Intro_AcceptButton', 'Intro_CancelButton',
       'Intro_LaunchButton', 'UI_Hilight', 'UI_Select',
-    ]).then(() => {
+    ]);
+
+    // AudioContext autoplay policy: context stays suspended until a user gesture.
+    // Resume on first interaction, then start music.
+    const tryStartMusic = () => {
+      SoundManager.resume();
       SoundManager.playMusic('Intro_GuitarTrack');
-    });
+    };
+    // Try immediately (works if returning to menu after game started)
+    tryStartMusic();
+    // Also listen for first user interaction to unlock audio
+    const unlockAudio = () => {
+      tryStartMusic();
+      document.removeEventListener('pointerdown', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
+      this.audioUnlockHandler = null;
+    };
+    this.audioUnlockHandler = unlockAudio;
+    document.addEventListener('pointerdown', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
 
     // Load Orbitron font (matches original game's orbitronWhite style)
     if (!document.getElementById('orbitron-font')) {
@@ -306,6 +323,11 @@ export class StartMenuState implements SceneState {
     if (this.escHandler) {
       window.removeEventListener('keydown', this.escHandler);
       this.escHandler = null;
+    }
+    if (this.audioUnlockHandler) {
+      document.removeEventListener('pointerdown', this.audioUnlockHandler);
+      document.removeEventListener('keydown', this.audioUnlockHandler);
+      this.audioUnlockHandler = null;
     }
     this.overlay?.remove();
   }

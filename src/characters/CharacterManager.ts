@@ -7,7 +7,7 @@ import {
   ANGER_MAX, VIOLENT_RAMPAGE_CHANCE, HURT_THRESHOLD,
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
   STATUS_DEAD,
-  OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH,
+  OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH, SPACESUIT_MAX_OXYGEN,
   VACUUM_THRESHOLD, VACUUM_THRESHOLD_END,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
@@ -190,6 +190,10 @@ export class CharacterManager {
     for (const spawn of spawns) {
       const char = new Character(this.nextId++, spawn.x, spawn.y);
       char.bSpacewalking = true; // Initial crew starts spacewalking
+      // Lua: SpacewalkingSettler template + _setStats defaults suitOxygen = SPACESUIT_MAX_OXYGEN
+      // Then spacesuitOn(true) activates suit without refilling.
+      char.bSpacesuit = true;
+      char.nSuitOxygen = SPACESUIT_MAX_OXYGEN;
       char.setJob(BUILDER); // Starting crew are all builders (original Lua behavior)
       this.characterRenderer?.createCharacter(char);
       this.characters.push(char);
