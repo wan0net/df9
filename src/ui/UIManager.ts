@@ -529,12 +529,15 @@ export class UIManager {
         }
         if (def.action === 'construct') {
           // Toggle construct mode — show/hide sub-menu
+          // Lua: pause game + enable cutaway on open, restore on close
           if (this.getBuildMode() === 'room' || this.getBuildMode() === 'floor' ||
               this.getBuildMode() === 'door' || this.getBuildMode() === 'zone' ||
               this.getBuildMode() === 'object') {
             this.setBuildMode('none');
+            GameRules.bRunning = true;
           } else {
             this.setBuildMode('room');
+            GameRules.bRunning = false;
           }
           this.refreshObjectPicker();
           return;

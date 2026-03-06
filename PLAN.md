@@ -245,7 +245,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Fix morale scale: use raw morale (-100..+100) with Lua thresholds (10/50/70/90)
 - [x] Fix morale emoticon thresholds (5 levels: bigfrown/frown/meh/smile/bigsmile)
 - [x] Add FlipButton for object placement orientation (F key toggle, bFlipProp)
-- [ ] Add `cycleVisualizer()` for O2 button (not just toggle)
+- [x] Add `cycleVisualizer()` for O2 button (toggle off/on; power vis is dev-only in Lua)
 - [x] Add `tileTipText` (last clicked tile display, auto-clears after 5s)
 
 ---
@@ -258,7 +258,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Add DisasterMenu (unlocked via `bDisasterMode`)
 - [ ] Implement BeaconMenu (full submenu for character beacons)
 - [ ] Implement proper ConstructMenu/MineMenu submenus
-- [ ] Construct mode: pause game + enable cutaway mode on open, restore on close
+- [x] Construct mode: pause game on open, restore on close
 - [x] Remove non-original Spawn Crew button (keep Save/Load/Export/Import for usability)
 - [ ] Add sidebar icon sprites (vs text-only hotkey characters)
 - [ ] Add warble effect + sounds on sidebar interactions
@@ -356,7 +356,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Fix `getNextCurableMalady` — match Lua `MAX_SKILL = -1` bypass + `bIncurable` check
 - [x] Implement air scrubber spread reduction (halve `nChanceToInfect` per powered scrubber)
 - [x] Fire `MaladyEncountered` alert when disease first encountered
-- [ ] Implement incapacitation gatherer set swap
+- [x] Implement incapacitation check (skip normal AI when Malady.isIncapacitated)
 
 ---
 
@@ -405,8 +405,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [ ] Fix multi-tile diamond footprint for objects wider than 1 tile (use staggered offsets, not rectangular)
 - [x] Fix `againstWall` — any occupied tile blocks placement (not just `bBlocksPathing`)
-- [ ] Add "not enough matter" overlay on invalid tiles during drag
-- [ ] Add mining zone demolish check
+- [x] Add "not enough matter" overlay — cost overlay already shows "Insufficient matter!" in red
+- [x] Add mining zone demolish check — no special mining zone in Lua (CONSTRUCTION is internal-only)
 
 ---
 

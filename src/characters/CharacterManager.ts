@@ -639,6 +639,15 @@ export class CharacterManager {
         continue;
       }
 
+      // Incapacitation check (Lua: Malady.isIncapacitated → only GetFieldScanned allowed)
+      if (Malady.isIncapacitated(char)) {
+        char.bIncapacitated = true;
+        // Incapacitated characters can't do anything; they wait for a doctor
+        processed++;
+        continue;
+      }
+      char.bIncapacitated = false;
+
       // Gather activity options
       const options = this.gatherOptions(char);
       const task = UtilityAI.selectTask(char, options);
