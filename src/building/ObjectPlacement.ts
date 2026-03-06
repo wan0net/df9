@@ -74,32 +74,34 @@ export class ObjectPlacement {
 
     } else if (data.againstWall) {
       // ── Wall-mounted objects ────────────────────────────────────
-      // Mirrors _findPropFit: player clicks the WALL tile; we find the adjacent
-      // floor tile in the perpendicular direction (_findPropFit shifts txTest,tyTest
-      // via _getAdjacentTile(wall, awayFromWallDir)).
-      // The actual placement is AT the floor tile (mirrors _checkPropFit receiving
-      // a floor tile tileX/tileY with bAgainstWall validated by checking adjacent dir).
+      // Mirrors _findPropFit: player clicks the WALL tile; we try all adjacent
+      // floor tiles (both sides of the wall) until one passes all checks.
       if (tileType !== TileType.WALL && tileType !== TileType.WALL_PENDING) {
         return { valid: false, reason: 'Must place on wall' };
       }
-      const floorTile = this.findFloorTileForWallObject(tileX, tileY);
-      if (!floorTile) {
+      const candidates = this.findFloorTilesForWallObject(tileX, tileY);
+      if (candidates.length === 0) {
         return { valid: false, reason: 'No adjacent floor tile' };
       }
 
-      // Occupied-tile check — mirrors _checkPropFit: any existing object blocks placement.
-      const occupant = EnvObjectManager.getObjectAt(floorTile.x, floorTile.y);
-      if (occupant) {
-        return { valid: false, reason: 'Tile is occupied' };
-      }
-
-      // Zone check — mirrors allowObjInRoom(tData, rRoom) on the floor tile's room.
-      if (!data.noRoom && data.zoneName) {
-        const room = this.roomManager.getRoomAt(floorTile.x, floorTile.y);
-        if (!room) return { valid: false, reason: 'Must be in a room' };
-        if (room.zone !== data.zoneName && !data.additionalZones.includes(room.zone)) {
-          return { valid: false, reason: `Requires ${data.zoneName} zone` };
+      // Try each candidate floor tile — first one passing all checks wins.
+      let lastReason = '';
+      let found = false;
+      for (const floorTile of candidates) {
+        const occupant = EnvObjectManager.getObjectAt(floorTile.x, floorTile.y);
+        if (occupant) { lastReason = 'Tile is occupied'; continue; }
+        if (!data.noRoom && data.zoneName) {
+          const room = this.roomManager.getRoomAt(floorTile.x, floorTile.y);
+          if (!room) { lastReason = 'Must be in a room'; continue; }
+          if (room.zone !== data.zoneName && !data.additionalZones.includes(room.zone)) {
+            lastReason = `Requires ${data.zoneName} zone`; continue;
+          }
         }
+        found = true;
+        break;
+      }
+      if (!found) {
+        return { valid: false, reason: lastReason || 'No valid adjacent floor tile' };
       }
 
     } else {
@@ -167,7 +169,20 @@ export class ObjectPlacement {
       bFlipX = (dir === WallDirection.NWSE);
     } else if (data.againstWall) {
       // Mirrors _findPropFit: shift from wall tile to adjacent floor tile.
-      const floorTile = this.findFloorTileForWallObject(tileX, tileY)!;
+      // Use same candidate iteration as canPlace to pick the valid tile.
+      const candidates = this.findFloorTilesForWallObject(tileX, tileY);
+      let floorTile = candidates[0];
+      for (const c of candidates) {
+        const occupant = EnvObjectManager.getObjectAt(c.x, c.y);
+        if (occupant) continue;
+        if (!data.noRoom && data.zoneName) {
+          const room = this.roomManager.getRoomAt(c.x, c.y);
+          if (!room) continue;
+          if (room.zone !== data.zoneName && !data.additionalZones.includes(room.zone)) continue;
+        }
+        floorTile = c;
+        break;
+      }
       placeTileX = floorTile.x;
       placeTileY = floorTile.y;
       bFlipX = floorTile.bFlipX;
@@ -259,8 +274,12 @@ export class ObjectPlacement {
    *   - Object at NE of wall (wall is at SW of floor): bFlipX=false, bFlipY=false
    *   - Object at SW of wall (wall is at NE of floor): bFlipX=true,  bFlipY=true
    */
-  private findFloorTileForWallObject(wallX: number, wallY: number):
-    { x: number; y: number; bFlipX: boolean; bFlipY: boolean } | null
+  /**
+   * Return ALL adjacent floor tiles for a wall object, ordered by preference.
+   * Mirrors Lua _findPropFit which tries all 4 flip combos until one succeeds.
+   */
+  private findFloorTilesForWallObject(wallX: number, wallY: number):
+    { x: number; y: number; bFlipX: boolean; bFlipY: boolean }[]
   {
     const isOdd = wallY & 1;
     const xLeft = isOdd ? 0 : -1;
@@ -275,24 +294,22 @@ export class ObjectPlacement {
       return t === TileType.FLOOR || t === TileType.FLOOR_PENDING;
     };
 
+    const results: { x: number; y: number; bFlipX: boolean; bFlipY: boolean }[] = [];
     const dir = getWallDirection(this.grid, wallX, wallY);
 
     if (dir === WallDirection.NESW) {
-      // NESW ("/"): perpendicular sides are NW and SE of the wall.
-      if (isFloor(nw)) return { ...nw, bFlipX: true,  bFlipY: false };
-      if (isFloor(se)) return { ...se, bFlipX: false, bFlipY: true  };
+      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: false });
+      if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: true  });
     } else if (dir === WallDirection.NWSE) {
-      // NWSE ("\"): perpendicular sides are NE and SW of the wall.
-      if (isFloor(ne)) return { ...ne, bFlipX: false, bFlipY: false };
-      if (isFloor(sw)) return { ...sw, bFlipX: true,  bFlipY: true  };
+      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: false });
+      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: true  });
     } else {
-      // Corner/T/pillar: try all four, pick first floor neighbor.
-      if (isFloor(nw)) return { ...nw, bFlipX: true,  bFlipY: false };
-      if (isFloor(ne)) return { ...ne, bFlipX: false, bFlipY: false };
-      if (isFloor(sw)) return { ...sw, bFlipX: true,  bFlipY: true  };
-      if (isFloor(se)) return { ...se, bFlipX: false, bFlipY: true  };
+      if (isFloor(nw)) results.push({ ...nw, bFlipX: true,  bFlipY: false });
+      if (isFloor(ne)) results.push({ ...ne, bFlipX: false, bFlipY: false });
+      if (isFloor(sw)) results.push({ ...sw, bFlipX: true,  bFlipY: true  });
+      if (isFloor(se)) results.push({ ...se, bFlipX: false, bFlipY: true  });
     }
-    return null;
+    return results;
   }
 
   /** Get available objects for the given room's zone. */
