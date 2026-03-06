@@ -848,6 +848,12 @@ export class Character {
     }
   }
 
+  // ── Vacuum death animation state (Lua Character:_vacuumDisappear) ───
+  /** Scale for vacuum death shrink animation (starts 0.5, shrinks to 0). */
+  nVacuumScale = -1; // -1 = not in vacuum death
+  /** Rotation accumulator for vacuum death spin. */
+  nVacuumRotation = 0;
+
   /** Kill the character with a specific cause of death. */
   kill(cause: number = CAUSE_OF_DEATH.UNSPECIFIED) {
     if (this.tStats.nStatus === STATUS_DEAD) return; // Already dead
@@ -870,17 +876,27 @@ export class Character {
       this.currentTask = null;
     }
 
+    // Vacuum death animation — shrink + spin (Lua Character:_vacuumDisappear)
+    if (cause === CAUSE_OF_DEATH.SUCKED_INTO_SPACE) {
+      this.nVacuumScale = 0.5;
+      this.nVacuumRotation = 0;
+    }
+
     // Track hostile kill statistics
     if (this.tStats.nTeam !== TEAM_ID_PLAYER) {
       Base.incrementStat('nHostilesKilled');
       if (cause === CAUSE_OF_DEATH.SUFFOCATION) {
         Base.incrementStat('nHostilesAsphyxiated');
       }
-      // TODO: nHostilesKilledByTurret — Turret system (GameRules tick slot 8)
-      // is not yet implemented. When turrets deal damage, pass a turret-specific
-      // cause of death or a killedByTurret flag so we can call
-      // Base.incrementStat('nHostilesKilledByTurret') here.
     }
+  }
+
+  /** Tick vacuum death animation. Returns true if character should be deleted. */
+  tickVacuumDeath(dt: number): boolean {
+    if (this.nVacuumScale < 0) return false;
+    this.nVacuumScale -= dt * 0.2;
+    this.nVacuumRotation += 120 * dt * (Math.PI / 180);
+    return this.nVacuumScale < 0.001;
   }
 
   startPath(path: { x: number; y: number }[]) {

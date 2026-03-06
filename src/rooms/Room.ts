@@ -299,6 +299,22 @@ export class Room {
   /** Last combat alert timestamp. */
   nLastCombatAlert = 0;
 
+  // ── Hover highlight — mirrors Room.lua:hover/unHover ──────────────────────
+
+  /** Room highlight intensity for mouse hover (0.0 = none, 0.3 = hovered). */
+  nHighlightPercent = 0;
+
+  /** Highlight room tiles on mouse hover (Lua Room:hover).
+   *  Only in INSPECT/PICK mode. */
+  hover(): void {
+    this.nHighlightPercent = 0.3;
+  }
+
+  /** Remove hover highlight (Lua Room:unHover). */
+  unHover(): void {
+    this.nHighlightPercent = 0;
+  }
+
   /** Adjoining rooms (connected through doors). Set by RoomManager/PowerSystem contiguity. */
   getAdjoiningRooms(): Room[] {
     return this.tContiguousRooms;
