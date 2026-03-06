@@ -178,6 +178,9 @@ export const Malady = {
   TIME_TO_WORRY,
   MIN_SPREAD_CHANCE,
 
+  /** Callback: count powered AirScrubbers within range of a tile. */
+  getAirScrubberCount: null as ((tx: number, ty: number, range: number) => number) | null,
+
   // ── State Management ───────────────────────────────────────
 
   reset(): void {
@@ -733,8 +736,15 @@ export const Malady = {
       }
     }
 
-    // Air scrubber environment mod — integration point
+    // Air scrubber environment mod (Lua Malady._getEnvironmentSpreadMod)
     // Each powered air scrubber in range halves chance, floor = MIN_SPREAD_CHANCE
+    if (Malady.getAirScrubberCount) {
+      const nScrubbers = Malady.getAirScrubberCount(rTarget.tileX, rTarget.tileY, 12);
+      for (let i = 0; i < nScrubbers; i++) {
+        chance *= 0.5;
+      }
+      chance = Math.max(chance, MIN_SPREAD_CHANCE);
+    }
 
     if (Math.random() < chance) {
       let newMalady: MaladyInstance;

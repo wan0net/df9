@@ -113,6 +113,25 @@ class CommandQueueClass {
     this.commands.clear();
     this.nextId = 1;
   }
+
+  /** Get save data for all pending/in-progress commands. */
+  getSaveData(): { type: CommandType; tileX: number; tileY: number; objectName?: string }[] {
+    const result: { type: CommandType; tileX: number; tileY: number; objectName?: string }[] = [];
+    for (const cmd of this.commands.values()) {
+      if (cmd.status === 'pending' || cmd.status === 'in_progress') {
+        result.push({ type: cmd.type, tileX: cmd.tileX, tileY: cmd.tileY, objectName: cmd.objectName });
+      }
+    }
+    return result;
+  }
+
+  /** Load save data — restores commands as pending. */
+  loadSaveData(data: { type: CommandType; tileX: number; tileY: number; objectName?: string }[]) {
+    this.clear();
+    for (const d of data) {
+      this.addCommand(d.type, d.tileX, d.tileY, d.objectName);
+    }
+  }
 }
 
 /** Global singleton */

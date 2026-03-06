@@ -201,6 +201,17 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   ]);
 
   Malady.reset();
+  // Wire air scrubber count for disease spread reduction
+  Malady.getAirScrubberCount = (tx, ty, range) => {
+    let count = 0;
+    for (const obj of EnvObjectManager.getObjects()) {
+      if (obj.tData.customClass !== 'AirScrubber') continue;
+      if (!obj.bBuilt || !obj.isFunctioning()) continue;
+      const dist = Math.max(Math.abs(obj.tileX - tx), Math.abs(obj.tileY - ty));
+      if (dist <= range) count++;
+    }
+    return count;
+  };
   EnvObjectManager.init(roomManager);
 
   // Wire door sprite lookup for TileRenderer3D
@@ -492,6 +503,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   saveLoadSystem.getFireData = () => fire.getSaveData();
   saveLoadSystem.loadFireData = (data) => {
     fire.loadSaveData(data);
+  };
+  saveLoadSystem.getCommandData = () => CommandQueue.getSaveData();
+  saveLoadSystem.loadCommandData = (data) => {
+    CommandQueue.loadSaveData(data as any);
   };
 
   // Register subsystems
