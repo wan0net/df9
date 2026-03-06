@@ -799,8 +799,13 @@ export class CharacterManager {
     }
 
     // ── Build tile commands (floor/wall construction) ─────
+    // Floors get higher priority than walls so builders complete the interior
+    // before sealing it off (completed WALLs are impassable).
     for (const cmd of CommandQueue.getAvailable('build_tile')) {
-      const priority = job === BUILDER ? 9 : 4; // Higher priority than objects
+      const isFloor = this.grid.get(cmd.tileX, cmd.tileY) === TileType.FLOOR_PENDING;
+      const priority = job === BUILDER
+        ? (isFloor ? 10 : 9)   // floors first, then walls
+        : (isFloor ? 5 : 4);
       options.push(new ActivityOption(
         new BuildTile(cmd.id, this.grid),
         cmd.tileX, cmd.tileY,

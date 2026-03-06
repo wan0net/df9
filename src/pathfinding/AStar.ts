@@ -101,6 +101,11 @@ export function findPath(
     if (!walkableFilter(endType)) return null;
   }
 
+  // Lua Pathfinder.lua:264-267 — bCharacterStartOnWallCheat:
+  // Characters can end up on wall tiles due to construction. The start tile
+  // is never checked against walkableFilter, so they can path off naturally
+  // (neighbors that are FLOOR pass the filter and get expanded).
+
   const open = new MinHeap();
   const closed = new Set<number>();
   // Track best g-score per tile for duplicate detection

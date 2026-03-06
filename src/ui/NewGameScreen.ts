@@ -22,12 +22,12 @@ const TUTORIAL_X = 12;
 const TUTORIAL_Y = 34;
 
 /**
- * Sidebar widths — scaled from native sprite sizes.
- * Original sprites: left=295px, right=156px for ~1920 viewport.
- * We scale to ~50% so they work well at 960-1440 typical viewports.
+ * Sidebar widths — native Lua pixel sizes.
+ * Left sidebar sprite: 295px wide.
+ * Right sidebar positioned at W/2 - 156 in Lua (156px from right edge).
  */
-const LEFT_SIDEBAR_W = 148;
-const RIGHT_SIDEBAR_W = 78;
+const LEFT_SIDEBAR_W = 295;
+const RIGHT_SIDEBAR_W = 156;
 
 type GameState = 'Initial' | 'SelectedLandingZone' | 'ConfirmedLandingZone' | 'Deploying' | 'Deployed';
 
@@ -286,8 +286,7 @@ export class NewGameScreenState implements SceneState {
     const h = window.innerHeight;
 
     // ── Left sidebar ──────────────────────────────────────────────────
-    // Lua: top piece at left edge covering upper 809px, tiles at 542px intervals
-    // starting 758px from top, bottom piece near viewport bottom.
+    // Lua: top piece at left edge, tiles repeat, bottom piece at -(H/2)+350.
     this.leftSidebar = document.createElement('div');
     this.leftSidebar.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
 
@@ -302,46 +301,48 @@ export class NewGameScreenState implements SceneState {
     lTop.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_W}px;`;
     this.leftSidebar.appendChild(lTop);
 
-    // Bottom piece — rounded corner cap (mirrors SideBarLeftBGBottom)
+    // Bottom piece — Lua: pos = { '-W/2', '-(H/2) + 350' }
+    // Top of sprite at 350px from viewport bottom.
     const lBottom = document.createElement('img');
     lBottom.src = '/assets/ui/newgame/ui_newgame_sidebarLeft_bottom.png';
-    lBottom.style.cssText = `position:absolute;left:0;bottom:0;width:${LEFT_SIDEBAR_W}px;`;
+    lBottom.style.cssText = `position:absolute;left:0;top:calc(100% - 350px);width:${LEFT_SIDEBAR_W}px;`;
     this.leftSidebar.appendChild(lBottom);
 
     this.overlay.appendChild(this.leftSidebar);
 
     // ── Right sidebar ─────────────────────────────────────────────────
-    // Lua: top piece at right edge - 156, tiles at right edge - 126,
-    // bottom piece near viewport bottom.
+    // Lua: top piece at W/2 - 156, tiles at W/2 - 126, bottom at W/2 - 146.
+    // Container is 156px wide (matching the rightmost position offset).
     this.rightSidebar = document.createElement('div');
     this.rightSidebar.style.cssText = `position:absolute;right:0;top:0;width:${RIGHT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
 
-    // Tile background
+    // Tile background — Lua: tiles at W/2 - 126 (30px inset from container left)
     const rTileBg = document.createElement('div');
-    rTileBg.style.cssText = `position:absolute;right:0;top:0;width:100%;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png') right top repeat-y;background-size:${RIGHT_SIDEBAR_W}px auto;`;
+    rTileBg.style.cssText = `position:absolute;left:30px;top:0;width:calc(100% - 30px);height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png') left top repeat-y;background-size:auto;`;
     this.rightSidebar.appendChild(rTileBg);
 
-    // Top piece
+    // Top piece — flush with container left (sprite is 145px wide)
     const rTop = document.createElement('img');
     rTop.src = '/assets/ui/newgame/ui_newgame_sidebarRight.png';
-    rTop.style.cssText = `position:absolute;right:0;top:0;width:${RIGHT_SIDEBAR_W}px;`;
+    rTop.style.cssText = `position:absolute;left:0;top:0;width:${RIGHT_SIDEBAR_W}px;`;
     this.rightSidebar.appendChild(rTop);
 
-    // Bottom piece — rounded corner cap
+    // Bottom piece — Lua: pos = { '(W/2) - 146', '-(H/2) + 382' }
+    // 10px inset from container left (156-146=10), top at 382px from bottom.
     const rBottom = document.createElement('img');
     rBottom.src = '/assets/ui/newgame/ui_newgame_sidebarRight_bottom.png';
-    rBottom.style.cssText = `position:absolute;right:0;bottom:0;width:${RIGHT_SIDEBAR_W}px;`;
+    rBottom.style.cssText = `position:absolute;left:10px;top:calc(100% - 382px);width:146px;`;
     this.rightSidebar.appendChild(rBottom);
 
     this.overlay.appendChild(this.rightSidebar);
   }
 
   private buildInfoPanel() {
-    // Info panel on right side — Lua: labels at right viewport edge - 565 to edge - 320
-    // We place it just left of the right sidebar
+    // Info panel on right side — Lua: labels at W/2 - 565 to W/2 - 320
+    // Positioned just left of the right sidebar
     const panelRight = RIGHT_SIDEBAR_W + 10;
     this.infoPanel = document.createElement('div');
-    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:60px;width:240px;padding:16px;color:${AMBER_HEX};font-size:13px;line-height:2;z-index:5;display:none;font-family:'Orbitron',monospace;`;
+    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:24px;width:240px;padding:16px;color:${AMBER_HEX};font-size:13px;line-height:2;z-index:5;display:none;font-family:'Orbitron',monospace;`;
 
     this.panelName         = document.createElement('div');
     this.panelName.style.cssText = 'font-weight:700;font-size:15px;margin-bottom:4px;';
@@ -359,10 +360,10 @@ export class NewGameScreenState implements SceneState {
 
   private buildConfirmDecline() {
     // Confirm and Decline buttons — ON the left sidebar panel
-    // Lua: left_edge + 50, top - 90 / top - 300 → buttons sit on the sidebar
-    const btnLeft = 25;   // Lua 50 at native / 2
-    const btnTop = 45;    // Lua 90 at native / 2
-    const btnSize = 77;   // 154px native / 2
+    // Lua: pos = { '-W/2 + 50', 'H/2 - 90' }, scale = { 154, 154 }
+    const btnLeft = 50;
+    const btnTop = 90;
+    const btnSize = 154;
 
     // Confirm button
     this.confirmBtnEl = document.createElement('div');
@@ -390,8 +391,8 @@ export class NewGameScreenState implements SceneState {
 
     // Decline button — below confirm
     this.declineBtnEl = document.createElement('div');
-    // Lua: decline at top - 300 → 150 at half scale
-    const declineTop = 150;
+    // Lua: pos = { '-W/2 + 50', 'H/2 - 300' }
+    const declineTop = 300;
     this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;display:none;`;
     const declineImg = document.createElement('img');
     declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
@@ -413,29 +414,25 @@ export class NewGameScreenState implements SceneState {
   }
 
   private buildLaunchButton() {
-    // Lua positions at half scale (native / 2):
-    //   Housing (launchbutton_active): left=55, bottom=102, 203x176
-    //   Cover (launchbutton_cover):    left=-20, bottom=126, 183x111
-    //   Cancel hitbox:                 left=5, bottom=151, 30x25
-    // The cover sits over the red button area of the housing.
-    // CANCEL label is baked into the housing sprite at top-left.
-    const housingW = 203;
-    const housingH = 176;
-    const housingLeft = 55;    // Lua: (left_edge + 110) / 2
-    const housingBottom = 102; // Lua: 204 / 2
-    const coverW = 183;        // Lua: 366 / 2
-    const coverLeft = -20;     // Lua: -40 / 2
-    const coverBottom = 126;   // Lua: 252 / 2
+    // Lua native positions (top-left anchor, MOAI Y-up → CSS top:calc(100%-Y)):
+    //   Housing (launchbutton_active): left=110, 204px from bottom, 405x351
+    //   Cover (launchbutton_cover):    left=-40, 252px from bottom, 366px wide
+    //   Cancel hitbox:                 left=10,  302px from bottom, 60x50
+    const housingW = 405;
+    const housingH = 351;
+    const housingLeft = 110;
+    const coverW = 366;
+    const coverLeft = -40;
 
     // Launch cover (hazard stripes "LAUNCH" — shown until confirmed)
     this.launchCoverEl = document.createElement('img') as HTMLImageElement;
     this.launchCoverEl.src = '/assets/ui/newgame/launchbutton_cover.png';
-    this.launchCoverEl.style.cssText = `position:absolute;left:${coverLeft}px;bottom:${coverBottom}px;width:${coverW}px;z-index:6;pointer-events:none;transition:transform 0.5s ease-in-out, opacity 0.5s;`;
+    this.launchCoverEl.style.cssText = `position:absolute;left:${coverLeft}px;top:calc(100% - 252px);width:${coverW}px;z-index:6;pointer-events:none;transition:transform 0.5s ease-in-out, opacity 0.5s;`;
     this.overlay.appendChild(this.launchCoverEl);
 
     // Deploy housing (red button + CANCEL — hidden until confirmed)
     this.launchActiveEl = document.createElement('div');
-    this.launchActiveEl.style.cssText = `position:absolute;left:${housingLeft}px;bottom:${housingBottom}px;width:${housingW}px;height:${housingH}px;z-index:5;display:none;cursor:pointer;`;
+    this.launchActiveEl.style.cssText = `position:absolute;left:${housingLeft}px;top:calc(100% - 204px);width:${housingW}px;height:${housingH}px;z-index:5;display:none;cursor:pointer;`;
 
     const activeImg = document.createElement('img');
     activeImg.src = '/assets/ui/newgame/launchbutton_active.png';
@@ -456,13 +453,9 @@ export class NewGameScreenState implements SceneState {
     this.launchActiveEl.addEventListener('click', () => this.onDeploy());
     this.overlay.appendChild(this.launchActiveEl);
 
-    // Cancel button — separate element over the CANCEL text in the housing sprite.
-    // Positioned absolutely in the overlay, NOT as a child of the deploy housing,
-    // so clicks don't bubble to the deploy handler.
+    // Cancel button — Lua: pos = { '-W/2 + 10', '-(H/2) + 302' }, scale = { 60, 50 }
     this.cancelBtnEl = document.createElement('div');
-    const cancelLeft = housingLeft;        // Aligned with left edge of housing
-    const cancelBottom = housingBottom + housingH - 30; // Near top of housing sprite
-    this.cancelBtnEl.style.cssText = `position:absolute;left:${cancelLeft}px;bottom:${cancelBottom}px;width:80px;height:30px;z-index:8;display:none;cursor:pointer;`;
+    this.cancelBtnEl.style.cssText = `position:absolute;left:10px;top:calc(100% - 302px);width:60px;height:50px;z-index:8;display:none;cursor:pointer;`;
     this.cancelBtnEl.addEventListener('click', () => this.onCancel());
     this.overlay.appendChild(this.cancelBtnEl);
   }
