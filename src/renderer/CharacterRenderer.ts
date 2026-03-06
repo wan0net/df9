@@ -365,13 +365,35 @@ export class CharacterRenderer {
     let mixer: THREE.AnimationMixer | null = null;
 
     if (spacesuit && cachedSpacesuit && !spacesuitLoadFailed) {
-      // Spacesuit model
+      // Spacesuit model — show base suit + job-specific accessories
       const clone = spacesuitHasSkeleton
         ? cloneSkeleton(cachedSpacesuit) as THREE.Group
         : cachedSpacesuit.clone(true);
       clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
       clone.rotation.x = 0.4;
       clone.rotation.y = 0.6;
+
+      // Spacesuit.glb has 7 primitives by material:
+      // 0: Head (always), 1: Suit body (always), 2: AsteroidChunk (MINER),
+      // 3: Builder tool (BUILDER), 4: Suit body (always),
+      // 5: SpaceEmergency (EMERGENCY), 6: MinerAcc (MINER)
+      const job = char.getJob();
+      const visibleMats = new Set(['Human_Head_Male01', 'Spacesuit01']);
+      if (job === 4) { // MINER
+        visibleMats.add('AsteroidChunk01');
+        visibleMats.add('MinerAcc01');
+      } else if (job === 2) { // BUILDER
+        visibleMats.add('Builder01');
+      } else if (job === 5) { // EMERGENCY
+        visibleMats.add('SpaceEmergency01');
+      }
+      clone.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
+          const matName = (child.material as THREE.Material)?.name ?? '';
+          child.visible = visibleMats.has(matName);
+        }
+      });
+
       group.add(clone);
 
       // Set up animation mixer if clips available
@@ -475,10 +497,21 @@ export class CharacterRenderer {
   }
 
   private upgradePending() {
-    if (!cachedCitizen || citizenLoadFailed) return;
+    const remaining: Character[] = [];
     for (const char of this.pendingUpgrade) {
       const handle = this.handles.get(char.id);
       if (!handle || handle.is3D) continue;
+
+      // If character needs spacesuit but it's not loaded yet, keep waiting
+      if (char.bSpacewalking && !cachedSpacesuit && !spacesuitLoadFailed) {
+        remaining.push(char);
+        continue;
+      }
+      // If citizen model not loaded yet, keep waiting
+      if (!char.bSpacewalking && (!cachedCitizen || citizenLoadFailed)) {
+        remaining.push(char);
+        continue;
+      }
 
       this.scene.remove(handle.object);
       if (handle.object instanceof THREE.Mesh) {
@@ -494,7 +527,7 @@ export class CharacterRenderer {
       handle.is3D = true;
       handle.showingSpacesuit = char.bSpacewalking;
     }
-    this.pendingUpgrade = [];
+    this.pendingUpgrade = remaining;
   }
 
   updateCharacter(char: Character) {
@@ -521,6 +554,13 @@ export class CharacterRenderer {
     // Base position
     this.positionCharacter(handle.object, char);
     this.positionNeedBars(handle.needBarsObj, char);
+
+    // Rotate model to face movement direction
+    if (handle.is3D && handle.modelGroup.children.length > 0) {
+      const model = handle.modelGroup.children[0];
+      model.rotation.x = 0.4; // Keep the isometric tilt
+      model.rotation.y = 0.6 + char.facingAngle; // Base orientation + facing
+    }
 
     // Animation: use skeletal clips if available, else procedural
     if (handle.mixer) {

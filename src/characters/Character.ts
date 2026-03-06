@@ -140,6 +140,8 @@ export class Character {
   // Movement
   path: { x: number; y: number }[] = [];
   moving = false;
+  /** Facing angle in radians (Y-axis rotation for 3D model). Updated on movement. */
+  facingAngle = 0;
   private moveProgress = 0;
   private moveFrom = { x: 0, y: 0 };
   private moveTo = { x: 0, y: 0 };
@@ -819,6 +821,15 @@ export class Character {
     this.moveTo = { x: next.x, y: next.y };
     this.moveProgress = 0;
     this.moving = true;
+
+    // Update facing angle based on screen-space movement direction
+    const fromPos = tileToScreen(this.tileX, this.tileY);
+    const toPos = tileToScreen(next.x, next.y);
+    const dx = toPos.x - fromPos.x;
+    const dy = toPos.y - fromPos.y;
+    if (dx !== 0 || dy !== 0) {
+      this.facingAngle = Math.atan2(dx, -dy);
+    }
   }
 
   /** Infect with a malady by type name. Returns true if infected. */
