@@ -167,10 +167,10 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Regenerate forecast after each event completes
 - [x] Accumulate `nPopulationDeltaEstimate` during forecast generation
 - [x] Implement `nMaxUndiscoveredRooms` and `nMaxExteriorRooms` gates per event class
-- [ ] Implement per-class `getWeight()` for immigration/compound/breaching events
+- [x] Implement per-class `getWeight()` for immigration/compound/breaching events
 - [x] Implement malady pre-roll on immigration (`CHANCE_OF_MALADY = 15/100`)
 - [x] Auto-save before event execution (if 45s since last save)
-- [ ] Persist `nMegaEventStartTime` in save data
+- [x] Persist `nMegaEventStartTime` in save data
 
 ---
 
@@ -242,7 +242,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [ ] Implement animated matter counter (tick toward real value with sound)
 - [x] Fix corpse count: query `Corpse` env objects, not dead characters
-- [ ] Fix morale scale: Lua uses 0-100 directly, not remapped from [-100,100]
+- [x] Fix morale scale: use raw morale (-100..+100) with Lua thresholds (10/50/70/90)
 - [x] Fix morale emoticon thresholds (5 levels: bigfrown/frown/meh/smile/bigsmile)
 - [ ] Add FlipButton for object placement orientation
 - [ ] Add `cycleVisualizer()` for O2 button (not just toggle)
@@ -272,18 +272,18 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 ### 12.1 Character inspector
 - [ ] Add character portrait system (face, hair, facial hair sprite compositing)
 - [ ] Add shortcut buttons (HealthStat, Morale, Room, Activity, CamCenter)
-- [ ] Add ActivityText in header (current task description)
-- [ ] Add LocationText in header (room name or "Space")
-- [ ] Add TitleLabel with "(On Duty)" suffix
-- [ ] Add cause-of-death display (swap morale for death cause when dead)
-- [ ] Add hostile mode (suppress Duty/Psych tabs for hostiles)
+- [x] Add ActivityText in header (current task description)
+- [x] Add LocationText in header (room name or "Space")
+- [x] Add TitleLabel with "(On Duty)" suffix
+- [x] Add cause-of-death display (swap morale for death cause when dead)
+- [x] Add hostile mode (suppress Duty/Psych/Needs tabs for hostiles)
 
 ### 12.2 Object inspector
 - [ ] Add object portrait with tint sprite
 - [ ] Add emergency status overlay (`getEmergencyString()`)
 - [ ] Add door status label/text
-- [ ] Use localized condition string from `EnvObject.getConditionUIString()`
-- [ ] Auto-close inspector on object destruction
+- [x] Use localized condition string from `EnvObject.getConditionUIString()`
+- [x] Auto-close inspector on object destruction
 - [ ] Add InventoryItem handling in inspector
 - [ ] Add About tab (description/lore text)
 
@@ -294,8 +294,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: LOW-MEDIUM**
 
 ### 13.1 Start Menu
-- [ ] Add Resume, Save Base, Settings, Credits, Quit buttons
-- [ ] Add ESC key handling (resume if game loaded)
+- [x] Add Resume button (when game running) + ESC key handling
+- [ ] Add Save Base, Settings, Credits, Quit buttons
 - [ ] Add SaveYesNo confirmation dialog
 
 ### 13.2 Job Roster
@@ -319,7 +319,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] TeamTactics — +75% damage reduction when nearby security officers
 - [x] SpaceSuit2 — suit O2 capacity 480→600 seconds
 - [x] MaintenanceLevel2 — apply `nConditionMultiplier: 1.5` to maintenance
-- [ ] PlantLevel2 — apply `nConditionMultiplier: 2` to garden objects
+- [x] PlantLevel2 — apply `nConditionMultiplier: 2` to garden objects
 - [ ] Connect `bDiscoverOnly` items to datacube pickup discovery mechanism
 
 ---
@@ -352,9 +352,9 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: LOW-MEDIUM**
 
-- [ ] Fix `getNextUndiagnosedMalady` — Lua returns any undiagnosed (not just symptomatic)
-- [ ] Fix `getNextCurableMalady` — match Lua `MAX_SKILL = -1` bypass condition
-- [ ] Implement air scrubber spread reduction (halve `nChanceToInfect` per powered scrubber)
+- [x] Fix `getNextUndiagnosedMalady` — Lua returns any undiagnosed (not just symptomatic)
+- [x] Fix `getNextCurableMalady` — match Lua `MAX_SKILL = -1` bypass + `bIncurable` check
+- [x] Implement air scrubber spread reduction (halve `nChanceToInfect` per powered scrubber)
 - [ ] Fire `MaladyEncountered` alert when disease first encountered
 - [ ] Implement incapacitation gatherer set swap
 
@@ -370,8 +370,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Save/load fire state (heat map + flame intensities)
 - [x] Save/load room oxygen levels
 - [x] Save/load character needs (hunger, tiredness, fun, etc.)
-- [ ] Save/load command/reservation queue (pending build/mine orders)
-- [ ] Save/load asteroid/derelict positions
+- [x] Save/load command/reservation queue (pending build/mine orders)
+- [x] Save/load asteroid/derelict positions (handled via grid data)
 - [x] Save/load character inventory (full, not just weapon)
 - [x] Fix AutoSave to use wall-clock time (not game-scaled `gameDt`)
 
@@ -394,7 +394,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Add CONSTRUCTION zone type
 - [ ] Add `Zone:getAssociatedJob()` method
 - [ ] Implement zone power distribution (powerRequest/powerUnrequest/tThingsPowered sorted by distance)
-- [ ] Implement unique zone name generators for all 11 zone types (reactor/greek, research/greek, infirmary/constellation, etc.)
+- [x] Implement unique zone name generators for all 11 zone types (reactor/greek, research/greek, infirmary/constellation, etc.)
 - [ ] Verify and fix Pub capacity system (`PUB_CAPACITY=3`, `PUB_CITIZENS_PER_BARTENDER=5`)
 
 ---
@@ -502,3 +502,4 @@ These are intentional differences due to engine/platform:
 | 2026-03-06 | Batches 1-6 complete: needs scale, memory, morale, anger, duty cycle, room state/tick, events, combat LoS/aim/stunner, fire 8-neighbor, directions, O2 consumption/sharing, research effects (5/7), pathfinding heap, tile heal power gate, dead char tracking. |
 | 2026-03-06 | Batch 7: AttackEnemy full rewrite, malady pre-roll, suffocation thresholds, 8 new E2E tests. Audit: downgraded 5 items from [x] to [~], upgraded 3 from [ ] to [x]. |
 | 2026-03-06 | Fix save/load: wire all 5 load callbacks (characters, objects, research, events, topics). Room oxygen now restored after room re-detection. Added clearAll() to EnvObjectManager, loadSaveData() to ResearchSystem. 3 new save/load round-trip E2E tests. |
+| 2026-03-06 | Batches 9-12: event weights, inspector activity/location/cause-of-death/onDuty/hostile mode, zone name generators, air scrubber disease reduction, command queue save/load, morale display fix, malady diagnosis/cure fixes, StartMenu resume+ESC. |

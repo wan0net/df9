@@ -87,6 +87,7 @@ export interface MaladyInstance {
   tSymptomStages?: SymptomStage[];
   nForceResearch?: number;
   sSymptomLog?: string;
+  bIncurable: boolean;
   bCreateStrains: boolean;
   tDurationRange: [number, number];
   bNoSpawnInEvent?: boolean;
@@ -278,20 +279,23 @@ export const Malady = {
   /** Get all minor injury type names. */
   getMinorInjuryFromList: getMinorInjuryList,
 
-  /** Get first undiagnosed symptomatic malady on a character. */
+  /** Get first undiagnosed malady on a character (Lua: any undiagnosed, not just symptomatic). */
   getNextUndiagnosedMalady(rChar: CharacterLike): MaladyInstance | null {
     for (const m of rChar.maladies) {
-      if (!m.bDiagnosed && m.bSymptomatic) return m;
+      if (!m.bDiagnosed) return m;
     }
     return null;
   },
 
-  /** Get first curable malady (diagnosed, cure discovered, skill sufficient). */
+  /** Max skill level bypass — Lua MAX_SKILL = -1 means "any skill works". */
+  MAX_SKILL: -1 as number,
+
+  /** Get first curable malady (not incurable, cure discovered, skill sufficient). */
   getNextCurableMalady(rChar: CharacterLike, nSkillLevel: number): MaladyInstance | null {
     for (const m of rChar.maladies) {
-      if (!m.bDiagnosed) continue;
+      if (m.bIncurable) continue;
       if (!Malady.hasDiscoveredCure(m.sMaladyName)) continue;
-      if (m.nFieldTreatSkill <= nSkillLevel || m.nFieldTreatSkill === 0) {
+      if (nSkillLevel === Malady.MAX_SKILL || nSkillLevel >= m.nFieldTreatSkill) {
         return m;
       }
     }
@@ -464,6 +468,7 @@ export const Malady = {
       tSymptomStages: def.tSymptomStages?.map(s => ({ ...s })),
       nForceResearch: def.nForceResearch,
       sSymptomLog: def.sSymptomLog,
+      bIncurable: def.bIncurable ?? false,
       bCreateStrains: def.bCreateStrains,
       tDurationRange: [...def.tDurationRange],
       bNoSpawnInEvent: def.bNoSpawnInEvent,

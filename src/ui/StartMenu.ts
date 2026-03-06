@@ -16,15 +16,21 @@ export class StartMenuState implements SceneState {
   private onNewGame!: () => void;
   private onTutorial!: () => void;
   private onLoadBase!: () => void;
+  private onResume: (() => void) | null = null;
+  private escHandler: ((e: KeyboardEvent) => void) | null = null;
+  /** Set to true when a game session has been started (allows Resume). */
+  gameRunning = false;
 
   constructor(handlers: {
     onNewGame: () => void;
     onTutorial: () => void;
     onLoadBase: () => void;
+    onResume?: () => void;
   }) {
     this.onNewGame = handlers.onNewGame;
     this.onTutorial = handlers.onTutorial;
     this.onLoadBase = handlers.onLoadBase;
+    this.onResume = handlers.onResume ?? null;
   }
 
   enter(ctx: SceneContext) {
@@ -140,11 +146,15 @@ export class StartMenuState implements SceneState {
       pointer-events:auto;
     `;
 
-    const buttons = [
+    const buttons: { label: string; action: () => void }[] = [];
+    if (this.gameRunning && this.onResume) {
+      buttons.push({ label: 'RESUME', action: this.onResume });
+    }
+    buttons.push(
       { label: 'NEW GAME', action: this.onNewGame },
       { label: 'TUTORIAL', action: this.onTutorial },
       { label: 'LOAD BASE', action: this.onLoadBase },
-    ];
+    );
 
     for (const btn of buttons) {
       const el = document.createElement('div');
@@ -187,12 +197,28 @@ export class StartMenuState implements SceneState {
     this.overlay.appendChild(version);
 
     ctx.container.appendChild(this.overlay);
+
+    // ESC to resume game if running
+    if (this.gameRunning && this.onResume) {
+      this.escHandler = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          SoundManager.playUI('Intro_AcceptButton');
+          this.onResume!();
+        }
+      };
+      window.addEventListener('keydown', this.escHandler);
+    }
   }
 
   update(_dt: number) {}
 
   exit() {
     SoundManager.stopMusic();
+    if (this.escHandler) {
+      window.removeEventListener('keydown', this.escHandler);
+      this.escHandler = null;
+    }
     this.overlay?.remove();
   }
 }

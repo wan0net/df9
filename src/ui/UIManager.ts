@@ -899,15 +899,14 @@ export class UIManager {
     const aliveChars = chars.filter(c => c.isAlive());
     if (aliveChars.length > 0) {
       const avgMorale = aliveChars.reduce((sum, c) => sum + c.nMorale, 0) / aliveChars.length;
-      // Lua StatusBar: morale 0-100 directly, 5 emoticon levels at 20/40/60/80
-      const moralePct = ((avgMorale + 100) / 200) * 100;
+      // Lua StatusBar: raw morale -100..+100, thresholds at 10/50/70/90
       let emoticon: string;
-      if (moralePct < 20) emoticon = '>:(';       // bigfrown
-      else if (moralePct < 40) emoticon = ':(';    // frown
-      else if (moralePct < 60) emoticon = ':|';    // meh
-      else if (moralePct < 80) emoticon = ':)';    // smile
+      if (avgMorale <= 10) emoticon = '>:(';       // bigfrown
+      else if (avgMorale <= 50) emoticon = ':(';    // frown
+      else if (avgMorale <= 70) emoticon = ':|';    // meh
+      else if (avgMorale <= 90) emoticon = ':)';    // smile
       else emoticon = ':D';                         // bigsmile
-      this.moraleText.textContent = `${emoticon} ${Math.round(moralePct)}%`;
+      this.moraleText.textContent = `${emoticon} ${Math.round(avgMorale)}`;
     } else {
       this.moraleText.textContent = '';
     }

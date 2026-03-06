@@ -105,6 +105,8 @@ export interface MaladyDef {
   bNoSpawnInEvent?: boolean;
   /** Internal: don't create instances directly. */
   bNoCreate?: boolean;
+  /** Cannot be cured by any means. */
+  bIncurable?: boolean;
 }
 
 // ── Default Template ────────────────────────────────────────────────────

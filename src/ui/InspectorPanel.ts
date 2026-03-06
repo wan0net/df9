@@ -178,7 +178,8 @@ export class InspectorPanel {
     }
 
     const jobSpan = document.createElement('span');
-    jobSpan.textContent = `[${char.getJobName()}]`;
+    const dutyStr = char.isAlive() && char.onDuty() ? ' (On Duty)' : '';
+    jobSpan.textContent = `[${char.getJobName()}${dutyStr}]`;
     jobSpan.style.cssText = 'font-size:12px;color:#888;';
     nameRow.appendChild(jobSpan);
     header.appendChild(nameRow);
@@ -218,14 +219,20 @@ export class InspectorPanel {
     tabRow.style.cssText = `
       display:flex;border-top:1px solid #333;border-bottom:1px solid #333;
     `;
-    const tabs: { label: string; tab: InspectorTab }[] = [
-      { label: 'Duty', tab: 'duty' },
-      { label: 'Stats', tab: 'stats' },
-      { label: 'Needs', tab: 'needs' },
-      { label: 'Psych', tab: 'psych' },
-      { label: 'Log', tab: 'log' },
-      { label: 'Actions', tab: 'actions' },
-    ];
+    const isPlayer = char.tStats.nTeam === 1; // TEAM_ID_PLAYER
+    const tabs: { label: string; tab: InspectorTab }[] = isPlayer
+      ? [
+          { label: 'Duty', tab: 'duty' },
+          { label: 'Stats', tab: 'stats' },
+          { label: 'Needs', tab: 'needs' },
+          { label: 'Psych', tab: 'psych' },
+          { label: 'Log', tab: 'log' },
+          { label: 'Actions', tab: 'actions' },
+        ]
+      : [
+          { label: 'Stats', tab: 'stats' },
+          { label: 'Log', tab: 'log' },
+        ];
     for (const t of tabs) {
       const btn = document.createElement('div');
       btn.textContent = t.label;
