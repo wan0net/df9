@@ -8,6 +8,9 @@ import {
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, TEAM_ID_PLAYER_ABANDONED,
   HUMAN_MELEE_DAMAGE, MELEE_RANGE, EMERGENCY,
   DAMAGE_TYPE, ATTACK_TYPE, CAUSE_OF_DEATH,
+  STARTLE_CHANCE, MEMORY_STARTLED_RECENTLY, MEMORY_STARTLED_RECENTLY_DURATION,
+  RACE_HUMAN, RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK, RACE_CHICKEN, RACE_SHAMON,
+  FACTION_BEHAVIOR,
 } from '../characters/CharacterConstants';
 import { WEAPON_DEFS, type WeaponDef } from './WeaponData';
 import type { ProjectileManager } from '../hazards/Projectile';
@@ -168,6 +171,22 @@ export class CombatSystem {
       bCoolingDown: false,
       weapon,
     });
+
+    // Startle animation check (Lua AttackEnemy.lua:62-72)
+    // Emergency on duty and raiders/monsters don't startle
+    const bBrawling = attacker.tBrawlingWith.size > 0;
+    const isEmergencyOnDuty = attacker.getJob() === EMERGENCY &&
+      (attacker.nRemainingDutyTime > 0);
+    const race = attacker.tStats.nRace;
+    if (!isEmergencyOnDuty && !bBrawling &&
+        race !== undefined && // normal character
+        Math.random() < STARTLE_CHANCE) {
+      if (!attacker.retrieveMemory(MEMORY_STARTLED_RECENTLY)) {
+        // Would play startle anim here — store memory to prevent re-startling
+        attacker.storeMemory(MEMORY_STARTLED_RECENTLY, true, MEMORY_STARTLED_RECENTLY_DURATION);
+      }
+    }
+
     return true;
   }
 

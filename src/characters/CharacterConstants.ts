@@ -403,4 +403,7 @@ export const MEMORY_LAST_BED = 'tLastSleptInBed';
 export const MEMORY_SENT_TO_HOSPITAL = 'bSentToHospital';
 export const MEMORY_STARTLED_RECENTLY = 'bStartledRecently';
 export const MEMORY_STARTLED_RECENTLY_DURATION = 15;
+
+/** Chance to play startle animation when entering combat (Lua CharacterConstants.STARTLE_CHANCE = 0.75). */
+export const STARTLE_CHANCE = 0.75;
 export const MEMORY_SAW_TANTRUM_RECENTLY = 'tSawTantrum';

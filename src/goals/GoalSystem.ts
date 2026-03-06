@@ -19,6 +19,8 @@ export interface GoalCheckProviders {
   getHappyCitizenCount: (moraleThreshold: number) => number;
   /** Check final siege: mega-event ran + 120s + friendly alive in safe room + all hostiles dead. */
   checkFinalSiege: () => boolean;
+  /** Count unique bStuff+bDisplayable items in player-owned rooms (Lua GoalData.allPossessions). */
+  getAllPossessionsCount: () => { collected: number; total: number };
 }
 
 export class GoalSystem {
@@ -90,9 +92,10 @@ export class GoalSystem {
         return this.providers.getHappyCitizenCount(TARGET_HAPPY_MORALE) >= goal.nThreshold;
       case 'breachShipsDestroyed':
         return stats.nBreachShipsDestroyed >= goal.nThreshold;
-      case 'allPossessions':
-        // TODO: implement when possession tracking is complete
-        return false;
+      case 'allPossessions': {
+        const { collected, total } = this.providers.getAllPossessionsCount();
+        return collected >= total;
+      }
       case 'raidersConverted':
         return stats.nRaidersConverted >= goal.nThreshold;
       case 'hostilesAsphyxiated':
@@ -155,6 +158,10 @@ export class GoalSystem {
         return Math.min(1, stats.nHostilesAsphyxiated / goal.nThreshold);
       case 'raidersConverted':
         return Math.min(1, stats.nRaidersConverted / goal.nThreshold);
+      case 'allPossessions': {
+        const { collected, total } = this.providers.getAllPossessionsCount();
+        return total > 0 ? Math.min(1, collected / total) : 0;
+      }
       default:
         return 0;
     }

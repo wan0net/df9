@@ -71,6 +71,7 @@ export interface SaveData {
   fires?: { tTiles: Record<string, number>; tFlames: Record<string, number> };
   commands?: { type: string; tileX: number; tileY: number; objectName?: string }[];
   pickups?: { sName: string; tileX: number; tileY: number }[];
+  powerHolidayEndTime?: number | null;
 }
 
 export class SaveLoadSystem {
@@ -139,6 +140,7 @@ export class SaveLoadSystem {
       fires: this.getFireData?.(),
       commands: this.getCommandData?.(),
       pickups: this.getPickupData?.(),
+      powerHolidayEndTime: GameRules.powerHolidayEndTime,
     };
   }
 
@@ -180,6 +182,16 @@ export class SaveLoadSystem {
     GameRules.elapsedTime = data.elapsedTime;
     GameRules.SPACEDATE_BASE = data.SPACEDATE_BASE;
     GameRules.setTimeScale(data.playerTimeScale);
+
+    // Restore power holiday state
+    if (data.powerHolidayEndTime !== undefined) {
+      GameRules.powerHolidayEndTime = data.powerHolidayEndTime ?? null;
+      GameRules.bPowerHoliday = GameRules.powerHolidayEndTime !== null;
+    } else {
+      // Old save without power holiday data — grant grace period (Lua compat)
+      GameRules.powerHolidayEndTime = GameRules.elapsedTime + 600;
+      GameRules.bPowerHoliday = true;
+    }
 
     // Restore grid
     if (data.gridData && data.gridData.length === data.gridWidth * data.gridHeight) {

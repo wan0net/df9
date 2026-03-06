@@ -102,6 +102,10 @@ class GameRulesClass {
   bTimeLocked = false;
   /** Power holiday — tutorial grace period, all objects get power (Lua g_PowerHoliday). */
   bPowerHoliday = false;
+  /** Time when power holiday expires (Lua GameRules.powerHolidayEndTime). */
+  powerHolidayEndTime: number | null = null;
+  /** Power holiday duration: 10 minutes (Lua 60*10 = 600 seconds). */
+  static readonly POWER_HOLIDAY_DURATION = 600;
   /** Prohibit suffocation (Lua GameRules.bProhibitSuffocation). */
   bProhibitSuffocation = false;
 
@@ -176,6 +180,10 @@ class GameRulesClass {
     this.playerTimeScale = 1;
     this.bRunning = true;
     this.currentMode = MODE_INSPECT;
+
+    // Start power holiday — 10 minute grace period (Lua GameRules.lua)
+    this.bPowerHoliday = true;
+    this.powerHolidayEndTime = GameRulesClass.POWER_HOLIDAY_DURATION;
 
     // Randomize spacedate base (matches Lua: SPACEDATE_BASE + random(0, OFFSET))
     this.SPACEDATE_BASE =
@@ -271,6 +279,12 @@ class GameRulesClass {
     this.deltaTime = dt * this.playerTimeScale;
     this.simTime += this.deltaTime;
     this.elapsedTime += this.deltaTime;
+
+    // Check power holiday expiry (Lua GameRules.lua)
+    if (this.powerHolidayEndTime !== null && this.elapsedTime >= this.powerHolidayEndTime) {
+      this.powerHolidayEndTime = null;
+      this.bPowerHoliday = false;
+    }
 
     // Tick all registered subsystems in order
     const gameDt = this.deltaTime;

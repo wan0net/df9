@@ -42,4 +42,11 @@ export const PICKUP_DEFS: Record<string, PickupDef> = {
     bPickupable: true,
     nMatterValue: 5,
   },
+  ResearchDatacube: {
+    sName: 'ResearchDatacube',
+    friendlyName: 'Research Datacube',
+    spriteName: 'data_pickup',
+    bPickupable: true,
+    nMatterValue: 0,
+  },
 };

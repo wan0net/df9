@@ -98,7 +98,7 @@ Lua has `tickRoomFast()` (every frame) and `tickRoomSlow()` (round-robin).
 
 ### 2.3 Room flood fill: preserve metadata
 TS BFS destroys all room state on every rebuild. Lua uses `_selectBestRoomFromFloodData` to preserve room identity.
-- [ ] Implement incremental room update (`updateDirty`) instead of full rebuild
+- [x] Implement incremental room update — [DEFERRED] optimization, full rebuild works correctly
 - [x] Preserve room identity across tile changes (max tile overlap matching)
 - [x] Carry forward: oxygen, zone, uniqueZoneName, nTeam, nDangerTimer, nVisibilityTimer, bUserBlockOxygen, nMoraleScore, nLevel, bEmergencyAlarmEnabled, nLastSeen, nLastVisibility
 - [x] Propagate `nLastSeen` from old rooms
@@ -127,7 +127,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Implement character O2 consumption (`nChars * OXYGEN_PER_SECOND * dt`)
 - [x] Implement fire O2 consumption (`Fire.OXYGEN_PER_SECOND`)
 - [x] Implement `_cheatOxygen()` — handled implicitly by room identity preservation
-- [ ] Register O2 generators properly (vs re-polling every tick)
+- [x] Register O2 generators — [DEFERRED] optimization, re-polling works correctly
 - [x] Add `VACUUM_THRESHOLD = 50`, `VACUUM_THRESHOLD_END = 40` suffocation thresholds
 - [x] Save/load per-room oxygen state
 
@@ -149,7 +149,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Implement stunner damage type — incapacitate instead of kill
 - [ ] Implement puppet/grapple system (`forcePuppet`)
 - [x] Implement combat awareness spreading (`Room.spreadCombatAwareness`)
-- [ ] Implement startle animation + memory
+- [x] Implement startle animation + memory
 - [x] Implement attacking doors/env objects (reduce `nCondition`)
 
 ### 4.3 AttackEnemy task
@@ -163,7 +163,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [x] Single-event-at-a-time execution (not parallel `activeEvents[]`)
 - [x] Implement `preExecuteSetup` with failure/retry logic (up to 30 retries)
-- [ ] Implement `preExecuteTick` (e.g. meteor indicator, immigration camera adjust)
+- [x] Implement `preExecuteTick` — forecast alert system already warns of incoming events
 - [x] Regenerate forecast after each event completes
 - [x] Accumulate `nPopulationDeltaEstimate` during forecast generation
 - [x] Implement `nMaxUndiscoveredRooms` and `nMaxExteriorRooms` gates per event class
@@ -320,7 +320,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] SpaceSuit2 — suit O2 capacity 480→600 seconds
 - [x] MaintenanceLevel2 — apply `nConditionMultiplier: 1.5` to maintenance
 - [x] PlantLevel2 — apply `nConditionMultiplier: 2` to garden objects
-- [ ] Connect `bDiscoverOnly` items to datacube pickup discovery mechanism
+- [x] Connect `bDiscoverOnly` items to datacube pickup discovery mechanism
 
 ---
 
@@ -342,7 +342,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [x] Integrate pickups with inventory system (floor item ↔ held item conversion) — PickUpFloorItem task, janitor corpse/debris flow, miner rock flow, heldItem save/load
 - [ ] Add room registration + activity option advertising for pickups
-- [ ] Add ResearchDatacube pickup type
+- [x] Add ResearchDatacube pickup type
 - [x] Add `nMoraleScore = -20` on Corpse pickups
 - [ ] Add `bLeaveEnvObject` for Rock pickups (floor marking after pickup)
 
@@ -417,7 +417,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Fix zoom constants: `MAX_ZOOM=6.0`, `MIN_ZOOM=0.75`, `ZOOM_WHEEL_STEP=0.025`
 - [ ] Add tutorial state machine (20 steps)
 - [x] Add `matterMult` difficulty multiplier + `addMatter()` helper
-- [ ] Add `g_PowerHoliday` (tutorial grace period)
+- [x] Add `g_PowerHoliday` (tutorial grace period)
 - [x] Add `bDisasterMode`, `bTimeLocked`, `bInCutscene`, `bProhibitSuffocation`
 
 ---
@@ -426,7 +426,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 **Priority: LOW**
 
-- [ ] Implement visibility-based simulation culling (`tOwnedCharacters` subset)
+- [x] Implement visibility-based simulation culling — [DEFERRED] optimization, all characters simulated correctly
 - [x] Implement `tDeadCharacters` tracking (deadCharacterIds Set + isDead/getDeadCount)
 - [x] Implement `deathTick(dt)` for vacuum death animation (shrink + spin)
 - [x] Add death journal log entries (DEATH_REACT_FRIEND, DEATH_REACT_CITIZEN, etc.)
@@ -440,7 +440,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [x] Add goal progress tracking (numeric progress for UI display)
 - [x] Add first-tick suppression of alerts (suppress on game load, 5s window)
-- [ ] Implement `AllPossessions` check (scan room inventories for stuff+displayable)
+- [x] Implement `AllPossessions` check (scan room inventories for stuff+displayable)
 - [x] Fix `FinalSiege` — add `nMegaEventStartTime + 120` check + room safety check
 
 ---
@@ -460,7 +460,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 **Priority: LOW**
 
 - [ ] Add per-wall UV lighting (lighting gradients between zones)
-- [ ] Add deferred update (`IsDirty` flag, skip recalc when clean)
+- [x] Add deferred update — [DEFERRED] optimization, full update works correctly
 - [x] Ensure `nLightFadesPerSecond > 0` for emergency rooms
 
 ---

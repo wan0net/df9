@@ -419,6 +419,22 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         ),
       );
     },
+    getAllPossessionsCount: () => {
+      // Lua GoalData.allPossessions: count unique bStuff+bDisplayable items
+      const targetItems = new Set<string>();
+      for (const [key, tmpl] of Object.entries(ITEM_TEMPLATES)) {
+        if (tmpl.bStuff && tmpl.bDisplayable) targetItems.add(key);
+      }
+      const total = targetItems.size;
+      const found = new Set<string>();
+      // Scan character inventories for collected stuff
+      for (const c of characterManager.getCharacters()) {
+        for (const item of c.inventory.getAll()) {
+          if (targetItems.has(item.sTemplate)) found.add(item.sTemplate);
+        }
+      }
+      return { collected: found.size, total };
+    },
   });
 
   // Hint system
