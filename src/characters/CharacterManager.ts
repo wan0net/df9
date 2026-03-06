@@ -391,14 +391,31 @@ export class CharacterManager {
         const causeName = Object.entries(CAUSE_OF_DEATH).find(([, v]) => v === char.nCauseOfDeath)?.[0] ?? 'unknown';
         Base.addAlert('death', `${char.getName()} has died (${causeName.toLowerCase()})`);
 
-        // Morale hit on all living player characters (not for enemy deaths)
-        // Lua-exact: lerp(-4, -60, (familiarity * affinity) / (100 * 10))
-        if (char.tStats.nTeam === TEAM_ID_PLAYER) {
-          for (const other of this.characters) {
-            if (other === char || !other.isAlive()) continue;
-            if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+        // Death react logs + morale hit (Lua CharacterManager.killCharacter)
+        const deceasedName = char.getName();
+        const isPlayerDeath = char.tStats.nTeam === TEAM_ID_PLAYER;
+        for (const other of this.characters) {
+          if (other === char || !other.isAlive()) continue;
+          const otherIsPlayer = other.tStats.nTeam === TEAM_ID_PLAYER;
+          const logData = { sDeceased: deceasedName };
+
+          if (otherIsPlayer && isPlayerDeath) {
+            // Player reacts to player death
+            const fam = other.getFamiliarity(char.id);
+            const aff = other.getAffinity(String(char.id));
+            if (aff > 0 && fam >= 5) {
+              addLog('DEATH_REACT_FRIEND', other, logData);
+            } else {
+              addLog('DEATH_REACT_CITIZEN', other, logData);
+            }
             const hit = other.getDeathMoraleLoss(char.id);
             other.nMorale = Math.max(-100, other.nMorale + hit);
+          } else if (otherIsPlayer && !isPlayerDeath) {
+            addLog('DEATH_REACT_ENEMY', other, logData);
+          } else if (!otherIsPlayer && isPlayerDeath) {
+            addLog('DEATH_REACT_RAIDER_TO_CITZ', other, logData);
+          } else {
+            addLog('DEATH_REACT_RAIDER_TO_RAIDER', other, logData);
           }
         }
 

@@ -355,7 +355,12 @@ export const Malady = {
         nResearchCure: researchTime,
       };
     }
-    if (nTeam === TEAM_ID_PLAYER) {
+    // Fire alert on first encounter (Lua: Base.EVENTS.MaladyEncountered)
+    if (nTeam === TEAM_ID_PLAYER && !tS.tResearch[key].bEncountered) {
+      if (!Malady.isInjury(key)) {
+        const friendlyName = tMalady.sFriendlyName ?? key;
+        Base.addAlert('disease', `New disease encountered: ${friendlyName}`);
+      }
       tS.tResearch[key].bEncountered = true;
     }
   },
