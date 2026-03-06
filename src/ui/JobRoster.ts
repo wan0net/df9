@@ -19,6 +19,8 @@ export class JobRoster {
   private sortColumn: number | null = null;
   private sortAsc = true;
   private jobCountCells: HTMLElement[] = [];
+  private headerLabels: string[] = [];
+  private headerCells: HTMLElement[] = [];
 
   constructor(
     parent: HTMLElement,
@@ -72,10 +74,12 @@ export class JobRoster {
     const thead = document.createElement('thead');
     const headerTr = document.createElement('tr');
 
-    const headers = ['Name', 'Job', ...tJobs.map(j => this.shortJobName(j))];
-    for (let i = 0; i < headers.length; i++) {
+    this.headerLabels = ['Name', 'Job', ...tJobs.map(j => this.shortJobName(j))];
+    this.headerCells = [];
+    for (let i = 0; i < this.headerLabels.length; i++) {
       const th = document.createElement('th');
-      th.textContent = headers[i];
+      th.textContent = this.headerLabels[i];
+      this.headerCells.push(th);
       th.style.cssText = `
         text-align:left;padding:6px 4px;border-bottom:1px solid ${AMBER};
         color:${AMBER};cursor:pointer;font-size:12px;white-space:nowrap;
@@ -83,7 +87,11 @@ export class JobRoster {
       const colIdx = i;
       th.addEventListener('click', () => {
         if (this.sortColumn === colIdx) {
-          this.sortAsc = !this.sortAsc;
+          if (this.sortAsc) {
+            this.sortAsc = false; // asc → desc
+          } else {
+            this.sortColumn = null; // desc → unsorted
+          }
         } else {
           this.sortColumn = colIdx;
           this.sortAsc = true;
@@ -155,6 +163,12 @@ export class JobRoster {
 
   private refresh() {
     while (this.tableBody.firstChild) this.tableBody.removeChild(this.tableBody.firstChild);
+
+    // Update sort arrows in headers (tri-state: up/down/neutral)
+    for (let i = 0; i < this.headerCells.length; i++) {
+      const arrow = this.sortColumn === i ? (this.sortAsc ? ' ^' : ' v') : '';
+      this.headerCells[i].textContent = this.headerLabels[i] + arrow;
+    }
 
     let chars = [...this.getCharacters()].filter(c => c.isAlive());
 

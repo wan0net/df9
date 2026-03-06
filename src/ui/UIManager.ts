@@ -830,9 +830,17 @@ export class UIManager {
     this.tileTipClearTimer = this.TILE_TIP_DURATION;
   }
 
-  /** Toggle job roster visibility. */
+  /** Toggle job roster visibility. Hides alert/hint pane when opening (Lua). */
   toggleJobRoster() {
+    const wasVisible = this.jobRoster.isVisible();
     this.jobRoster.toggle();
+    if (!wasVisible) {
+      // Hide alert pane when opening roster (Lua: hide alert/hint on open)
+      this.alertContainer.style.display = 'none';
+    } else {
+      // Restore alert pane when closing roster
+      this.alertContainer.style.display = '';
+    }
   }
 
   /** Check if job roster is open. */

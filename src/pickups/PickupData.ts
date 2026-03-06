@@ -11,6 +11,8 @@ export interface PickupDef {
   bPickupable: boolean;
   /** Matter value if recycled. */
   nMatterValue: number;
+  /** Leave 3D model/sprite on ground after pickup (Lua bLeaveEnvObject). */
+  bLeaveEnvObject?: boolean;
 }
 
 export const PICKUP_DEFS: Record<string, PickupDef> = {
@@ -20,6 +22,7 @@ export const PICKUP_DEFS: Record<string, PickupDef> = {
     spriteName: 'corpse',
     bPickupable: true,
     nMatterValue: 150,
+    bLeaveEnvObject: true,
   },
   Debris: {
     sName: 'Debris',
@@ -34,6 +37,7 @@ export const PICKUP_DEFS: Record<string, PickupDef> = {
     spriteName: 'rock',
     bPickupable: true,
     nMatterValue: 50,
+    bLeaveEnvObject: true,
   },
   Food: {
     sName: 'Food',

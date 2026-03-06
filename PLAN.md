@@ -301,8 +301,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 ### 13.2 Job Roster
 - [x] Add per-column job count labels
 - [ ] Add character portraits in roster entries
-- [ ] Add tri-state sort arrows (up/down/mid)
-- [ ] Hide alert/hint pane on open
+- [x] Add tri-state sort arrows (up/down/mid)
+- [x] Hide alert/hint pane on open
 - [ ] Add sidebar close integration on back
 
 ### 13.3 New Game Screen
@@ -344,7 +344,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Add room registration + activity option advertising for pickups
 - [x] Add ResearchDatacube pickup type
 - [x] Add `nMoraleScore = -20` on Corpse pickups
-- [ ] Add `bLeaveEnvObject` for Rock pickups (floor marking after pickup)
+- [x] Add `bLeaveEnvObject` for Rock pickups (floor marking after pickup)
 
 ---
 
