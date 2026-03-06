@@ -370,8 +370,8 @@ export class CharacterRenderer {
         ? cloneSkeleton(cachedSpacesuit) as THREE.Group
         : cachedSpacesuit.clone(true);
       clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
-      clone.rotation.x = 0.4;
-      clone.rotation.y = 0.6;
+      clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
+      clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
       // Spacesuit.glb has 7 primitives by material:
       // 0: Head (always), 1: Suit body (always), 2: AsteroidChunk (MINER),
@@ -406,8 +406,8 @@ export class CharacterRenderer {
         ? cloneSkeleton(cachedCitizen) as THREE.Group
         : cachedCitizen.clone(true);
       clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
-      clone.rotation.x = 0.4;
-      clone.rotation.y = 0.6;
+      clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
+      clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
       const visibleSet = this.getVisibleSubsets(char);
       let meshIdx = 0;
@@ -555,11 +555,12 @@ export class CharacterRenderer {
     this.positionCharacter(handle.object, char);
     this.positionNeedBars(handle.needBarsObj, char);
 
-    // Rotate model to face movement direction
+    // Rotate model to face movement direction (Lua: 30° X-tilt, Y = facing angle)
     if (handle.is3D && handle.modelGroup.children.length > 0) {
       const model = handle.modelGroup.children[0];
-      model.rotation.x = 0.4; // Keep the isometric tilt
-      model.rotation.y = 0.6 + char.facingAngle; // Base orientation + facing
+      // Lua: setRot(30, dirAngle, 0) — 30° isometric tilt on X-axis
+      model.rotation.x = 30 * (Math.PI / 180); // 30° = 0.5236 rad
+      model.rotation.y = char.facingAngle;
     }
 
     // Animation: use skeletal clips if available, else procedural

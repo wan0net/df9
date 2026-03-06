@@ -823,12 +823,34 @@ export class Character {
     this.moving = true;
 
     // Update facing angle based on screen-space movement direction
+    // Lua convention: S=0°, SE=45°, E=90°, NE=135°, N=180°, NW=225°, W=270°, SW=315°
+    // atan2(-dx, dy) gives: screen-down=0, screen-left=+90°, screen-up=180°
+    // which matches the Lua S=0° convention for isometric view
     const fromPos = tileToScreen(this.tileX, this.tileY);
     const toPos = tileToScreen(next.x, next.y);
     const dx = toPos.x - fromPos.x;
     const dy = toPos.y - fromPos.y;
     if (dx !== 0 || dy !== 0) {
-      this.facingAngle = Math.atan2(dx, -dy);
+      // Compute angle matching Lua: S=0, clockwise positive
+      let deg = Math.atan2(-dx, dy) * (180 / Math.PI);
+      if (deg < 0) deg += 360;
+      // Snap to nearest 8 compass direction (Lua ROT_DIR thresholds)
+      const DIR_ANGLES = [
+        { max: 22.5, deg: 0 },     // S
+        { max: 67.5, deg: 45 },    // SE
+        { max: 112.5, deg: 90 },   // E
+        { max: 157.5, deg: 135 },  // NE
+        { max: 202.5, deg: 180 },  // N
+        { max: 247.5, deg: 225 },  // NW
+        { max: 292.5, deg: 270 },  // W
+        { max: 337.5, deg: 315 },  // SW
+      ];
+      let snapped = 0;
+      for (const d of DIR_ANGLES) {
+        if (deg < d.max) { snapped = d.deg; break; }
+      }
+      if (deg >= 337.5) snapped = 0; // wrap to S
+      this.facingAngle = snapped * (Math.PI / 180);
     }
   }
 
