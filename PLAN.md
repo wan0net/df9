@@ -157,31 +157,42 @@ P4 — NICE-TO-HAVE (AI graphics, extra polish)
 - [x] Amber tile tint overlay on selected room tiles (Lua: Lighting.setRoomHighlight 0.3)
 - [x] Cached room meshes (only rebuilt on selection change, not per-frame)
 
-### P1.4 Character Emoticon/Thought Bubbles
-- [ ] Lua has elaborate speech bubble system (`setEmoticon()` with bubble tail, caps, text, icons). Characters feel lifeless without thought bubbles showing current activity/mood.
+### P1.4 Character Emoticon/Thought Bubbles ✅
+- [x] CSS2DObject thought bubble above each character showing task name
+- [x] Shows for 5 seconds on task change (Lua EMOTICON_INITIAL_DURATION=5)
+- [x] Friendly display names for 23 task types (Building, Mining, Fighting!, etc.)
 
-### P1.5 Fire Particles
-- [ ] Fire tiles currently just get orange tint. Original has actual flame/smoke/ember particle system. Add basic particle effect on fire tiles.
+### P1.5 Fire Particles ✅
+- [x] `FireParticles.ts` — procedural flame particle system using Three.js Points
+- [x] 12 particles per tile with upward drift, yellow→red fade, random flicker
+- [x] Additive blending, auto-synced with active fire tiles from Fire.ts
 
-### P1.6 Build Grid Overlay
-- [ ] Lua shows subtle diamond grid when in build mode. No such overlay in TS.
+### P1.6 Build Grid Overlay ✅
+- [x] Already implemented in BuildCursor.ts with cursor_grid textures
 
-### P1.7 Projectile Visuals
-- [ ] Ranged combat fires projectiles but no visible bullet/laser sprite travels between attacker and target.
+### P1.7 Projectile Visuals ✅
+- [x] `ProjectileRenderer.ts` — colored beam meshes between source and target
+- [x] Color-coded by damage type (green laser, orange bullet, blue stunner, purple plasma)
+- [x] Additive blending, auto-synced with ProjectileManager active list
 
-### P1.8 Camera Shake
-- [ ] Lua `Camera.shake(nMag, nDuration)` on meteor impacts. TS has no shake mechanism.
+### P1.8 Camera Shake ✅
+- [x] `CameraController3D.shake(mag, dur)` — random offset per frame while active
+- [x] Triggered from MeteorEvent (mag=15, dur=0.2s) matching Lua Camera.lua
+- [x] Shake offset applied in updateCamera() via scrollX/scrollY adjustment
 
-### P1.9 Character/Object Room Lighting
-- [ ] Characters always render at full brightness regardless of room lighting. Lua applies per-room ambient colors via shader. Same for objects.
+### P1.9 Character/Object Room Lighting ✅
+- [x] `CharacterRenderer.setCharacterTint()` applies room tint color to character meshes
+- [x] `applyCharacterRoomLighting()` in game loop reads room scheme per character
+- [x] Characters in emergency rooms (fire, vacuum, low power) get matching tint
 - [ ] Door lighting — Lua `_updateDoorLights()` tints doors to match facing room.
 
 ### P1.10 Per-Tile Light Gradients
 - [ ] Lua creates full `LightPixelBuffer` with ceiling lights, radius falloff, LoS checks, wall darkening. TS applies uniform tint per room. Loses light falloff gradients, wall shadows, multi-light blending.
 - [ ] Zone-specific ceiling light placement (`nLightTileGapX/Y`, `nLightRadius`)
 
-### P1.11 Smooth Camera
-- [ ] Smooth zoom interpolation (currently instant)
+### P1.11 Smooth Camera (partial) ✅
+- [x] Smooth zoom interpolation via zoomBuffer + ZOOM_RATE drain (Lua Camera)
+- [x] Zoom-toward-cursor preserves world point under mouse
 - [ ] Edge-of-screen camera panning (Lua pans when cursor near edges)
 
 ### P1.12 Missing Animations
@@ -496,3 +507,4 @@ Sprint 4 — Content & Systems (P3): Completeness
 | 2026-03-06 | v3 plan created: comprehensive audit from 5 sources (UI screenshots, Lua file-by-file, audio system, wiki, renderer). Organized by P0-P4 priority. |
 | 2026-03-06 | Fix 3 critical bugs: door construction (WALL→DOOR deferred to build completion, pathToNearest for wall targets), wall-object placement order (SE first for NESW walls to match Lua), sprite bFlipX mirroring. 159 tests. |
 | 2026-03-06 | Sprint 2 visual polish: blob shadows (P1.2), selection highlighting (P1.3), enhanced space background (P1.1). 161 tests. |
+| 2026-03-06 | Sprint 2 continued: camera shake (P1.8), smooth zoom (P1.11), thought bubbles (P1.4), fire particles (P1.5), projectile visuals (P1.7), room lighting on characters (P1.9), build grid (P1.6). 167 tests. |

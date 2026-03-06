@@ -11,6 +11,8 @@ import { CharacterRenderer } from './renderer/CharacterRenderer';
 import { EnvObjectRenderer } from './renderer/EnvObjectRenderer';
 import { PropRenderer } from './renderer/PropRenderer';
 import { SelectionHighlight } from './renderer/SelectionHighlight';
+import { FireParticles } from './renderer/FireParticles';
+import { ProjectileRenderer } from './renderer/ProjectileRenderer';
 import { SceneManager } from './renderer/SceneManager';
 import { loadAllAssets, getTexture } from './renderer/AssetLoader';
 import { InputManager } from './input/InputManager';
@@ -227,6 +229,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // Prop renderer for 3D pickup/held-item models
   const propRenderer = new PropRenderer(threeRenderer.scene);
   const selectionHighlight = new SelectionHighlight(threeRenderer.scene);
+
+  // Fire particle system (replaces plain orange tint)
+  const fireParticles = new FireParticles(threeRenderer.scene);
+
+  // Projectile renderer (visible beams between attacker → target)
+  const projectileRenderer = new ProjectileRenderer(threeRenderer.scene);
   propRenderer.preload([
     'BodyBag', 'FoodBar', 'FoodCrate', 'AsteroidChunk',
     'Pistol', 'Rifle', 'SpaceGun', 'Builder', 'Weldammer',
@@ -332,6 +340,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Start a fire at the impact site
     fire.startFire(tile.x, tile.y);
+
+    // Camera shake on meteor impact (Lua Camera:shake(15, 0.2))
+    cameraController.shake(15, 0.2);
 
     // Force room re-detection (breach)
     roomManager.markDirty([tile]);
@@ -868,8 +879,17 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       renderRoomLighting();
     }
 
-    // Fire tile overlays
+    // Fire tile overlays + fire particles
     renderFireOverlays();
+    const activeFires = fire.getActiveFires();
+    fireParticles.setFireTiles(activeFires);
+    fireParticles.update(delta / 1000);
+
+    // Projectile visuals
+    projectileRenderer.update(projectileManager.getActiveProjectiles());
+
+    // Room lighting on characters (Lua: room ambient → character shader)
+    applyCharacterRoomLighting();
 
     // O2 overlay (overrides room lighting tints)
     if (showO2Overlay) {
@@ -1110,6 +1130,20 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }
     prevFireTiles.clear();
     for (const key of currentFires) prevFireTiles.add(key);
+  }
+
+  /** Apply room lighting tint to characters based on which room they're in (Lua room ambient → character shader). */
+  function applyCharacterRoomLighting() {
+    for (const char of characterManager.getAllCharacters()) {
+      const room = roomManager.getRoomAt(char.tileX, char.tileY);
+      if (room) {
+        const tint = lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
+        characterRenderer.setCharacterTint(char.id, tint);
+      } else {
+        // In space — no tint
+        characterRenderer.setCharacterTint(char.id, 0xffffff);
+      }
+    }
   }
 
   // ── Pickup → 3D model mapping ───────────────────────────────
@@ -1673,6 +1707,26 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         }
       }
       return count;
+    },
+    // ── Sprint 2 Visual Polish test helpers ──────────────────
+    /** Camera shake test: trigger shake and return state. */
+    triggerCameraShake: (mag: number, dur: number) => {
+      cameraController.shake(mag, dur);
+      return true;
+    },
+    /** Camera zoom test: return current zoom level. */
+    getCameraZoom: () => cameraController.zoom,
+    /** Fire particles: return count of active fire particle tiles. */
+    getFireParticleTileCount: () => fireParticles ? (fireParticles as any).fires?.size ?? 0 : 0,
+    /** Projectile renderer: return count of active beam meshes. */
+    getProjectileBeamCount: () => projectileRenderer ? (projectileRenderer as any).beams?.size ?? 0 : 0,
+    /** Get active projectile count. */
+    getActiveProjectileCount: () => projectileManager.getActiveProjectiles().length,
+    /** Room lighting tint for a specific room. */
+    getRoomLightingTint: (roomId: number) => {
+      const room = roomManager.getRooms().find(r => r.id === roomId);
+      if (!room) return null;
+      return lighting.getRoomTint(room.zone, room.nLightingScheme, room.nLightFadeTimer);
     },
   };
 

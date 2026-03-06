@@ -313,6 +313,37 @@ function loadSpacesuitModel(): Promise<void> {
 loadCitizenModel();
 loadSpacesuitModel();
 
+// ── Thought bubble (Lua Task:showEmoticon / Character:setEmoticon) ────
+/** Duration to show thought bubble text (Lua EMOTICON_INITIAL_DURATION=5). */
+const THOUGHT_DURATION = 5;
+
+/** Friendly display names for internal task names (Lua OptionData.UIText). */
+const TASK_DISPLAY_NAMES: Record<string, string> = {
+  Idle: 'Idle',
+  Wander: 'Wandering',
+  SleepInBed: 'Sleeping',
+  SleepOnFloor: 'Napping',
+  Eat: 'Eating',
+  GetDrink: 'Drinking',
+  BuildTile: 'Building',
+  BuildEnvObject: 'Building',
+  Mine: 'Mining',
+  MaintainEnvObject: 'Repairing',
+  MaintainPlants: 'Gardening',
+  AttackEnemy: 'Fighting!',
+  ExtinguishFire: 'Firefighting',
+  GoToSafety: 'Fleeing!',
+  FieldScan: 'Scanning',
+  Research: 'Researching',
+  Chat: 'Chatting',
+  Socialize: 'Socializing',
+  RefineRock: 'Refining',
+  DropOffRock: 'Hauling',
+  Explore: 'Exploring',
+  HealCharacter: 'Healing',
+  DeliverFood: 'Delivering',
+};
+
 export interface CharacterRenderHandle {
   object: THREE.Object3D;
   /** Inner model group that gets procedural animation. */
@@ -332,6 +363,13 @@ export interface CharacterRenderHandle {
   currentAnimState: string;
   /** Blob shadow mesh (Lua: rBlobShadow). */
   shadow: THREE.Mesh;
+  /** Thought bubble DOM + CSS2DObject. */
+  thoughtEl: HTMLDivElement;
+  thoughtObj: CSS2DObject;
+  /** Last shown task name (to detect task change). */
+  lastTaskName: string;
+  /** Time when current thought was shown. */
+  thoughtShowTime: number;
 }
 
 export class CharacterRenderer {
@@ -391,6 +429,17 @@ export class CharacterRenderer {
     this.positionNeedBars(needBarsObj, char);
     this.overlayScene.add(needBarsObj);
 
+    // Thought bubble (Lua setEmoticon — bubble tail + text)
+    const thoughtEl = document.createElement('div');
+    thoughtEl.className = 'thought-bubble';
+    thoughtEl.style.cssText =
+      'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
+      'background:rgba(0,0,0,0.75);border-radius:6px;padding:2px 5px;white-space:nowrap;' +
+      'text-align:center;display:none;border:1px solid rgba(255,255,255,0.3);';
+    const thoughtObj = new CSS2DObject(thoughtEl);
+    thoughtObj.position.set(char.screenX, -(char.screenY - 60), 20002 + char.screenY);
+    this.overlayScene.add(thoughtObj);
+
     const handle: CharacterRenderHandle = {
       object, modelGroup, needBarsEl, needBarsObj, is3D,
       showingSpacesuit: char.bSpacewalking,
@@ -399,6 +448,10 @@ export class CharacterRenderer {
       currentAction: null,
       currentAnimState: '',
       shadow,
+      thoughtEl,
+      thoughtObj,
+      lastTaskName: '',
+      thoughtShowTime: 0,
     };
     this.handles.set(char.id, handle);
     return handle;
@@ -659,6 +712,9 @@ export class CharacterRenderer {
       this.applyProceduralAnim(handle, char);
     }
 
+    // Thought bubble (Lua Task:showEmoticon — show for EMOTICON_INITIAL_DURATION on task change)
+    this.updateThoughtBubble(handle, char);
+
     // Need bars
     this.drawNeedBars(handle.needBarsEl, char);
   }
@@ -763,6 +819,39 @@ export class CharacterRenderer {
     }
   }
 
+  /** Update thought bubble — shows task name for 5 seconds on task change (Lua Task:showEmoticon). */
+  private updateThoughtBubble(handle: CharacterRenderHandle, char: Character) {
+    const taskName = char.currentTask?.name ?? '';
+    const now = performance.now() / 1000;
+
+    // Position thought bubble above character
+    handle.thoughtObj.position.set(
+      char.screenX,
+      -(char.screenY - 60),
+      20002 + char.screenY,
+    );
+
+    // Detect task change — show bubble
+    if (taskName && taskName !== handle.lastTaskName) {
+      handle.lastTaskName = taskName;
+      handle.thoughtShowTime = now;
+      // Map internal task names to friendly display text
+      const label = TASK_DISPLAY_NAMES[taskName] ?? taskName;
+      handle.thoughtEl.textContent = label;
+      handle.thoughtEl.style.display = '';
+    }
+
+    // Dismiss after THOUGHT_DURATION
+    if (handle.thoughtEl.style.display !== 'none' && now - handle.thoughtShowTime > THOUGHT_DURATION) {
+      handle.thoughtEl.style.display = 'none';
+    }
+
+    // Hide for dead characters
+    if (!char.isAlive()) {
+      handle.thoughtEl.style.display = 'none';
+    }
+  }
+
   private drawNeedBars(el: HTMLDivElement, char: Character) {
     // Needs range -100..+100; remap to 0..100 for bar display
     const remap = (v: number) => Math.max(0, Math.min(100, (v + 100) / 2));
@@ -806,6 +895,24 @@ export class CharacterRenderer {
 
     this.overlayScene.remove(handle.needBarsObj);
     handle.needBarsEl.remove();
+    // Remove thought bubble
+    this.overlayScene.remove(handle.thoughtObj);
+    handle.thoughtEl.remove();
     this.handles.delete(charId);
+  }
+
+  /** Apply room lighting tint to a character (Lua room ambient → character shader). */
+  setCharacterTint(charId: number, tint: number) {
+    const handle = this.handles.get(charId);
+    if (!handle) return;
+    const color = new THREE.Color(tint);
+    handle.object.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
+        const mat = child.material;
+        if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshBasicMaterial) {
+          mat.color.copy(color);
+        }
+      }
+    });
   }
 }

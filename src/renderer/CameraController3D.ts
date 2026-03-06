@@ -1,6 +1,9 @@
 import { ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, PAN_SPEED, GRID_W, GRID_H, TILE_W, TILE_HALF_H } from '../config';
 import type { ThreeRenderer } from './ThreeRenderer';
 
+// Lua: GameRules.ZOOM_RATE = 0.005 (per-frame interpolation decrement)
+const ZOOM_RATE = 0.005;
+
 /**
  * Camera controller for Three.js orthographic camera.
  * Replaces Phaser's CameraController with native DOM events.
@@ -15,6 +18,17 @@ export class CameraController3D {
 
   private keysDown: Set<string> = new Set();
   private dragStart: { x: number; y: number; scrollX: number; scrollY: number } | null = null;
+
+  // ── Smooth zoom (Lua: zoomBuffer + ZOOM_RATE) ──────────────
+  private zoomBuffer = 0;
+  private zoomMouseX = 0;
+  private zoomMouseY = 0;
+
+  // ── Camera shake (Lua: Camera:shake) ───────────────────────
+  private shakeEndTime = 0;
+  private shakeMagnitude = 0;
+  private shakeOffsetX = 0;
+  private shakeOffsetY = 0;
 
   /** World bounds. */
   private boundsMinX: number;
@@ -50,29 +64,15 @@ export class CameraController3D {
     window.addEventListener('keydown', (e) => this.keysDown.add(e.code));
     window.addEventListener('keyup', (e) => this.keysDown.delete(e.code));
 
-    // Mouse wheel zoom
+    // Mouse wheel zoom — accumulate into zoomBuffer for smooth interpolation
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX,
-        this.zoom - Math.sign(e.deltaY) * ZOOM_STEP * this.zoom
-      ));
-
-      // Zoom toward mouse position
-      if (newZoom !== this.zoom) {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        // Mouse position in world coords before zoom
-        const worldX = this.scrollX + mouseX / this.zoom;
-        const worldY = this.scrollY + mouseY / this.zoom;
-
-        this.zoom = newZoom;
-
-        // Adjust scroll so mouse position stays at same world point
-        this.scrollX = worldX - mouseX / this.zoom;
-        this.scrollY = worldY - mouseY / this.zoom;
-      }
+      const delta = -Math.sign(e.deltaY) * ZOOM_STEP * this.zoom;
+      this.zoomBuffer += delta;
+      // Store mouse position for zoom-toward-cursor
+      const rect = canvas.getBoundingClientRect();
+      this.zoomMouseX = e.clientX - rect.left;
+      this.zoomMouseY = e.clientY - rect.top;
     }, { passive: false });
 
     // Middle/right mouse drag to pan
@@ -114,6 +114,37 @@ export class CameraController3D {
     if (this.keysDown.has('ArrowUp')) this.scrollY -= speed;
     if (this.keysDown.has('ArrowDown')) this.scrollY += speed;
 
+    // ── Smooth zoom: drain zoomBuffer by ZOOM_RATE per frame (Lua Camera) ──
+    if (Math.abs(this.zoomBuffer) > 0.0001) {
+      const drain = Math.sign(this.zoomBuffer) * Math.min(Math.abs(this.zoomBuffer), ZOOM_RATE * this.zoom + 0.01);
+      const oldZoom = this.zoom;
+      this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + drain));
+      this.zoomBuffer -= drain;
+
+      // Zoom toward mouse cursor
+      if (this.zoom !== oldZoom) {
+        const factor = this.zoom / oldZoom;
+        const viewW = window.innerWidth;
+        const viewH = window.innerHeight;
+        const worldMouseX = this.scrollX + this.zoomMouseX / oldZoom;
+        const worldMouseY = this.scrollY + this.zoomMouseY / oldZoom;
+        this.scrollX = worldMouseX - this.zoomMouseX / this.zoom;
+        this.scrollY = worldMouseY - this.zoomMouseY / this.zoom;
+      }
+    } else {
+      this.zoomBuffer = 0;
+    }
+
+    // ── Camera shake (Lua Camera:tick) ──
+    const now = performance.now() / 1000;
+    if (this.shakeEndTime > now) {
+      this.shakeOffsetX = (Math.random() - 0.5) * 2 * this.shakeMagnitude;
+      this.shakeOffsetY = (Math.random() - 0.5) * 2 * this.shakeMagnitude;
+    } else {
+      this.shakeOffsetX = 0;
+      this.shakeOffsetY = 0;
+    }
+
     // Clamp to bounds
     const viewW = window.innerWidth / this.zoom;
     const viewH = window.innerHeight / this.zoom;
@@ -123,15 +154,25 @@ export class CameraController3D {
     this.updateCamera();
   }
 
+  /** Trigger camera shake (Lua Camera:shake). */
+  shake(magnitude: number, duration: number) {
+    this.shakeMagnitude = magnitude;
+    this.shakeEndTime = performance.now() / 1000 + duration;
+  }
+
   private updateCamera() {
     const viewW = window.innerWidth / this.zoom;
     const viewH = window.innerHeight / this.zoom;
 
+    // Apply shake offset (Lua Camera:setLoc adds shakeX/Y)
+    const sx = this.scrollX + this.shakeOffsetX / this.zoom;
+    const sy = this.scrollY + this.shakeOffsetY / this.zoom;
+
     this.threeRenderer.setCameraView(
-      this.scrollX,           // left
-      this.scrollY,           // top
-      this.scrollX + viewW,   // right
-      this.scrollY + viewH,   // bottom
+      sx,           // left
+      sy,           // top
+      sx + viewW,   // right
+      sy + viewH,   // bottom
     );
   }
 

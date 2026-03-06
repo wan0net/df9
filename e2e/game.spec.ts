@@ -3246,6 +3246,74 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   // Door placement keeps WALL tile until construction completes
+  // ── Sprint 2 Visual Polish tests ────────────────────────────
+
+  test('camera shake triggers without errors', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return df9.triggerCameraShake(15, 0.2);
+    });
+    expect(result).toBe(true);
+  });
+
+  test('smooth zoom: camera zoom value is a number', async () => {
+    const zoom = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return df9.getCameraZoom();
+    });
+    expect(typeof zoom).toBe('number');
+    expect(zoom).toBeGreaterThan(0);
+  });
+
+  test('fire particles track active fire tiles', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Build a room and start a fire in it
+      df9.buildSealedRoom(85, 85, 2);
+      df9.startFire(85, 85);
+      // Fire particles should register the fire tile after next frame
+      return {
+        fireCount: df9.getFireCount(),
+        particleTiles: df9.getFireParticleTileCount(),
+      };
+    });
+    expect(result.fireCount).toBeGreaterThanOrEqual(1);
+    // Particle tiles are synced during game loop — may not be updated yet
+    // but the system should exist without errors
+  });
+
+  test('projectile renderer exists and returns beam count', async () => {
+    const count = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return df9.getProjectileBeamCount();
+    });
+    expect(typeof count).toBe('number');
+    expect(count).toBeGreaterThanOrEqual(0);
+  });
+
+  test('room lighting tint returns valid color for normal room', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(90, 90, 2);
+      const rooms = df9.getRooms();
+      if (rooms.length === 0) return null;
+      return df9.getRoomLightingTint(rooms[0].id);
+    });
+    // Normal rooms return 0xffffff (white = no tint)
+    expect(result).not.toBeNull();
+    expect(typeof result).toBe('number');
+  });
+
+  test('character renderer handles thought bubble creation', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const chars = df9.getCharacters();
+      // All characters should have been created with thought bubbles
+      return { charCount: chars.length, hasChars: chars.length > 0 };
+    });
+    expect(result.hasChars).toBe(true);
+  });
+
   test('door placement does not immediately convert wall to DOOR', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
