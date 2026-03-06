@@ -128,8 +128,8 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] Implement fire O2 consumption (`Fire.OXYGEN_PER_SECOND`)
 - [ ] Implement `_cheatOxygen()` — average neighbors' O2 when tile vaporized
 - [ ] Register O2 generators properly (vs re-polling every tick)
-- [ ] Add `VACUUM_THRESHOLD = 50`, `VACUUM_THRESHOLD_END = 40` suffocation thresholds
-- [x] Save/load per-room oxygen state
+- [x] Add `VACUUM_THRESHOLD = 50`, `VACUUM_THRESHOLD_END = 40` suffocation thresholds
+- [~] Save/load per-room oxygen state (oxygen saved but NOT restored on load — loadCharacterData callback unwired)
 
 ---
 
@@ -153,7 +153,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement attacking doors/env objects (reduce `nCondition`)
 
 ### 4.3 AttackEnemy task
-- [ ] Rewrite `AttackEnemy.ts` from stub to full implementation matching Lua (pathfinding to target, grapple cycle, aim/shoot, LoS)
+- [x] Rewrite `AttackEnemy.ts` from stub to full implementation matching Lua (pathfinding to target, grapple cycle, aim/shoot, LoS)
 
 ---
 
@@ -166,9 +166,9 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [ ] Implement `preExecuteTick` (e.g. meteor indicator, immigration camera adjust)
 - [x] Regenerate forecast after each event completes
 - [x] Accumulate `nPopulationDeltaEstimate` during forecast generation
-- [x] Implement `nMaxUndiscoveredRooms` and `nMaxExteriorRooms` gates per event class (fields added)
+- [~] Implement `nMaxUndiscoveredRooms` and `nMaxExteriorRooms` gates per event class (fields defined but not enforced in eligibility checks)
 - [ ] Implement per-class `getWeight()` for immigration/compound/breaching events
-- [ ] Implement malady pre-roll on immigration (`CHANCE_OF_MALADY = 15/100`)
+- [x] Implement malady pre-roll on immigration (`CHANCE_OF_MALADY = 15/100`)
 - [ ] Auto-save before event execution (if 45s since last save)
 - [ ] Persist `nMegaEventStartTime` in save data
 
@@ -208,7 +208,7 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 
 - [x] Fix neighbor count: use all 8 neighbors for spread and `getNearbyFire()` (currently only 4)
 - [x] Implement `onFire()` event dispatch to Room and EnvObject
-- [x] Implement fire save/load (heat map + flame intensity)
+- [~] Implement fire save/load (heat map + flame intensity) — getSaveData/loadSaveData exist in Fire.ts but NOT wired into SaveLoad system
 - [ ] Implement FirePanel influence on spread reduction (Lua: FirePanel enables suppression tasks, doesn't reduce spread directly)
 - [ ] Add fire sound (3D positional loop at average fire coords)
 
@@ -368,11 +368,11 @@ Lua O2 is hardware-accelerated per-tile cellular automata. TS has room-level sca
 - [x] File import: `importFromFile()` — opens file picker, loads .json save
 - [x] Export/Import UI buttons in sidebar utility section
 - [ ] Save/load fire state (heat map + flame intensities)
-- [x] Save/load room oxygen levels
-- [x] Save/load character needs (hunger, tiredness, fun, etc.)
+- [~] Save/load room oxygen levels (saved but not restored — load callback unwired)
+- [~] Save/load character needs (serialized but loadCharacterData callback never wired in main.ts)
 - [ ] Save/load command/reservation queue (pending build/mine orders)
 - [ ] Save/load asteroid/derelict positions
-- [x] Save/load character inventory (full, not just weapon)
+- [~] Save/load character inventory (serialized but loadCharacterData callback never wired in main.ts)
 - [x] Fix AutoSave to use wall-clock time (not game-scaled `gameDt`)
 
 ---
@@ -500,3 +500,4 @@ These are intentional differences due to engine/platform:
 |------|---------|
 | 2026-03-05 | Full Lua vs TS parity audit. Archived old plan. Created new plan with 27 sections, ~180 items. |
 | 2026-03-06 | Batches 1-6 complete: needs scale, memory, morale, anger, duty cycle, room state/tick, events, combat LoS/aim/stunner, fire 8-neighbor, directions, O2 consumption/sharing, research effects (5/7), pathfinding heap, tile heal power gate, dead char tracking. |
+| 2026-03-06 | Batch 7: AttackEnemy full rewrite, malady pre-roll, suffocation thresholds, 8 new E2E tests. Audit: downgraded 5 items from [x] to [~] (fire save/load unwired, event gates unenforced, save/load character data callback unwired for needs/inventory/O2). Upgraded 3 items from [ ] to [x] (VACUUM_THRESHOLD, AttackEnemy, malady pre-roll). |
