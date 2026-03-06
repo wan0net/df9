@@ -1708,6 +1708,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
       return tiles;
     },
+    // ── Animation helpers ──────────────────────────────────
+    getAnimationInfo: () => ({
+      citizenClips: characterRenderer.getCitizenClipCount(),
+      spacesuitClips: characterRenderer.getSpacesuitClipCount(),
+      hasSkeleton: characterRenderer.hasCitizenSkeleton(),
+    }),
     // ── Faction & Event System helpers ──────────────────────
     createNewTeamID: (behavior: number) => Base.createNewTeamID(behavior),
     getTeamFactionBehavior: (teamId: number) => Base.getTeamFactionBehavior(teamId),

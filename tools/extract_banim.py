@@ -1,25 +1,36 @@
 #!/usr/bin/env python3
 """Extract .banim animation files from Spacebase DF-9 to JSON format.
 
-.banim binary format (Double Fine's MungeAnim output):
+.banim binary format (Double Fine / MOAI DFAnimData):
     Header: 'ANM ' (4B) + uncompressed_size (u32) + compressed_size (u32)
     Payload: zlib raw deflate (wbits=-15)
 
-Decompressed payload (DFAnimData packed format):
-    [0:4]   u32 flags (always 0)
+Decompressed payload:
+    [0:4]   f32 sample_interval (0 = all CONSTANT, 1/30 = 30fps)
     [4:8]   f32 duration (seconds)
-    [8]     u8  version (1)
-    [9]     u8  num_curves (quantized animation channels)
-    [10..]  per-curve packed u16 quantized keyframe samples
+    [8]     u8  version (always 1)
+    [9]     u8  num_curves (total joint + visibility curves)
 
-The curves are packed quantized streams from MOAI's MOAIAnimCurve.
-Each curve maps to a single component (tx/ty/tz/rx/ry/rz/rw/sx/sy/sz)
-of a specific bone. The mapping to bones follows the .brig bone order:
-curves 0-9 = bone 0 (tx,ty,tz,rx,ry,rz,rw,sx,sy,sz), etc.
+Curve data (after 10-byte header):
+    5-byte bone table header: [0, 0, 0, num_animated_bones, 0]
+    Per animated bone:
+        4-byte descriptor: [bone_index, 0, num_curves, first_attr]
+        Per curve (first uses first_attr; subsequent have u8 attr prefix):
+            Read u32: if == 1 → CONSTANT (f32 value follows)
+                       else → CURVE (low u16 = keyframe count)
+            CURVE format: seek back 2, f32 min, f32 max,
+                          count × (u16 time, u16 value) keyframes
+
+    Optional visibility section at end:
+        u32(1) marker + u16(count) + count × (u16 target, u32 type, f32/curve)
+    Or u16(0) if no visibility curves.
+
+Attr IDs: 0=PIV_X 1=PIV_Y 2=PIV_Z 3=LOC_X 4=LOC_Y 5=LOC_Z
+           6=ROT_X 7=ROT_Y 8=ROT_Z 9=SCL_X 10=SCL_Y 11=SCL_Z
 
 Usage:
     python extract_banim.py <input.banim> [output.json]
-    python extract_banim.py --all <asset_dir> <output_dir>
+    python extract_banim.py --all <asset_dir> [output_dir]
 """
 
 import struct
@@ -28,6 +39,13 @@ import json
 import os
 import sys
 import glob
+
+ATTR_NAMES = [
+    'PIV_X', 'PIV_Y', 'PIV_Z',
+    'LOC_X', 'LOC_Y', 'LOC_Z',
+    'ROT_X', 'ROT_Y', 'ROT_Z',
+    'SCL_X', 'SCL_Y', 'SCL_Z',
+]
 
 
 def decompress_banim(path):
@@ -49,81 +67,155 @@ def decompress_banim(path):
     return dec
 
 
-def parse_banim_packed(data):
-    """Parse the DFAnimData packed format.
+def parse_banim(data):
+    """Parse the DFAnimData binary format.
 
-    Returns a dict with metadata and raw curve data for glTF conversion.
+    Returns a dict with:
+        sample_interval, duration, version, num_curves,
+        bones: [{bone_index, curves: [{attr, type, value|keyframes, min, max}]}],
+        visibility: [{target, type, value|keyframes, min, max}]
     """
-    off = 0
-
-    # Header
-    flags = struct.unpack_from('<I', data, off)[0]; off += 4
-    duration = struct.unpack_from('<f', data, off)[0]; off += 4
-    version = data[off]; off += 1
-    num_curves = data[off]; off += 1
+    sample_interval = struct.unpack_from('<f', data, 0)[0]
+    duration = struct.unpack_from('<f', data, 4)[0]
+    version = data[8]
+    num_curves = data[9]
 
     result = {
-        'flags': flags,
+        'sample_interval': sample_interval,
         'duration': duration,
         'version': version,
-        'numCurves': num_curves,
-        'curves': [],
+        'num_curves': num_curves,
+        'bones': [],
+        'visibility': [],
     }
-
-    # Parse packed curves
-    # The remaining data contains num_curves worth of quantized u16 samples.
-    # Total remaining bytes / 2 = total u16 values.
-    # These are distributed across num_curves channels.
-    remaining = len(data) - off
-    total_u16 = remaining // 2
 
     if num_curves == 0:
         return result
 
-    # Each curve has the same number of samples (total / num_curves)
-    # OR curves have variable length with a per-curve header.
-    # Based on data analysis, try uniform sample count first.
-    samples_per_curve = total_u16 // num_curves if num_curves > 0 else 0
+    curve_data = data[10:]
+    off = 0
 
-    # Components per bone: tx, ty, tz, qx, qy, qz, qw, sx, sy, sz = 10
-    components_per_bone = 10
-    num_bones = num_curves // components_per_bone
+    # 5-byte bone table header
+    num_animated_bones = curve_data[3]
+    off = 5
 
-    result['numBones'] = num_bones
-    result['samplesPerCurve'] = samples_per_curve
-    result['fps'] = 30.0  # MOAI default
+    total_parsed = 0
 
-    # Read all curves as quantized u16 arrays
-    for c in range(num_curves):
-        samples = []
-        for _ in range(samples_per_curve):
-            if off + 2 <= len(data):
-                val = struct.unpack_from('<H', data, off)[0]
-                samples.append(val)
-                off += 2
-        result['curves'].append(samples)
+    for _bi in range(num_animated_bones):
+        bone_idx = curve_data[off]
+        num_c = curve_data[off + 2]
+        first_attr = curve_data[off + 3]
+        off += 4
 
-    # Consume any remaining bytes
-    result['remainingBytes'] = len(data) - off
+        bone = {'bone_index': bone_idx, 'curves': []}
+        attrs = [first_attr]
+
+        for ci in range(num_c):
+            if ci > 0:
+                attrs.append(curve_data[off])
+                off += 1
+
+            attr_id = attrs[ci]
+            marker = struct.unpack_from('<I', curve_data, off)[0]
+
+            if marker == 1:
+                # TRACK_CONSTANT
+                val = struct.unpack_from('<f', curve_data, off + 4)[0]
+                bone['curves'].append({
+                    'attr': attr_id,
+                    'attr_name': ATTR_NAMES[attr_id] if attr_id < len(ATTR_NAMES) else f'attr{attr_id}',
+                    'type': 'constant',
+                    'value': val,
+                })
+                off += 8
+            else:
+                # TRACK_CURVE: low u16 = keyframe count
+                count = marker & 0xFFFF
+                fmin = struct.unpack_from('<f', curve_data, off + 2)[0]
+                fmax = struct.unpack_from('<f', curve_data, off + 6)[0]
+                kf_off = off + 10
+
+                keyframes = []
+                for k in range(count):
+                    t_raw = struct.unpack_from('<H', curve_data, kf_off + k * 4)[0]
+                    v_raw = struct.unpack_from('<H', curve_data, kf_off + k * 4 + 2)[0]
+                    t_sec = (t_raw / 65535.0) * duration if duration > 0 else 0
+                    v_actual = fmin + (v_raw / 65535.0) * (fmax - fmin)
+                    keyframes.append({'time': t_sec, 'value': v_actual})
+
+                bone['curves'].append({
+                    'attr': attr_id,
+                    'attr_name': ATTR_NAMES[attr_id] if attr_id < len(ATTR_NAMES) else f'attr{attr_id}',
+                    'type': 'curve',
+                    'min': fmin,
+                    'max': fmax,
+                    'keyframes': keyframes,
+                })
+                off = kf_off + count * 4
+
+            total_parsed += 1
+
+        result['bones'].append(bone)
+
+    # Visibility section
+    remaining = len(curve_data) - off
+    if remaining >= 6:
+        vis_marker = struct.unpack_from('<I', curve_data, off)[0]
+        off += 4
+        if vis_marker == 1:
+            vis_count = struct.unpack_from('<H', curve_data, off)[0]
+            off += 2
+            for _vi in range(vis_count):
+                target = struct.unpack_from('<H', curve_data, off)[0]
+                tt = struct.unpack_from('<I', curve_data, off + 2)[0]
+                if tt == 1:
+                    val = struct.unpack_from('<f', curve_data, off + 6)[0]
+                    result['visibility'].append({
+                        'target': target,
+                        'type': 'constant',
+                        'value': val,
+                    })
+                    off += 10
+                else:
+                    count = tt & 0xFFFF
+                    fmin = struct.unpack_from('<f', curve_data, off + 4)[0]
+                    fmax = struct.unpack_from('<f', curve_data, off + 8)[0]
+                    kf_off = off + 12
+                    keyframes = []
+                    for k in range(count):
+                        t_raw = struct.unpack_from('<H', curve_data, kf_off + k * 4)[0]
+                        v_raw = struct.unpack_from('<H', curve_data, kf_off + k * 4 + 2)[0]
+                        t_sec = (t_raw / 65535.0) * duration
+                        v_actual = fmin + (v_raw / 65535.0) * (fmax - fmin)
+                        keyframes.append({'time': t_sec, 'value': v_actual})
+                    result['visibility'].append({
+                        'target': target,
+                        'type': 'curve',
+                        'min': fmin,
+                        'max': fmax,
+                        'keyframes': keyframes,
+                    })
+                    off = kf_off + count * 4
+                total_parsed += 1
+
+    if total_parsed != num_curves:
+        raise ValueError(f"Parsed {total_parsed}/{num_curves} curves")
 
     return result
 
 
+# Backward-compatible wrapper used by convert_to_gltf.py
 def try_parse_banim(data):
-    """Parse .banim data using the packed DFAnimData format."""
+    """Parse .banim data, returning a dict suitable for glTF conversion."""
     try:
-        result = parse_banim_packed(data)
-        if result['numCurves'] > 0 and result['duration'] > 0:
-            return result
+        result = parse_banim(data)
+        return result
     except Exception:
-        pass
-
-    # Fallback: raw dump for manual inspection
-    return {
-        'raw': True,
-        'size': len(data),
-        'header_bytes': [data[i] for i in range(min(64, len(data)))],
-    }
+        return {
+            'raw': True,
+            'size': len(data),
+            'header_bytes': [data[i] for i in range(min(64, len(data)))],
+        }
 
 
 def export_json(anim_data, json_path):
@@ -147,43 +239,38 @@ if __name__ == '__main__':
         os.makedirs(output_dir, exist_ok=True)
 
         banim_files = glob.glob(os.path.join(asset_dir, '**/*.banim'), recursive=True)
-        success = fail = raw = 0
+        success = fail = 0
         for path in sorted(banim_files):
             fname = os.path.splitext(os.path.basename(path))[0]
             try:
                 dec = decompress_banim(path)
-                anim = try_parse_banim(dec)
+                anim = parse_banim(dec)
 
                 json_path = os.path.join(output_dir, f"{fname}.json")
                 export_json(anim, json_path)
 
-                if anim.get('raw'):
-                    print(f"RAW  {fname}: {anim['size']} bytes")
-                    raw += 1
-                else:
-                    nc = anim['numCurves']
-                    nb = anim.get('numBones', 0)
-                    dur = anim['duration']
-                    print(f"OK   {fname}: {nc} curves, ~{nb} bones, {dur:.2f}s")
-                    success += 1
+                nb = len(anim['bones'])
+                nc = anim['num_curves']
+                nv = len(anim['visibility'])
+                dur = anim['duration']
+                print(f"OK   {fname}: {nc} curves ({nb} bones, {nv} vis), {dur:.2f}s")
+                success += 1
             except Exception as e:
                 print(f"FAIL {fname}: {e}")
                 fail += 1
 
-        print(f"\n{success} parsed, {raw} raw dumps, {fail} failed")
+        print(f"\n{success} parsed, {fail} failed out of {success + fail}")
 
     else:
         input_path = sys.argv[1]
         output_path = sys.argv[2] if len(sys.argv) > 2 else input_path.rsplit('.', 1)[0] + '.json'
 
         dec = decompress_banim(input_path)
-        anim = try_parse_banim(dec)
+        anim = parse_banim(dec)
         export_json(anim, output_path)
 
-        if anim.get('raw'):
-            print(f"WARNING: Could not parse structure, saved raw dump to {output_path}")
-        else:
-            nc = anim['numCurves']
-            nb = anim.get('numBones', 0)
-            dur = anim['duration']
-            print(f"Exported {output_path}: {nc} curves, ~{nb} bones, {dur:.2f}s")
+        nb = len(anim['bones'])
+        nc = anim['num_curves']
+        nv = len(anim['visibility'])
+        dur = anim['duration']
+        print(f"Exported {output_path}: {nc} curves ({nb} bones, {nv} vis), {dur:.2f}s")

@@ -198,17 +198,25 @@ let spacesuitLoadPromise: Promise<void> | null = null;
 let citizenLoadFailed = false;
 let spacesuitLoadFailed = false;
 
-/** Map character activity state to animation clip name. */
+/** Map character activity state to animation clip name candidates (first match wins). */
 const STATE_CLIP_MAP: Record<string, string[]> = {
-  walking: ['Citizen_Walk', 'Spacewalk_Walk_Rock'],
-  idle: ['Citizen_Idle_A', 'Citizen_Idle_Normal'],
-  sleeping: ['Citizen_Goto_Sleep'],
-  building: ['Citizen_Build'],
-  eating: ['Citizen_EatReplicator'],
-  fighting_melee: ['Citizen_Punch'],
-  fighting_ranged: ['Citizen_EmergencyShoot'],
-  dead: ['Citizen_DeathPose'],
-  panicking: ['Citizen_Panic_Walk'],
+  walking: ['Citizen_Walk', 'Citizen_Walk_B', 'Spacewalk_Walk'],
+  idle: ['Citizen_Idle_A', 'Citizen_Idle_Normal', 'Citizen_Idle_B', 'Spacewalk_Idle'],
+  sleeping: ['Citizen_Sleeping', 'Citizen_Goto_Sleep'],
+  building: ['Citizen_BuilderConstruct', 'Citizen_Hammer', 'Spacewalk_Build'],
+  eating: ['Citizen_Eat', 'Citizen_Eat_Fork', 'Citizen_Eat_Vegetable'],
+  fighting_melee: ['Citizen_Box', 'Citizen_Box_B', 'Citizen_Stun_Attack'],
+  fighting_ranged: ['Citizen_EmergencyShoot', 'Citizen_EmergencyShoot_Pistol', 'Spacewalk_Shoot'],
+  dead: ['Citizen_DeadPose', 'Citizen_Shot_Death'],
+  panicking: ['Citizen_Panic_Walk', 'Citizen_Panic_Run', 'Citizen_Panic_Idle'],
+  running: ['Citizen_Run', 'Citizen_Run_WithIntent'],
+  chatting: ['Citizen_Chat_A', 'Citizen_Chat_B', 'Citizen_Talking'],
+  mining: ['Citizen_MinerRefinery', 'Citizen_MinerHoldRock', 'Spacewalk_Mining'],
+  carrying: ['Citizen_Carry', 'Citizen_WalkCarry'],
+  firefighting: ['Citizen_FightFire_Armed', 'Citizen_FightFire_Unarmed'],
+  healing: ['Citizen_Doctor_Heal', 'Citizen_DoctorScan'],
+  researching: ['Citizen_ConsolePushButtons', 'Citizen_ConsolePonder'],
+  spacewalk: ['Spacewalk_Idle', 'Spacewalk_Walk'],
 };
 
 function stripSkinning(group: THREE.Group) {
@@ -378,6 +386,8 @@ export class CharacterRenderer {
   private handles = new Map<number, CharacterRenderHandle>();
   private pendingUpgrade: Character[] = [];
   private elapsedTime = 0;
+  private lastFrameTime = 0;
+  private frameDt = 1 / 60;
   private grid: TileGrid | null = null;
 
   constructor(scene: THREE.Scene, overlayScene: THREE.Scene) {
@@ -657,6 +667,13 @@ export class CharacterRenderer {
     const handle = this.handles.get(char.id);
     if (!handle) return;
 
+    // Compute frame dt once per frame
+    const now = performance.now() / 1000;
+    if (now - this.lastFrameTime > 0.001) {
+      this.frameDt = Math.min(0.1, now - this.lastFrameTime);
+      this.lastFrameTime = now;
+    }
+
     // Switch model if spacesuit state changed
     if (handle.is3D && handle.showingSpacesuit !== char.bSpacewalking) {
       this.scene.remove(handle.object);
@@ -724,12 +741,17 @@ export class CharacterRenderer {
     if (!char.isAlive()) return 'dead';
     if (char.moving) return 'walking';
     const taskName = char.currentTask?.name;
-    if (taskName === 'sleep' || taskName === 'SleepInBed' || taskName === 'SleepOnFloor') return 'sleeping';
+    if (taskName === 'SleepInBed' || taskName === 'SleepOnFloor') return 'sleeping';
     if (taskName === 'BuildEnvObject' || taskName === 'BuildTile') return 'building';
     if (taskName === 'Eat' || taskName === 'GetDrink') return 'eating';
     if (taskName === 'AttackEnemy' && char.weapon) return 'fighting_ranged';
     if (taskName === 'AttackEnemy') return 'fighting_melee';
-    if (taskName === 'Mine') return 'building'; // Use build animation for mining too
+    if (taskName === 'Mine') return 'mining';
+    if (taskName === 'Chat' || taskName === 'Socialize') return 'chatting';
+    if (taskName === 'ExtinguishFire') return 'firefighting';
+    if (taskName === 'HealCharacter') return 'healing';
+    if (taskName === 'Research') return 'researching';
+    if (taskName === 'GoToSafety') return 'panicking';
     return 'idle';
   }
 
@@ -769,9 +791,7 @@ export class CharacterRenderer {
       }
     }
 
-    // Update mixer (use real time delta)
-    const dt = 1 / 60; // Approximate — called once per frame
-    handle.mixer!.update(dt);
+    handle.mixer!.update(this.frameDt);
   }
 
   /** Check if character is doing a working task (building, mining, maintaining). */
@@ -900,6 +920,13 @@ export class CharacterRenderer {
     handle.thoughtEl.remove();
     this.handles.delete(charId);
   }
+
+  /** Get citizen animation clip count (for testing). */
+  getCitizenClipCount(): number { return citizenAnimClips.length; }
+  /** Get spacesuit animation clip count (for testing). */
+  getSpacesuitClipCount(): number { return spacesuitAnimClips.length; }
+  /** Check if citizen model has skeleton (for testing). */
+  hasCitizenSkeleton(): boolean { return citizenHasSkeleton; }
 
   /** Apply room lighting tint to a character (Lua room ambient → character shader). */
   setCharacterTint(charId: number, tint: number) {

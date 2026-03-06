@@ -3376,6 +3376,20 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.hasChars).toBe(true);
   });
 
+  test('skeletal animations loaded from GLB models', async () => {
+    // Wait for GLB models to load (they load asynchronously)
+    await page.waitForTimeout(3000);
+    const info = await page.evaluate(() => {
+      return (window as any).__df9.getAnimationInfo();
+    });
+    // Citizen_Base.glb should have 140 animation clips embedded
+    expect(info.citizenClips).toBeGreaterThan(50);
+    // Spacesuit.glb should have 12 animation clips
+    expect(info.spacesuitClips).toBeGreaterThan(5);
+    // Skeleton should be present since we have clips
+    expect(info.hasSkeleton).toBe(true);
+  });
+
   test('door placement does not immediately convert wall to DOOR', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;

@@ -26,7 +26,7 @@ All 27 sections from the v2 plan are complete (180+ items). Key systems working:
 - Power (contiguity BFS via doors + wall-blob adjacency)
 - UI (start menu, new game, sidebar, inspector, job roster, alerts, HUD)
 - Save/Load (full state, fire, O2 grid RLE, commands, inventory, export/import)
-- 172 E2E tests passing
+- 173 E2E tests passing
 - Audio: lazy loading, WAV playback, music rotation (Revoice tracks), spatial loops
 - UI: Orbitron font everywhere, persistent coordinate display, alert panel cleanup
 
@@ -198,8 +198,14 @@ P4 — NICE-TO-HAVE (AI graphics, extra polish)
 - [x] Zoom-toward-cursor preserves world point under mouse
 - [x] Edge panning: N/A — confirmed NOT in original Lua Camera.lua (no edge pan logic exists)
 
-### P1.12 Missing Animations [TECH]
-- [ ] Skeletal animation clips blocked — `.banim` binary format not reverse-engineered. Characters use procedural walk/idle fallback.
+### P1.12 Skeletal Animations ✅
+- [x] `.banim` binary format fully reverse-engineered (306/306 files parse successfully)
+- [x] Format: ANM header → zlib payload → bone descriptors → CONSTANT/CURVE tracks → visibility curves
+- [x] TRACK_CURVE: u16 keyframe count + f32 min/max + quantized u16 time/value pairs
+- [x] `extract_banim.py` rewritten with correct parser
+- [x] `convert_to_gltf.py` updated: embeds animations in GLB (Citizen_Base: 140 clips, Spacesuit: 12, Bad_Alien: 9, Murder_Robot: 6)
+- [x] CharacterRenderer wires skeletal animations via THREE.AnimationMixer
+- [x] STATE_CLIP_MAP covers 17 activity states (walk, idle, build, eat, fight, heal, research, etc.)
 - [x] Door open/close: confirmed instant sprite swap in Lua (no transition animation) — our implementation matches
 - [ ] Animated object sprites (Jukebox pulsing, generators) — low priority
 
@@ -419,7 +425,7 @@ These are engine/platform differences, not missing features:
 | Body/head/hair tables | GLB skin variants vs rig data | Different 3D pipeline |
 | Layout system | Code-driven vs data-file driven | No UILayout asset loader |
 | Name editing | HTML input vs in-world text entry | Browser native |
-| Skeletal animation | Procedural fallback vs `.banim` clips | Binary format not reversed |
+| Skeletal animation | Full `.banim` skeletal clips | Format reversed, 306 animations embedded in GLBs |
 
 ---
 
@@ -512,3 +518,4 @@ Sprint 4 — Content & Systems (P3): Completeness
 | 2026-03-06 | Sprint 2 visual polish: blob shadows (P1.2), selection highlighting (P1.3), enhanced space background (P1.1). 161 tests. |
 | 2026-03-06 | Sprint 2 continued: camera shake (P1.8), smooth zoom (P1.11), thought bubbles (P1.4), fire particles (P1.5), projectile visuals (P1.7), room lighting on characters (P1.9), build grid (P1.6). 167 tests. |
 | 2026-03-06 | Sprint 2 final: per-tile light gradients (P1.10), door+object lighting (P1.9), meteor trails+construction sparks (P1.13), zone ceiling light configs. 172 tests. All P1 items complete or blocked (P1.12 .banim). |
+| 2026-03-07 | Skeletal animations: reverse-engineered .banim binary format (306/306 files), rewrote parser, rebuilt GLBs with embedded clips, wired CharacterRenderer AnimationMixer. 173 tests. |

@@ -413,83 +413,146 @@ class GLTFBuilder:
         self.gltf['skins'].append(skin)
         return idx
 
-    def add_animation(self, name, anim_data, joint_indices, bone_name_to_idx):
-        """Add an animation from parsed .banim data."""
+    def add_animation(self, name, anim_data, joint_indices, bones):
+        """Add an animation from parsed .banim data.
+
+        anim_data uses the new format from extract_banim.parse_banim():
+          bones: [{bone_index, curves: [{attr, type, value|keyframes, min, max}]}]
+        Each curve targets a single attr (LOC_X=3..SCL_Z=11).
+        We merge per-attr curves into glTF translation/rotation/scale channels.
+        """
         if anim_data.get('raw') or not anim_data.get('bones'):
+            return
+
+        duration = anim_data.get('duration', 0)
+        if duration <= 0:
             return
 
         channels = []
         samplers = []
 
-        fps = anim_data.get('fps', 30.0)
-        if fps <= 0:
-            fps = 30.0
-
-        for bone_data in anim_data['bones']:
-            bone_name = bone_data['name']
-            if bone_name not in bone_name_to_idx:
-                continue
-
-            bone_idx = bone_name_to_idx[bone_name]
-            if bone_idx >= len(joint_indices):
+        for bone_entry in anim_data['bones']:
+            bone_idx = bone_entry['bone_index']
+            if bone_idx >= len(joint_indices) or bone_idx >= len(bones):
                 continue
 
             target_node = joint_indices[bone_idx]
-            keyframes = bone_data['keyframes']
-            if not keyframes:
-                continue
+            bone_bind = bones[bone_idx]
 
-            # Time values
-            times = [kf['frame'] / fps for kf in keyframes]
-            time_data = struct.pack(f'<{len(times)}f', *times)
-            time_bv = self.add_buffer_view(time_data)
-            time_acc = self.add_accessor(time_bv, GLTF_FLOAT, len(times), 'SCALAR',
-                                         [min(times)], [max(times)])
+            # Collect curves by attribute group
+            loc_curves = {}  # attr_id → curve_info
+            rot_curves = {}
+            scl_curves = {}
+            for curve in bone_entry['curves']:
+                a = curve['attr']
+                if 3 <= a <= 5:
+                    loc_curves[a] = curve
+                elif 6 <= a <= 8:
+                    rot_curves[a] = curve
+                elif 9 <= a <= 11:
+                    scl_curves[a] = curve
 
-            # Translation
-            trans_values = []
-            for kf in keyframes:
-                trans_values.extend(kf['translation'])
-            trans_data = struct.pack(f'<{len(trans_values)}f', *trans_values)
-            trans_bv = self.add_buffer_view(trans_data)
-            trans_acc = self.add_accessor(trans_bv, GLTF_FLOAT, len(keyframes), 'VEC3')
+            # Helper: evaluate a curve at a given time
+            def eval_curve(curve, t):
+                if curve['type'] == 'constant':
+                    return curve['value']
+                kfs = curve['keyframes']
+                if not kfs:
+                    return 0.0
+                if t <= kfs[0]['time']:
+                    return kfs[0]['value']
+                if t >= kfs[-1]['time']:
+                    return kfs[-1]['value']
+                for i in range(len(kfs) - 1):
+                    if kfs[i]['time'] <= t <= kfs[i+1]['time']:
+                        dt = kfs[i+1]['time'] - kfs[i]['time']
+                        if dt < 1e-9:
+                            return kfs[i]['value']
+                        frac = (t - kfs[i]['time']) / dt
+                        return kfs[i]['value'] + frac * (kfs[i+1]['value'] - kfs[i]['value'])
+                return kfs[-1]['value']
 
-            sampler_idx = len(samplers)
-            samplers.append({'input': time_acc, 'output': trans_acc, 'interpolation': 'LINEAR'})
-            channels.append({
-                'sampler': sampler_idx,
-                'target': {'node': target_node, 'path': 'translation'},
-            })
+            # Helper: collect unique sorted time values from a set of curves
+            def collect_times(curves_dict):
+                times = set()
+                for curve in curves_dict.values():
+                    if curve['type'] == 'curve':
+                        for kf in curve['keyframes']:
+                            times.add(kf['time'])
+                if not times:
+                    # All constant — use start/end
+                    times = {0.0, duration}
+                return sorted(times)
 
-            # Rotation (quaternion)
-            rot_values = []
-            for kf in keyframes:
-                rot_values.extend(kf['rotation'])
-            rot_data = struct.pack(f'<{len(rot_values)}f', *rot_values)
-            rot_bv = self.add_buffer_view(rot_data)
-            rot_acc = self.add_accessor(rot_bv, GLTF_FLOAT, len(keyframes), 'VEC4')
+            # Translation channel (LOC_X=3, LOC_Y=4, LOC_Z=5)
+            if loc_curves:
+                times = collect_times(loc_curves)
+                bind_t = bone_bind['translation']
+                trans_values = []
+                for t in times:
+                    tx = eval_curve(loc_curves[3], t) if 3 in loc_curves else bind_t[0]
+                    ty = eval_curve(loc_curves[4], t) if 4 in loc_curves else bind_t[1]
+                    tz = eval_curve(loc_curves[5], t) if 5 in loc_curves else bind_t[2]
+                    trans_values.extend([tx, ty, tz])
 
-            sampler_idx = len(samplers)
-            samplers.append({'input': time_acc, 'output': rot_acc, 'interpolation': 'LINEAR'})
-            channels.append({
-                'sampler': sampler_idx,
-                'target': {'node': target_node, 'path': 'rotation'},
-            })
+                time_data = struct.pack(f'<{len(times)}f', *times)
+                time_bv = self.add_buffer_view(time_data)
+                time_acc = self.add_accessor(time_bv, GLTF_FLOAT, len(times), 'SCALAR',
+                                             [min(times)], [max(times)])
+                t_data = struct.pack(f'<{len(trans_values)}f', *trans_values)
+                t_bv = self.add_buffer_view(t_data)
+                t_acc = self.add_accessor(t_bv, GLTF_FLOAT, len(times), 'VEC3')
 
-            # Scale
-            scale_values = []
-            for kf in keyframes:
-                scale_values.extend(kf['scale'])
-            scale_data = struct.pack(f'<{len(scale_values)}f', *scale_values)
-            scale_bv = self.add_buffer_view(scale_data)
-            scale_acc = self.add_accessor(scale_bv, GLTF_FLOAT, len(keyframes), 'VEC3')
+                si = len(samplers)
+                samplers.append({'input': time_acc, 'output': t_acc, 'interpolation': 'LINEAR'})
+                channels.append({'sampler': si, 'target': {'node': target_node, 'path': 'translation'}})
 
-            sampler_idx = len(samplers)
-            samplers.append({'input': time_acc, 'output': scale_acc, 'interpolation': 'LINEAR'})
-            channels.append({
-                'sampler': sampler_idx,
-                'target': {'node': target_node, 'path': 'scale'},
-            })
+            # Rotation channel (ROT_X=6, ROT_Y=7, ROT_Z=8) — Euler XYZ → quaternion
+            if rot_curves:
+                times = collect_times(rot_curves)
+                bind_r = bone_bind['rotation']
+                rot_values = []
+                for t in times:
+                    rx = eval_curve(rot_curves[6], t) if 6 in rot_curves else bind_r[0]
+                    ry = eval_curve(rot_curves[7], t) if 7 in rot_curves else bind_r[1]
+                    rz = eval_curve(rot_curves[8], t) if 8 in rot_curves else bind_r[2]
+                    qx, qy, qz, qw = euler_to_quaternion(rx, ry, rz)
+                    rot_values.extend([qx, qy, qz, qw])
+
+                time_data = struct.pack(f'<{len(times)}f', *times)
+                time_bv = self.add_buffer_view(time_data)
+                time_acc = self.add_accessor(time_bv, GLTF_FLOAT, len(times), 'SCALAR',
+                                             [min(times)], [max(times)])
+                r_data = struct.pack(f'<{len(rot_values)}f', *rot_values)
+                r_bv = self.add_buffer_view(r_data)
+                r_acc = self.add_accessor(r_bv, GLTF_FLOAT, len(times), 'VEC4')
+
+                si = len(samplers)
+                samplers.append({'input': time_acc, 'output': r_acc, 'interpolation': 'LINEAR'})
+                channels.append({'sampler': si, 'target': {'node': target_node, 'path': 'rotation'}})
+
+            # Scale channel (SCL_X=9, SCL_Y=10, SCL_Z=11)
+            if scl_curves:
+                times = collect_times(scl_curves)
+                bind_s = bone_bind['scale']
+                scl_values = []
+                for t in times:
+                    sx = eval_curve(scl_curves[9], t) if 9 in scl_curves else bind_s[0]
+                    sy = eval_curve(scl_curves[10], t) if 10 in scl_curves else bind_s[1]
+                    sz = eval_curve(scl_curves[11], t) if 11 in scl_curves else bind_s[2]
+                    scl_values.extend([sx, sy, sz])
+
+                time_data = struct.pack(f'<{len(times)}f', *times)
+                time_bv = self.add_buffer_view(time_data)
+                time_acc = self.add_accessor(time_bv, GLTF_FLOAT, len(times), 'SCALAR',
+                                             [min(times)], [max(times)])
+                s_data = struct.pack(f'<{len(scl_values)}f', *scl_values)
+                s_bv = self.add_buffer_view(s_data)
+                s_acc = self.add_accessor(s_bv, GLTF_FLOAT, len(times), 'VEC3')
+
+                si = len(samplers)
+                samplers.append({'input': time_acc, 'output': s_acc, 'interpolation': 'LINEAR'})
+                channels.append({'sampler': si, 'target': {'node': target_node, 'path': 'scale'}})
 
         if channels:
             if 'animations' not in self.gltf:
@@ -614,9 +677,6 @@ def convert_model(brig_path, rig_path=None, tex_dirs=None, anim_dir=None, output
         skin_idx = builder.add_skin(joint_indices, root_node, bones)
         builder.gltf['nodes'][mesh_node]['skin'] = skin_idx
 
-    # Build bone name→index map for animations
-    bone_name_to_idx = {b['name']: i for i, b in enumerate(bones)}
-
     # Add animations
     if anim_dir and os.path.isdir(anim_dir):
         banim_files = sorted(glob.glob(os.path.join(anim_dir, '*.banim')))
@@ -626,7 +686,7 @@ def convert_model(brig_path, rig_path=None, tex_dirs=None, anim_dir=None, output
                 dec = decompress_banim(banim_path)
                 anim_data = try_parse_banim(dec)
                 if not anim_data.get('raw'):
-                    builder.add_animation(anim_name, anim_data, joint_indices, bone_name_to_idx)
+                    builder.add_animation(anim_name, anim_data, joint_indices, bones)
             except Exception as e:
                 print(f"  Warning: Could not parse animation {anim_name}: {e}")
 
@@ -659,13 +719,13 @@ def batch_convert(munged_dir, extracted_dir, output_dir):
 
         # Find texture directories
         tex_dirs = [extracted_dir]
-        # Also check relative to the brig file's character/prop directory
-        parent = Path(brig_path).parent.parent.parent  # Up from Rig/ to model dir
+        # .brig lives in Characters/CharName/Rig/ — go up 1 level to CharName/
+        parent = Path(brig_path).parent.parent
         extracted_tex = os.path.join(extracted_dir, *parent.relative_to(munged_dir).parts)
         if os.path.isdir(extracted_tex):
             tex_dirs.insert(0, extracted_tex)
 
-        # Find animation directory
+        # Find animation directory (sibling of Rig/)
         anim_dir = os.path.join(parent, 'Animations')
         if not os.path.isdir(anim_dir):
             anim_dir = None
