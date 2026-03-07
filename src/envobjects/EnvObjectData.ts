@@ -5,6 +5,7 @@
 
 import { ZoneType } from '../world/ZoneType';
 import { BUILDER, TECHNICIAN, BOTANIST } from '../characters/CharacterConstants';
+import { line } from '../localization/Localization';
 
 export interface EnvObjectDef {
   spriteName: string;
@@ -137,14 +138,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Doors ─────────────────────────────────────────────────────
   Door: def({
-    spriteName: 'door_closed', friendlyName: 'Door', matterCost: 25,
+    spriteName: 'door_closed', friendlyName: line('PROPSX019TEXT'), matterCost: 25,
     door: true, bBlocksOxygen: true,
     customClass: 'Door', noRoom: true, sidebarIcon: 'icon_door',
     layer: 'worldWall', clickSound: 'spacedoor', placeSound: 'placedoor',
     portrait: 'Env_Door', sFlavorText: 'OBFLAV018TEXT',
   }),
   HeavyDoor: def({
-    spriteName: 'door_heavy_closed', friendlyName: 'Heavy Door', matterCost: 100,
+    spriteName: 'door_heavy_closed', friendlyName: line('PROPSX064TEXT'), matterCost: 100,
     door: true, bBlocksPathing: true, bBlocksOxygen: true,
     customClass: 'HeavyDoor', noRoom: true, researchPrereq: 'DoorLevel2',
     sidebarIcon: 'icon_heavydoor', layer: 'worldWall',
@@ -153,7 +154,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV025TEXT',
   }),
   Airlock: def({
-    spriteName: 'airlock_door_closed', friendlyName: 'Airlock Door', matterCost: 75,
+    spriteName: 'airlock_door_closed', friendlyName: line('PROPSX021TEXT'), matterCost: 75,
     width: 2, door: true, bBlocksOxygen: true,
     customClass: 'Airlock', noRoom: true, sidebarIcon: 'icon_airlock_door',
     layer: 'worldWall', clickSound: '', placeSound: 'placeairlock',
@@ -162,7 +163,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Power Generation ──────────────────────────────────────────
   Generator: def({
-    spriteName: 'ReactorGen', friendlyName: 'Generator', matterCost: 200,
+    spriteName: 'ReactorGen', friendlyName: line('ZONEUI015TEXT'), matterCost: 200,
     width: 2, height: 2, margin: 2, nPowerOutput: 1000,
     decayPerSecond: 0.03, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, nSabotageDuration: 30,
@@ -172,7 +173,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV019TEXT',
   }),
   GeneratorLevel2: def({
-    spriteName: 'generator2', friendlyName: 'Generator Mk II', matterCost: 600,
+    spriteName: 'generator2', friendlyName: line('PROPSX096TEXT'), matterCost: 600,
     width: 2, height: 2, margin: 2, nPowerOutput: 2500,
     decayPerSecond: 0.04, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, nSabotageDuration: 30,
@@ -183,7 +184,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV022TEXT',
   }),
   GeneratorLevel3: def({
-    spriteName: 'ReactorGen3', friendlyName: 'Generator Mk III', matterCost: 2000,
+    spriteName: 'ReactorGen3', friendlyName: line('PROPSX100TEXT'), matterCost: 2000,
     width: 3, height: 3, margin: 2, nPowerOutput: 5000,
     decayPerSecond: 0.04, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, nSabotageDuration: 30,
@@ -194,7 +195,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV037TEXT',
   }),
   GeneratorLevel4: def({
-    spriteName: 'ReactorGen4', friendlyName: 'Generator Mk IV', matterCost: 5000,
+    spriteName: 'ReactorGen4', friendlyName: line('PROPSX102TEXT'), matterCost: 5000,
     width: 4, height: 4, margin: 2, nPowerOutput: 10000,
     decayPerSecond: 0.04, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, nSabotageDuration: 30,
@@ -207,7 +208,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Life Support ──────────────────────────────────────────────
   OxygenRecycler: def({
-    spriteName: 'O2Gen', friendlyName: 'Oxygen Recycler', matterCost: 150,
+    spriteName: 'O2Gen', friendlyName: line('ZONEUI016TEXT'), matterCost: 150,
     margin: 1, oxygenLevel: 50, nPowerDraw: 25,
     decayPerSecond: 0.05, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, zoneName: ZoneType.LIFESUPPORT,
@@ -217,7 +218,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV001TEXT',
   }),
   OxygenRecyclerLevel2: def({
-    spriteName: 'oxygen_recycler_level2', friendlyName: 'O2 Recycler Mk II', matterCost: 300,
+    spriteName: 'oxygen_recycler_level2', friendlyName: line('PROPSX062TEXT'), matterCost: 300,
     width: 2, height: 2, margin: 1, oxygenLevel: 300, nPowerDraw: 30,
     decayPerSecond: 0.05, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, zoneName: ZoneType.LIFESUPPORT,
@@ -227,7 +228,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFunctionality: 'OxygenRecycler', sFlavorText: 'OBFLAV002TEXT',
   }),
   OxygenRecyclerLevel3: def({
-    spriteName: 'O2Gen3', friendlyName: 'O2 Recycler Mk III', matterCost: 600,
+    spriteName: 'O2Gen3', friendlyName: line('RECYCLE001TEXT'), matterCost: 600,
     width: 3, height: 3, margin: 1, oxygenLevel: 600, nPowerDraw: 35,
     decayPerSecond: 0.06, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, zoneName: ZoneType.LIFESUPPORT,
@@ -237,7 +238,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFunctionality: 'OxygenRecycler', sFlavorText: 'RECYCLE003TEXT',
   }),
   OxygenRecyclerLevel4: def({
-    spriteName: 'O2Gen4', friendlyName: 'O2 Recycler Mk IV', matterCost: 1200,
+    spriteName: 'O2Gen4', friendlyName: line('RECYCLE004TEXT'), matterCost: 1200,
     width: 4, height: 4, margin: 1, oxygenLevel: 900, nPowerDraw: 35,
     decayPerSecond: 0.06, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, zoneName: ZoneType.LIFESUPPORT,
@@ -247,7 +248,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFunctionality: 'OxygenRecycler', sFlavorText: 'RECYCLE006TEXT',
   }),
   AirScrubber: def({
-    spriteName: 'AirScrubber', friendlyName: 'Air Scrubber', matterCost: 300,
+    spriteName: 'AirScrubber', friendlyName: line('PROPSX078TEXT'), matterCost: 300,
     margin: 1, nPowerDraw: 30,
     decayPerSecond: 0.04, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, zoneName: ZoneType.LIFESUPPORT,
@@ -259,7 +260,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Plants ────────────────────────────────────────────────────
   BulbousPlant: def({
-    spriteName: 'BulbousPlant', friendlyName: 'Bulbous Plant', matterCost: 150,
+    spriteName: 'BulbousPlant', friendlyName: line('PROPSX106TEXT'), matterCost: 150,
     oxygenLevel: 7, nMoraleScore: 3, noRoom: true, sidebarIcon: 'icon_plant',
     changeZone: false, spriteOffsetX: 40, spriteOffsetXFlipped: -60,
     portrait: 'bulbous_plant_icon', placeSound: 'placeplant',
@@ -267,14 +268,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV040TEXT',
   }),
   StrangePlant: def({
-    spriteName: 'strange_plant', friendlyName: 'Strange Plant', matterCost: 250,
+    spriteName: 'strange_plant', friendlyName: line('PROPSX110TEXT'), matterCost: 250,
     oxygenLevel: 10, nMoraleScore: 5, noRoom: true, sidebarIcon: 'icon_plant',
     changeZone: false,
     sPortraitPath: 'Environments/strange_plant',
     placeSound: 'placeplant', sFlavorText: 'OBFLAV042TEXT',
   }),
   space_tree: def({
-    spriteName: 'space_tree', friendlyName: 'Space Tree', matterCost: 250,
+    spriteName: 'space_tree', friendlyName: line('PROPSX108TEXT'), matterCost: 250,
     width: 2, height: 2, margin: 1, oxygenLevel: 10, nMoraleScore: 10,
     bBlocksPathing: true, decayPerSecond: 0.1, zoneName: ZoneType.GARDEN,
     sidebarIcon: 'icon_plant', changeZone: false,
@@ -284,7 +285,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV041TEXT',
   }),
   HydroPlant: def({
-    spriteName: 'HydroPlant', friendlyName: 'Hydroponic Plant', matterCost: 150,
+    spriteName: 'HydroPlant', friendlyName: line('PROPSX025TEXT'), matterCost: 150,
     oxygenLevel: 10, nMoraleScore: 4, bBlocksPathing: true,
     decayPerSecond: 0, zoneName: ZoneType.GARDEN,
     customClass: 'HydroPlant', sidebarIcon: 'icon_plant_tray',
@@ -293,7 +294,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV034TEXT',
   }),
   HousePlant: def({
-    spriteName: 'HousePoint', friendlyName: 'House Plant', matterCost: 150,
+    spriteName: 'HousePoint', friendlyName: line('ZONEUI059TEXT'), matterCost: 150,
     oxygenLevel: 5, nMoraleScore: 3, noRoom: true, sidebarIcon: 'icon_plant',
     changeZone: false,
     portrait: 'Env_Plant_01', placeSound: 'placeplant',
@@ -302,7 +303,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Residence ─────────────────────────────────────────────────
   Bed: def({
-    spriteName: 'Bed', friendlyName: 'Bed', matterCost: 150,
+    spriteName: 'Bed', friendlyName: line('ZONEUI044TEXT'), matterCost: 150,
     width: 2, margin: 1, bBlocksPathing: true,
     customClass: 'Bed', zoneName: ZoneType.RESIDENCE,
     additionalZones: [ZoneType.BRIG], sidebarIcon: 'icon_bed',
@@ -311,7 +312,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV026TEXT',
   }),
   Dresser: def({
-    spriteName: 'Dresser', friendlyName: 'Dresser', matterCost: 125,
+    spriteName: 'Dresser', friendlyName: line('ZONEUI061TEXT'), matterCost: 125,
     noRoom: true, bInventory: true, nMoraleScore: 1,
     zoneName: ZoneType.RESIDENCE, sidebarIcon: 'icon_dresser',
     spriteOffsetX: 10, sFunctionality: 'Shelving',
@@ -323,7 +324,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     ],
   }),
   WallShelf: def({
-    spriteName: 'WallShelf', friendlyName: 'Wall Shelf', matterCost: 20,
+    spriteName: 'WallShelf', friendlyName: line('PROPSX092TEXT'), matterCost: 20,
     againstWall: true, noRoom: true, bInventory: true,
     zoneName: ZoneType.RESIDENCE, sidebarIcon: 'icon_shelf',
     decayPerSecond: 0, spriteOffsetX: -15, spriteOffsetXFlipped: 15,
@@ -338,7 +339,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     ],
   }),
   Rug1: def({
-    spriteName: 'Rug1', friendlyName: 'Rug', matterCost: 20,
+    spriteName: 'Rug1', friendlyName: line('ZONEUI063TEXT'), matterCost: 20,
     noRoom: true, nMoraleScore: 1,
     zoneName: ZoneType.RESIDENCE, sidebarIcon: 'icon_rug',
     bHelpsMorale: true, bSortBack: true,
@@ -348,14 +349,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Pub ───────────────────────────────────────────────────────
   Bar: def({
-    spriteName: 'Bar', friendlyName: 'Bar', matterCost: 250,
+    spriteName: 'Bar', friendlyName: line('ZONEUI065TEXT'), matterCost: 250,
     width: 2, margin: 1, bBlocksPathing: true, decayPerSecond: 0.005,
     customClass: 'Bar', zoneName: ZoneType.PUB, sidebarIcon: 'icon_bar',
     portrait: 'Env_Bar', placeSound: 'placebar',
     sFlavorText: 'OBFLAV030TEXT',
   }),
   Fridge: def({
-    spriteName: 'Fridge', friendlyName: 'Food Replicator', matterCost: 250,
+    spriteName: 'Fridge', friendlyName: line('PROPSX033TEXT'), matterCost: 250,
     againstWall: true, bBlocksPathing: true, bInventory: true,
     nPowerDraw: 35, decayPerSecond: 0.002, bCanDeactivate: true,
     customClass: 'Fridge', zoneName: ZoneType.PUB, sidebarIcon: 'icon_fridge',
@@ -364,7 +365,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV013TEXT',
   }),
   FridgeLvl2: def({
-    spriteName: 'fridge_level2', friendlyName: 'Food Replicator Mk II', matterCost: 250,
+    spriteName: 'fridge_level2', friendlyName: line('PROPSX069TEXT'), matterCost: 250,
     againstWall: true, bBlocksPathing: true, bInventory: true,
     nPowerDraw: 50, decayPerSecond: 0.002, bCanDeactivate: true,
     customClass: 'Fridge', zoneName: ZoneType.PUB,
@@ -375,21 +376,21 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV014TEXT',
   }),
   Stove: def({
-    spriteName: 'Stove', friendlyName: 'Stove', matterCost: 250,
+    spriteName: 'Stove', friendlyName: line('PROPSX030TEXT'), matterCost: 250,
     bBlocksPathing: true, nPowerDraw: 30, decayPerSecond: 0.005,
     bCanDeactivate: true, zoneName: ZoneType.PUB, sidebarIcon: 'icon_stove',
     portrait: 'Env_Pub_Stove', placeSound: 'placestove',
     sFlavorText: 'OBFLAV035TEXT',
   }),
   StandingTable: def({
-    spriteName: 'StandingTable', friendlyName: 'Standing Table', matterCost: 100,
+    spriteName: 'StandingTable', friendlyName: line('PROPSX031TEXT'), matterCost: 100,
     margin: 1, bBlocksPathing: true, bInventory: true, decayPerSecond: 0,
     customClass: 'PubTable', zoneName: ZoneType.PUB, sidebarIcon: 'icon_standingtable',
     portrait: 'Env_Pub_StandingTable', placeSound: 'placetable',
     sFlavorText: 'OBFLAV005TEXT',
   }),
   Jukebox: def({
-    spriteName: 'Jukebox', friendlyName: 'Jukebox', matterCost: 300,
+    spriteName: 'Jukebox', friendlyName: line('JUKEX001TEXT'), matterCost: 300,
     againstWall: true, bBlocksPathing: true, decayPerSecond: 0.002,
     explodeOnFailure: true, nPowerDraw: 25, bCanDeactivate: true,
     nMoraleScore: 5, customClass: 'Jukebox', zoneName: ZoneType.PUB,
@@ -399,7 +400,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     placeSound: 'placeoxygenfilter', sFlavorText: 'JUKEX003TEXT',
   }),
   BurgerSign: def({
-    spriteName: 'BurgerSign', friendlyName: 'Burger Sign', matterCost: 225,
+    spriteName: 'BurgerSign', friendlyName: line('PROPSX007TEXT'), matterCost: 225,
     againstWall: true, nMoraleScore: 2, nPowerDraw: 5,
     zoneName: ZoneType.PUB, sidebarIcon: 'icon_wall_neon_burger',
     bIgnoreLighting: true,
@@ -407,7 +408,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV010TEXT',
   }),
   PizzaSign: def({
-    spriteName: 'PizzaSign', friendlyName: 'Pizza Sign', matterCost: 150,
+    spriteName: 'PizzaSign', friendlyName: line('PROPSX011TEXT'), matterCost: 150,
     againstWall: true, nMoraleScore: 2, nPowerDraw: 5,
     zoneName: ZoneType.PUB, sidebarIcon: 'icon_wall_neon_pizza',
     bIgnoreLighting: true,
@@ -415,7 +416,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV011TEXT',
   }),
   FriesSign: def({
-    spriteName: 'FriesSign', friendlyName: 'Fries Sign', matterCost: 75,
+    spriteName: 'FriesSign', friendlyName: line('PROPSX009TEXT'), matterCost: 75,
     againstWall: true, nMoraleScore: 2, nPowerDraw: 5,
     zoneName: ZoneType.PUB, sidebarIcon: 'icon_wall_neon_fries',
     bIgnoreLighting: true,
@@ -425,7 +426,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Refinery ──────────────────────────────────────────────────
   refinery: def({
-    spriteName: 'Refinery', friendlyName: 'Refinery', matterCost: 200,
+    spriteName: 'Refinery', friendlyName: line('ZONEUI045TEXT'), matterCost: 200,
     width: 2, height: 2, margin: 1, nPowerDraw: 40,
     decayPerSecond: 0.005, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, customClass: 'RefineryDropoff',
@@ -435,7 +436,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV032TEXT',
   }),
   refinery_level2: def({
-    spriteName: 'Refinery', friendlyName: 'Refinery Mk II', matterCost: 400,
+    spriteName: 'Refinery', friendlyName: line('PROPSX066TEXT'), matterCost: 400,
     width: 2, height: 2, margin: 1, nPowerDraw: 50,
     decayPerSecond: 0.005, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, customClass: 'RefineryDropoff',
@@ -448,7 +449,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Fitness ───────────────────────────────────────────────────
   WeightBench: def({
-    spriteName: 'WeightBench', friendlyName: 'Weight Bench', matterCost: 100,
+    spriteName: 'WeightBench', friendlyName: line('PROPSX046TEXT'), matterCost: 100,
     width: 2, margin: 1, bBlocksPathing: true,
     customClass: 'WeightBench', zoneName: ZoneType.FITNESS,
     additionalZones: [ZoneType.BRIG], sidebarIcon: 'icon_weightbench',
@@ -461,7 +462,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Research ──────────────────────────────────────────────────
   ResearchDesk: def({
-    spriteName: 'ResearchDesk', friendlyName: 'Research Desk', matterCost: 300,
+    spriteName: 'ResearchDesk', friendlyName: line('PROPSX060TEXT'), matterCost: 300,
     width: 2, margin: 1, bBlocksPathing: true,
     decayPerSecond: 0.005, explodeOnFailure: true,
     nPowerDraw: 50, bCanDeactivate: true,
@@ -473,7 +474,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Infirmary ─────────────────────────────────────────────────
   HospitalBed: def({
-    spriteName: 'HospitalBed', friendlyName: 'Hospital Bed', matterCost: 400,
+    spriteName: 'HospitalBed', friendlyName: line('PROPSX076TEXT'), matterCost: 400,
     width: 2, margin: 1, bBlocksPathing: true,
     decayPerSecond: 0.005, nPowerDraw: 30, bCanDeactivate: true,
     customClass: 'HospitalBed', zoneName: ZoneType.INFIRMARY,
@@ -487,7 +488,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Airlock ───────────────────────────────────────────────────
   AirlockLocker: def({
-    spriteName: 'AirlockLocker', friendlyName: 'Spacesuit Locker', matterCost: 25,
+    spriteName: 'AirlockLocker', friendlyName: line('ZONEUI040TEXT'), matterCost: 50,
     againstWall: true, zoneName: ZoneType.AIRLOCK,
     customClass: 'AirlockLocker', sidebarIcon: 'icon_airlock_locker',
     explodeOnFailure: true, bAttackable: false,
@@ -497,14 +498,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Utility (ALL zone) ───────────────────────────────────────
   FirePanel: def({
-    spriteName: 'FirePanel', friendlyName: 'Fire Panel', matterCost: 50,
+    spriteName: 'FirePanel', friendlyName: line('PROPSX001TEXT'), matterCost: 50,
     againstWall: true, noRoom: true, sidebarIcon: 'icon_fire_panel',
     clickSound: 'spacesuitlocker',
     portrait: 'Env_Firepanel', placeSound: 'placefirepanel',
     sFlavorText: 'OBFLAV029TEXT',
   }),
   EmergencyAlarm: def({
-    spriteName: 'EmergencyAlarm', friendlyName: 'Emergency Alarm', matterCost: 50,
+    spriteName: 'EmergencyAlarm', friendlyName: line('PROPSX040TEXT'), matterCost: 50,
     againstWall: true, noRoom: true,
     customClass: 'EmergencyAlarm', sidebarIcon: 'icon_alarm_panel',
     clickSound: 'spacesuitlocker',
@@ -512,7 +513,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV020TEXT',
   }),
   HappyBot: def({
-    spriteName: 'happybot', friendlyName: 'Happy Bot', matterCost: 2000,
+    spriteName: 'happybot', friendlyName: line('PROPSX104TEXT'), matterCost: 2000,
     margin: 1, nPowerDraw: 200, decayPerSecond: 0.1,
     explodeOnFailure: true, bCanDeactivate: true,
     nMoraleScore: 15, bBlocksPathing: true, noRoom: true,
@@ -523,14 +524,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
     placeSound: 'placeoxygenfilter', sFlavorText: 'OBFLAV039TEXT',
   }),
   TVScreen1: def({
-    spriteName: 'TVScreen1', friendlyName: 'TV Screen', matterCost: 75,
+    spriteName: 'TVScreen1', friendlyName: line('PROPSX003TEXT'), matterCost: 75,
     againstWall: true, noRoom: true, nMoraleScore: 1,
     nPowerDraw: 10, bCanDeactivate: true, sidebarIcon: 'icon_tv_screen',
     portrait: 'Env_TVScreen', placeSound: 'placemonitor',
     sFlavorText: 'OBFLAV028TEXT',
   }),
   FoodReplicator: def({
-    spriteName: 'FoodReplicator', friendlyName: 'Food Replicator', matterCost: 150,
+    spriteName: 'FoodReplicator', friendlyName: line('PROPSX027TEXT'), matterCost: 150,
     againstWall: true, noRoom: true, nMoraleScore: 3,
     nPowerDraw: 25, bCanDeactivate: true, sidebarIcon: 'icon_replicator',
     customClass: 'FoodReplicator', nFoodPrice: 50,
@@ -541,7 +542,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Combat ────────────────────────────────────────────────────
   WallMountedTurret: def({
-    spriteName: 'Turret', friendlyName: 'Turret', matterCost: 300,
+    spriteName: 'Turret', friendlyName: line('PROPSX084TEXT'), matterCost: 300,
     margin: 1, againstWall: true, noRoom: true, bCanBuildInSpace: true,
     decayPerSecond: 0.01, explodeOnFailure: true,
     nPowerDraw: 150, bCanDeactivate: true,
@@ -552,7 +553,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
     placeSound: 'placebed', sFlavorText: 'OBFLAV017TEXT',
   }),
   WallMountedTurret2: def({
-    spriteName: 'Turret', friendlyName: 'Turret Mk II', matterCost: 600,
+    spriteName: 'Turret', friendlyName: line('PROPSX080TEXT'), matterCost: 600,
     margin: 1, againstWall: true, noRoom: true, bCanBuildInSpace: true,
     explodeOnFailure: true, nPowerDraw: 200, bCanDeactivate: true,
     customClass: 'TurretLv2', researchPrereq: 'WallMountedTurret2',
@@ -565,14 +566,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Special (not in build menus) ──────────────────────────────
   SpaceshipEngine: def({
-    spriteName: 'SpaceshipEngine', friendlyName: 'Spaceship Engine', matterCost: 200,
+    spriteName: 'SpaceshipEngine', friendlyName: line('PROPSX094TEXT'), matterCost: 200,
     width: 2, height: 3, margin: 1, noRoom: true, bCanBuildInSpace: true,
     bBlocksPathing: true, nPowerOutput: 250, nSabotageDuration: 30,
     showInObjectMenu: false,
     clickSound: 'fusionreactor', portrait: 'Env_SeedPod',
   }),
   BaseSeed: def({
-    spriteName: 'BaseSeed', friendlyName: 'Base Seed', matterCost: 500,
+    spriteName: 'BaseSeed', friendlyName: line('PROPSX005TEXT'), matterCost: 500,
     width: 2, height: 3, noRoom: true, bCanBuildInSpace: true,
     bBlocksPathing: true, nPowerOutput: 500, nSabotageDuration: 30,
     nMoraleScore: 10, showInObjectMenu: false,
@@ -580,6 +581,34 @@ export const tObjects: Record<string, EnvObjectDef> = {
     sFlavorText: 'OBFLAV027TEXT',
   }),
 };
+
+// ── Wire description linecodes (Lua EnvObjectData.lua description field) ────
+const DESC_LCS: Record<string, string> = {
+  Door: 'PROPSX020TEXT', HeavyDoor: 'PROPSX065TEXT', Airlock: 'PROPSX022TEXT',
+  Generator: 'ZONEUI051TEXT', GeneratorLevel2: 'PROPSX097TEXT',
+  GeneratorLevel3: 'PROPSX101TEXT', GeneratorLevel4: 'PROPSX103TEXT',
+  OxygenRecycler: 'ZONEUI052TEXT', OxygenRecyclerLevel2: 'PROPSX063TEXT',
+  OxygenRecyclerLevel3: 'RECYCLE002TEXT', OxygenRecyclerLevel4: 'RECYCLE005TEXT',
+  AirScrubber: 'PROPSX079TEXT',
+  BulbousPlant: 'PROPSX107TEXT', StrangePlant: 'PROPSX111TEXT',
+  space_tree: 'PROPSX109TEXT', HydroPlant: 'PROPSX026TEXT', HousePlant: 'ZONEUI060TEXT',
+  Bed: 'ZONEUI054TEXT', Dresser: 'ZONEUI062TEXT', WallShelf: 'PROPSX093TEXT',
+  Rug1: 'ZONEUI064TEXT',
+  Bar: 'ZONEUI066TEXT', Fridge: 'PROPSX034TEXT', FridgeLvl2: 'PROPSX068TEXT',
+  Stove: 'PROPSX029TEXT', StandingTable: 'PROPSX032TEXT', Jukebox: 'JUKEX002TEXT',
+  BurgerSign: 'PROPSX008TEXT', PizzaSign: 'PROPSX012TEXT', FriesSign: 'PROPSX010TEXT',
+  refinery: 'ZONEUI055TEXT', refinery_level2: 'PROPSX067TEXT',
+  WeightBench: 'PROPSX047TEXT', ResearchDesk: 'PROPSX061TEXT',
+  HospitalBed: 'PROPSX077TEXT', AirlockLocker: 'ZONEUI053TEXT',
+  FirePanel: 'PROPSX002TEXT', EmergencyAlarm: 'PROPSX041TEXT',
+  HappyBot: 'PROPSX105TEXT', TVScreen1: 'PROPSX004TEXT',
+  FoodReplicator: 'PROPSX028TEXT',
+  WallMountedTurret: 'PROPSX074TEXT', WallMountedTurret2: 'PROPSX081TEXT',
+  SpaceshipEngine: 'PROPSX095TEXT', BaseSeed: 'PROPSX006TEXT',
+};
+for (const [key, lc] of Object.entries(DESC_LCS)) {
+  if (tObjects[key]) tObjects[key].description = line(lc);
+}
 
 // ── Alias system (matches EnvObjectData.lua tAliases) ───────────
 export const tAliases: Record<string, string> = {

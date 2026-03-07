@@ -5,6 +5,7 @@
 
 import { RESEARCH_DEFS, type ResearchDef } from './ResearchData';
 import { Base } from '../core/Base';
+import { line } from '../localization/Localization';
 
 export class ResearchSystem {
   /** Completed research IDs. */
@@ -49,9 +50,9 @@ export class ResearchSystem {
     this.activeResearch = null;
     this.progress = 0;
     if (def?.bDiscoverOnly) {
-      Base.addAlert('research', `Blueprint discovered: ${def.friendlyName}`);
+      Base.addAlert('research', line('ALERTS019TEXT', { research: def.friendlyName }));
     } else {
-      Base.addAlert('research', `Research complete: ${def?.friendlyName ?? researchId}`);
+      Base.addAlert('research', line('ALERTS019TEXT', { research: def?.friendlyName ?? researchId }));
     }
   }
 

@@ -1,26 +1,85 @@
 /**
  * JobRoster.ts — Fullscreen overlay for managing character job assignments.
- * Matches original JobRoster.lua: grid of characters × jobs with competency values.
+ * Matches original JobRoster.lua + JobRosterEntry.lua layout:
+ * - Full-screen left-aligned overlay
+ * - "Back" button with ESC hotkey
+ * - Star ratings (5 levels) with competency-colored backgrounds
+ * - Affinity emoticon faces per job cell
+ * - Full job names in sortable column headers
+ * - Job count row under headers
  */
 
 import type { Character } from '../characters/Character';
-import { JOB_NAMES, tJobs } from '../characters/CharacterConstants';
+import {
+  JOB_NAMES, tJobs, UNEMPLOYED,
+  DUTY_AFFINITY_LIKE, DUTY_AFFINITY_DISLIKE,
+} from '../characters/CharacterConstants';
+import { line } from '../localization/Localization';
+import { playWarble } from './WarbleEffect';
 
 const AMBER = '#dfa200';
+const AMBER_RGB = '223,162,0';
+
+// Lua CharacterConstants.tJobLevels — competency thresholds → star level
+const COMPETENCY_LEVELS = [
+  { nLevel: 1, nMinCompetency: 0 },
+  { nLevel: 2, nMinCompetency: 0.16 },
+  { nLevel: 3, nMinCompetency: 0.28 },
+  { nLevel: 4, nMinCompetency: 0.60 },
+  { nLevel: 5, nMinCompetency: 0.90 },
+];
+
+// Lua CharacterConstants.JOB_COMPETENCY_COLORS (RGB 0-1 → CSS)
+const COMPETENCY_COLORS: Record<number, string> = {
+  1: 'rgb(79,28,1)',     // dark brown-red
+  2: 'rgb(105,69,14)',   // brown
+  3: 'rgb(87,81,1)',     // olive
+  4: 'rgb(37,78,0)',     // green
+  5: 'rgb(28,91,118)',   // teal-blue
+};
+
+// Lua AFFINITY_ICONS — emoticon faces with colors
+const AFFINITY_ICONS = [
+  { icon: '>:(', minAff: -Infinity, color: '#ff3333' },  // RED — bigfrown
+  { icon: ':(', minAff: -7.5, color: '#ff8800' },         // ORANGE — frown
+  { icon: ':|', minAff: DUTY_AFFINITY_DISLIKE, color: AMBER }, // AMBER — meh
+  { icon: ':)', minAff: DUTY_AFFINITY_LIKE, color: '#88cc00' }, // AMBERGREEN — smile
+  { icon: ':D', minAff: 7.5, color: '#44cc44' },          // GREEN — bigsmile
+];
+
+function getAffinityDisplay(affinity: number): { icon: string; color: string } {
+  let result = AFFINITY_ICONS[0];
+  for (const entry of AFFINITY_ICONS) {
+    if (affinity >= entry.minAff) result = entry;
+  }
+  return result;
+}
+
+function getCompetencyLevel(competency: number): number {
+  let level = 1;
+  for (const entry of COMPETENCY_LEVELS) {
+    if (competency > entry.nMinCompetency) level = entry.nLevel;
+  }
+  return level;
+}
+
+function renderStars(level: number): string {
+  return '\u2605'.repeat(level);  // filled star ★
+}
+
+// Display columns: tJobs + UNEMPLOYED
+const DISPLAY_JOBS = [...tJobs, UNEMPLOYED];
 
 export class JobRoster {
   private el: HTMLDivElement;
-  private tableBody!: HTMLTableSectionElement;
+  private scrollPane!: HTMLDivElement;
   private visible = false;
   private getCharacters: () => Character[];
   private onSetJob: (character: Character, jobId: number) => void;
   private onOpen: () => void;
   private onClose: () => void;
-  private sortColumn: number | null = null;
+  private sortColumn: number | null = 1; // default: sort by Name (column 1)
   private sortAsc = true;
-  private jobCountCells: HTMLElement[] = [];
-  private headerLabels: string[] = [];
-  private headerCells: HTMLElement[] = [];
 
   constructor(
     parent: HTMLElement,
@@ -36,114 +95,69 @@ export class JobRoster {
     this.onOpen = callbacks.onOpen;
     this.onClose = callbacks.onClose;
 
+    // Full-screen overlay (Lua: nBGWidth=1925, left-aligned, full height)
     this.el = document.createElement('div');
     this.el.id = 'job-roster';
     this.el.style.cssText = `
       position:fixed;top:0;left:0;width:100%;height:100%;
-      background:rgba(0,0,0,0.9);z-index:100;display:none;
-      font-family:'Orbitron',monospace;pointer-events:auto;
-      display:flex;align-items:center;justify-content:center;
-    `;
-    this.el.style.display = 'none';
-
-    const panel = document.createElement('div');
-    panel.style.cssText = `
-      background:rgba(10,10,10,0.95);border:2px solid ${AMBER};
-      padding:20px;max-width:900px;width:90%;max-height:80vh;
-      overflow-y:auto;
+      background:rgba(0,0,0,0.92);z-index:100;display:none;
+      font-family:'Dosis',sans-serif;pointer-events:auto;
     `;
 
-    // Header
-    const headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;';
-    headerRow.innerHTML = `
-      <span style="font-size:20px;font-weight:bold;color:${AMBER};">JOB ROSTER</span>
+    // Back button (Lua: BackButton + BackLabel + BackHotkey)
+    const backBtn = document.createElement('div');
+    backBtn.style.cssText = `
+      position:absolute;top:0;left:0;width:286px;height:98px;
+      background:#000;cursor:pointer;display:flex;align-items:center;
+      padding:0 20px;box-sizing:border-box;
     `;
-    const closeBtn = document.createElement('span');
-    closeBtn.textContent = '[Close]';
-    closeBtn.style.cssText = `font-size:14px;color:${AMBER};cursor:pointer;`;
-    closeBtn.addEventListener('click', () => this.hide());
-    headerRow.appendChild(closeBtn);
-    panel.appendChild(headerRow);
-
-    // Table
-    const table = document.createElement('table');
-    table.style.cssText = 'width:100%;border-collapse:collapse;color:#ccc;font-size:13px;';
-
-    // Table header
-    const thead = document.createElement('thead');
-    const headerTr = document.createElement('tr');
-
-    this.headerLabels = ['Name', 'Job', ...tJobs.map(j => this.shortJobName(j))];
-    this.headerCells = [];
-    for (let i = 0; i < this.headerLabels.length; i++) {
-      const th = document.createElement('th');
-      th.textContent = this.headerLabels[i];
-      this.headerCells.push(th);
-      th.style.cssText = `
-        text-align:left;padding:6px 4px;border-bottom:1px solid ${AMBER};
-        color:${AMBER};cursor:pointer;font-size:12px;white-space:nowrap;
-      `;
-      const colIdx = i;
-      th.addEventListener('click', () => {
-        if (this.sortColumn === colIdx) {
-          if (this.sortAsc) {
-            this.sortAsc = false; // asc → desc
-          } else {
-            this.sortColumn = null; // desc → unsorted
-          }
-        } else {
-          this.sortColumn = colIdx;
-          this.sortAsc = true;
-        }
-        this.refresh();
-      });
-      headerTr.appendChild(th);
-    }
-    // Job count row (Lua: job1Num, job2Num, ... job10Num labels)
-    const countTr = document.createElement('tr');
-    // Name + Job columns (empty)
-    for (let i = 0; i < 2; i++) {
-      const td = document.createElement('td');
-      td.style.cssText = 'padding:2px 4px;font-size:10px;color:#666;';
-      countTr.appendChild(td);
-    }
-    this.jobCountCells = [];
-    for (let i = 0; i < tJobs.length; i++) {
-      const td = document.createElement('td');
-      td.style.cssText = `padding:2px 4px;text-align:center;font-size:10px;color:#888;border-bottom:1px solid #333;`;
-      td.textContent = '0';
-      countTr.appendChild(td);
-      this.jobCountCells.push(td);
-    }
-
-    thead.appendChild(headerTr);
-    thead.appendChild(countTr);
-    table.appendChild(thead);
-
-    this.tableBody = document.createElement('tbody');
-    table.appendChild(this.tableBody);
-    panel.appendChild(table);
-
-    this.el.appendChild(panel);
-    parent.appendChild(this.el);
-
-    // Close on background click
-    this.el.addEventListener('click', (e) => {
-      if (e.target === this.el) this.hide();
+    const backLabel = document.createElement('span');
+    backLabel.textContent = line('HUDHUD035TEXT');
+    backLabel.style.cssText = `color:${AMBER};font-size:28px;flex:1;`;
+    const backHotkey = document.createElement('span');
+    backHotkey.textContent = 'ESC';
+    backHotkey.style.cssText = `color:${AMBER};font-size:16px;`;
+    backBtn.appendChild(backLabel);
+    backBtn.appendChild(backHotkey);
+    backBtn.addEventListener('mouseenter', () => {
+      backBtn.style.background = AMBER;
+      backLabel.style.color = '#000';
+      backHotkey.style.color = '#000';
     });
-  }
+    backBtn.addEventListener('mouseleave', () => {
+      backBtn.style.background = '#000';
+      backLabel.style.color = AMBER;
+      backHotkey.style.color = AMBER;
+    });
+    backBtn.addEventListener('click', () => this.hide());
+    this.el.appendChild(backBtn);
 
-  private shortJobName(jobId: number): string {
-    const name = JOB_NAMES[jobId] ?? '?';
-    return name.length > 4 ? name.substring(0, 3).toUpperCase() : name.toUpperCase();
+    // Title (Lua: RosterLabel at pos 380,-20, dosismedium44)
+    const title = document.createElement('div');
+    title.textContent = line('HUDHUD047TEXT');
+    title.style.cssText = `
+      position:absolute;top:20px;left:380px;
+      color:${AMBER};font-size:32px;font-weight:500;
+    `;
+    this.el.appendChild(title);
+
+    // Scroll pane for the roster table (Lua: ScrollPane at pos 10,-250)
+    this.scrollPane = document.createElement('div');
+    this.scrollPane.style.cssText = `
+      position:absolute;top:110px;left:10px;right:60px;bottom:20px;
+      overflow-y:auto;overflow-x:auto;
+    `;
+    this.el.appendChild(this.scrollPane);
+
+    parent.appendChild(this.el);
   }
 
   show() {
     this.visible = true;
-    this.el.style.display = 'flex';
+    this.el.style.display = 'block';
     this.onOpen();
     this.refresh();
+    playWarble(this.el, 0.3, 0.3);
   }
 
   hide() {
@@ -162,90 +176,177 @@ export class JobRoster {
   }
 
   private refresh() {
-    while (this.tableBody.firstChild) this.tableBody.removeChild(this.tableBody.firstChild);
-
-    // Update sort arrows in headers (tri-state: up/down/neutral)
-    for (let i = 0; i < this.headerCells.length; i++) {
-      const arrow = this.sortColumn === i ? (this.sortAsc ? ' ^' : ' v') : '';
-      this.headerCells[i].textContent = this.headerLabels[i] + arrow;
-    }
+    while (this.scrollPane.firstChild) this.scrollPane.removeChild(this.scrollPane.firstChild);
 
     let chars = [...this.getCharacters()].filter(c => c.isAlive());
 
-    // Update per-column job count labels (Lua: tJobCount)
+    // Compute job counts (Lua: CharacterManager.tJobCount)
     const jobCounts: Record<number, number> = {};
-    for (const jobId of tJobs) jobCounts[jobId] = 0;
+    for (const jobId of DISPLAY_JOBS) jobCounts[jobId] = 0;
     for (const c of chars) jobCounts[c.getJob()] = (jobCounts[c.getJob()] ?? 0) + 1;
-    for (let i = 0; i < tJobs.length; i++) {
-      if (this.jobCountCells[i]) {
-        this.jobCountCells[i].textContent = String(jobCounts[tJobs[i]] ?? 0);
-      }
-    }
 
     // Sort
     if (this.sortColumn !== null) {
       const col = this.sortColumn;
       const dir = this.sortAsc ? 1 : -1;
       chars.sort((a, b) => {
-        if (col === 0) {
-          return a.getName().localeCompare(b.getName()) * dir;
-        } else if (col === 1) {
-          return a.getJobName().localeCompare(b.getJobName()) * dir;
-        } else {
-          const jobIdx = col - 2;
-          const jobId = tJobs[jobIdx];
-          const compA = a.tStats.tCompetency[jobId] ?? 0;
-          const compB = b.tStats.tCompetency[jobId] ?? 0;
-          return (compA - compB) * dir;
-        }
-        return 0;
+        if (col === 0) return (a.getJob() - b.getJob()) * dir;
+        if (col === 1) return a.getName().localeCompare(b.getName()) * dir;
+        const jobIdx = col - 2;
+        const jobId = DISPLAY_JOBS[jobIdx];
+        if (jobId === UNEMPLOYED) return (a.getJob() - b.getJob()) * dir;
+        const compA = a.tStats.tCompetency[jobId] ?? 0;
+        const compB = b.tStats.tCompetency[jobId] ?? 0;
+        return (compA - compB) * dir;
       });
     }
 
+    const table = document.createElement('table');
+    table.style.cssText = 'border-collapse:collapse;color:#ccc;font-size:13px;width:100%;';
+
+    // ── Header row ──
+    const thead = document.createElement('thead');
+    const headerTr = document.createElement('tr');
+    const colDefs = [
+      { label: line('HUDHUD032TEXT'), idx: 0 },
+      { label: line('HUDHUD033TEXT'), idx: 1 },
+      ...DISPLAY_JOBS.map((jobId, i) => ({
+        label: JOB_NAMES[jobId] ?? '?',
+        idx: i + 2,
+      })),
+    ];
+
+    for (const colDef of colDefs) {
+      const th = document.createElement('th');
+      const arrow = this.sortColumn === colDef.idx
+        ? (this.sortAsc ? ' \u25BC' : ' \u25B2')
+        : '';
+      th.textContent = colDef.label + arrow;
+      th.style.cssText = `
+        text-align:center;padding:8px 6px;
+        border-bottom:2px solid #555;
+        color:${AMBER};cursor:pointer;font-size:14px;
+        font-weight:600;white-space:nowrap;
+      `;
+      if (colDef.idx <= 1) th.style.textAlign = 'left';
+      th.addEventListener('click', () => {
+        if (this.sortColumn === colDef.idx) {
+          if (this.sortAsc) this.sortAsc = false;
+          else { this.sortColumn = null; }
+        } else {
+          this.sortColumn = colDef.idx;
+          this.sortAsc = true;
+        }
+        this.refresh();
+      });
+      headerTr.appendChild(th);
+    }
+    thead.appendChild(headerTr);
+
+    // Job count row (Lua: job1Num..job10Num)
+    const countTr = document.createElement('tr');
+    for (let i = 0; i < 2; i++) {
+      const td = document.createElement('td');
+      td.style.cssText = 'padding:2px 6px;';
+      countTr.appendChild(td);
+    }
+    for (const jobId of DISPLAY_JOBS) {
+      const td = document.createElement('td');
+      td.style.cssText = `
+        text-align:center;padding:2px 6px;font-size:11px;
+        color:#888;border-bottom:1px solid #333;
+      `;
+      td.textContent = String(jobCounts[jobId] ?? 0);
+      countTr.appendChild(td);
+    }
+    thead.appendChild(countTr);
+    table.appendChild(thead);
+
+    // ── Body rows (one per character) ──
+    const tbody = document.createElement('tbody');
     for (const char of chars) {
       const tr = document.createElement('tr');
-      tr.style.cssText = 'border-bottom:1px solid #222;';
+      tr.style.cssText = 'border-bottom:1px solid #1a1a1a;';
 
-      // Name
-      const nameTd = document.createElement('td');
-      nameTd.textContent = char.getName();
-      nameTd.style.cssText = 'padding:6px 4px;white-space:nowrap;';
-      tr.appendChild(nameTd);
-
-      // Current job
+      // Job column (current job name)
       const jobTd = document.createElement('td');
       jobTd.textContent = char.getJobName();
-      jobTd.style.cssText = `padding:6px 4px;color:${AMBER};white-space:nowrap;`;
+      jobTd.style.cssText = `padding:6px;color:${AMBER};white-space:nowrap;font-size:12px;`;
       tr.appendChild(jobTd);
 
-      // Job competencies
-      for (const jobId of tJobs) {
-        const td = document.createElement('td');
-        const comp = char.tStats.tCompetency[jobId] ?? 0;
-        const isCurrent = char.getJob() === jobId;
+      // Name column
+      const nameTd = document.createElement('td');
+      nameTd.textContent = char.getName();
+      nameTd.style.cssText = 'padding:6px;white-space:nowrap;min-width:140px;cursor:pointer;';
+      nameTd.addEventListener('mouseenter', () => { nameTd.style.color = AMBER; });
+      nameTd.addEventListener('mouseleave', () => { nameTd.style.color = '#ccc'; });
+      tr.appendChild(nameTd);
 
+      // Job competency + affinity cells
+      const currentJob = char.getJob();
+      for (const jobId of DISPLAY_JOBS) {
+        const td = document.createElement('td');
         td.style.cssText = `
-          padding:6px 4px;text-align:center;cursor:pointer;
-          ${isCurrent ? `background:rgba(223,162,0,0.2);color:${AMBER};font-weight:bold;` : ''}
+          text-align:center;padding:4px 2px;cursor:pointer;
+          min-width:80px;position:relative;
         `;
-        td.textContent = comp.toFixed(1);
+
+        if (jobId === UNEMPLOYED) {
+          const isCurrent = currentJob === UNEMPLOYED;
+          td.textContent = isCurrent ? '\u2713' : '';
+          td.style.color = isCurrent ? AMBER : '#666';
+          if (isCurrent) {
+            td.style.background = `rgba(${AMBER_RGB},0.15)`;
+            td.style.fontWeight = 'bold';
+          }
+        } else {
+          const comp = char.tStats.tCompetency[jobId] ?? 0;
+          const level = getCompetencyLevel(comp);
+          const isCurrent = currentJob === jobId;
+          const bgColor = COMPETENCY_COLORS[level];
+
+          // Star rating
+          const stars = document.createElement('div');
+          stars.textContent = renderStars(level);
+          stars.style.cssText = `font-size:12px;color:${AMBER};letter-spacing:1px;`;
+
+          // Affinity emoticon
+          const affinity = char.getJobAffinity(jobId);
+          const affDisplay = getAffinityDisplay(affinity);
+          const affEl = document.createElement('div');
+          affEl.textContent = affDisplay.icon;
+          affEl.style.cssText = `font-size:10px;color:${affDisplay.color};margin-top:1px;`;
+
+          td.appendChild(stars);
+          td.appendChild(affEl);
+
+          td.style.background = isCurrent
+            ? `rgba(${AMBER_RGB},0.2)`
+            : bgColor;
+          if (isCurrent) {
+            td.style.outline = `2px solid ${AMBER}`;
+            td.style.outlineOffset = '-2px';
+          }
+        }
 
         td.addEventListener('click', () => {
           this.onSetJob(char, jobId);
           this.refresh();
         });
         td.addEventListener('mouseenter', () => {
-          td.style.background = 'rgba(223,162,0,0.3)';
+          td.style.filter = 'brightness(1.4)';
         });
         td.addEventListener('mouseleave', () => {
-          td.style.background = isCurrent ? 'rgba(223,162,0,0.2)' : 'transparent';
+          td.style.filter = '';
         });
 
         tr.appendChild(td);
       }
 
-      this.tableBody.appendChild(tr);
+      tbody.appendChild(tr);
     }
+    table.appendChild(tbody);
+    this.scrollPane.appendChild(table);
   }
 
   update() {

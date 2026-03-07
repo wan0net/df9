@@ -5,30 +5,57 @@
 
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
+import { GameRules } from '../core/GameRules';
 import { Door, DOOR_STATE } from '../envobjects/Door';
 import type { Room } from '../rooms/Room';
 import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH } from '../characters/CharacterConstants';
-import { ZONE_SPRITES } from '../world/ZoneType';
-import { ITEM_TEMPLATES } from '../inventory/InventoryData';
+import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 
-/** Human-readable cause of death names. */
-const DEATH_CAUSE_NAMES: Record<number, string> = {
-  [CAUSE_OF_DEATH.UNSPECIFIED]: 'Unknown',
-  [CAUSE_OF_DEATH.DEBUG]: 'Debug Kill',
-  [CAUSE_OF_DEATH.SUFFOCATION]: 'Suffocation',
-  [CAUSE_OF_DEATH.FIRE]: 'Fire',
-  [CAUSE_OF_DEATH.DISEASE]: 'Disease',
-  [CAUSE_OF_DEATH.COMBAT_RANGED]: 'Shot',
-  [CAUSE_OF_DEATH.SUCKED_INTO_SPACE]: 'Sucked Into Space',
-  [CAUSE_OF_DEATH.PARASITE]: 'Parasite',
-  [CAUSE_OF_DEATH.STARVATION]: 'Starvation',
-  [CAUSE_OF_DEATH.COMBAT_MELEE]: 'Melee Combat',
-  [CAUSE_OF_DEATH.THING]: 'The Thing',
-  [CAUSE_OF_DEATH.STUNNER]: 'Stunner',
-};
+import { line } from '../localization/Localization';
+
+const TEAM_ID_PLAYER = 1;
+
+/** Human-readable cause of death names (Lua INSPEC098-109). */
+function getDeathCauseName(cause: number): string {
+  switch (cause) {
+    case CAUSE_OF_DEATH.UNSPECIFIED: return line('INSPEC103TEXT');
+    case CAUSE_OF_DEATH.DEBUG: return 'Debug Kill';
+    case CAUSE_OF_DEATH.SUFFOCATION: return line('INSPEC098TEXT');
+    case CAUSE_OF_DEATH.FIRE: return line('INSPEC100TEXT');
+    case CAUSE_OF_DEATH.DISEASE: return line('INSPEC109TEXT');
+    case CAUSE_OF_DEATH.COMBAT_RANGED: return line('INSPEC102TEXT');
+    case CAUSE_OF_DEATH.SUCKED_INTO_SPACE: return line('INSPEC105TEXT');
+    case CAUSE_OF_DEATH.PARASITE: return line('INSPEC104TEXT');
+    case CAUSE_OF_DEATH.STARVATION: return line('INSPEC099TEXT');
+    case CAUSE_OF_DEATH.COMBAT_MELEE: return line('INSPEC101TEXT');
+    case CAUSE_OF_DEATH.THING: return 'The Thing';
+    case CAUSE_OF_DEATH.STUNNER: return 'Stunner';
+    default: return line('INSPEC103TEXT');
+  }
+}
 
 const AMBER = '#dfa200';
 const PANEL_W = 280;
+
+/** Morale value → text label (Lua CharacterConstants.lua morale thresholds). */
+function getMoraleText(morale: number): string {
+  if (morale >= 75) return line('INSPEC069TEXT'); // Ecstatic
+  if (morale >= 50) return line('INSPEC067TEXT'); // Very Happy
+  if (morale >= 25) return line('INSPEC024TEXT'); // Happy
+  if (morale >= 5) return line('INSPEC066TEXT');  // Kinda Happy
+  if (morale >= -5) return line('INSPEC025TEXT'); // Neutral
+  if (morale >= -25) return line('INSPEC065TEXT'); // Kinda Sad
+  if (morale >= -50) return line('INSPEC023TEXT'); // Sad
+  if (morale >= -75) return line('INSPEC064TEXT'); // Very Sad
+  return line('INSPEC068TEXT'); // Deeply Sad
+}
+
+/** Health status text (Lua INSPEC011TEXT field: "Diagnosis: Healthy/Hurt"). */
+function getHealthStatusText(char: Character): string {
+  if (!char.isAlive()) return line('INSPEC010TEXT'); // Dead
+  if (char.getHP() < char.tStats.nMaxHP * 0.5) return line('INSPEC021TEXT'); // Hurt
+  return line('INSPEC022TEXT'); // Healthy
+}
 
 export type SelectedEntity =
   | { type: 'character'; data: Character }
@@ -36,13 +63,15 @@ export type SelectedEntity =
   | { type: 'room'; data: Room }
   | null;
 
-type InspectorTab = 'duty' | 'stats' | 'needs' | 'psych' | 'log' | 'actions' | 'stuff' | 'about';
+type InspectorTab = 'duty' | 'stats' | 'psych' | 'log' | 'actions';
+type RoomTab = 'info' | 'rezone' | 'actions';
 
 export class InspectorPanel {
   private el: HTMLDivElement;
   private contentEl!: HTMLDivElement;
   private entity: SelectedEntity = null;
   private currentTab: InspectorTab = 'duty';
+  private roomTab: RoomTab = 'info';
   private editingName = false;
   private onSetJob: ((character: Character, jobId: number) => void) | null = null;
   private getObjectsInRoom: ((room: Room) => EnvObject[]) | null = null;
@@ -53,6 +82,7 @@ export class InspectorPanel {
   private getRoomForChar: ((char: Character) => Room | null) | null = null;
   private onCenterCamera: ((char: Character) => void) | null = null;
   private onSelectRoom: ((room: Room) => void) | null = null;
+  private onRezoneRoom: ((room: Room, zone: ZoneType) => void) | null = null;
 
   constructor(
     parent: HTMLElement,
@@ -66,6 +96,7 @@ export class InspectorPanel {
       getRoomForChar?: (char: Character) => Room | null;
       onCenterCamera?: (char: Character) => void;
       onSelectRoom?: (room: Room) => void;
+      onRezoneRoom?: (room: Room, zone: ZoneType) => void;
     },
   ) {
     this.onSetJob = callbacks.onSetJob;
@@ -77,14 +108,15 @@ export class InspectorPanel {
     this.getRoomForChar = callbacks.getRoomForChar ?? null;
     this.onCenterCamera = callbacks.onCenterCamera ?? null;
     this.onSelectRoom = callbacks.onSelectRoom ?? null;
+    this.onRezoneRoom = callbacks.onRezoneRoom ?? null;
 
     this.el = document.createElement('div');
     this.el.id = 'inspector-panel';
     this.el.style.cssText = `
-      position:absolute;right:10px;top:200px;width:${PANEL_W}px;
-      background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
-      color:#ccc;font-family:'Orbitron',monospace;font-size:13px;
-      display:none;pointer-events:auto;z-index:15;
+      position:absolute;left:0;top:0;width:${PANEL_W}px;height:100%;
+      background:rgba(0,0,0,0.85);
+      color:#ccc;font-family:'nevis','Dosis',sans-serif;font-size:13px;
+      display:none;pointer-events:auto;z-index:16;overflow-y:auto;
     `;
 
     this.contentEl = document.createElement('div');
@@ -96,12 +128,18 @@ export class InspectorPanel {
   setEntity(entity: SelectedEntity) {
     this.entity = entity;
     this.currentTab = 'duty';
+    this.roomTab = 'info';
     this.editingName = false;
     if (entity) {
       this.el.style.display = 'block';
     } else {
       this.el.style.display = 'none';
     }
+  }
+
+  /** Whether the inspector is currently showing an entity. */
+  hasEntity(): boolean {
+    return this.entity !== null;
   }
 
   update() {
@@ -120,7 +158,27 @@ export class InspectorPanel {
       // Keep showing dead characters for inspection, but could auto-close after decay
     }
 
-    this.contentEl.innerHTML = '';
+    this.contentEl.textContent = '';
+
+    // Back button + ">> Inspect" header (Lua: CitizenInspector top bar)
+    const topBar = document.createElement('div');
+    topBar.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:6px 10px;`;
+    const backBtn = document.createElement('div');
+    backBtn.textContent = 'Back';
+    backBtn.style.cssText = `font-size:14px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`;
+    backBtn.addEventListener('click', () => this.setEntity(null));
+    const closeBtn = document.createElement('div');
+    closeBtn.textContent = 'X';
+    closeBtn.style.cssText = `font-size:14px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`;
+    closeBtn.addEventListener('click', () => this.setEntity(null));
+    topBar.appendChild(backBtn);
+    topBar.appendChild(closeBtn);
+    this.contentEl.appendChild(topBar);
+
+    const inspLabel = document.createElement('div');
+    inspLabel.textContent = `>> ${line('HUDHUD005TEXT')}`;
+    inspLabel.style.cssText = `font-size:11px;color:${AMBER};padding:0 10px 4px;font-family:'Dosis',sans-serif;`;
+    this.contentEl.appendChild(inspLabel);
 
     switch (this.entity.type) {
       case 'character':
@@ -152,7 +210,7 @@ export class InspectorPanel {
       input.value = char.getName();
       input.style.cssText = `
         font-size:16px;font-weight:bold;color:${AMBER};background:#111;
-        border:1px solid ${AMBER};outline:none;font-family:'Orbitron',monospace;
+        border:1px solid ${AMBER};outline:none;font-family:'nevis','Dosis',sans-serif;
         width:180px;padding:1px 4px;
       `;
       input.addEventListener('keydown', (e) => {
@@ -187,39 +245,58 @@ export class InspectorPanel {
     }
 
     const jobSpan = document.createElement('span');
-    const dutyStr = char.isAlive() && char.onDuty() ? ' (On Duty)' : '';
+    const dutyStr = char.isAlive() && char.onDuty() ? ` ${line('DUTIES015TEXT')}` : '';
     jobSpan.textContent = `[${char.getJobName()}${dutyStr}]`;
     jobSpan.style.cssText = 'font-size:12px;color:#888;';
     nameRow.appendChild(jobSpan);
     header.appendChild(nameRow);
 
-    const hpDiv = document.createElement('div');
-    hpDiv.style.cssText = 'margin-top:4px;';
-    hpDiv.innerHTML = this.bar('HP', char.getHP(), char.tStats.nMaxHP, isDead ? '#f44' : '#4f4');
-    header.appendChild(hpDiv);
+    // Structured info rows (Lua CitizenInspector: Diagnosis, Morale, Location, Activity)
+    const infoSection = document.createElement('div');
+    infoSection.style.cssText = 'margin-top:6px;';
 
-    // Activity text (current task description)
-    const activityDiv = document.createElement('div');
-    activityDiv.style.cssText = 'margin-top:4px;color:#aaa;font-size:11px;';
-    const taskName = char.currentTask?.name ?? (isDead ? 'Dead' : 'Idle');
-    activityDiv.textContent = taskName;
-    header.appendChild(activityDiv);
+    // Diagnosis row
+    const diagRow = this.makeInfoRow(
+      line('INSPEC011TEXT'),
+      getHealthStatusText(char),
+      isDead ? '#f44' : '#4f4',
+    );
+    infoSection.appendChild(diagRow);
 
-    // Location text (room name or "Space")
-    const locationDiv = document.createElement('div');
-    locationDiv.style.cssText = 'display:flex;justify-content:space-between;margin-top:2px;';
-    let locationText = 'Space';
+    // Morale row (or Cause of Death if dead)
+    if (isDead) {
+      const deathRow = this.makeInfoRow(
+        line('INSPEC010TEXT') + ':',
+        getDeathCauseName(char.nCauseOfDeath),
+        '#f44',
+      );
+      infoSection.appendChild(deathRow);
+    } else {
+      const moraleRow = this.makeInfoRow(
+        line('INSPEC012TEXT'),
+        getMoraleText(char.nMorale),
+        AMBER,
+      );
+      infoSection.appendChild(moraleRow);
+    }
+
+    // Location row
+    let locationText = line('INSPUI036TEXT');
     if (!char.bSpacewalking) {
       const room = this.getRoomForChar?.(char);
       if (room?.uniqueZoneName) locationText = room.uniqueZoneName;
       else if (room) locationText = `Room ${room.id}`;
       else locationText = `(${char.tileX}, ${char.tileY})`;
     }
-    const moraleText = isDead
-      ? `Dead: ${DEATH_CAUSE_NAMES[char.nCauseOfDeath] ?? 'Unknown'}`
-      : `Morale: ${char.nMorale}`;
-    locationDiv.innerHTML = `<span>${moraleText}</span><span style="color:#888">${this.escapeHtml(locationText)}</span>`;
-    header.appendChild(locationDiv);
+    const locRow = this.makeInfoRow(line('INSPEC013TEXT'), locationText, '#ccc');
+    infoSection.appendChild(locRow);
+
+    // Activity row
+    const taskName = char.currentTask?.name ?? (isDead ? line('INSPEC010TEXT') : line('UITASK029TEXT'));
+    const actRow = this.makeInfoRow(line('INSPEC014TEXT'), taskName, '#ccc');
+    infoSection.appendChild(actRow);
+
+    header.appendChild(infoSection);
 
     // Shortcut buttons (Lua: HealthStatButton, MoraleButton, RoomButton, ActivityButton, CamCenterButton)
     if (isPlayer && !isDead) {
@@ -258,20 +335,18 @@ export class InspectorPanel {
     tabRow.style.cssText = `
       display:flex;border-top:1px solid #333;border-bottom:1px solid #333;
     `;
+    // Lua CitizenInspector: 5 tabs (Duty, Stats, Psych, Spaceface, Action)
     const tabs: { label: string; tab: InspectorTab }[] = isPlayer
       ? [
-          { label: 'Duty', tab: 'duty' },
-          { label: 'Stats', tab: 'stats' },
-          { label: 'Needs', tab: 'needs' },
-          { label: 'Psych', tab: 'psych' },
-          { label: 'Stuff', tab: 'stuff' },
-          { label: 'About', tab: 'about' },
-          { label: 'Log', tab: 'log' },
-          { label: 'Actions', tab: 'actions' },
+          { label: line('INSPEC015TEXT'), tab: 'duty' },
+          { label: line('INSPEC017TEXT'), tab: 'stats' },
+          { label: line('INSPUI002TEXT'), tab: 'psych' },
+          { label: 'Spaceface', tab: 'log' },
+          { label: line('INSPUI005TEXT'), tab: 'actions' },
         ]
       : [
-          { label: 'Stats', tab: 'stats' },
-          { label: 'Log', tab: 'log' },
+          { label: line('INSPEC017TEXT'), tab: 'stats' },
+          { label: 'Spaceface', tab: 'log' },
         ];
     for (const t of tabs) {
       const btn = document.createElement('div');
@@ -299,17 +374,8 @@ export class InspectorPanel {
       case 'stats':
         this.renderStatsTab(body, char);
         break;
-      case 'needs':
-        this.renderNeedsTab(body, char);
-        break;
       case 'psych':
         this.renderPsychTab(body, char);
-        break;
-      case 'stuff':
-        this.renderStuffTab(body, char);
-        break;
-      case 'about':
-        this.renderAboutTab(body, char);
         break;
       case 'log':
         this.renderLogTab(body, char);
@@ -356,41 +422,42 @@ export class InspectorPanel {
   }
 
   private renderStatsTab(container: HTMLDivElement, char: Character) {
-    container.innerHTML = `
-      <div style="margin-bottom:6px;">
-        ${this.bar('HP', char.getHP(), char.tStats.nMaxHP, char.getHP() < 30 ? '#f44' : '#4f4')}
-      </div>
-      <div style="margin-bottom:6px;">
-        ${this.bar('O2', Math.round(char.needs.oxygen), 100, char.needs.oxygen < 30 ? '#f44' : '#48f')}
-      </div>
-      <div style="margin-bottom:4px;">
-        Location: ${char.bSpacewalking ? 'Spacewalking' : `(${char.tileX}, ${char.tileY})`}
-      </div>
-      <div style="margin-bottom:4px;">XP: ${char.tStats.nXP}</div>
-      <div style="margin-bottom:4px;">Anger: ${char.nAnger}</div>
-      <div>Status: ${char.isAlive() ? (char.tStats.nStatus === 1 ? 'Healthy' : 'Injured') : 'Dead'}</div>
-    `;
-  }
+    // HP + O2 bars
+    const hpDiv = document.createElement('div');
+    hpDiv.style.cssText = 'margin-bottom:6px;';
+    hpDiv.innerHTML = this.bar('HP', char.getHP(), char.tStats.nMaxHP, char.getHP() < 30 ? '#f44' : '#4f4');
+    container.appendChild(hpDiv);
 
-  private renderNeedsTab(container: HTMLDivElement, char: Character) {
+    const o2Div = document.createElement('div');
+    o2Div.style.cssText = 'margin-bottom:6px;';
+    o2Div.innerHTML = this.bar('O2', Math.round(char.needs.oxygen), 100, char.needs.oxygen < 30 ? '#f44' : '#48f');
+    container.appendChild(o2Div);
+
+    // Needs bars (merged from original Stats tab — Lua CitizenStatsTab shows needs)
     const needs: { label: string; value: number }[] = [
-      { label: 'Hunger', value: char.needs.hunger },
-      { label: 'Energy', value: char.needs.energy },
-      { label: 'Amusement', value: char.needs.amusement },
-      { label: 'Social', value: char.needs.social },
-      { label: 'Duty', value: char.needs.duty },
+      { label: line('INSPEC085TEXT'), value: char.needs.hunger },
+      { label: line('INSPEC072TEXT'), value: char.needs.energy },
+      { label: line('INSPEC074TEXT'), value: char.needs.amusement },
+      { label: line('INSPEC073TEXT'), value: char.needs.social },
+      { label: line('INSPEC071TEXT'), value: char.needs.duty },
     ];
-
     for (const n of needs) {
-      // Needs range -100..+100; remap to 0..100% for display
       const displayPct = (n.value + 100) / 2;
       const color = n.value > 30 ? '#4f4' : n.value > -30 ? '#ff0' : '#f44';
       const row = document.createElement('div');
-      row.style.cssText = 'margin-bottom:6px;';
-      // Note: bar() uses only numeric values derived from game state, not user input
+      row.style.cssText = 'margin-bottom:4px;';
       row.innerHTML = this.bar(n.label, Math.max(0, displayPct), 100, color);
       container.appendChild(row);
     }
+
+    // XP + Anger stats
+    const statsDiv = document.createElement('div');
+    statsDiv.style.cssText = 'margin-top:6px;font-size:12px;color:#ccc;';
+    statsDiv.innerHTML = `
+      <div style="margin-bottom:4px;">${line('INSPUI007TEXT')} ${char.tStats.nXP}</div>
+      <div style="margin-bottom:4px;">${line('INSPUI008TEXT')} ${char.nAnger}</div>
+    `;
+    container.appendChild(statsDiv);
   }
 
   private renderPsychTab(container: HTMLDivElement, char: Character) {
@@ -398,19 +465,19 @@ export class InspectorPanel {
 
     // Slider traits (0-1 range)
     const sliders: { label: string; value: number; lowLabel: string; highLabel: string }[] = [
-      { label: 'Bravery', value: p.nBravery, lowLabel: 'Cowardly', highLabel: 'Brave' },
-      { label: 'Temper', value: p.nTemper, lowLabel: 'Calm', highLabel: 'Hot-headed' },
-      { label: 'Work Ethic', value: p.nWorkEthic, lowLabel: 'Lazy', highLabel: 'Diligent' },
-      { label: 'Gregariousness', value: p.nGregariousness, lowLabel: 'Loner', highLabel: 'Social' },
-      { label: 'Chattiness', value: p.nChattiness, lowLabel: 'Quiet', highLabel: 'Chatty' },
-      { label: 'Neatness', value: p.nNeatness, lowLabel: 'Messy', highLabel: 'Tidy' },
-      { label: 'Positivity', value: p.nPositivity, lowLabel: 'Pessimist', highLabel: 'Optimist' },
-      { label: 'Authority', value: p.nAuthoritarian, lowLabel: 'Rebel', highLabel: 'Obedient' },
+      { label: line('INSPUI018TEXT'), value: p.nBravery, lowLabel: line('PERSON008TEXT'), highLabel: line('PERSON001TEXT') },
+      { label: line('INSPUI019TEXT'), value: p.nTemper, lowLabel: line('INSPUI026TEXT'), highLabel: line('INSPUI033TEXT') },
+      { label: line('INSPUI020TEXT'), value: p.nWorkEthic, lowLabel: line('PERSON015TEXT'), highLabel: line('INSPUI027TEXT') },
+      { label: line('INSPUI021TEXT'), value: p.nGregariousness, lowLabel: line('PERSON009TEXT'), highLabel: line('INSPUI028TEXT') },
+      { label: line('INSPUI022TEXT'), value: p.nChattiness, lowLabel: line('PERSON010TEXT'), highLabel: line('PERSON003TEXT') },
+      { label: line('INSPUI023TEXT'), value: p.nNeatness, lowLabel: line('INSPUI029TEXT'), highLabel: line('INSPUI030TEXT') },
+      { label: line('INSPUI024TEXT'), value: p.nPositivity, lowLabel: line('PERSON017TEXT'), highLabel: line('PERSON016TEXT') },
+      { label: line('INSPUI025TEXT'), value: p.nAuthoritarian, lowLabel: line('PERSON028TEXT'), highLabel: line('PERSON027TEXT') },
     ];
 
     for (const s of sliders) {
       const pct = Math.round(s.value * 100);
-      const desc = s.value < 0.3 ? s.lowLabel : s.value > 0.7 ? s.highLabel : 'Average';
+      const desc = s.value < 0.3 ? s.lowLabel : s.value > 0.7 ? s.highLabel : line('INSPEC132TEXT');
       const row = document.createElement('div');
       row.style.cssText = 'margin-bottom:4px;';
       row.innerHTML = `
@@ -427,20 +494,20 @@ export class InspectorPanel {
 
     // Boolean traits
     const boolTraits: { label: string; value: boolean }[] = [
-      { label: 'Xenophobe', value: p.bXenophobe },
-      { label: 'Anxious', value: p.bAnxious },
-      { label: 'Gourmand', value: p.bGourmand },
-      { label: 'Joker', value: p.bJoker },
-      { label: 'Sentimental', value: p.bSentimental },
-      { label: 'Competitive', value: p.bCompetitive },
-      { label: 'Hipster', value: p.bHipster },
+      { label: line('PERSON018TEXT'), value: p.bXenophobe },
+      { label: line('PERSON020TEXT'), value: p.bAnxious },
+      { label: line('PERSON021TEXT'), value: p.bGourmand },
+      { label: line('PERSON019TEXT'), value: p.bJoker },
+      { label: line('PERSON022TEXT'), value: p.bSentimental },
+      { label: line('PERSON023TEXT'), value: p.bCompetitive },
+      { label: line('INSPUI034TEXT'), value: p.bHipster },
     ];
 
     const activeTraits = boolTraits.filter(t => t.value);
     if (activeTraits.length > 0) {
       const traitDiv = document.createElement('div');
       traitDiv.style.cssText = `margin-top:6px;padding-top:6px;border-top:1px solid #333;`;
-      traitDiv.innerHTML = `<div style="font-size:11px;color:${AMBER};margin-bottom:4px;">Quirks</div>`;
+      traitDiv.innerHTML = `<div style="font-size:11px;color:${AMBER};margin-bottom:4px;">${line('INSPUI009TEXT')}</div>`;
       for (const t of activeTraits) {
         const tag = document.createElement('span');
         tag.textContent = t.label;
@@ -454,114 +521,36 @@ export class InspectorPanel {
     }
   }
 
-  private renderStuffTab(container: HTMLDivElement, char: Character) {
-    const items = char.inventory.getAll();
-    const heldItem = char.heldItem;
-
-    // Held item
-    if (heldItem) {
-      const heldDiv = document.createElement('div');
-      heldDiv.style.cssText = `margin-bottom:8px;padding:4px;border:1px solid ${AMBER};`;
-      heldDiv.innerHTML = `<span style="color:${AMBER};font-size:11px;">Carrying:</span> <span style="color:#ccc;">${this.escapeHtml(heldItem)}</span>`;
-      container.appendChild(heldDiv);
-    }
-
-    if (items.length === 0 && !heldItem) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'color:#888;font-style:italic;';
-      empty.textContent = 'No items.';
-      container.appendChild(empty);
-      return;
-    }
-
-    for (const item of items) {
-      const tmpl = ITEM_TEMPLATES[item.sTemplate];
-      const row = document.createElement('div');
-      row.style.cssText = 'margin-bottom:4px;padding:2px 0;border-bottom:1px solid #222;font-size:11px;';
-      const countStr = item.nCount > 1 ? ` x${item.nCount}` : '';
-      const tagStr = tmpl?.bStuff ? ' [Stuff]' : tmpl?.bDisplayable ? ' [Display]' : '';
-      row.innerHTML = `<span style="color:#ccc;">${this.escapeHtml(item.sName)}${countStr}</span><span style="color:#666;font-size:10px;">${tagStr}</span>`;
-      container.appendChild(row);
-    }
-  }
-
-  private renderAboutTab(container: HTMLDivElement, char: Character) {
-    // Character description/lore (Lua CitizenInspector About tab)
-    const info: { label: string; value: string }[] = [
-      { label: 'Name', value: char.getName() },
-      { label: 'Race', value: char.getRaceDef().sName.charAt(0).toUpperCase() + char.getRaceDef().sName.slice(1) },
-      { label: 'Job', value: JOB_NAMES[char.getJob()] ?? 'Unknown' },
-      { label: 'Morale', value: String(Math.round(char.nMorale)) },
-      { label: 'Health', value: `${char.getHP()} / ${char.tStats.nMaxHP}` },
-      { label: 'Joined', value: `Day ${Math.floor(char.nJoinTime / (60 * 24))}` },
-    ];
-
-    for (const item of info) {
-      const row = document.createElement('div');
-      row.style.cssText = 'margin-bottom:4px;font-size:12px;';
-      const labelSpan = document.createElement('span');
-      labelSpan.style.cssText = `color:${AMBER};`;
-      labelSpan.textContent = item.label + ': ';
-      const valueSpan = document.createElement('span');
-      valueSpan.style.cssText = 'color:#ccc;';
-      valueSpan.textContent = item.value;
-      row.appendChild(labelSpan);
-      row.appendChild(valueSpan);
-      container.appendChild(row);
-    }
-
-    // Personality traits summary
-    if (char.tStats.personality) {
-      const traitDiv = document.createElement('div');
-      traitDiv.style.cssText = 'margin-top:8px;';
-      const traitLabel = document.createElement('div');
-      traitLabel.style.cssText = `color:${AMBER};font-size:11px;margin-bottom:4px;`;
-      traitLabel.textContent = 'Personality:';
-      traitDiv.appendChild(traitLabel);
-
-      const p = char.tStats.personality;
-      const traits: string[] = [];
-      if (p.nBravery > 0.7) traits.push('Brave');
-      if (p.nBravery < 0.3) traits.push('Cautious');
-      if (p.nGregariousness > 0.7) traits.push('Sociable');
-      if (p.nGregariousness < 0.3) traits.push('Loner');
-      if (p.nPositivity > 0.7) traits.push('Optimist');
-      if (p.nPositivity < 0.3) traits.push('Pessimist');
-      if (p.nTemper > 0.7) traits.push('Hot-headed');
-      if (p.nWorkEthic > 0.7) traits.push('Hardworking');
-      if (p.bXenophobe) traits.push('Xenophobe');
-      if (p.bJoker) traits.push('Joker');
-      if (p.bGourmand) traits.push('Gourmand');
-
-      const traitText = document.createElement('div');
-      traitText.style.cssText = 'color:#ccc;font-size:11px;';
-      traitText.textContent = traits.length > 0 ? traits.join(', ') : 'Average';
-      traitDiv.appendChild(traitText);
-      container.appendChild(traitDiv);
-    }
-  }
-
   private renderLogTab(container: HTMLDivElement, char: Character) {
     const log = char.tLog;
     if (log.length === 0) {
       const empty = document.createElement('div');
       empty.style.cssText = 'color:#888;font-style:italic;';
-      empty.textContent = 'No log entries yet.';
+      empty.textContent = line('INSPUI012TEXT');
       container.appendChild(empty);
       return;
     }
 
-    // Show most recent entries first, up to 20
+    // Show most recent entries first, up to 20 (Lua Spaceface: timestamp + text)
     const maxEntries = 20;
     const start = Math.max(0, log.length - maxEntries);
     for (let i = log.length - 1; i >= start; i--) {
       const entry = log[i];
       const row = document.createElement('div');
       row.style.cssText = `
-        margin-bottom:4px;padding:3px 4px;border-bottom:1px solid #222;
-        font-size:11px;line-height:1.3;color:#ccc;
+        display:flex;gap:8px;margin-bottom:4px;padding:3px 4px;border-bottom:1px solid #222;
+        font-size:11px;line-height:1.3;
       `;
-      row.textContent = entry.sLine;
+      // Spacedate timestamp (Lua: shows "9122.12.18" before each entry)
+      const timeSpan = document.createElement('span');
+      const timeStr = GameRules.getFullStarDateString(entry.nTime);
+      timeSpan.textContent = timeStr;
+      timeSpan.style.cssText = `color:${AMBER};font-weight:bold;white-space:nowrap;flex-shrink:0;`;
+      const textSpan = document.createElement('span');
+      textSpan.textContent = entry.sLine;
+      textSpan.style.cssText = 'color:#ccc;';
+      row.appendChild(timeSpan);
+      row.appendChild(textSpan);
       container.appendChild(row);
     }
   }
@@ -571,7 +560,7 @@ export class InspectorPanel {
 
     // Cuff / Uncuff
     const cuffBtn = this.makeActionButton(
-      char.bCuffed ? 'Uncuff' : 'Cuff',
+      char.bCuffed ? line('INSPEC194TEXT') : line('INSPEC193TEXT'),
       isDead,
       () => { if (this.onCuffCharacter) this.onCuffCharacter(char); },
     );
@@ -580,7 +569,7 @@ export class InspectorPanel {
     // Send to Brig
     const brigRooms = this.getBrigRooms ? this.getBrigRooms() : [];
     const brigBtn = this.makeActionButton(
-      'Send to Brig',
+      line('INSPUI013TEXT'),
       isDead || brigRooms.length === 0,
       () => {
         if (this.onCuffCharacter && !char.bCuffed) this.onCuffCharacter(char);
@@ -588,7 +577,7 @@ export class InspectorPanel {
     );
     if (brigRooms.length === 0) {
       const note = document.createElement('div');
-      note.textContent = 'No brig zone exists';
+      note.textContent = line('INSPUI014TEXT');
       note.style.cssText = 'font-size:10px;color:#666;margin-top:-4px;margin-bottom:8px;';
       container.appendChild(brigBtn);
       container.appendChild(note);
@@ -598,7 +587,7 @@ export class InspectorPanel {
 
     // Execute (red)
     const execBtn = this.makeActionButton(
-      'Execute',
+      line('INSPEC195TEXT'),
       isDead,
       () => { if (this.onExecuteCharacter) this.onExecuteCharacter(char); },
       '#f44',
@@ -632,19 +621,19 @@ export class InspectorPanel {
 
   private getDoorStatusText(door: Door): string {
     switch (door.state) {
-      case DOOR_STATE.OPEN: return '<span style="color:#4f4;">Open</span>';
-      case DOOR_STATE.CLOSED: return 'Closed';
-      case DOOR_STATE.LOCKED: return '<span style="color:#f44;">Locked</span>';
-      case DOOR_STATE.BROKEN_OPEN: return '<span style="color:#f44;">Broken (Open)</span>';
-      case DOOR_STATE.BROKEN_CLOSED: return '<span style="color:#f44;">Broken (Closed)</span>';
-      default: return 'Unknown';
+      case DOOR_STATE.OPEN: return `<span style="color:#4f4;">${line('PROPSX056TEXT')}</span>`;
+      case DOOR_STATE.CLOSED: return line('PROPSX057TEXT');
+      case DOOR_STATE.LOCKED: return `<span style="color:#f44;">${line('PROPSX059TEXT')}</span>`;
+      case DOOR_STATE.BROKEN_OPEN: return `<span style="color:#f44;">${line('PROPSX053TEXT')}</span>`;
+      case DOOR_STATE.BROKEN_CLOSED: return `<span style="color:#f44;">${line('PROPSX054TEXT')}</span>`;
+      default: return line('INSPEC103TEXT');
     }
   }
 
   private renderObject(obj: EnvObject) {
     const header = this.makeSection();
     const condStr = obj.getConditionUIString();
-    const status = obj.isFunctioning() ? 'Functioning' : obj.isDestroyed() ? 'Destroyed' : 'Offline';
+    const status = obj.isFunctioning() ? line('INSPEC089TEXT') : obj.isDestroyed() ? line('INSPEC053TEXT') : line('INSPEC091TEXT');
     const statusColor = obj.isDestroyed() ? '#f44' :
       obj.isDamaged() ? '#ff0' :
       obj.isFunctioning() ? '#4f4' : '#888';
@@ -656,20 +645,20 @@ export class InspectorPanel {
         ${emergencyStr ? `<span style="color:#f44;font-size:11px;margin-left:8px;">[${emergencyStr}]</span>` : ''}
       </div>
       <div style="margin-bottom:6px;">
-        ${this.bar('Condition', Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}
+        ${this.bar(line('INSPEC054TEXT').replace(':', ''), Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}
       </div>
-      <div style="margin-bottom:4px;">Condition: ${condStr} | Status: <span style="color:${statusColor};">${status}</span></div>
-      ${obj.tData.nPowerOutput > 0 ? `<div style="margin-bottom:4px;">Power Output: ${obj.getPowerOutput()}</div>` : ''}
-      ${obj.tData.nPowerDraw > 0 ? `<div style="margin-bottom:4px;">Power Draw: ${obj.getPowerDraw()}</div>` : ''}
-      ${obj.tData.oxygenLevel > 0 ? `<div style="margin-bottom:4px;">O2 Output: ${obj.getOxygenOutput()}</div>` : ''}
-      ${obj instanceof Door ? `<div style="margin-bottom:4px;">Door: ${this.getDoorStatusText(obj)}</div>` : ''}
-      ${obj.sBuilderName ? `<div style="margin-bottom:4px;">Built by: ${obj.sBuilderName}</div>` : ''}
-      ${obj.sBuildTime ? `<div style="margin-bottom:4px;">Built: ${obj.sBuildTime}</div>` : ''}
-      <div style="margin-bottom:4px;">Position: (${obj.tileX}, ${obj.tileY})</div>
+      <div style="margin-bottom:4px;">${line('INSPEC054TEXT')} <span style="color:${statusColor};">${condStr} (${Math.round(obj.nCondition)}%)</span> | ${line('INSPEC093TEXT')} <span style="color:${statusColor};">${status}</span></div>
+      ${obj.tData.nPowerOutput > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC165TEXT')} ${obj.getPowerOutput()}</div>` : ''}
+      ${obj.tData.nPowerDraw > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC164TEXT')} ${obj.getPowerDraw()}</div>` : ''}
+      ${obj.tData.oxygenLevel > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC059TEXT')} ${obj.getOxygenOutput()}</div>` : ''}
+      ${obj instanceof Door ? `<div style="margin-bottom:4px;">${line('PROPSX055TEXT')} ${this.getDoorStatusText(obj)}</div>` : ''}
+      ${obj.sBuilderName ? `<div style="margin-bottom:4px;">${line('INSPEC111TEXT')} ${obj.sBuilderName}</div>` : ''}
+      ${obj.sBuildTime ? `<div style="margin-bottom:4px;">${line('INSPEC110TEXT')} ${obj.sBuildTime}</div>` : ''}
+      <div style="margin-bottom:4px;">${line('INSPUI015TEXT')} (${obj.tileX}, ${obj.tileY})</div>
       ${obj.tData.bCanDeactivate ? `
         <div style="margin-top:8px;">
           <span style="cursor:pointer;color:${AMBER};border:1px solid ${AMBER};padding:2px 8px;"
-                id="inspector-toggle-active">${obj.bActive ? 'Deactivate' : 'Activate'}</span>
+                id="inspector-toggle-active">${obj.bActive ? line('INSPEC171TEXT') : line('INSPEC172TEXT')}</span>
         </div>` : ''}
     `;
     this.contentEl.appendChild(header);
@@ -687,7 +676,7 @@ export class InspectorPanel {
     if (obj.bBuilt) {
       const refund = obj.getVaporizeMatterYield();
       const demolishBtn = this.makeActionButton(
-        `Demolish (+${refund} matter)`,
+        `${line('INSPUI016TEXT')} (+${refund} ${line('INSPUI017TEXT')})`,
         false,
         () => {
           if (this.onDemolishObject) this.onDemolishObject(obj);
@@ -709,31 +698,144 @@ export class InspectorPanel {
 
   private renderRoom(room: Room) {
     const zoneName = ZONE_SPRITES[room.zone]?.name ?? 'Unknown';
-    const objCount = this.getObjectsInRoom ? this.getObjectsInRoom(room).length : 0;
 
+    // Room header — zone name + room ID
     const header = this.makeSection();
     header.innerHTML = `
       <div style="font-size:16px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
         ${zoneName} <span style="color:#888;">Room #${room.id}</span>
       </div>
-      <div style="margin-bottom:4px;">Tiles: ${room.size}</div>
-      <div style="margin-bottom:6px;">
-        ${this.bar('O2', room.oxygen, 255, room.oxygen < 50 ? '#f44' : '#48f')}
-      </div>
-      <div style="margin-bottom:4px;">
-        Sealed: <span style="color:${room.sealed ? '#4f4' : '#f44'};">${room.sealed ? 'Yes' : 'BREACHED'}</span>
-      </div>
-      <div style="margin-bottom:4px;">
-        Power: <span style="color:#4f4;">+${room.nPowerOutput}</span> / <span style="color:#f44;">-${room.nPowerDraw}</span>
-      </div>
-      <div style="margin-bottom:4px;">Objects: ${objCount}</div>
     `;
     this.contentEl.appendChild(header);
+
+    // Tabs: Info | Rezone | Actions (Lua: ZoneInspector has folder tabs)
+    const tabBar = document.createElement('div');
+    tabBar.style.cssText = 'display:flex;padding:0 8px;margin-bottom:6px;gap:2px;';
+    const roomTabs: { key: RoomTab; label: string }[] = [
+      { key: 'info', label: line('INSPEC055TEXT').replace(':', '').trim() || 'Info' },
+      { key: 'rezone', label: line('ZONEUI005TEXT').replace(':', '').trim() || 'Rezone' },
+      { key: 'actions', label: line('INSPEC093TEXT').replace(':', '').trim() || 'Actions' },
+    ];
+    for (const tab of roomTabs) {
+      const active = this.roomTab === tab.key;
+      const tabEl = document.createElement('div');
+      tabEl.textContent = tab.label;
+      tabEl.style.cssText = `
+        flex:1;text-align:center;padding:4px 0;cursor:pointer;font-size:12px;
+        background:${active ? 'rgba(223,162,0,0.3)' : 'rgba(30,30,30,0.8)'};
+        color:${active ? AMBER : '#888'};
+        border:1px solid ${active ? AMBER : '#444'};
+      `;
+      tabEl.addEventListener('click', () => { this.roomTab = tab.key; this.update(); });
+      tabBar.appendChild(tabEl);
+    }
+    this.contentEl.appendChild(tabBar);
+
+    switch (this.roomTab) {
+      case 'info': this.renderRoomInfo(room); break;
+      case 'rezone': this.renderRoomRezone(room); break;
+      case 'actions': this.renderRoomActions(room); break;
+    }
 
     this.addCloseButton();
   }
 
+  /** Room Info tab — stats display (Lua ZoneInspector main view). */
+  private renderRoomInfo(room: Room) {
+    const objCount = this.getObjectsInRoom ? this.getObjectsInRoom(room).length : 0;
+    const section = this.makeSection();
+    section.innerHTML = `
+      <div style="margin-bottom:4px;">${line('INSPEC055TEXT')} ${room.size} ${line('INSPEC057TEXT')}</div>
+      <div style="margin-bottom:6px;">
+        ${this.bar(line('INSPEC062TEXT'), room.oxygen, 255, room.oxygen < 50 ? '#f44' : '#48f')}
+      </div>
+      <div style="margin-bottom:4px;">
+        <span style="color:${room.sealed ? '#4f4' : '#f44'};">${room.sealed ? line('INSPEC153TEXT') : line('INSPEC152TEXT')}</span>
+      </div>
+      <div style="margin-bottom:4px;">
+        ${line('INSPEC167TEXT')} <span style="color:#4f4;">+${room.nPowerOutput}</span> / ${line('INSPEC163TEXT')} <span style="color:#f44;">-${room.nPowerDraw}</span>
+      </div>
+      <div style="margin-bottom:4px;">${line('INSPEC056TEXT')} ${objCount}</div>
+    `;
+    this.contentEl.appendChild(section);
+  }
+
+  /** Room Rezone tab — zone type buttons (Lua ZoneRezoneTab). */
+  private renderRoomRezone(room: Room) {
+    const section = this.makeSection();
+    // Zone type buttons matching Lua ZoneRezoneTab.tZoneOptions order
+    for (const zone of ZONE_LIST) {
+      const config = ZONE_SPRITES[zone];
+      if (!config) continue;
+      const isActive = room.zone === zone;
+      const btn = document.createElement('div');
+      btn.style.cssText = `
+        padding:6px 10px;margin-bottom:3px;cursor:pointer;font-size:13px;
+        background:${isActive ? 'rgba(223,162,0,0.25)' : 'transparent'};
+        color:${isActive ? AMBER : '#aaa'};
+        border:1px solid ${isActive ? AMBER : '#444'};
+      `;
+      btn.textContent = config.name;
+      if (!isActive) {
+        btn.addEventListener('click', () => {
+          if (this.onRezoneRoom) this.onRezoneRoom(room, zone);
+          this.update();
+        });
+        btn.addEventListener('mouseenter', () => {
+          btn.style.background = 'rgba(223,162,0,0.15)';
+          btn.style.color = AMBER;
+        });
+        btn.addEventListener('mouseleave', () => {
+          btn.style.background = 'transparent';
+          btn.style.color = '#aaa';
+        });
+      }
+      section.appendChild(btn);
+    }
+    this.contentEl.appendChild(section);
+  }
+
+  /** Room Actions tab — claim/unclaim, seal/unseal (Lua ZoneActionTab). */
+  private renderRoomActions(room: Room) {
+    const section = this.makeSection();
+    const isPlayer = room.nTeam === TEAM_ID_PLAYER;
+
+    // Claim / Unclaim button (Lua ZoneActionTab.claimButtonPressed)
+    const claimLabel = isPlayer ? line('ZONEUI112TEXT') || 'Unclaim' : line('ZONEUI111TEXT') || 'Claim';
+    const claimBtn = this.makeActionButton(claimLabel, false, () => {
+      if (isPlayer) { room.unclaim(); } else { room.claim(); }
+      this.update();
+    });
+    section.appendChild(claimBtn);
+
+    // Seal / Unseal oxygen button (Lua ZoneActionTab.sealButtonPressed)
+    const isSealed = room.bUserBlockOxygen;
+    const sealLabel = isSealed ? (line('ZONEUI072TEXT') || 'Unseal Oxygen') : (line('ZONEUI071TEXT') || 'Seal Oxygen');
+    const sealBtn = this.makeActionButton(sealLabel, false, () => {
+      room.bUserBlockOxygen = !room.bUserBlockOxygen;
+      this.update();
+    });
+    section.appendChild(sealBtn);
+
+    this.contentEl.appendChild(section);
+  }
+
   // ── Helpers ─────────────────────────────────────────────
+
+  /** Structured "Label: Value" info row matching Lua CitizenInspector layout. */
+  private makeInfoRow(label: string, value: string, valueColor: string): HTMLDivElement {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;padding:2px 0;font-size:13px;';
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = label + ' ';
+    labelSpan.style.cssText = `color:#888;font-weight:600;`;
+    const valueSpan = document.createElement('span');
+    valueSpan.textContent = value;
+    valueSpan.style.cssText = `color:${valueColor};font-weight:600;`;
+    row.appendChild(labelSpan);
+    row.appendChild(valueSpan);
+    return row;
+  }
 
   private makeSection(): HTMLDivElement {
     const s = document.createElement('div');
@@ -760,7 +862,7 @@ export class InspectorPanel {
 
   private addCloseButton() {
     const closeBtn = document.createElement('div');
-    closeBtn.textContent = '[X] Close';
+    closeBtn.textContent = `[X] ${line('UIMISC041TEXT')}`;
     closeBtn.style.cssText = `
       text-align:center;padding:6px;cursor:pointer;color:${AMBER};
       border-top:1px solid #333;font-size:12px;

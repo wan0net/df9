@@ -5,6 +5,7 @@
 
 import { GOAL_DEFS, TARGET_HAPPY_MORALE, type GoalDef } from './GoalData';
 import { Base } from '../core/Base';
+import { line } from '../localization/Localization';
 
 /** Callback providers for checking goal conditions. */
 export interface GoalCheckProviders {
@@ -60,7 +61,7 @@ export class GoalSystem {
     if (this.checkGoal(goal)) {
       this.completed.add(goal.sName);
       if (!this.suppressAlerts) {
-        Base.addAlert('goal', `Goal completed: ${goal.friendlyName} — ${goal.description}`);
+        Base.addAlert('goal', line('ALERTS039TEXT', { name: goal.friendlyName }));
       }
     }
   }
@@ -167,14 +168,67 @@ export class GoalSystem {
     }
   }
 
+  /** Get numeric progress for a goal (raw count + target). */
+  getGoalNumericProgress(goal: GoalDef): { nProgress: number; nTarget: number } {
+    const stats = Base.getStats();
+    const nTarget = goal.nThreshold;
+    let nProgress = 0;
+    switch (goal.checkType) {
+      case 'citizens':
+        nProgress = this.providers.getPopulation(); break;
+      case 'matter':
+        nProgress = this.providers.getMatter(); break;
+      case 'builtEverything': {
+        const { built } = this.providers.getBuiltObjectTypeCount();
+        nProgress = built; break;
+      }
+      case 'hostilesKilled':
+        nProgress = stats.nHostilesKilled; break;
+      case 'baseTiles':
+        nProgress = this.providers.getOwnedTileCount(); break;
+      case 'mealsServed':
+        nProgress = stats.nMealsServed; break;
+      case 'curesResearched':
+        nProgress = stats.nCuresResearched; break;
+      case 'allTechs': {
+        const { researched } = this.providers.getResearchedTechCount();
+        nProgress = researched; break;
+      }
+      case 'happyCitizens':
+        nProgress = this.providers.getHappyCitizenCount(TARGET_HAPPY_MORALE); break;
+      case 'breachShipsDestroyed':
+        nProgress = stats.nBreachShipsDestroyed; break;
+      case 'allPossessions': {
+        const { collected } = this.providers.getAllPossessionsCount();
+        nProgress = collected; break;
+      }
+      case 'raidersConverted':
+        nProgress = stats.nRaidersConverted; break;
+      case 'hostilesAsphyxiated':
+        nProgress = stats.nHostilesAsphyxiated; break;
+      case 'hostilesKilledByTurrets':
+        nProgress = stats.nHostilesKilledByTurret; break;
+      case 'bodiesRefined':
+        nProgress = stats.nCorpsesRecycled; break;
+      case 'finalSiege':
+        nProgress = this.providers.checkFinalSiege() ? 1 : 0; break;
+    }
+    return { nProgress: Math.min(nProgress, nTarget), nTarget };
+  }
+
   /** Get all goals with their progress. */
-  getAllGoalProgress(): { sName: string; friendlyName: string; progress: number; completed: boolean }[] {
-    return GOAL_DEFS.map(g => ({
-      sName: g.sName,
-      friendlyName: g.friendlyName,
-      progress: this.getGoalProgress(g),
-      completed: this.completed.has(g.sName),
-    }));
+  getAllGoalProgress(): { sName: string; friendlyName: string; progress: number; completed: boolean; nProgress: number; nTarget: number }[] {
+    return GOAL_DEFS.map(g => {
+      const { nProgress, nTarget } = this.getGoalNumericProgress(g);
+      return {
+        sName: g.sName,
+        friendlyName: g.friendlyName,
+        progress: this.getGoalProgress(g),
+        completed: this.completed.has(g.sName),
+        nProgress,
+        nTarget,
+      };
+    });
   }
 
   /** Save data. */

@@ -130,16 +130,61 @@ const JOB_COLORS: Record<number, number> = {
 };
 
 /**
- * Character texture variants for skin tone diversity.
- * Textures in public/assets/characters/ follow the pattern:
- *   {Species}_{Part}_{Gender}_{Variant}_base_{ToneIndex}.png
- * The _base_01 and _base_02 variants provide two skin tones per model.
+ * Character texture loading.
+ * GLB models have no embedded textures — all materials are flat grey.
+ * Textures exist as separate PNGs in public/assets/characters/.
+ * We match material names to texture files and apply them at clone time.
  */
 const CHARACTER_TEXTURE_PATH = 'assets/characters/';
 const textureLoader = new THREE.TextureLoader();
 const charTexCache = new Map<string, THREE.Texture>();
 
-function loadCharTexture(filename: string): THREE.Texture | null {
+/** Known character texture base names (without .png). */
+const CHAR_TEXTURES = new Set([
+  'Bird_Body_Female01_base_01', 'Bird_Body_Female01_base_02',
+  'Bird_Body_Male01_base_01', 'Bird_Body_Male01_base_02',
+  'Bird_Head_Female01_base_01', 'Bird_Head_Female01_base_02',
+  'Bird_Head_Male01_base_01', 'Bird_Head_Male01_base_02',
+  'Cat_Body_Female01_base_01', 'Cat_Body_Female01_base_02',
+  'Cat_Body_Male01_base_01', 'Cat_Body_Male01_base_02',
+  'Cat_Head_Female01_base_01', 'Cat_Head_Female01_base_02',
+  'Cat_Head_Male01_base_01', 'Cat_Head_Male01_base_02',
+  'Collar_base_01', 'Collar_base_02',
+  'Human_Body_Female01_base_01', 'Human_Body_Female01_base_02',
+  'Human_Body_Male01_base_01', 'Human_Body_Male01_base_02',
+  'Human_Head_Female01_base_01', 'Human_Head_Female01_base_02',
+  'Human_Head_Male01_base_01', 'Human_Head_Male01_base_02',
+  'Jelly_Body_Female01_base_01', 'Jelly_Body_Female01_base_02',
+  'Jelly_Head_Female01_base_01', 'Jelly_Head_Female01_base_02',
+]);
+
+/** Default colors for materials without textures (approximates original game). */
+const MAT_DEFAULT_COLORS: Record<string, number> = {
+  'Spacesuit01': 0xcccccc,
+  'Builder01': 0xd4a020,
+  'Emergency01': 0xcc3333,
+  'SpaceEmergency01': 0xcc3333,
+  'Miner01': 0xdd8833,
+  'MinerAcc01': 0xdd8833,
+  'AsteroidChunk01': 0x887755,
+  'Doctor01': 0xdddddd,
+  'Technician01': 0x4488cc,
+  'Raider01': 0x666666,
+  'Hair01': 0x553311,
+  'Straps_Pouches': 0x554433,
+  'Visor01': 0x88ccff,
+  'Collar01': 0x888888,
+  'Arm_Gauntlet': 0x777777,
+  'Tourist_Shorts_Male_01': 0x445566,
+  'Tourist_Shorts_Female_01': 0x445566,
+  'Tourist_Shirt_Male_01': 0x556677,
+  'Tourist_Shirt_Female_01': 0x667788,
+  'AC_UpBody01': 0x556677,
+  'AC_UpBody03': 0x556677,
+  'Shamon_Head01': 0x99aa77,
+};
+
+function loadCharTexture(filename: string): THREE.Texture {
   const cached = charTexCache.get(filename);
   if (cached) return cached;
 
@@ -149,40 +194,71 @@ function loadCharTexture(filename: string): THREE.Texture | null {
       t.magFilter = THREE.NearestFilter;
       t.minFilter = THREE.NearestFilter;
       t.colorSpace = THREE.SRGBColorSpace;
-      charTexCache.set(filename, t);
+      t.needsUpdate = true;
     },
     undefined,
     () => { /* silently fail for missing textures */ }
   );
+  // Set filters immediately too (for the texture object before load)
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
   charTexCache.set(filename, tex);
   return tex;
 }
 
-/** Swap skin tone textures on a cloned citizen model based on character ID. */
-function applySkinVariant(group: THREE.Group, charId: number) {
-  // Use char ID to pick tone variant: _base_01 or _base_02
+/**
+ * Apply textures and colors to a cloned character model.
+ * Matches material names to texture files using multiple candidate patterns.
+ */
+function applyModelTextures(group: THREE.Group, charId: number) {
   const toneIdx = (charId % 2) + 1;
-  const toneSuffix = `_base_0${toneIdx}.png`;
 
-  // Walk all meshes and try to find matching variant textures
   group.traverse((child) => {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
-    const mat = child.material;
-    if (!(mat instanceof THREE.MeshStandardMaterial) && !(mat instanceof THREE.MeshBasicMaterial)) return;
-    if (!mat.map) return;
+    // Clone materials per character — Three.js clone() shares material references,
+    // so modifying mat.map would affect ALL characters using the same cached model.
+    const origMat = child.material;
+    if (!(origMat instanceof THREE.MeshStandardMaterial) && !(origMat instanceof THREE.MeshBasicMaterial)) return;
+    const mat = origMat.clone();
+    mat.name = origMat.name;
+    child.material = mat;
 
-    // Get the original texture name from the material
-    const origName = mat.name || child.name;
-    if (!origName) return;
+    const matName = mat.name || child.name || '';
 
-    // Try to find a variant texture matching this mesh's name pattern
-    // E.g., for mesh "Human_Body_Male01" → try "Human_Body_Male01_base_01.png"
-    const variantFile = `${origName}${toneSuffix}`;
-    const tex = loadCharTexture(variantFile);
-    if (tex) {
-      mat.map = tex;
-      mat.needsUpdate = true;
+    // Try to find a matching texture file.
+    // Candidate patterns (first match wins):
+    //   1. Strip _base_XX + add character tone: "Human_Body_Male01_base_03" → "Human_Body_Male01_base_01"
+    //      Also handles no-suffix names: "Human_Head_Male01" → "Human_Head_Male01_base_01"
+    //   2. Strip trailing digits + add tone: "Collar01" → "Collar_base_01"
+    //   3. Exact matName (only for non-skin materials or when tone doesn't matter)
+    const strippedBase = matName.replace(/_base_\d+$/, '');
+    const candidates = [
+      `${strippedBase}_base_0${toneIdx}`,
+      `${matName.replace(/\d+$/, '')}_base_0${toneIdx}`,
+      matName,
+    ];
+
+    let applied = false;
+    for (const baseName of candidates) {
+      if (CHAR_TEXTURES.has(baseName)) {
+        mat.map = loadCharTexture(`${baseName}.png`);
+        mat.needsUpdate = true;
+        applied = true;
+        break;
+      }
     }
+
+    // For materials without textures, apply a default color
+    if (!applied) {
+      const defaultColor = MAT_DEFAULT_COLORS[matName];
+      if (defaultColor !== undefined) {
+        (mat as THREE.MeshStandardMaterial).color.setHex(defaultColor);
+      }
+    }
+
+    // Store base color so setCharacterTint can multiply rather than replace
+    mat.userData.baseColor = (mat as THREE.MeshStandardMaterial).color.getHex();
   });
 }
 
@@ -256,12 +332,10 @@ function loadCitizenModel(): Promise<void> {
     loader.load(MODEL_PATH, (gltf) => {
       cachedCitizen = gltf.scene;
       citizenAnimClips = gltf.animations || [];
-      citizenHasSkeleton = hasSkinning(cachedCitizen) && citizenAnimClips.length > 0;
-
-      // Only strip skinning if we have no usable animation clips
-      if (!citizenHasSkeleton) {
-        stripSkinning(cachedCitizen);
-      }
+      // Always strip skinning — SkinnedMesh in bind pose renders as bones.
+      // Procedural animations provide walk/idle/work motion instead.
+      stripSkinning(cachedCitizen);
+      citizenHasSkeleton = false;
 
       // Ensure double-sided materials
       cachedCitizen.traverse((child) => {
@@ -291,11 +365,9 @@ function loadSpacesuitModel(): Promise<void> {
     loader.load(SPACESUIT_PATH, (gltf) => {
       cachedSpacesuit = gltf.scene;
       spacesuitAnimClips = gltf.animations || [];
-      spacesuitHasSkeleton = hasSkinning(cachedSpacesuit) && spacesuitAnimClips.length > 0;
-
-      if (!spacesuitHasSkeleton) {
-        stripSkinning(cachedSpacesuit);
-      }
+      // Always strip skinning — SkinnedMesh in bind pose renders as bones.
+      stripSkinning(cachedSpacesuit);
+      spacesuitHasSkeleton = false;
 
       cachedSpacesuit.traverse((child) => {
         if (child instanceof THREE.Mesh) {
@@ -350,6 +422,47 @@ const TASK_DISPLAY_NAMES: Record<string, string> = {
   Explore: 'Exploring',
   HealCharacter: 'Healing',
   DeliverFood: 'Delivering',
+  ChatPartner: 'Chatting',
+  MaintainPub: 'Bartending',
+  EatAtFoodReplicator: 'Eating',
+  EatPlant: 'Eating',
+  EatAtTable: 'Eating',
+  PlayGameSystem: 'Playing',
+  WorkOutInGym: 'Working Out',
+  WorkOut: 'Working Out',
+  DestroyEnvObject: 'Demolishing',
+  DropEverything: 'Dropping Items',
+  RunTo: 'Running!',
+  PanicOnFire: 'On Fire!',
+  GoOutside: 'Going Outside',
+  GoInside: 'Going Inside',
+  VacuumPull: 'Decompression!',
+  CheckInToHospital: 'In Hospital',
+  PanicFire: 'Panicking!',
+  PanicOxygen: 'Suffocating!',
+  PanicThreat: 'Panicking!',
+  FireFleeArea: 'Fleeing Fire!',
+  OxygenFleeArea: 'Fleeing!',
+  FleeThreat: 'Fleeing!',
+  Patrol: 'Patrolling',
+  ServeDrink: 'Serving',
+  ServeFoodAtTable: 'Serving',
+  Cuff: 'Cuffing',
+  Brawl: 'Brawling',
+  PickUpFloorItem: 'Picking Up',
+  DropOffCorpse: 'Hauling',
+  DropOffRocks: 'Hauling',
+  Sabotage: 'Sabotaging!',
+  RampageTantrum: 'Rampaging!',
+  PutOnSuit: 'Suiting Up',
+  BedHeal: 'Healing',
+  LiftAtWeightBench: 'Lifting',
+  ListenToJukebox: 'Listening',
+  HarvestAndDeliverFood: 'Harvesting',
+  Breathe: 'Idle',
+  IncapacitatedOnFloor: 'Injured',
+  FieldScanAndHeal: 'Treating',
+  ResearchInLab: 'Researching',
 };
 
 export interface CharacterRenderHandle {
@@ -509,6 +622,9 @@ export class CharacterRenderer {
         }
       });
 
+      // Apply textures and default colors
+      applyModelTextures(clone, char.id);
+
       group.add(clone);
 
       // Set up animation mixer if clips available
@@ -533,8 +649,8 @@ export class CharacterRenderer {
         }
       });
 
-      // Apply skin tone variant textures for visual diversity
-      applySkinVariant(clone, char.id);
+      // Apply textures and default colors
+      applyModelTextures(clone, char.id);
 
       group.add(clone);
 
@@ -928,16 +1044,42 @@ export class CharacterRenderer {
   /** Check if citizen model has skeleton (for testing). */
   hasCitizenSkeleton(): boolean { return citizenHasSkeleton; }
 
+  /** Debug: get material info for first character's meshes. */
+  debugMaterials(): { name: string; type: string; hasMap: boolean; color: string; visible: boolean }[] {
+    const first = this.handles.values().next().value as CharacterRenderHandle | undefined;
+    if (!first) return [];
+    const mats: { name: string; type: string; hasMap: boolean; color: string; visible: boolean }[] = [];
+    first.object.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const m = child.material as THREE.MeshStandardMaterial;
+        mats.push({
+          name: m.name || child.name,
+          type: m.type,
+          hasMap: !!m.map,
+          color: '#' + (m.color?.getHexString?.() ?? '000000'),
+          visible: child.visible,
+        });
+      }
+    });
+    return mats;
+  }
+
   /** Apply room lighting tint to a character (Lua room ambient → character shader). */
   setCharacterTint(charId: number, tint: number) {
     const handle = this.handles.get(charId);
     if (!handle) return;
-    const color = new THREE.Color(tint);
+    const tintColor = new THREE.Color(tint);
     handle.object.traverse((child) => {
       if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
         const mat = child.material;
         if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshBasicMaterial) {
-          mat.color.copy(color);
+          // Multiply base color by tint (preserves default material colors)
+          const baseHex = mat.userData.baseColor as number | undefined;
+          if (baseHex !== undefined) {
+            mat.color.setHex(baseHex).multiply(tintColor);
+          } else {
+            mat.color.copy(tintColor);
+          }
         }
       }
     });

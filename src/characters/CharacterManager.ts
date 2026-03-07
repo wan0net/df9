@@ -1,14 +1,15 @@
 import { Character } from './Character';
 import { addLog } from './Log';
+import { line } from '../localization/Localization';
 import {
   MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
   RAIDER,
   CAUSE_OF_DEATH, FAMILIARITY_TICK_RATE, FAMILIARITY_TICK_INCREASE,
-  ANGER_MAX, VIOLENT_RAMPAGE_CHANCE, HURT_THRESHOLD,
+  HURT_THRESHOLD,
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
   STATUS_DEAD,
   OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH, SPACESUIT_MAX_OXYGEN,
-  VACUUM_THRESHOLD, VACUUM_THRESHOLD_END,
+  OXYGEN_LOW, OXYGEN_SUFFOCATING,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -61,7 +62,22 @@ import { EatAtTable } from '../utility/tasks/EatAtTable';
 import { DropOffRocks } from '../utility/tasks/DropOffRocks';
 import { PickUpFloorItem } from '../utility/tasks/PickUpFloorItem';
 import { IncapacitatedOnFloor } from '../utility/tasks/IncapacitatedOnFloor';
+import { ExtinguishFireWithTool } from '../utility/tasks/ExtinguishFireWithTool';
+import { ExtinguishFireBareHanded } from '../utility/tasks/ExtinguishFireBareHanded';
+import { DropEverything } from '../utility/tasks/DropEverything';
+import { DestroyEnvObject } from '../utility/tasks/DestroyEnvObject';
+import { ChatPartner } from '../utility/tasks/ChatPartner';
+import { MaintainPub } from '../utility/tasks/MaintainPub';
+import { EatAtFoodReplicator } from '../utility/tasks/EatAtFoodReplicator';
+import { EatPlant } from '../utility/tasks/EatPlant';
+import { PlayGameSystem } from '../utility/tasks/PlayGameSystem';
+import { WorkOutInGym } from '../utility/tasks/WorkOutInGym';
+import { CheckInToHospital } from '../utility/tasks/CheckInToHospital';
+import { PanicOnFire } from '../utility/tasks/PanicOnFire';
+import { VacuumPull } from '../utility/tasks/VacuumPull';
+import { CircleBeacon } from '../utility/tasks/CircleBeacon';
 import { PRIORITY } from '../utility/ActivityOption';
+import { EmergencyBeacon } from '../combat/EmergencyBeacon';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { tDoorsByAddr, Door } from '../envobjects/Door';
@@ -82,6 +98,7 @@ import type { CharacterRenderer } from '../renderer/CharacterRenderer';
 import type { CrewSpawnPoint } from '../world/WorldGen';
 import type { Pickup } from '../pickups/Pickup';
 import type { ProjectileManager } from '../hazards/Projectile';
+import type { DecalRenderer } from '../renderer/DecalRenderer';
 
 /** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
 const UPDATES_PER_TICK = 10;
@@ -89,6 +106,7 @@ const UPDATES_PER_TICK = 10;
 export class CharacterManager {
   private grid: TileGrid;
   private roomManager: RoomManager;
+  private wallAutoGen: import('../world/WallAutoGen').WallAutoGen | null = null;
   private characterRenderer: CharacterRenderer | null = null;
   private characters: Character[] = [];
   private spawned = false;
@@ -108,6 +126,9 @@ export class CharacterManager {
   /** Fire system reference for fire damage. */
   private fire: Fire | null = null;
 
+  /** Decal renderer for blood decals. */
+  private decalRenderer: DecalRenderer | null = null;
+
   /** Malady contagion check timer. */
   private contagionTimer = 0;
   /** Contagion check interval in seconds. */
@@ -117,6 +138,10 @@ export class CharacterManager {
 
   /** Familiarity tick accumulator (seconds). */
   private familiarityAccum = 0;
+
+  setWallAutoGen(wag: import('../world/WallAutoGen').WallAutoGen) {
+    this.wallAutoGen = wag;
+  }
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -143,6 +168,10 @@ export class CharacterManager {
 
   setFire(fire: Fire) {
     this.fire = fire;
+  }
+
+  setDecalRenderer(dr: DecalRenderer) {
+    this.decalRenderer = dr;
   }
 
   getCharacters(): Character[] {
@@ -190,11 +219,17 @@ export class CharacterManager {
     for (const spawn of spawns) {
       const char = new Character(this.nextId++, spawn.x, spawn.y);
       char.bSpacewalking = true; // Initial crew starts spacewalking
-      // Lua: SpacewalkingSettler template + _setStats defaults suitOxygen = SPACESUIT_MAX_OXYGEN
-      // Then spacesuitOn(true) activates suit without refilling.
+      // Lua: SpacewalkingSettler template (ModuleData.lua:85-100)
       char.bSpacesuit = true;
       char.nSuitOxygen = SPACESUIT_MAX_OXYGEN;
-      char.setJob(BUILDER); // Starting crew are all builders (original Lua behavior)
+      char.setJob(BUILDER); // Starting crew are all builders
+      // Lua: tStatus={bBaseFounder=true, bImmuneToParasite=true, nMorale=50}
+      char.nMorale = 50;
+      char.bBaseFounder = true;
+      char.bImmuneToParasite = true;
+      // Lua: tNeeds={Energy=80, Hunger=80} — needs start at 80% (not full)
+      char.needs.energy = 80;
+      char.needs.hunger = 80;
       this.characterRenderer?.createCharacter(char);
       this.characters.push(char);
     }
@@ -209,11 +244,20 @@ export class CharacterManager {
     // Clear room character sets before re-populating
     for (const room of this.roomManager.getRooms()) {
       room.tCharacters.clear();
+      room.bHasHostiles = false;
     }
 
     for (const char of this.characters) {
       char.update(delta);
-      char.needs.decay(dtSec);
+      // Lua: skip need decay for needs promised by the current task
+      let promisedNeeds: Set<string> | undefined;
+      if (char.currentTask) {
+        const advNeeds = char.currentTask.getAdvertisedNeeds();
+        if (advNeeds.length > 0) {
+          promisedNeeds = new Set(advNeeds.map(a => a.need.charAt(0).toUpperCase() + a.need.slice(1)));
+        }
+      }
+      char.needs.decay(dtSec, promisedNeeds);
       // Pass room morale score to character morale update
       const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
       char.updateMorale(dtSec, charRoom?.nMoraleScore ?? 0, charRoom ? ZoneType[charRoom.zone] : undefined);
@@ -232,51 +276,72 @@ export class CharacterManager {
         if (char.tStats.nTeam === TEAM_ID_PLAYER) {
           charRoom.nLastSeen = GameRules.elapsedTime;
         }
+        // Track hostiles in room
+        if (char.tStats.nTeam !== TEAM_ID_PLAYER && isHostile(char.tStats.nTeam, TEAM_ID_PLAYER)) {
+          charRoom.bHasHostiles = true;
+        }
       }
 
-      // Update O2 need from room + suffocation (Lua Character._tickOxygen)
+      // Update O2 need from room + suffocation (Lua Character.updateOxygen)
+      // Lua uses a 0.25s tick accumulator — oxygen logic only runs every OXYGEN_TICK seconds
       const room = charRoom;
+      const OXYGEN_TICK = 0.25;
+
       // Non-breathing races (MONSTER, KILLBOT) don't need O2
       if (!char.doesBreathe()) {
         char.needs.updateOxygen(255);
         char.suffocationTime = 0;
         if (char.bSpacewalking) char.bSpacewalking = false;
-      } else if (room && room.sealed && room.oxygen > 50) {
-        // Safe sealed room — breathable
-        char.needs.updateOxygen(room.oxygen);
-        if (char.bSpacewalking) {
-          char.bSpacewalking = false;
-        }
-        // Recover from suffocation if O2 score above threshold
-        const o2Score = room.getOxygenScore();
-        if (o2Score >= VACUUM_THRESHOLD * VACUUM_THRESHOLD) {
-          char.suffocationTime = 0;
-          char.bLowOxygen = false;
-        } else if (o2Score < VACUUM_THRESHOLD_END * VACUUM_THRESHOLD_END) {
-          // Still low enough to suffocate
-          char.suffocationTime += dtSec;
-          char.bLowOxygen = true;
-        }
       } else {
-        // In space, on unsealed floor, or in a room with no oxygen
-        char.needs.updateOxygen(room?.oxygen ?? 0);
-        if (!char.bSpacewalking) {
-          char.bSpacewalking = true;
-        }
-        // Suffocating in vacuum (spacesuit depletes separately)
-        if (!char.bSpacesuit) {
-          char.suffocationTime += dtSec;
-          char.bLowOxygen = true;
-        } else {
-          // Consume spacesuit oxygen
-          char.nSuitOxygen -= OXYGEN_PER_SECOND * dtSec;
-          if (char.nSuitOxygen <= 0) {
-            char.nSuitOxygen = 0;
-            char.suffocationTime += dtSec;
-            char.bLowOxygen = true;
+        char.oxygenTimer -= dtSec;
+        if (char.oxygenTimer < 0) {
+          const o2dt = OXYGEN_TICK + Math.abs(char.oxygenTimer);
+          char.oxygenTimer = OXYGEN_TICK;
+
+          // Get O2 on Lua scale (0-65535) for threshold comparisons
+          const o2 = room ? room.getOxygenScore() : 0;
+          char.needs.updateOxygen(room?.oxygen ?? 0);
+
+          // Lua: _updateSpacewalking(o2 < OXYGEN_LOW)
+          if (o2 < OXYGEN_LOW) {
+            if (!char.bSpacewalking) char.bSpacewalking = true;
           } else {
-            char.suffocationTime = 0;
-            char.bLowOxygen = false;
+            if (char.bSpacewalking) char.bSpacewalking = false;
+          }
+
+          // Suit vs no-suit logic (Lua Character.updateOxygen lines 1627-1750)
+          if (!char.bSpacesuit) {
+            // No spacesuit — check O2 thresholds (Lua lines 1663-1700)
+            const tileType = this.grid.get(char.tileX, char.tileY);
+            let newO2 = o2 - (OXYGEN_PER_SECOND * o2dt);
+
+            // Bonus suffocation in space (Lua: suffocationTime += 15 per tick)
+            if (tileType === TileType.SPACE) {
+              char.suffocationTime += 15;
+              newO2 = 0;
+            }
+
+            if (newO2 < OXYGEN_SUFFOCATING) {
+              char.suffocationTime += o2dt;
+              char.bLowOxygen = true;
+            } else if (newO2 < OXYGEN_LOW) {
+              char.bLowOxygen = true;
+              // No suffocation in low-O2 range, just warning
+            } else {
+              char.bLowOxygen = false;
+              char.suffocationTime = 0;
+            }
+          } else {
+            // Wearing spacesuit — consume suit O2 (Lua lines 1712-1745)
+            char.nSuitOxygen -= OXYGEN_PER_SECOND * o2dt;
+            if (char.nSuitOxygen <= 0) {
+              char.nSuitOxygen = 0;
+              char.suffocationTime += o2dt;
+              char.bLowOxygen = true;
+            } else {
+              char.suffocationTime = 0;
+              char.bLowOxygen = false;
+            }
           }
         }
       }
@@ -454,6 +519,17 @@ export class CharacterManager {
         corpse.rRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
         this.pickups.push(corpse);
 
+        // Blood decal on combat deaths (Lua: bBloodDecal for SHOT/THING/default causes)
+        // Not for killbots, suffocation, starvation, fire, space deaths
+        const cause = char.nCauseOfDeath;
+        const bBloodDecal = cause === CAUSE_OF_DEATH.COMBAT_RANGED ||
+          cause === CAUSE_OF_DEATH.COMBAT_MELEE || cause === CAUSE_OF_DEATH.THING ||
+          cause === CAUSE_OF_DEATH.UNSPECIFIED;
+        const tileType = this.grid.get(char.tileX, char.tileY);
+        if (bBloodDecal && tileType !== TileType.SPACE && this.decalRenderer) {
+          this.decalRenderer.addBloodDecal(char.tileX, char.tileY);
+        }
+
         // Release any object reservations held by the dead character
         if (char.currentTask?.rTargetObject) {
           char.currentTask.rTargetObject.unreserve(char.id);
@@ -462,9 +538,22 @@ export class CharacterManager {
         // Disengage from combat
         this.combatSystem.disengage(char.id);
 
-        // Log death alert
-        const causeName = Object.entries(CAUSE_OF_DEATH).find(([, v]) => v === char.nCauseOfDeath)?.[0] ?? 'unknown';
-        Base.addAlert('death', `${char.getName()} has died (${causeName.toLowerCase()})`);
+        // Log death alert — per-cause linecodes (Lua CharacterManager:_alertOnDeath)
+        const deathAlertLC = (() => {
+          switch (char.nCauseOfDeath) {
+            case CAUSE_OF_DEATH.SUFFOCATION: return 'ALERTS004TEXT';
+            case CAUSE_OF_DEATH.FIRE: return 'ALERTS005TEXT';
+            case CAUSE_OF_DEATH.DISEASE: return 'ALERTS006TEXT';
+            case CAUSE_OF_DEATH.SUCKED_INTO_SPACE: return 'ALERTS014TEXT';
+            case CAUSE_OF_DEATH.COMBAT_RANGED:
+            case CAUSE_OF_DEATH.COMBAT_MELEE: return 'ALERTS015TEXT';
+            case CAUSE_OF_DEATH.PARASITE: return 'ALERTS016TEXT';
+            case CAUSE_OF_DEATH.STARVATION: return 'ALERTS018TEXT';
+            case CAUSE_OF_DEATH.DEBUG: return 'ALERTS008TEXT';
+            default: return 'ALERTS007TEXT';
+          }
+        })();
+        Base.addAlert('death', line(deathAlertLC, { name: char.getName() }));
 
         // Death react logs + morale hit (Lua CharacterManager.killCharacter)
         const deceasedName = char.getName();
@@ -627,7 +716,7 @@ export class CharacterManager {
         const outdoorOptions: ActivityOption[] = [];
         for (const cmd of CommandQueue.getAvailable('build_tile')) {
           outdoorOptions.push(new ActivityOption(
-            new BuildTile(cmd.id, this.grid),
+            new BuildTile(cmd.id, this.grid, this.wallAutoGen ?? undefined),
             cmd.tileX, cmd.tileY,
             9,
           ));
@@ -682,18 +771,8 @@ export class CharacterManager {
         continue;
       }
 
-      // Rampage check: anger at max triggers rampage
-      if (char.nAnger >= ANGER_MAX && !char.bRampaging) {
-        char.bRampaging = true;
-        char.bViolentRampage = Math.random() < VIOLENT_RAMPAGE_CHANCE;
-        Base.addAlert('rampage',
-          `${char.getName()} has gone on a ${char.bViolentRampage ? 'violent' : 'non-violent'} rampage!`);
-        // Rampage lasts until anger decays below 50
-      }
-      if (char.bRampaging && char.nAnger < 50) {
-        char.bRampaging = false;
-        char.bViolentRampage = false;
-      }
+      // Rampage is now handled by Character.angerEvent() → beginRampage()
+      // and Character.angerReduction() → endRampage() (Lua Character.lua:5816-5830)
 
       // Emergency: seek oxygen if suffocating (needs range -100..+100; 0 = midpoint)
       if (char.needs.oxygen < 0) {
@@ -781,6 +860,14 @@ export class CharacterManager {
             other.tileX, other.tileY,
             chatPriority,
           ));
+          // ChatPartner: if other char is chatting with us, high priority to reciprocate
+          if (other.currentTask && other.currentTask.name === 'Chat') {
+            options.push(new ActivityOption(
+              new ChatPartner(),
+              other.tileX, other.tileY,
+              10,
+            ));
+          }
           break;
         }
       }
@@ -820,7 +907,7 @@ export class CharacterManager {
         ? (isFloor ? 10 : 9)   // floors first, then walls
         : (isFloor ? 5 : 4);
       options.push(new ActivityOption(
-        new BuildTile(cmd.id, this.grid),
+        new BuildTile(cmd.id, this.grid, this.wallAutoGen ?? undefined),
         cmd.tileX, cmd.tileY,
         priority,
       ));
@@ -907,7 +994,7 @@ export class CharacterManager {
     // ── Job-specific tasks ────────────────────────────────────
     const shiftBoost = character.onDuty() ? 2 : 0;
 
-    // BARTENDER: Serve drink at bar
+    // BARTENDER: Serve drink at bar + maintain pub
     if (job === BARTENDER) {
       for (const bar of EnvObjectManager.getObjectsByType('Bar')) {
         if (!bar.bBuilt || !bar.isFunctioning()) continue;
@@ -916,6 +1003,15 @@ export class CharacterManager {
           bar.tileX, bar.tileY,
           6 + shiftBoost,
         ));
+        // MaintainPub: bartender maintains the bar (Lua: OpenPub Duty=8, MaintainPub Duty=1)
+        const opt = new ActivityOption(
+          new MaintainPub(),
+          bar.tileX, bar.tileY,
+          8 + shiftBoost,
+          { tags: { Job: BARTENDER, WorkShift: true } },
+        );
+        opt.targetObject = bar;
+        options.push(opt);
       }
     }
 
@@ -970,6 +1066,18 @@ export class CharacterManager {
           new Patrol(),
           target.x, target.y,
           3 + shiftBoost,
+        ));
+      }
+
+      // EMERGENCY: Respond to emergency beacons (CircleBeacon task)
+      const squad = SquadList.getSquadForChar(character.id);
+      if (squad && EmergencyBeacon.hasBeacon(squad.name) && EmergencyBeacon.needsMoreResponders(squad.name)) {
+        const beacon = EmergencyBeacon.getBeacon(squad.name)!;
+        options.push(new ActivityOption(
+          new CircleBeacon(),
+          beacon.tx, beacon.ty,
+          20, // High priority — beacon orders override normal patrol
+          { tags: { Job: EMERGENCY } },
         ));
       }
     }
@@ -1060,6 +1168,58 @@ export class CharacterManager {
       ));
     }
 
+    // ── Hobby: Work out in gym (with gym equipment) ──────────
+    for (const gym of EnvObjectManager.getObjectsByType('GymEquipment')) {
+      if (!gym.bBuilt || !gym.isFunctioning()) continue;
+      const opt = new ActivityOption(
+        new WorkOutInGym(),
+        gym.tileX, gym.tileY,
+        1.5,
+      );
+      opt.targetObject = gym;
+      options.push(opt);
+    }
+
+    // ── Hobby: Play game system ──────────────────────────────
+    for (const game of EnvObjectManager.getObjectsByType('ArcadeGame')) {
+      if (!game.bBuilt || !game.isFunctioning()) continue;
+      const opt = new ActivityOption(
+        new PlayGameSystem(),
+        game.tileX, game.tileY,
+        1.5,
+      );
+      opt.targetObject = game;
+      options.push(opt);
+    }
+
+    // ── Eat plant (if edible plants available) ───────────────
+    const ediblePlants = ['space_tree', 'HydroPlant', 'BulbousPlant'];
+    for (const pType of ediblePlants) {
+      for (const plant of EnvObjectManager.getObjectsByType(pType)) {
+        if (!plant.bBuilt || plant.nCondition < 50) continue;
+        const opt = new ActivityOption(
+          new EatPlant(),
+          plant.tileX, plant.tileY,
+          2,
+        );
+        opt.targetObject = plant;
+        options.push(opt);
+        break; // Just nearest
+      }
+    }
+
+    // ── Eat at food replicator (specific task) ───────────────
+    for (const rep of EnvObjectManager.getObjectsByType('FoodReplicator')) {
+      if (!rep.bBuilt || !rep.isFunctioning()) continue;
+      const opt = new ActivityOption(
+        new EatAtFoodReplicator(),
+        rep.tileX, rep.tileY,
+        1.5,
+      );
+      opt.targetObject = rep;
+      options.push(opt);
+    }
+
     // ── Explore (all characters, low priority) ──────────────
     if (room && room.tiles.length >= 2) {
       const target = room.tiles[Math.floor(Math.random() * room.tiles.length)];
@@ -1091,6 +1251,33 @@ export class CharacterManager {
 
     // ── Fire response (branching on bravery) ──────────────────
     if (room && this.hasFireInRoom(room)) {
+      // Find nearest fire tile in room for extinguishing
+      const fireTile = this.findFireInRoom(room);
+
+      // Brave characters: extinguish with tool (BaseScore=8)
+      if (fireTile && this.fire) {
+        options.push(new ActivityOption(
+          new ExtinguishFireWithTool(this.fire),
+          fireTile.x, fireTile.y,
+          8,
+          {
+            priorityLevel: PRIORITY.SURVIVAL_NORMAL,
+            personalityGates: { nBravery: [0.05, 1] },
+            prerequisites: { EmptyHands: true },
+          },
+        ));
+        // Extinguish bare-handed (BaseScore=6, requires more bravery)
+        options.push(new ActivityOption(
+          new ExtinguishFireBareHanded(this.fire),
+          fireTile.x, fireTile.y,
+          6,
+          {
+            priorityLevel: PRIORITY.SURVIVAL_NORMAL,
+            personalityGates: { nBravery: [0.15, 1] },
+            prerequisites: { EmptyHands: true },
+          },
+        ));
+      }
       // Low bravery: panic
       options.push(new ActivityOption(
         new PanicFire(),
@@ -1132,6 +1319,19 @@ export class CharacterManager {
         200,
         { priorityLevel: PRIORITY.SURVIVAL_NORMAL },
       ));
+    }
+
+    // ── Emergency alarm flee — Lua Character.lua:1260-1266 ───
+    // EMERGENCY job characters performing work shift tasks ignore alarm
+    if (room && room.isEmergencyAlarmOn()) {
+      if (!(job === EMERGENCY && character.isPerformingWorkShiftTask())) {
+        options.push(new ActivityOption(
+          new FleeEmergencyAlarm(),
+          character.tileX, character.tileY,
+          100,
+          { priorityLevel: PRIORITY.SURVIVAL_NORMAL },
+        ));
+      }
     }
 
     // ── Threat response (branching on bravery) ───────────────
@@ -1270,7 +1470,7 @@ export class CharacterManager {
       for (const ref of refineries) {
         if (!ref.bBuilt || !ref.isFunctioning()) continue;
         options.push(new ActivityOption(
-          new DropOffRocks(),
+          new DropOffRocks(ref.sName),
           ref.tileX, ref.tileY,
           7 + shiftBoost,
           {
@@ -1292,6 +1492,70 @@ export class CharacterManager {
       ));
     }
 
+    // ── Demolish commands (destroy env objects) ───────────────
+    for (const cmd of CommandQueue.getAvailable('demolish')) {
+      const obj = EnvObjectManager.getObjects().find(
+        o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && o.bBuilt,
+      );
+      if (obj) {
+        const priority = job === BUILDER ? 10 : 3;
+        options.push(new ActivityOption(
+          new DestroyEnvObject(obj),
+          cmd.tileX, cmd.tileY,
+          priority,
+          { tags: { Job: BUILDER, WorkShift: true } },
+        ));
+      }
+    }
+
+    // ── Drop everything (prereq satisfier) ───────────────────
+    if (character.heldItem !== null && !character.bCuffed) {
+      options.push(new ActivityOption(
+        new DropEverything(),
+        character.tileX, character.tileY,
+        0.002,
+      ));
+    }
+
+    // ── VacuumPull: character in breaching room gets pulled toward space ───
+    if (room && !room.sealed && room.oxygen < 50 && !character.bSpacesuit) {
+      // Find nearest space tile for vacuum pull direction
+      const spaceTile = this.findNearestSpaceTile(character.tileX, character.tileY);
+      if (spaceTile) {
+        options.push(new ActivityOption(
+          new VacuumPull(),
+          spaceTile.x, spaceTile.y,
+          500, // PUPPET level — overrides everything
+          { priorityLevel: PRIORITY.PUPPET },
+        ));
+      }
+    }
+
+    // ── PanicOnFire: character standing on a fire tile ───────
+    if (this.fire && this.fire.isOnFire(character.tileX, character.tileY)) {
+      options.push(new ActivityOption(
+        new PanicOnFire(),
+        character.tileX, character.tileY,
+        200,
+        { priorityLevel: PRIORITY.SURVIVAL_NORMAL },
+      ));
+    }
+
+    // ── CheckInToHospital: wounded characters seek hospital beds ───
+    if (character.tStats.nHP < character.tStats.nMaxHP * 0.5 && !character.bIncapacitated) {
+      for (const bed of EnvObjectManager.getObjectsByType('HospitalBed')) {
+        if (!bed.bBuilt || !bed.isFunctioning()) continue;
+        const opt = new ActivityOption(
+          new CheckInToHospital(),
+          bed.tileX, bed.tileY,
+          4,
+        );
+        opt.targetObject = bed;
+        options.push(opt);
+        break; // nearest hospital bed
+      }
+    }
+
     // ── Breathe (absolute fallback) ─────────────────────────
     options.push(new ActivityOption(
       new Breathe(),
@@ -1310,6 +1574,31 @@ export class CharacterManager {
       if (fireTiles.has(`${tile.x},${tile.y}`)) return true;
     }
     return false;
+  }
+
+  /** Find the first fire tile in a room (for targeting). */
+  private findFireInRoom(room: Room): { x: number; y: number } | null {
+    if (!this.fire) return null;
+    const fireTiles = this.fire.getFireTiles();
+    for (const tile of room.tiles) {
+      if (fireTiles.has(`${tile.x},${tile.y}`)) return { x: tile.x, y: tile.y };
+    }
+    return null;
+  }
+
+  /** Find nearest SPACE tile from a position (for vacuum pull direction). */
+  private findNearestSpaceTile(x: number, y: number): { x: number; y: number } | null {
+    // Check expanding rings of neighbors
+    for (let r = 1; r <= 5; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // only ring edge
+          const nx = x + dx, ny = y + dy;
+          if (this.grid.get(nx, ny) === TileType.SPACE) return { x: nx, y: ny };
+        }
+      }
+    }
+    return null;
   }
 
   /** Assign a task to a character and start pathfinding if needed. */

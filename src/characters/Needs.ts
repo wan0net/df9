@@ -28,20 +28,23 @@ export class Needs {
   /** Time accumulator for need decay (in seconds) */
   private needTickAccum = 0;
 
-  /** Decay needs over time. dt in seconds (game-scaled). */
-  decay(dt: number) {
+  /** Decay needs over time. dt in seconds (game-scaled).
+   *  Lua Character.lua:2367-2373 — all needs decay by 1 per NEEDS_REDUCE_TICK.
+   *  @param promisedNeeds - needs currently being satisfied by a task (skip decay) */
+  decay(dt: number, promisedNeeds?: Set<string>) {
     this.needTickAccum += dt;
 
     // Needs reduce every NEEDS_REDUCE_TICK seconds (14.4s in Lua)
     if (this.needTickAccum >= NEEDS_REDUCE_TICK) {
       this.needTickAccum -= NEEDS_REDUCE_TICK;
 
-      // Each need decays by a fixed amount per tick
-      this.hunger = Math.max(-100, this.hunger - 5);
-      this.energy = Math.max(-100, this.energy - 4);
-      this.amusement = Math.max(-100, this.amusement - 3);
-      this.social = Math.max(-100, this.social - 2);
-      this.duty = Math.max(-100, this.duty - 1);
+      // Lua: each need decays by 1 * malady modifier per tick
+      // Skip needs currently promised by the active task
+      if (!promisedNeeds?.has('Hunger'))   this.hunger    = Math.max(-100, this.hunger - 1);
+      if (!promisedNeeds?.has('Energy'))   this.energy    = Math.max(-100, this.energy - 1);
+      if (!promisedNeeds?.has('Amusement'))this.amusement = Math.max(-100, this.amusement - 1);
+      if (!promisedNeeds?.has('Social'))   this.social    = Math.max(-100, this.social - 1);
+      if (!promisedNeeds?.has('Duty'))     this.duty      = Math.max(-100, this.duty - 1);
     }
   }
 

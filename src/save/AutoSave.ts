@@ -18,6 +18,10 @@ export class AutoSave {
     this.lastSaveTime = performance.now() / 1000;
   }
 
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   setEnabled(enabled: boolean) {
     this.enabled = enabled;
   }

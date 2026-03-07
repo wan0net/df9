@@ -4,7 +4,7 @@
  * pick them up as work tasks via the utility AI.
  */
 
-export type CommandType = 'mine' | 'build_object' | 'build_tile';
+export type CommandType = 'mine' | 'build_object' | 'build_tile' | 'demolish';
 export type CommandStatus = 'pending' | 'in_progress' | 'complete' | 'cancelled';
 
 export interface Command {
@@ -85,6 +85,17 @@ class CommandQueueClass {
     if (cmd) {
       cmd.status = 'cancelled';
       this.commands.delete(id);
+    }
+  }
+
+  /** Cancel all commands at a given tile. */
+  cancelAt(tileX: number, tileY: number) {
+    for (const cmd of this.commands.values()) {
+      if (cmd.tileX === tileX && cmd.tileY === tileY &&
+          cmd.status !== 'complete' && cmd.status !== 'cancelled') {
+        cmd.status = 'cancelled';
+        this.commands.delete(cmd.id);
+      }
     }
   }
 

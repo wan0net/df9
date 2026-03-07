@@ -1,7 +1,7 @@
 import { ZoneType } from '../world/ZoneType';
 import type { ObjectTag } from '../core/ObjectList';
 import type { Zone } from '../zones/Zone';
-import { TEAM_ID_PLAYER, OXYGEN_LOW, OXYGEN_SUFFOCATING } from '../characters/CharacterConstants';
+import { TEAM_ID_PLAYER, TEAM_ID_PLAYER_ABANDONED, OXYGEN_LOW, OXYGEN_SUFFOCATING } from '../characters/CharacterConstants';
 import { GameRules } from '../core/GameRules';
 import { SoundManager } from '../audio/SoundManager';
 import { SpatialAudio } from '../audio/SpatialAudio';
@@ -97,6 +97,12 @@ export class Room {
   bUserBlockOxygen = false;
   /** Team that owns this room (default: TEAM_ID_PLAYER). */
   nTeam = TEAM_ID_PLAYER;
+  /** Original team before claim/unclaim (for reverting on unclaim). Lua Room.nOriginalTeam. */
+  nOriginalTeam: number | null = null;
+  /** GameRules.elapsedTime when float-away timer started (VISIBILITY_HIDDEN rooms). */
+  nFloatAwayTimerStart: number | null = null;
+  /** Next time to test float-away conditions (debounce every 30s). */
+  nNextFloatAwayTest: number | null = null;
   /** Room is currently on fire. */
   bBurning = false;
   /** Emergency alarm is active for this room. */
@@ -183,6 +189,14 @@ export class Room {
     const bLowO2 = this.getOxygenScore() < OXYGEN_LOW;
     return bLowO2 && !hasSpacesuit;
   }
+
+  /** Whether this room contains hostile characters (Lua Room:hasHostiles). */
+  hasHostiles(): boolean {
+    // Checked by CharacterManager during gatherOptions
+    return this.bHasHostiles;
+  }
+  /** Set by CharacterManager when scanning characters in rooms. */
+  bHasHostiles = false;
 
   /** Room safety score for AI (Lua Room:getRoomScore). Lower = worse.
    *  @param charTeam - character's team
@@ -375,6 +389,97 @@ export class Room {
   /** Remove hover highlight (Lua Room:unHover). */
   unHover(): void {
     this.nHighlightPercent = 0;
+  }
+
+  // ── Claim / Unclaim — mirrors Room.lua:2893-2905 ─────────────────────────
+
+  /** Claim room for player team (Lua Room:claim). */
+  claim(): void {
+    this.nLastSeen = GameRules.elapsedTime;
+    this._setTeam(TEAM_ID_PLAYER);
+  }
+
+  /** Unclaim room — revert to abandoned or original team (Lua Room:unclaim). */
+  unclaim(): void {
+    this.nLastSeen = GameRules.elapsedTime;
+    if (!this.nOriginalTeam || this.nOriginalTeam === TEAM_ID_PLAYER) {
+      this._setTeam(TEAM_ID_PLAYER_ABANDONED);
+    } else {
+      this._setTeam(this.nOriginalTeam);
+    }
+  }
+
+  /** Internal team setter (Lua Room:_setTeam). */
+  private _setTeam(nTeam: number): void {
+    this.nTeam = nTeam;
+    this.updateEmergency();
+  }
+
+  // ── Emergency Alarm — mirrors Room.lua:3437-3458 ────────────────────────
+
+  /** Whether emergency alarm is on (Lua Room:isEmergencyAlarmOn). */
+  isEmergencyAlarmOn(): boolean {
+    return this.bEmergencyAlarmEnabled;
+  }
+
+  /** Toggle emergency alarm (Lua Room:setEmergencyAlarmOn). */
+  setEmergencyAlarmOn(bOn: boolean): void {
+    this.bEmergencyAlarmEnabled = bOn;
+    this.updateEmergency();
+  }
+
+  /** Check if room has a functioning EmergencyAlarm object (Lua Room:hasFunctioningEmergencyAlarm). */
+  hasFunctioningEmergencyAlarm(getObjectsInRoom: (roomId: number) => { sName: string; isFunctioning: () => boolean }[]): boolean {
+    for (const rProp of getObjectsInRoom(this.id)) {
+      if (rProp.sName === 'EmergencyAlarm' && rProp.isFunctioning()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Handle alarm destruction — disable if no functioning alarms remain (Lua Room:onEmergencyAlarmDestroyed). */
+  onEmergencyAlarmDestroyed(getObjectsInRoom: (roomId: number) => { sName: string; isFunctioning: () => boolean }[]): void {
+    if (this.bEmergencyAlarmEnabled && !this.hasFunctioningEmergencyAlarm(getObjectsInRoom)) {
+      this.bEmergencyAlarmEnabled = false;
+      this.updateEmergency();
+    }
+  }
+
+  // ── Float-away — mirrors Room.lua:1951-2017 ─────────────────────────────
+
+  /** Tick float-away timer for hidden non-player rooms. */
+  tickFloatAway(): boolean {
+    if (this.nLastVisibility !== VISIBILITY_HIDDEN) {
+      this.nFloatAwayTimerStart = null;
+      return false;
+    }
+
+    if (this.nFloatAwayTimerStart === null) {
+      this.nFloatAwayTimerStart = GameRules.elapsedTime;
+    }
+
+    if (GameRules.elapsedTime - this.nFloatAwayTimerStart > FLOAT_AWAY_TIME) {
+      if (this.nNextFloatAwayTest === null || this.nNextFloatAwayTest < GameRules.elapsedTime) {
+        this.nNextFloatAwayTest = GameRules.elapsedTime + 30;
+        return this._canFloatAway();
+      }
+    }
+
+    return false;
+  }
+
+  /** Check if this room + its team's rooms can float away (Lua Room:_attemptFloatAway). */
+  private _canFloatAway(): boolean {
+    // Player rooms and rooms without original team don't float away
+    if (!this.nOriginalTeam || this.nOriginalTeam === TEAM_ID_PLAYER) return false;
+
+    // Check contiguity — don't float away if connected to rooms of a different team
+    for (const contig of this.tContiguousRooms) {
+      if (contig.nOriginalTeam !== this.nOriginalTeam) return false;
+    }
+
+    return true;
   }
 
   /** Adjoining rooms (connected through doors). Set by RoomManager/PowerSystem contiguity. */

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+import { PostFX } from './PostFX';
 
 /**
  * Core Three.js rendering layer.
@@ -10,6 +11,7 @@ export class ThreeRenderer {
   css2dRenderer: CSS2DRenderer;
   scene: THREE.Scene;
   camera: THREE.OrthographicCamera;
+  postfx: PostFX | null = null;
 
   /** Overlay scene for HTML elements (need bars, tooltips). */
   overlayScene: THREE.Scene;
@@ -62,6 +64,14 @@ export class ThreeRenderer {
     this.camera.position.set(0, 0, 1000);
     this.camera.lookAt(0, 0, 0);
 
+    // Post-processing (Lua Post.lua: bloom, color grading)
+    try {
+      this.postfx = new PostFX(this.renderer, this.scene, this.camera);
+    } catch {
+      // Fall back to no post-processing if WebGL2 features unavailable
+      this.postfx = null;
+    }
+
     // Window resize
     window.addEventListener('resize', () => this.onResize());
   }
@@ -90,7 +100,11 @@ export class ThreeRenderer {
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera);
+    if (this.postfx?.enabled) {
+      this.postfx.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
     this.css2dRenderer.render(this.overlayScene, this.camera);
   }
 
@@ -99,6 +113,7 @@ export class ThreeRenderer {
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
     this.css2dRenderer.setSize(w, h);
+    this.postfx?.setSize(w, h);
     // The camera view is managed by CameraController3D
   }
 
@@ -107,6 +122,7 @@ export class ThreeRenderer {
   }
 
   dispose() {
+    this.postfx?.dispose();
     this.renderer.dispose();
   }
 }

@@ -20,11 +20,13 @@ import type { Room } from '../rooms/Room';
 import type { GoalSystem } from '../goals/GoalSystem';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { SoundManager } from '../audio/SoundManager';
+import { line } from '../localization/Localization';
+import { playWarble } from './WarbleEffect';
 
 const AMBER = '#dfa200';
 const SIDEBAR_W = 286;
-const SIDEBAR_COLLAPSED_W = 60;
-const BUTTON_H = 60;
+const SIDEBAR_COLLAPSED_W = 104;
+const BUTTON_H = 81;
 
 // CSS filter to tint white/gray icons to amber (#dfa200)
 // brightness(0) → black, then invert+sepia+saturate+hue-rotate to amber
@@ -143,6 +145,14 @@ export class UIManager {
 
   // Construct sub-menu
   private constructSub!: HTMLDivElement;
+  private constructSubModes: BuildMode[] = [];
+
+  // Mine sub-menu
+  private mineSub!: HTMLDivElement;
+
+  // Beacon sub-menu
+  private beaconSub!: HTMLDivElement;
+  selectedViolenceLevel = 'default';
 
   // Inspector panel
   private inspectorPanel!: InspectorPanel;
@@ -184,6 +194,7 @@ export class UIManager {
     onDemolishObject?: (obj: EnvObject) => void;
     onCenterCamera?: (char: Character) => void;
     onSelectRoom?: (room: Room) => void;
+    onRezoneRoom?: (room: Room, zone: ZoneType) => void;
     getPendingBuildCost?: () => { cost: number; tileCount: number; mode: BuildMode } | null;
     getCorpseCount?: () => number;
   }) {
@@ -218,13 +229,14 @@ export class UIManager {
     onDemolishObject?: (obj: EnvObject) => void;
     onCenterCamera?: (char: Character) => void;
     onSelectRoom?: (room: Room) => void;
+    onRezoneRoom?: (room: Room, zone: ZoneType) => void;
     getRooms: () => Room[];
   }) {
     this.uiRoot = document.createElement('div');
     this.uiRoot.id = 'game-ui';
     this.uiRoot.style.cssText = `
       position:absolute;top:0;left:0;width:100%;height:100%;
-      pointer-events:none;z-index:10;font-family:'Orbitron',monospace;
+      pointer-events:none;z-index:10;font-family:'Dosis',sans-serif;
     `;
 
     this.createSidebar();
@@ -254,6 +266,7 @@ export class UIManager {
       },
       onCenterCamera: callbacks.onCenterCamera,
       onSelectRoom: callbacks.onSelectRoom,
+      onRezoneRoom: callbacks.onRezoneRoom,
     });
 
     // Research panel
@@ -275,62 +288,87 @@ export class UIManager {
   // Mirrors StatusBarLayout.lua: sprite icons, Orbitron-style layout, AMBER color.
 
   private createHUD() {
-    // Top-right panel: matter icon + value, people icon + value, divider, stardate, speed buttons
+    // Top-right panel — Lua StatusBarLayout.lua: two rows
+    // Row 1: MatterIcon + "Matter" label + value | PeopleIcon + "O2 Capacity" label + value
+    // Row 2: divider | Stardate text | speed buttons | ? button
     const hudTop = document.createElement('div');
     hudTop.style.cssText = `
       position:absolute;top:8px;right:10px;pointer-events:auto;
-      color:${AMBER};display:flex;align-items:center;gap:10px;font-size:13px;
+      color:${AMBER};font-size:13px;display:flex;flex-direction:column;align-items:flex-end;
     `;
 
-    // Matter icon (ui_hud_iconMatter) + value
+    // ── Row 1: Matter + O2 Capacity ──
+    const row1 = document.createElement('div');
+    row1.style.cssText = 'display:flex;align-items:center;gap:10px;';
+
+    // Matter icon + label + value
     const matterIcon = document.createElement('img');
     matterIcon.src = 'assets/ui/hud/ui_hud_iconMatter.png';
-    matterIcon.style.cssText = 'height:40px;width:auto;filter:sepia(1) saturate(5) hue-rotate(5deg);vertical-align:middle;';
-    hudTop.appendChild(matterIcon);
+    matterIcon.style.cssText = 'height:48px;width:auto;filter:sepia(1) saturate(5) hue-rotate(5deg);vertical-align:middle;';
+    row1.appendChild(matterIcon);
 
+    const matterGroup = document.createElement('div');
+    matterGroup.style.cssText = 'display:flex;flex-direction:column;';
+    const matterLabel = document.createElement('span');
+    matterLabel.textContent = line('HUDHUD002TEXT'); // "Matter"
+    matterLabel.style.cssText = `font-size:12px;color:#888;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`;
     this.matterText = document.createElement('span');
     this.matterText.id = 'hud-matter';
-    this.matterText.style.cssText = `font-size:30px;font-weight:bold;color:${AMBER};`;
+    this.matterText.style.cssText = `font-size:36px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`;
     this.matterText.textContent = '0';
-    hudTop.appendChild(this.matterText);
+    matterGroup.appendChild(matterLabel);
+    matterGroup.appendChild(this.matterText);
+    row1.appendChild(matterGroup);
 
-    // People icon (ui_hud_iconPeople) + population / capacity
+    // People icon + label + value
     const peopleIcon = document.createElement('img');
     peopleIcon.src = 'assets/ui/hud/ui_hud_iconPeople.png';
-    peopleIcon.style.cssText = 'height:40px;width:auto;filter:sepia(1) saturate(5) hue-rotate(5deg);vertical-align:middle;margin-left:8px;';
-    hudTop.appendChild(peopleIcon);
+    peopleIcon.style.cssText = 'height:48px;width:auto;filter:sepia(1) saturate(5) hue-rotate(5deg);vertical-align:middle;margin-left:12px;';
+    row1.appendChild(peopleIcon);
 
     const capGroup = document.createElement('div');
-    capGroup.style.cssText = 'display:flex;align-items:baseline;gap:0;';
+    capGroup.style.cssText = 'display:flex;flex-direction:column;';
+    const capLabel = document.createElement('span');
+    capLabel.textContent = line('HUDHUD003TEXT'); // "O2 Capacity"
+    capLabel.style.cssText = `font-size:12px;color:#888;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`;
+    const capValues = document.createElement('div');
+    capValues.style.cssText = 'display:flex;align-items:baseline;gap:0;';
     this.popText = document.createElement('span');
     this.popText.id = 'hud-pop';
-    this.popText.style.cssText = `font-size:30px;font-weight:bold;color:${AMBER};`;
+    this.popText.style.cssText = `font-size:36px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`;
     this.popText.textContent = '0';
     this.capacityText = document.createElement('span');
     this.capacityText.style.cssText = 'font-size:16px;color:#888;';
-    capGroup.appendChild(this.popText);
-    capGroup.appendChild(this.capacityText);
-    hudTop.appendChild(capGroup);
+    capValues.appendChild(this.popText);
+    capValues.appendChild(this.capacityText);
+    capGroup.appendChild(capLabel);
+    capGroup.appendChild(capValues);
+    row1.appendChild(capGroup);
+    hudTop.appendChild(row1);
 
-    // Divider (DividerLine from Lua)
+    // ── Divider line (Lua: DividerLine) ──
     const divider = document.createElement('div');
-    divider.style.cssText = `width:2px;height:40px;background:${AMBER};opacity:0.6;margin:0 4px;`;
+    divider.style.cssText = `width:100%;height:2px;background:${AMBER};opacity:0.5;margin:6px 0 4px;`;
     hudTop.appendChild(divider);
 
-    // Stardate
+    // ── Row 2: Stardate + Speed buttons + ? ──
+    const row2 = document.createElement('div');
+    row2.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    // Stardate (Lua: dosissemibold30 style, own row below divider)
     this.starDateText = document.createElement('span');
     this.starDateText.id = 'hud-stardate';
-    this.starDateText.style.cssText = `font-size:12px;color:${AMBER};`;
-    hudTop.appendChild(this.starDateText);
+    this.starDateText.style.cssText = `font-size:15px;font-weight:600;color:${AMBER};font-family:'Dosis',sans-serif;`;
+    row2.appendChild(this.starDateText);
 
-    // Speed buttons (sprite images: speed0-3 + active variants)
+    // Speed buttons (Lua: PauseButton at x=900, Speed1 at 956, Speed2 at 1012, Speed3 at 1068)
     const speedRow = document.createElement('div');
-    speedRow.style.cssText = 'display:flex;gap:2px;align-items:center;margin-left:4px;';
+    speedRow.style.cssText = 'display:flex;gap:2px;align-items:center;margin-left:8px;';
     const speeds = [0, 1, 2, 4];
     const speedKeys = ['speed0', 'speed1', 'speed2', 'speed3'];
     for (let i = 0; i < 4; i++) {
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position:relative;width:30px;height:30px;cursor:pointer;';
+      wrapper.style.cssText = 'position:relative;width:32px;height:32px;cursor:pointer;';
 
       const inactiveImg = document.createElement('img');
       inactiveImg.src = `assets/ui/hud/ui_hud_${speedKeys[i]}.png`;
@@ -362,8 +400,24 @@ export class UIManager {
       speedRow.appendChild(wrapper);
       this.speedImgs.push({ inactive: inactiveImg, active: activeImg });
     }
-    hudTop.appendChild(speedRow);
+    row2.appendChild(speedRow);
 
+    // Help "?" button (Lua: HelpButton)
+    const helpBtn = document.createElement('div');
+    helpBtn.style.cssText = `
+      width:28px;height:28px;border-radius:50%;border:2px solid ${AMBER};
+      display:flex;align-items:center;justify-content:center;cursor:pointer;
+      font-size:16px;font-weight:bold;color:${AMBER};margin-left:6px;
+    `;
+    helpBtn.textContent = '?';
+    helpBtn.addEventListener('click', () => {
+      Base.addAlert('hint', 'Keyboard shortcuts: C=Room, B=Floor, D=Door, X=Demolish, Z=Zone, P=Object, M=Mine, R=Roster, E=Research, G=Goals, O=O2 Overlay, 1/2/3=Speed');
+    });
+    helpBtn.addEventListener('mouseenter', () => { helpBtn.style.background = AMBER; helpBtn.style.color = '#000'; });
+    helpBtn.addEventListener('mouseleave', () => { helpBtn.style.background = 'transparent'; helpBtn.style.color = AMBER; });
+    row2.appendChild(helpBtn);
+
+    hudTop.appendChild(row2);
     this.uiRoot.appendChild(hudTop);
 
     // Bottom-right panel: morale, machine health, corpses, divider, O2 button, walls button, zoom buttons
@@ -436,16 +490,16 @@ export class UIManager {
     this.tileTipEl = document.createElement('div');
     this.tileTipEl.style.cssText = `
       position:absolute;bottom:50px;right:10px;
-      color:${AMBER};font-size:12px;font-family:'Orbitron',monospace;
+      color:${AMBER};font-size:12px;font-family:'Dosis',sans-serif;font-weight:600;
       pointer-events:none;display:none;
     `;
     this.uiRoot.appendChild(this.tileTipEl);
 
-    // Persistent coordinate display — always shows hovered tile coords + type
+    // Persistent coordinate display — below the top HUD bar
     this.tileInfoEl = document.createElement('div');
     this.tileInfoEl.style.cssText = `
-      position:absolute;bottom:8px;right:10px;
-      color:${AMBER};font-size:11px;font-family:'Orbitron',monospace;
+      position:absolute;top:52px;right:10px;
+      color:${AMBER};font-size:11px;font-family:'Dosis',sans-serif;font-weight:600;
       pointer-events:none;opacity:0.7;
     `;
     this.tileInfoEl.textContent = '';
@@ -496,6 +550,7 @@ export class UIManager {
 
   private createSidebar() {
     const sidebar = document.createElement('div');
+    sidebar.id = 'sidebar';
     this.sidebarEl = sidebar;
     sidebar.style.cssText = `
       position:absolute;top:0;left:0;width:${SIDEBAR_COLLAPSED_W}px;height:100%;
@@ -511,7 +566,10 @@ export class UIManager {
         sb.label.style.display = '';
         sb.hotkey.style.display = '';
       }
+      const util = sidebar.querySelector('.sidebar-util') as HTMLElement;
+      if (util) util.style.display = 'flex';
       SoundManager.playUI('UI_Expand');
+      playWarble(sidebar, 0.3, 0.3);
     });
     sidebar.addEventListener('mouseleave', () => {
       this.sidebarExpanded = false;
@@ -520,17 +578,20 @@ export class UIManager {
         sb.label.style.display = 'none';
         sb.hotkey.style.display = 'none';
       }
+      const util = sidebar.querySelector('.sidebar-util') as HTMLElement;
+      if (util) util.style.display = 'none';
+      SoundManager.playSfx('degauss');
     });
 
+    // Lua SideBarLayout.lua: 8 buttons (Inspect, Assign, Research, Goals, Construct, Mine, Beacon, [Disaster])
     const btnDefs: { label: string; hotkey: string; mode: BuildMode; action?: string; iconImg?: string }[] = [
-      { label: 'Inspect',   hotkey: 'I', mode: 'none', action: 'inspect', iconImg: 'ui_iconIso_inspect.png' },
-      { label: 'Assign',    hotkey: 'R', mode: 'none', action: 'roster', iconImg: 'ui_iconIso_assign.png' },
-      { label: 'Research',  hotkey: 'E', mode: 'none', action: 'research', iconImg: 'ui_iconIso_research.png' },
-      { label: 'Goals',     hotkey: 'G', mode: 'none', action: 'goals', iconImg: 'ui_iconIso_confirm.png' },
-      { label: 'Construct', hotkey: 'C', mode: 'room', action: 'construct', iconImg: 'ui_iconIso_construct.png' },
-      { label: 'Mine',      hotkey: 'M', mode: 'mine', iconImg: 'ui_iconIso_mine.png' },
-      { label: 'Beacon',    hotkey: 'N', mode: 'none', action: 'stub', iconImg: 'ui_iconIso_beacon.png' },
-      { label: 'Demolish',  hotkey: 'X', mode: 'demolish' },
+      { label: line('HUDHUD005TEXT'), hotkey: 'I', mode: 'none', action: 'inspect', iconImg: 'ui_iconIso_inspect.png' },
+      { label: line('HUDHUD006TEXT'), hotkey: 'R', mode: 'none', action: 'roster', iconImg: 'ui_iconIso_assign.png' },
+      { label: line('HUDHUD046TEXT'), hotkey: 'E', mode: 'none', action: 'research', iconImg: 'ui_iconIso_research.png' },
+      { label: line('HUDHUD052TEXT'), hotkey: 'G', mode: 'none', action: 'goals', iconImg: 'ui_iconIso_confirm.png' },
+      { label: line('HUDHUD007TEXT'), hotkey: 'C', mode: 'room', action: 'construct', iconImg: 'ui_iconIso_construct.png' },
+      { label: line('HUDHUD008TEXT'), hotkey: 'M', mode: 'mine', iconImg: 'ui_iconIso_mine.png' },
+      { label: line('HUDHUD025TEXT'), hotkey: 'B', mode: 'beacon', action: 'beacon', iconImg: 'ui_iconIso_beacon.png' },
     ];
 
     for (const def of btnDefs) {
@@ -541,23 +602,23 @@ export class UIManager {
       `;
       // Icon: use <img> with CSS filter for tinting, or text fallback
       const icon = document.createElement('div');
-      icon.style.cssText = `width:44px;height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;`;
+      icon.style.cssText = `width:54px;height:54px;flex-shrink:0;display:flex;align-items:center;justify-content:center;`;
       let iconImg: HTMLImageElement | null = null;
       if (def.iconImg) {
         iconImg = document.createElement('img');
         iconImg.src = `assets/ui/icons/${def.iconImg}`;
-        iconImg.style.cssText = `width:40px;height:40px;object-fit:contain;${ICON_FILTER_AMBER}`;
+        iconImg.style.cssText = `width:48px;height:48px;object-fit:contain;${ICON_FILTER_AMBER}`;
         icon.appendChild(iconImg);
       } else {
-        icon.style.cssText = `font-size:24px;font-weight:bold;color:${AMBER};width:44px;text-align:center;flex-shrink:0;`;
+        icon.style.cssText = `font-size:24px;font-weight:bold;color:${AMBER};width:54px;text-align:center;flex-shrink:0;`;
         icon.textContent = def.hotkey;
       }
       const label = document.createElement('div');
       label.textContent = def.label;
-      label.style.cssText = `font-size:18px;color:${AMBER};flex:1;display:none;`;
+      label.style.cssText = `font-size:18px;color:${AMBER};flex:1;display:none;font-family:'Dosis',sans-serif;font-weight:400;`;
       const hotkey = document.createElement('div');
       hotkey.textContent = def.hotkey;
-      hotkey.style.cssText = `font-size:12px;color:${AMBER};display:none;`;
+      hotkey.style.cssText = `font-size:12px;color:${AMBER};display:none;font-family:'Dosis',sans-serif;font-weight:600;`;
 
       btn.appendChild(icon);
       btn.appendChild(label);
@@ -565,6 +626,7 @@ export class UIManager {
 
       btn.addEventListener('click', () => {
         SoundManager.playUI('UI_Select');
+        playWarble(sidebar, 0.3, 0.3);
         if (def.action === 'roster') {
           this.jobRoster.toggle();
           return;
@@ -624,7 +686,7 @@ export class UIManager {
       btn.addEventListener('mouseleave', () => {
         btn.style.background = 'transparent';
         if (iconImg) {
-          iconImg.style.cssText = `width:40px;height:40px;object-fit:contain;${ICON_FILTER_AMBER}`;
+          iconImg.style.cssText = `width:48px;height:48px;object-fit:contain;${ICON_FILTER_AMBER}`;
         } else {
           icon.style.color = AMBER;
         }
@@ -636,23 +698,69 @@ export class UIManager {
       this.sidebarBtns.push({ el: btn, label, hotkey, icon, iconImg, mode: def.mode, btnLabel: def.label });
     }
 
-    // Construct sub-menu (hidden by default)
+    // Construct sub-menu — Lua ConstructMenu.lua: replaces sidebar buttons entirely
     this.constructSub = document.createElement('div');
-    this.constructSub.style.cssText = `padding:4px 10px;display:none;`;
+    this.constructSub.style.cssText = `display:none;`;
+
+    // ── Cancel button (red) — Lua CancelButton ──
+    const cancelEl = document.createElement('div');
+    cancelEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const cancelIcon = document.createElement('span');
+    cancelIcon.textContent = '\u{1F6AB}';
+    cancelIcon.style.cssText = `font-size:18px;`;
+    const cancelLbl = document.createElement('span');
+    cancelLbl.textContent = 'Cancel';
+    cancelLbl.style.cssText = `font-size:18px;color:#ff4444;font-family:'Dosis',sans-serif;font-weight:600;`;
+    const cancelHk = document.createElement('span');
+    cancelHk.textContent = 'ESC';
+    cancelHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    cancelEl.appendChild(cancelIcon);
+    cancelEl.appendChild(cancelLbl);
+    cancelEl.appendChild(cancelHk);
+    cancelEl.addEventListener('click', () => {
+      SoundManager.playSfx('degauss');
+      this.setBuildMode('none');
+    });
+    cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = 'rgba(255,68,68,0.3)'; });
+    cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; });
+    this.constructSub.appendChild(cancelEl);
+
+    // ── ">> Construct" label — Lua HUDHUD012TEXT ──
+    const constructLabel = document.createElement('div');
+    constructLabel.textContent = line('HUDHUD012TEXT');
+    constructLabel.style.cssText = `
+      font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
+      padding:4px 12px;opacity:0.7;
+    `;
+    this.constructSub.appendChild(constructLabel);
+
+    // ── Build mode buttons — matching Lua ConstructMenu order ──
+    // Lua order: Cancel, Erase, Area(Room), Wall, Floor, [Airlock], Demolish, Vaporize, Confirm, Object
     const subBtns: { label: string; hotkey: string; mode: BuildMode }[] = [
-      { label: 'Room',    hotkey: 'C', mode: 'room' },
-      { label: 'Floor',   hotkey: 'B', mode: 'floor' },
-      { label: 'Door',    hotkey: 'D', mode: 'door' },
-      { label: 'Zone',    hotkey: 'Z', mode: 'zone' },
-      { label: 'Objects', hotkey: 'P', mode: 'object' },
+      { label: line('HUDHUD011TEXT'), hotkey: 'E', mode: 'erase' },     // Erase (cancel pending builds)
+      { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },      // Room (Area)
+      { label: line('HUDHUD014TEXT'), hotkey: 'W', mode: 'wall' },      // Wall
+      { label: line('HUDHUD027TEXT'), hotkey: 'B', mode: 'floor' },     // Floor
+      { label: line('HUDHUD017TEXT'), hotkey: 'X', mode: 'demolish' },  // Tear Down (walls→floor, objects removed)
+      { label: line('BUILDM009TEXT'), hotkey: 'V', mode: 'vaporize' },  // Vaporize (everything→space)
+      { label: line('ZONEUI014TEXT'), hotkey: 'P', mode: 'object' },    // Object
     ];
+    this.constructSubModes = [];
     for (const sb of subBtns) {
       const el = document.createElement('div');
-      el.textContent = `[${sb.hotkey}] ${sb.label}`;
       el.style.cssText = `
-        font-size:13px;color:${AMBER};background:rgba(0,0,0,0.6);
-        padding:5px 10px;margin-bottom:2px;cursor:pointer;
+        height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;
+        gap:8px;position:relative;
       `;
+      const hk = document.createElement('span');
+      hk.textContent = `[${sb.hotkey}]`;
+      hk.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
+      const lbl = document.createElement('span');
+      lbl.textContent = sb.label;
+      lbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
+      el.appendChild(hk);
+      el.appendChild(lbl);
+      this.constructSubModes.push(sb.mode);
       el.addEventListener('click', () => {
         SoundManager.playUI('UI_Select');
         this.setBuildMode(this.getBuildMode() === sb.mode ? 'none' : sb.mode);
@@ -660,30 +768,192 @@ export class UIManager {
       });
       el.addEventListener('mouseenter', () => {
         SoundManager.playUI('UI_Hilight');
-        el.style.background = 'rgba(223,162,0,0.2)';
+        el.style.background = AMBER;
+        hk.style.color = '#000';
+        lbl.style.color = '#000';
       });
-      el.addEventListener('mouseleave', () => { el.style.background = 'rgba(0,0,0,0.6)'; });
+      el.addEventListener('mouseleave', () => {
+        el.style.background = 'transparent';
+        hk.style.color = AMBER;
+        lbl.style.color = AMBER;
+      });
       this.constructSub.appendChild(el);
     }
+
+    // ── Confirm button (green) — Lua ConfirmButton — appears after all mode buttons ──
+    const confirmEl = document.createElement('div');
+    confirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const confirmIcon = document.createElement('span');
+    confirmIcon.textContent = '\u2714';
+    confirmIcon.style.cssText = `font-size:18px;color:#44ff44;`;
+    const confirmLbl = document.createElement('span');
+    confirmLbl.textContent = line('HUDHUD019TEXT');
+    confirmLbl.style.cssText = `font-size:18px;color:#44ff44;font-family:'Dosis',sans-serif;font-weight:600;`;
+    confirmEl.appendChild(confirmIcon);
+    confirmEl.appendChild(confirmLbl);
+    confirmEl.addEventListener('click', () => {
+      SoundManager.playSfx('confirm');
+      this.setBuildMode('none');
+    });
+    confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = 'rgba(68,255,68,0.2)'; });
+    confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; });
+    this.constructSub.appendChild(confirmEl);
+
     sidebar.appendChild(this.constructSub);
 
-    // Utility buttons
+    // Mine sub-menu — Lua MineMenu: replaces sidebar with Confirm/>>Mine/Mine/Erase
+    this.mineSub = document.createElement('div');
+    this.mineSub.style.cssText = `display:none;`;
+
+    // Confirm button
+    const mineConfirmEl = document.createElement('div');
+    mineConfirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const mineConfirmIcon = document.createElement('span');
+    mineConfirmIcon.textContent = '\u2714';
+    mineConfirmIcon.style.cssText = `font-size:18px;color:#44ff44;`;
+    const mineConfirmLbl = document.createElement('span');
+    mineConfirmLbl.textContent = line('HUDHUD019TEXT');
+    mineConfirmLbl.style.cssText = `font-size:18px;color:#44ff44;font-family:'Dosis',sans-serif;font-weight:600;`;
+    const mineConfirmHk = document.createElement('span');
+    mineConfirmHk.textContent = 'ESC';
+    mineConfirmHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    mineConfirmEl.append(mineConfirmIcon, mineConfirmLbl, mineConfirmHk);
+    mineConfirmEl.addEventListener('click', () => {
+      SoundManager.playSfx('confirm');
+      this.setBuildMode('none');
+    });
+    mineConfirmEl.addEventListener('mouseenter', () => { mineConfirmEl.style.background = 'rgba(68,255,68,0.2)'; });
+    mineConfirmEl.addEventListener('mouseleave', () => { mineConfirmEl.style.background = 'transparent'; });
+    this.mineSub.appendChild(mineConfirmEl);
+
+    // ">> Mine" label
+    const mineLabel = document.createElement('div');
+    mineLabel.textContent = line('HUDHUD008TEXT');
+    mineLabel.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
+    this.mineSub.appendChild(mineLabel);
+
+    // Mine button [M]
+    const mineBtnEl = document.createElement('div');
+    mineBtnEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;background:${AMBER};`;
+    const mineBtnHk = document.createElement('span');
+    mineBtnHk.textContent = '[M]';
+    mineBtnHk.style.cssText = `font-size:13px;color:#000;font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
+    const mineBtnLbl = document.createElement('span');
+    mineBtnLbl.textContent = line('HUDHUD008TEXT');
+    mineBtnLbl.style.cssText = `font-size:18px;color:#000;font-family:'Dosis',sans-serif;font-weight:400;`;
+    mineBtnEl.append(mineBtnHk, mineBtnLbl);
+    mineBtnEl.addEventListener('click', () => {
+      SoundManager.playUI('UI_Select');
+      // Already in mine mode, no-op
+    });
+    this.mineSub.appendChild(mineBtnEl);
+
+    // Erase button [E]
+    const mineEraseEl = document.createElement('div');
+    mineEraseEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const mineEraseIcon = document.createElement('span');
+    mineEraseIcon.textContent = '\u2716';
+    mineEraseIcon.style.cssText = `font-size:16px;color:${AMBER};`;
+    const mineEraseHk = document.createElement('span');
+    mineEraseHk.textContent = '[E]';
+    mineEraseHk.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
+    const mineEraseLbl = document.createElement('span');
+    mineEraseLbl.textContent = line('HUDHUD011TEXT');
+    mineEraseLbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
+    mineEraseEl.append(mineEraseIcon, mineEraseHk, mineEraseLbl);
+    mineEraseEl.addEventListener('click', () => {
+      SoundManager.playUI('UI_Select');
+      // Erase pending mine commands
+      this.setBuildMode('erase');
+    });
+    mineEraseEl.addEventListener('mouseenter', () => {
+      SoundManager.playUI('UI_Hilight');
+      mineEraseEl.style.background = AMBER;
+      mineEraseIcon.style.color = '#000';
+      mineEraseHk.style.color = '#000';
+      mineEraseLbl.style.color = '#000';
+    });
+    mineEraseEl.addEventListener('mouseleave', () => {
+      mineEraseEl.style.background = 'transparent';
+      mineEraseIcon.style.color = AMBER;
+      mineEraseHk.style.color = AMBER;
+      mineEraseLbl.style.color = AMBER;
+    });
+    this.mineSub.appendChild(mineEraseEl);
+    sidebar.appendChild(this.mineSub);
+
+    // Beacon sub-menu — Lua BeaconMenu.lua: replaces sidebar when beacon/security mode is active
+    this.beaconSub = document.createElement('div');
+    this.beaconSub.style.cssText = `display:none;`;
+
+    // Done button
+    const beaconDoneEl = document.createElement('div');
+    beaconDoneEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const beaconDoneLbl = document.createElement('span');
+    beaconDoneLbl.textContent = 'Done';
+    beaconDoneLbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;`;
+    const beaconDoneHk = document.createElement('span');
+    beaconDoneHk.textContent = 'ESC';
+    beaconDoneHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    beaconDoneEl.appendChild(beaconDoneLbl);
+    beaconDoneEl.appendChild(beaconDoneHk);
+    beaconDoneEl.addEventListener('click', () => {
+      SoundManager.playSfx('degauss');
+      this.setBuildMode('none');
+    });
+    beaconDoneEl.addEventListener('mouseenter', () => { beaconDoneEl.style.background = `rgba(223,162,0,0.2)`; });
+    beaconDoneEl.addEventListener('mouseleave', () => { beaconDoneEl.style.background = 'transparent'; });
+    this.beaconSub.appendChild(beaconDoneEl);
+
+    // ">> Security" label
+    const secLabel = document.createElement('div');
+    secLabel.textContent = line('HUDHUD036TEXT');
+    secLabel.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
+    this.beaconSub.appendChild(secLabel);
+
+    // Clear Beacon button
+    const clearBeaconEl = this._createBeaconButton('\u2716 Clear Beacon', () => {
+      // Placeholder: clear all beacons
+      SoundManager.playUI('UI_Select');
+    });
+    this.beaconSub.appendChild(clearBeaconEl);
+
+    // Violence level buttons (Lua: Non-lethal, Necessary, Lethal)
+    const violenceBtns = [
+      { label: line('HUDHUD051TEXT'), level: 'nonlethal' },  // Force: Non-lethal
+      { label: line('HUDHUD049TEXT'), level: 'default' },    // Force: Necessary
+      { label: line('HUDHUD050TEXT'), level: 'lethal' },     // Force: Lethal
+    ];
+    for (const vb of violenceBtns) {
+      const el = this._createBeaconButton(vb.label, () => {
+        SoundManager.playUI('UI_Select');
+        this.selectedViolenceLevel = vb.level;
+      });
+      (el as any)._violenceLevel = vb.level;
+      this.beaconSub.appendChild(el);
+    }
+    sidebar.appendChild(this.beaconSub);
+
+    // Utility buttons — Lua puts Save/Load in StartMenu, but we keep small links at sidebar bottom for convenience
     const utilContainer = document.createElement('div');
-    utilContainer.style.cssText = 'padding:10px;display:flex;gap:6px;flex-wrap:wrap;';
+    utilContainer.className = 'sidebar-util';
+    utilContainer.style.cssText = `padding:6px 10px;display:none;flex-direction:column;gap:2px;margin-top:auto;`;
     const utilBtns = [
-      { label: 'Save', action: () => { this.onSave(); Base.addAlert('system', 'Game saved.'); } },
-      { label: 'Load', action: () => { this.onLoad(); Base.addAlert('system', 'Game loaded.'); } },
-      { label: 'Export', action: () => { this.onExport(); Base.addAlert('system', 'Save exported to file.'); } },
-      { label: 'Import', action: () => { this.onImport().then(ok => { Base.addAlert('system', ok ? 'Save imported.' : 'Import failed.'); }); } },
+      { label: line('UIMISC046TEXT'), action: () => { this.onSave(); Base.addAlert('system', line('UIMISC050TEXT')); } },
+      { label: line('UIMISC047TEXT'), action: () => { this.onLoad(); Base.addAlert('system', line('UIMISC051TEXT')); } },
+      { label: line('UIMISC048TEXT'), action: () => { this.onExport(); Base.addAlert('system', line('UIMISC052TEXT')); } },
+      { label: line('UIMISC049TEXT'), action: () => { this.onImport().then(ok => { Base.addAlert('system', ok ? line('UIMISC053TEXT') : line('UIMISC054TEXT')); }); } },
     ];
     for (const ub of utilBtns) {
       const el = document.createElement('div');
       el.textContent = ub.label;
       el.style.cssText = `
-        font-size:12px;color:${AMBER};background:rgba(0,0,0,0.6);
-        padding:5px 10px;cursor:pointer;
+        font-size:11px;color:${AMBER};opacity:0.6;
+        padding:2px 4px;cursor:pointer;
       `;
       el.addEventListener('click', ub.action);
+      el.addEventListener('mouseenter', () => { el.style.opacity = '1'; });
+      el.addEventListener('mouseleave', () => { el.style.opacity = '0.6'; });
       utilContainer.appendChild(el);
     }
     sidebar.appendChild(utilContainer);
@@ -692,6 +962,26 @@ export class UIManager {
   }
 
   // ── Zone Picker ─────────────────────────────────────────────────
+
+  private _createBeaconButton(label: string, onClick: () => void): HTMLDivElement {
+    const el = document.createElement('div');
+    el.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const lbl = document.createElement('span');
+    lbl.textContent = label;
+    lbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
+    el.appendChild(lbl);
+    el.addEventListener('click', onClick);
+    el.addEventListener('mouseenter', () => {
+      SoundManager.playUI('UI_Hilight');
+      el.style.background = AMBER;
+      lbl.style.color = '#000';
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.background = 'transparent';
+      lbl.style.color = AMBER;
+    });
+    return el;
+  }
 
   private createZonePicker() {
     this.zonePicker = document.createElement('div');
@@ -831,35 +1121,33 @@ export class UIManager {
   // ── Alert Log ───────────────────────────────────────────────────
 
   private createAlertLog() {
+    // Lua AlertLayout.lua: right-aligned amber notification panel, newest alert on top
+    // Shows "!" icon, message text, and "Spacedate XXXX.XX" below
     this.alertContainer = document.createElement('div');
+    this.alertContainer.id = 'alert-panel';
     this.alertContainer.style.cssText = `
-      position:absolute;bottom:28px;right:10px;width:360px;
-      background:rgba(0,0,0,0.7);
+      position:absolute;top:140px;right:10px;width:380px;
       pointer-events:auto;font-size:12px;
     `;
 
-    // Header
-    const headerRow = document.createElement('div');
-    headerRow.style.cssText = `
-      display:flex;justify-content:space-between;align-items:center;
-      padding:4px 8px;
-    `;
-    headerRow.innerHTML = `<span style="color:${AMBER};font-size:11px;font-weight:bold;">ALERTS</span>`;
+    // Alert list (shows newest alert as a notification card)
+    this.alertList = document.createElement('div');
+    this.alertList.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+    this.alertContainer.appendChild(this.alertList);
+
+    // Minimize toggle at bottom
+    const minRow = document.createElement('div');
+    minRow.style.cssText = `text-align:right;padding:2px 4px;`;
     const minBtn = document.createElement('span');
-    minBtn.textContent = '[_]';
-    minBtn.style.cssText = `color:${AMBER};cursor:pointer;font-size:11px;`;
+    minBtn.textContent = 'ALERTS';
+    minBtn.style.cssText = `color:${AMBER};cursor:pointer;font-size:11px;font-weight:bold;font-family:'Dosis',sans-serif;`;
     minBtn.addEventListener('click', () => {
       this.alertMinimized = !this.alertMinimized;
-      this.alertList.style.display = this.alertMinimized ? 'none' : 'block';
-      minBtn.textContent = this.alertMinimized ? '[+]' : '[_]';
+      this.alertList.style.display = this.alertMinimized ? 'none' : 'flex';
+      minBtn.textContent = this.alertMinimized ? 'ALERTS [+]' : 'ALERTS';
     });
-    headerRow.appendChild(minBtn);
-    this.alertContainer.appendChild(headerRow);
-
-    // Alert list
-    this.alertList = document.createElement('div');
-    this.alertList.style.cssText = 'max-height:200px;overflow-y:auto;';
-    this.alertContainer.appendChild(this.alertList);
+    minRow.appendChild(minBtn);
+    this.alertContainer.appendChild(minRow);
 
     this.uiRoot.appendChild(this.alertContainer);
   }
@@ -872,7 +1160,7 @@ export class UIManager {
     this.costOverlay.style.cssText = `
       position:absolute;bottom:10px;left:${SIDEBAR_W + 10}px;
       background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
-      color:${AMBER};font-family:'Orbitron',monospace;font-size:13px;
+      color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;font-size:13px;
       padding:6px 12px;display:none;pointer-events:none;z-index:15;
     `;
     this.uiRoot.appendChild(this.costOverlay);
@@ -893,7 +1181,7 @@ export class UIManager {
 
   /** Set tile tip text (Lua: StatusBar:setTileTipText). Auto-clears after timeout. */
   setTileTip(text: string) {
-    this.tileTipEl.textContent = `Last clicked: ${text}`;
+    this.tileTipEl.textContent = `${line('HUDHUD001TEXT')} ${text}`;
     this.tileTipEl.style.display = 'block';
     this.tileTipClearTimer = this.TILE_TIP_DURATION;
   }
@@ -996,7 +1284,7 @@ export class UIManager {
     this.matterText.textContent = String(this.displayedMatter);
 
     // ── Stardate ──────────────────────────────────────────
-    this.starDateText.textContent = `${GameRules.sStarDate} ${GameRules.sStarTime}`;
+    this.starDateText.textContent = `${line('HUDHUD004TEXT')} ${GameRules.sStarDate} ${GameRules.sStarTime}`;
 
     // ── Speed buttons ─────────────────────────────────────
     const currentSpeed = !GameRules.bRunning ? 0 : GameRules.playerTimeScale;
@@ -1045,17 +1333,21 @@ export class UIManager {
       this.machineHealthText.textContent = '';
     }
 
-    // ── Corpses (Lua: count Corpse pickups, not dead characters) ──
+    // ── Corpses (Lua: ":( XX" format, count Corpse pickups) ──
     const corpseCount = this.getCorpseCount?.() ?? 0;
     if (corpseCount > 0) {
-      this.corpseText.textContent = `${corpseCount}`;
+      this.corpseText.textContent = `:( ${corpseCount}`;
     } else {
       this.corpseText.textContent = '';
     }
 
+    // ── Inspector replaces sidebar (Lua: inspector takes over left panel) ──
+    const inspectorActive = this.inspectorPanel.hasEntity();
+    this.sidebarEl.style.display = inspectorActive ? 'none' : '';
+
     // ── Sidebar active states ─────────────────────────────
     const buildMode = this.getBuildMode();
-    const constructModes: BuildMode[] = ['room', 'floor', 'door', 'zone', 'object'];
+    const constructModes: BuildMode[] = ['room', 'floor', 'wall', 'door', 'zone', 'object', 'demolish'];
     const isConstructActive = constructModes.includes(buildMode);
 
     for (const sb of this.sidebarBtns) {
@@ -1071,7 +1363,7 @@ export class UIManager {
       sb.el.style.background = active ? AMBER : 'transparent';
       if (sb.iconImg) {
         sb.iconImg.style.filter = active ? 'brightness(0)' : '';
-        if (!active) sb.iconImg.style.cssText = `width:40px;height:40px;object-fit:contain;${ICON_FILTER_AMBER}`;
+        if (!active) sb.iconImg.style.cssText = `width:48px;height:48px;object-fit:contain;${ICON_FILTER_AMBER}`;
       } else {
         sb.icon.style.color = active ? '#000' : AMBER;
       }
@@ -1079,26 +1371,74 @@ export class UIManager {
       sb.hotkey.style.color = active ? '#000' : AMBER;
     }
 
-    // ── Construct sub-menu visibility ─────────────────────
-    this.constructSub.style.display = isConstructActive || buildMode === 'none' ? 'none' : 'none';
-    // Show construct sub-menu when any construct mode is active
+    // ── Construct sub-menu: replaces sidebar buttons (Lua behavior) ──
     if (isConstructActive) {
       this.constructSub.style.display = 'block';
-      // Highlight active sub-button
+      // Hide main sidebar buttons when construct menu is active
+      for (const sb of this.sidebarBtns) {
+        sb.el.style.display = 'none';
+      }
+      // Highlight active sub-button (skip first 3 children: Cancel, Confirm, label)
+      const SUB_OFFSET = 3;
       const subBtns = this.constructSub.children;
-      const subModes: BuildMode[] = ['room', 'floor', 'door', 'zone', 'object'];
-      for (let i = 0; i < subBtns.length; i++) {
-        const el = subBtns[i] as HTMLElement;
-        const isSubActive = buildMode === subModes[i];
-        el.style.background = isSubActive ? 'rgba(223,162,0,0.3)' : 'rgba(0,0,0,0.6)';
+      for (let i = 0; i < this.constructSubModes.length; i++) {
+        const el = subBtns[i + SUB_OFFSET] as HTMLElement;
+        if (!el) continue;
+        const hk = el.children[0] as HTMLElement;
+        const lbl = el.children[1] as HTMLElement;
+        const isSubActive = buildMode === this.constructSubModes[i] && buildMode !== 'none';
+        el.style.background = isSubActive ? AMBER : 'transparent';
+        if (hk) hk.style.color = isSubActive ? '#000' : AMBER;
+        if (lbl) lbl.style.color = isSubActive ? '#000' : AMBER;
       }
     } else {
       this.constructSub.style.display = 'none';
     }
 
-    // ── Zone picker ───────────────────────────────────────
-    this.zonePicker.style.display = buildMode === 'zone' ? 'block' : 'none';
-    if (buildMode === 'zone') {
+    // ── Mine sub-menu: replaces sidebar buttons (Lua MineMenu) ──
+    const isMineActive = buildMode === 'mine';
+    if (isMineActive) {
+      this.mineSub.style.display = 'block';
+      for (const sb of this.sidebarBtns) {
+        sb.el.style.display = 'none';
+      }
+    } else {
+      this.mineSub.style.display = 'none';
+    }
+
+    // ── Beacon sub-menu: replaces sidebar buttons (Lua BeaconMenu) ──
+    const isBeaconActive = buildMode === 'beacon';
+    if (isBeaconActive) {
+      this.beaconSub.style.display = 'block';
+      for (const sb of this.sidebarBtns) {
+        sb.el.style.display = 'none';
+      }
+      // Highlight active violence level
+      const children = this.beaconSub.children;
+      for (let i = 0; i < children.length; i++) {
+        const el = children[i] as HTMLElement;
+        const vLevel = (el as any)._violenceLevel;
+        if (vLevel) {
+          const active = vLevel === this.selectedViolenceLevel;
+          el.style.background = active ? AMBER : 'transparent';
+          const lbl = el.children[0] as HTMLElement;
+          if (lbl) lbl.style.color = active ? '#000' : AMBER;
+        }
+      }
+    } else {
+      this.beaconSub.style.display = 'none';
+    }
+
+    // Restore sidebar buttons when no submenu is active
+    if (!isConstructActive && !isMineActive && !isBeaconActive) {
+      for (const sb of this.sidebarBtns) {
+        sb.el.style.display = 'flex';
+      }
+    }
+
+    // ── Zone picker (disabled — zone assignment moved to room inspector Rezone tab) ───
+    this.zonePicker.style.display = 'none';
+    if (false) {
       const selZone = this.getSelectedZone();
       for (const zb of this.zoneButtons) {
         const sel = zb.zone === selZone;
@@ -1121,32 +1461,67 @@ export class UIManager {
       this.tooltipEl.style.display = 'none';
     }
 
-    // ── Alert log ─────────────────────────────────────────
+    // ── Alert log (Lua AlertLayout: amber notification cards) ──
     if (!this.alertMinimized) {
-      const alerts = Base.getRecentAlerts(10);
-      this.alertList.innerHTML = '';
+      const alerts = Base.getRecentAlerts(3);
+      this.alertList.textContent = '';
       for (const alert of alerts) {
         const el = document.createElement('div');
-        el.style.cssText = `padding:2px 8px;`;
-        const color = ALERT_COLORS[alert.type] ?? '#ccc';
-        const timeStr = GameRules.getFullStarDateString(alert.time);
-        el.innerHTML = `<span style="color:#555;font-size:10px;">${timeStr}</span> <span style="color:${color};">${alert.message}</span>`;
+        el.style.cssText = `
+          background:rgba(223,162,0,0.9);padding:8px 10px;display:flex;gap:8px;align-items:flex-start;
+        `;
+        // "!" icon
+        const icon = document.createElement('div');
+        icon.textContent = '!';
+        icon.style.cssText = `
+          font-size:18px;font-weight:bold;color:#000;background:#dfa200;border:2px solid #000;
+          width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+        `;
+        // Content
+        const content = document.createElement('div');
+        content.style.cssText = 'flex:1;';
+        const msg = document.createElement('div');
+        msg.textContent = alert.message;
+        msg.style.cssText = `font-size:13px;color:#000;font-family:'Dosis',sans-serif;font-weight:500;`;
+        // Lua: show relative time for recent alerts, absolute for older ones
+        const elapsed = GameRules.simTime - alert.time;
+        let timeLabel: string;
+        if (elapsed < 2) timeLabel = '1 second ago';
+        else if (elapsed < 60) timeLabel = `${Math.floor(elapsed)} seconds ago`;
+        else if (elapsed < 120) timeLabel = '1 minute ago';
+        else if (elapsed < 3600) timeLabel = `${Math.floor(elapsed / 60)} minutes ago`;
+        else timeLabel = `${line('HUDHUD004TEXT')} ${GameRules.getFullStarDateString(alert.time)}`;
+        const time = document.createElement('div');
+        time.textContent = timeLabel;
+        time.style.cssText = `font-size:11px;color:#333;font-family:'Dosis',sans-serif;margin-top:2px;`;
+        content.appendChild(msg);
+        content.appendChild(time);
+        el.appendChild(icon);
+        el.appendChild(content);
         this.alertList.appendChild(el);
       }
     }
 
-    // ── Build cost overlay ──────────────────────────────────
+    // ── Build cost overlay (Lua ConstructMenu:getMatterCostText) ─────
     if (this.getPendingBuildCost) {
-      const costInfo = this.getPendingBuildCost();
+      const costInfo = this.getPendingBuildCost() as any;
       if (costInfo && costInfo.tileCount > 0) {
         const canAfford = GameRules.nMatter >= costInfo.cost;
-        const sign = costInfo.mode === 'demolish' ? '+' : '-';
         const costColor = costInfo.mode === 'demolish' ? '#4f4' : (canAfford ? AMBER : '#f44');
-        this.costOverlay.innerHTML = `
-          <span style="color:${costColor};">${sign}${Math.abs(costInfo.cost)} matter</span>
-          <span style="color:#888;font-size:11px;"> (${costInfo.tileCount} tiles)</span>
-          ${!canAfford && costInfo.mode !== 'demolish' ? '<div style="color:#f44;font-size:11px;">Insufficient matter!</div>' : ''}
-        `;
+        // Lua format: "Floor Area: W x H\nCost: N (W wall H floor)"
+        let html = '';
+        if (costInfo.w && costInfo.h && costInfo.mode === 'room') {
+          html += `<div style="color:${AMBER};">Floor Area: ${costInfo.w} x ${costInfo.h}</div>`;
+          html += `<div style="color:${costColor};">Cost: ${costInfo.cost} (${costInfo.wallCount} wall ${costInfo.floorCount} floor)</div>`;
+        } else if (costInfo.mode === 'demolish') {
+          html += `<div style="color:${costColor};">+${Math.abs(costInfo.cost)} matter (${costInfo.tileCount} tiles)</div>`;
+        } else {
+          html += `<div style="color:${costColor};">Cost: ${costInfo.cost} (${costInfo.tileCount} tiles)</div>`;
+        }
+        if (!canAfford && costInfo.mode !== 'demolish') {
+          html += `<div style="color:#f44;font-size:11px;">${line('BUILDM016TEXT')}</div>`;
+        }
+        this.costOverlay.innerHTML = html;
         this.costOverlay.style.display = 'block';
       } else {
         this.costOverlay.style.display = 'none';

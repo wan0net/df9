@@ -1,6 +1,11 @@
 import type { SceneContext, SceneState } from '../renderer/SceneManager';
 import { getTexture } from '../renderer/AssetLoader';
 import { SoundManager } from '../audio/SoundManager';
+import { line } from '../localization/Localization';
+import { CreditsScreen } from './CreditsScreen';
+import { SettingsPanel, type SettingsCallbacks } from './SettingsPanel';
+import { SaveSlotPanel } from './SaveSlotPanel';
+import { playWarble, playWarbleFullscreen } from './WarbleEffect';
 
 const AMBER = '#dfa200';
 const BRIGHT_AMBER = '#ffcc44';
@@ -15,27 +20,34 @@ export class StartMenuState implements SceneState {
   private overlay!: HTMLDivElement;
   private onNewGame!: () => void;
   private onTutorial!: () => void;
-  private onLoadBase!: () => void;
-  private onSaveBase: (() => void) | null = null;
+  private onLoadBase!: (slotName?: string) => void;
+  private onSaveBase: ((slotName?: string) => void) | null = null;
   private onResume: (() => void) | null = null;
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
   private audioUnlockHandler: (() => void) | null = null;
   private saveYesNoEl: HTMLDivElement | null = null;
+  private creditsScreen = new CreditsScreen();
+  private settingsPanel = new SettingsPanel();
+  private saveSlotPanel = new SaveSlotPanel();
   /** Set to true when a game session has been started (allows Resume). */
   gameRunning = false;
 
   constructor(handlers: {
     onNewGame: () => void;
     onTutorial: () => void;
-    onLoadBase: () => void;
-    onSaveBase?: () => void;
+    onLoadBase: (slotName?: string) => void;
+    onSaveBase?: (slotName?: string) => void;
     onResume?: () => void;
+    settingsCallbacks?: SettingsCallbacks;
   }) {
     this.onNewGame = handlers.onNewGame;
     this.onTutorial = handlers.onTutorial;
     this.onLoadBase = handlers.onLoadBase;
     this.onSaveBase = handlers.onSaveBase ?? null;
     this.onResume = handlers.onResume ?? null;
+    if (handlers.settingsCallbacks) {
+      this.settingsPanel.setCallbacks(handlers.settingsCallbacks);
+    }
   }
 
   enter(ctx: SceneContext) {
@@ -174,17 +186,35 @@ export class StartMenuState implements SceneState {
 
     const buttons: { label: string; action: () => void }[] = [];
     if (this.gameRunning && this.onResume) {
-      buttons.push({ label: 'RESUME', action: this.onResume });
+      buttons.push({ label: line('UIMISC023TEXT'), action: this.onResume });
     }
     buttons.push(
-      { label: 'NEW GAME', action: this.onNewGame },
-      { label: 'TUTORIAL', action: this.onTutorial },
-      { label: 'LOAD BASE', action: this.onLoadBase },
+      { label: line('UIMISC024TEXT'), action: this.onNewGame },
+      { label: line('UIMISC045TEXT'), action: this.onTutorial },
+      { label: line('UIMISC044TEXT'), action: () => {
+        this.saveSlotPanel.showLoad(this.overlay, (slotName) => {
+          this.onLoadBase(slotName);
+        }, () => {});
+      }},
     );
     if (this.gameRunning && this.onSaveBase) {
       const saveFn = this.onSaveBase;
-      buttons.push({ label: 'SAVE BASE', action: () => { saveFn(); } });
+      buttons.push({ label: line('UIMISC027TEXT'), action: () => {
+        this.saveSlotPanel.showSave(this.overlay, (slotName) => {
+          saveFn(slotName);
+        }, () => {});
+      }});
     }
+    // Settings button (Lua StartMenu: UIMISC025TEXT = SETTINGS)
+    buttons.push({
+      label: line('UIMISC025TEXT'),
+      action: () => { this.settingsPanel.show(this.overlay, () => {}); },
+    });
+    // Credits button (Lua StartMenu: UIMISC026TEXT = CREDITS)
+    buttons.push({
+      label: line('UIMISC026TEXT'),
+      action: () => { this.creditsScreen.show(this.overlay, () => {}); },
+    });
 
     for (const btn of buttons) {
       const el = document.createElement('div');
@@ -209,6 +239,7 @@ export class StartMenuState implements SceneState {
       });
       el.addEventListener('click', () => {
         SoundManager.playUI('Intro_AcceptButton');
+        playWarbleFullscreen(this.overlay, 0.3, 0.3);
         btn.action();
       });
       btnsPanel.appendChild(el);
@@ -252,7 +283,7 @@ export class StartMenuState implements SceneState {
       font-family:'Orbitron',monospace;
     `;
     const msg = document.createElement('div');
-    msg.textContent = 'SAVE BEFORE QUITTING?';
+    msg.textContent = `${line('UIMISC027TEXT')}?`;
     msg.style.cssText = `color:${AMBER};font-size:20px;margin-bottom:24px;`;
     dialog.appendChild(msg);
 
@@ -273,20 +304,20 @@ export class StartMenuState implements SceneState {
     };
 
     // [S] Save & Quit
-    btnRow.appendChild(makeDlgBtn('SAVE & QUIT (S)', () => {
+    btnRow.appendChild(makeDlgBtn(`${line('UIMISC027TEXT')} (S)`, () => {
       this.onSaveBase?.();
       this.closeSaveYesNo();
       // Stay at start menu (game saved)
     }));
 
     // [Q] Quit without saving
-    btnRow.appendChild(makeDlgBtn('QUIT (Q)', () => {
+    btnRow.appendChild(makeDlgBtn(`${line('UIMISC043TEXT')} (Q)`, () => {
       this.closeSaveYesNo();
       // In web: just stay at start menu
     }));
 
     // [ESC] Cancel
-    btnRow.appendChild(makeDlgBtn('CANCEL (ESC)', () => {
+    btnRow.appendChild(makeDlgBtn(`${line('BUILDM014TEXT')} (ESC)`, () => {
       this.closeSaveYesNo();
     }));
 

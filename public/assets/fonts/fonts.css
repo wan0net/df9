@@ -1,0 +1,63 @@
+/* Spacebase DF-9 Game Fonts — local copies for offline use */
+/* Mirrors Lua Gui.lua font definitions */
+
+/* Orbitron Light — start menu titles, HUD labels (Lua: orbitronlight) */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('Orbitron-Regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('Orbitron-Bold.ttf') format('truetype');
+}
+
+/* Dosis Regular — sidebar labels, matter/pop values (Lua: dosisregular) */
+@font-face {
+  font-family: 'Dosis';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('Dosis-Regular.ttf') format('truetype');
+}
+
+/* Dosis Medium — general UI text (Lua: dosismedium) */
+@font-face {
+  font-family: 'Dosis';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('Dosis-Medium.ttf') format('truetype');
+}
+
+/* Dosis SemiBold — hotkeys, stardate, small labels (Lua: dosissemibold) */
+@font-face {
+  font-family: 'Dosis';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('Dosis-SemiBold.ttf') format('truetype');
+}
+
+/* League Gothic — inspector names, status bar titles (Lua: gothic / LeagueGothic) */
+@font-face {
+  font-family: 'League Gothic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('LeagueGothic-Regular.ttf') format('truetype');
+}
+
+/* Nevis — inspector labels, log text, body text (Lua: nevis / Nevis) */
+@font-face {
+  font-family: 'nevis';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('Nevis-Bold.woff') format('woff');
+}

@@ -1,15 +1,16 @@
 /**
- * ResearchPanel.ts — Side panel showing tech tree and disease research.
- * Two tabs: Tech | Disease. Matches original ResearchMenu.lua layout.
+ * ResearchPanel.ts — Full-screen overlay for research assignment.
+ * Matches original ResearchAssignment.lua: full-screen with Back+ESC,
+ * Tech/Disease tabs, project list with progress bars.
  */
 
 import { researchSystem } from '../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../research/ResearchData';
-import { Malady, type ResearchEntry } from '../malady/Malady';
-import { GameRules } from '../core/GameRules';
+import { Malady } from '../malady/Malady';
+import { line } from '../localization/Localization';
+import { playWarble } from './WarbleEffect';
 
 const AMBER = '#dfa200';
-const PANEL_W = 340;
 
 export class ResearchPanel {
   private el: HTMLDivElement;
@@ -18,25 +19,105 @@ export class ResearchPanel {
   private currentTab: 'tech' | 'disease' = 'tech';
 
   constructor(parent: HTMLElement) {
+    // Full-screen overlay (matching original ResearchAssignment.lua)
     this.el = document.createElement('div');
     this.el.id = 'research-panel';
     this.el.style.cssText = `
-      position:absolute;left:296px;top:10px;width:${PANEL_W}px;
-      background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
-      color:#ccc;font-family:'Orbitron',monospace;font-size:13px;
-      display:none;pointer-events:auto;z-index:15;
-      max-height:80vh;overflow-y:auto;
+      position:fixed;top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0.92);z-index:100;display:none;
+      font-family:'Dosis',sans-serif;pointer-events:auto;
     `;
 
+    // Back button (Lua: BackButton + BackLabel + BackHotkey)
+    const backBtn = document.createElement('div');
+    backBtn.style.cssText = `
+      position:absolute;top:0;left:0;width:286px;height:98px;
+      background:#000;cursor:pointer;display:flex;align-items:center;
+      padding:0 20px;box-sizing:border-box;
+    `;
+    const backLabel = document.createElement('span');
+    backLabel.textContent = line('HUDHUD035TEXT');
+    backLabel.style.cssText = `color:${AMBER};font-size:28px;flex:1;`;
+    const backHotkey = document.createElement('span');
+    backHotkey.textContent = 'ESC';
+    backHotkey.style.cssText = `color:${AMBER};font-size:16px;`;
+    backBtn.appendChild(backLabel);
+    backBtn.appendChild(backHotkey);
+    backBtn.addEventListener('mouseenter', () => {
+      backBtn.style.background = AMBER;
+      backLabel.style.color = '#000';
+      backHotkey.style.color = '#000';
+    });
+    backBtn.addEventListener('mouseleave', () => {
+      backBtn.style.background = '#000';
+      backLabel.style.color = AMBER;
+      backHotkey.style.color = AMBER;
+    });
+    backBtn.addEventListener('click', () => this.hide());
+    this.el.appendChild(backBtn);
+
+    // Title
+    const title = document.createElement('div');
+    title.textContent = line('INSPEC121TEXT');
+    title.style.cssText = `
+      position:absolute;top:20px;left:380px;
+      color:${AMBER};font-size:32px;font-weight:500;
+    `;
+    this.el.appendChild(title);
+
+    // Tab row (Lua: TechTabButton / DiseaseTabButton)
+    const tabRow = document.createElement('div');
+    tabRow.style.cssText = `
+      position:absolute;top:70px;left:380px;display:flex;gap:0;
+    `;
+    const tabs: { label: string; tab: 'tech' | 'disease' }[] = [
+      { label: line('RSCHUI005TEXT'), tab: 'tech' },
+      { label: line('RSCHUI006TEXT'), tab: 'disease' },
+    ];
+    this.tabButtons = [];
+    for (const t of tabs) {
+      const btn = document.createElement('div');
+      btn.textContent = t.label;
+      btn.style.cssText = `
+        padding:8px 24px;cursor:pointer;font-size:16px;
+        border:1px solid ${AMBER};
+      `;
+      btn.addEventListener('click', () => {
+        this.currentTab = t.tab;
+        this.updateTabStyles();
+      });
+      tabRow.appendChild(btn);
+      this.tabButtons.push({ btn, tab: t.tab });
+    }
+    this.el.appendChild(tabRow);
+
+    // Scrollable content area
     this.contentEl = document.createElement('div');
+    this.contentEl.style.cssText = `
+      position:absolute;top:120px;left:380px;right:60px;bottom:20px;
+      overflow-y:auto;color:#ccc;font-size:13px;
+    `;
     this.el.appendChild(this.contentEl);
 
     parent.appendChild(this.el);
   }
 
+  private tabButtons: { btn: HTMLDivElement; tab: string }[] = [];
+
+  private updateTabStyles() {
+    for (const { btn, tab } of this.tabButtons) {
+      const isActive = this.currentTab === tab;
+      btn.style.background = isActive ? AMBER : 'transparent';
+      btn.style.color = isActive ? '#000' : AMBER;
+    }
+  }
+
   show() {
     this.visible = true;
     this.el.style.display = 'block';
+    this.updateTabStyles();
+    this.update();
+    playWarble(this.el, 0.3, 0.3);
   }
 
   hide() {
@@ -56,56 +137,14 @@ export class ResearchPanel {
   update() {
     if (!this.visible) return;
 
-    this.contentEl.innerHTML = '';
+    while (this.contentEl.firstChild) this.contentEl.removeChild(this.contentEl.firstChild);
+    this.updateTabStyles();
 
-    // Header
-    const header = document.createElement('div');
-    header.style.cssText = `padding:8px;font-size:16px;font-weight:bold;color:${AMBER};border-bottom:1px solid #333;`;
-    header.textContent = 'RESEARCH';
-    this.contentEl.appendChild(header);
-
-    // Tab row
-    const tabRow = document.createElement('div');
-    tabRow.style.cssText = 'display:flex;border-bottom:1px solid #333;';
-    const tabs: { label: string; tab: 'tech' | 'disease' }[] = [
-      { label: 'Tech', tab: 'tech' },
-      { label: 'Disease', tab: 'disease' },
-    ];
-    for (const t of tabs) {
-      const btn = document.createElement('div');
-      btn.textContent = t.label;
-      const isActive = this.currentTab === t.tab;
-      btn.style.cssText = `
-        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:12px;
-        background:${isActive ? AMBER : 'transparent'};
-        color:${isActive ? '#000' : AMBER};
-      `;
-      btn.addEventListener('click', () => {
-        this.currentTab = t.tab;
-      });
-      tabRow.appendChild(btn);
-    }
-    this.contentEl.appendChild(tabRow);
-
-    // Tab content
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:8px;';
     if (this.currentTab === 'tech') {
-      this.renderTechTab(body);
+      this.renderTechTab(this.contentEl);
     } else {
-      this.renderDiseaseTab(body);
+      this.renderDiseaseTab(this.contentEl);
     }
-    this.contentEl.appendChild(body);
-
-    // Close button
-    const closeBtn = document.createElement('div');
-    closeBtn.textContent = '[X] Close';
-    closeBtn.style.cssText = `
-      text-align:center;padding:6px;cursor:pointer;color:${AMBER};
-      border-top:1px solid #333;font-size:12px;
-    `;
-    closeBtn.addEventListener('click', () => this.hide());
-    this.contentEl.appendChild(closeBtn);
   }
 
   private renderTechTab(container: HTMLDivElement) {
@@ -113,7 +152,6 @@ export class ResearchPanel {
     const activeId = researchSystem.getActiveResearch();
     const progress = researchSystem.getProgress();
 
-    // Group into sections
     const active: [string, typeof allResearch[string]][] = [];
     const available: [string, typeof allResearch[string]][] = [];
     const completed: [string, typeof allResearch[string]][] = [];
@@ -127,8 +165,8 @@ export class ResearchPanel {
 
     // Active research
     if (active.length > 0) {
-      this.sectionHeader(container, 'ACTIVE');
-      for (const [id, def] of active) {
+      this.sectionHeader(container, line('RSCHUI008TEXT'));
+      for (const [, def] of active) {
         const row = this.makeResearchRow(def.friendlyName, def.description, def.nCost);
         const pct = Math.min(100, Math.round((progress / def.nCost) * 100));
         row.appendChild(this.progressBar(pct));
@@ -138,25 +176,25 @@ export class ResearchPanel {
 
     // Available research
     if (available.length > 0) {
-      this.sectionHeader(container, 'AVAILABLE');
+      this.sectionHeader(container, line('RSCHUI009TEXT'));
       for (const [id, def] of available) {
         const row = this.makeResearchRow(def.friendlyName, def.description, def.nCost);
         if (def.prerequisites.length > 0) {
           const prereqText = document.createElement('div');
-          prereqText.style.cssText = 'font-size:10px;color:#666;margin-top:2px;';
+          prereqText.style.cssText = 'font-size:11px;color:#666;margin-top:2px;';
           const prereqNames = def.prerequisites
             .map(p => RESEARCH_DEFS[p]?.friendlyName ?? p)
             .join(', ');
-          prereqText.textContent = `Requires: ${prereqNames}`;
+          prereqText.textContent = `${line('RSCHUI001TEXT')} ${prereqNames}`;
           row.appendChild(prereqText);
         }
         // Start button
         if (!activeId) {
           const startBtn = document.createElement('div');
-          startBtn.textContent = 'Start';
+          startBtn.textContent = line('RSCHUI013TEXT');
           startBtn.style.cssText = `
-            display:inline-block;margin-top:4px;padding:2px 8px;
-            border:1px solid ${AMBER};color:${AMBER};cursor:pointer;font-size:11px;
+            display:inline-block;margin-top:6px;padding:4px 16px;
+            border:1px solid ${AMBER};color:${AMBER};cursor:pointer;font-size:13px;
           `;
           startBtn.addEventListener('click', () => {
             researchSystem.startResearch(id);
@@ -171,20 +209,27 @@ export class ResearchPanel {
 
     // Completed research
     if (completed.length > 0) {
-      this.sectionHeader(container, 'COMPLETED');
+      this.sectionHeader(container, line('RSCHUI010TEXT'));
       for (const [, def] of completed) {
         const row = document.createElement('div');
-        row.style.cssText = 'padding:4px 0;border-bottom:1px solid #222;';
-        row.innerHTML = `
-          <div style="color:#4f4;font-size:12px;">✓ ${def.friendlyName}</div>
-          <div style="font-size:10px;color:#666;">${def.description}</div>
-        `;
+        row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
+        const check = document.createElement('div');
+        check.style.cssText = 'color:#4f4;font-size:14px;';
+        check.textContent = '\u2713 ' + def.friendlyName;
+        const desc = document.createElement('div');
+        desc.style.cssText = 'font-size:11px;color:#666;margin-top:2px;';
+        desc.textContent = def.description;
+        row.appendChild(check);
+        row.appendChild(desc);
         container.appendChild(row);
       }
     }
 
     if (active.length === 0 && available.length === 0 && completed.length === 0) {
-      container.innerHTML = `<div style="color:#888;text-align:center;padding:20px;">No research available</div>`;
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:#888;text-align:center;padding:40px;font-size:16px;';
+      empty.textContent = line('RSCHUI015TEXT');
+      container.appendChild(empty);
     }
   }
 
@@ -193,35 +238,46 @@ export class ResearchPanel {
     const completedResearch = Malady.getCompletedResearch();
 
     if (availableResearch.length > 0) {
-      this.sectionHeader(container, 'IN PROGRESS');
+      this.sectionHeader(container, line('RSCHUI011TEXT'));
       for (const entry of availableResearch) {
         const row = document.createElement('div');
-        row.style.cssText = 'padding:4px 0;border-bottom:1px solid #222;';
+        row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
+        const name = document.createElement('div');
+        name.style.cssText = `color:${AMBER};font-size:14px;`;
+        name.textContent = entry.sMaladyName;
+        const type = document.createElement('div');
+        type.style.cssText = 'font-size:11px;color:#888;margin-top:2px;';
+        type.textContent = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
+        row.appendChild(name);
+        row.appendChild(type);
         const pct = Math.min(100, Math.round((entry.nCureProgress / entry.nResearchCure) * 100));
-        row.innerHTML = `
-          <div style="color:${AMBER};font-size:12px;">${entry.sMaladyName}</div>
-          <div style="font-size:10px;color:#888;">Type: ${entry.sMaladyType}</div>
-        `;
         row.appendChild(this.progressBar(pct));
         container.appendChild(row);
       }
     }
 
     if (completedResearch.length > 0) {
-      this.sectionHeader(container, 'CURES DISCOVERED');
+      this.sectionHeader(container, line('RSCHUI012TEXT'));
       for (const entry of completedResearch) {
         const row = document.createElement('div');
-        row.style.cssText = 'padding:4px 0;border-bottom:1px solid #222;';
-        row.innerHTML = `
-          <div style="color:#4f4;font-size:12px;">✓ ${entry.sMaladyName}</div>
-          <div style="font-size:10px;color:#666;">Type: ${entry.sMaladyType}</div>
-        `;
+        row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
+        const check = document.createElement('div');
+        check.style.cssText = 'color:#4f4;font-size:14px;';
+        check.textContent = '\u2713 ' + entry.sMaladyName;
+        const type = document.createElement('div');
+        type.style.cssText = 'font-size:11px;color:#666;margin-top:2px;';
+        type.textContent = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
+        row.appendChild(check);
+        row.appendChild(type);
         container.appendChild(row);
       }
     }
 
     if (availableResearch.length === 0 && completedResearch.length === 0) {
-      container.innerHTML = `<div style="color:#888;text-align:center;padding:20px;">No diseases encountered</div>`;
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:#888;text-align:center;padding:40px;font-size:16px;';
+      empty.textContent = line('RSCHUI016TEXT');
+      container.appendChild(empty);
     }
   }
 
@@ -229,37 +285,50 @@ export class ResearchPanel {
     const h = document.createElement('div');
     h.textContent = text;
     h.style.cssText = `
-      font-size:11px;font-weight:bold;color:${AMBER};
-      padding:6px 0 2px 0;border-bottom:1px solid #444;margin-bottom:4px;
+      font-size:14px;font-weight:bold;color:${AMBER};
+      padding:10px 0 4px 0;border-bottom:1px solid #444;margin-bottom:6px;
     `;
     container.appendChild(h);
   }
 
   private makeResearchRow(name: string, desc: string, cost: number): HTMLDivElement {
     const row = document.createElement('div');
-    row.style.cssText = 'padding:4px 0;border-bottom:1px solid #222;';
-    row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;">
-        <span style="color:${AMBER};font-size:12px;">${name}</span>
-        <span style="font-size:10px;color:#888;">Cost: ${cost}</span>
-      </div>
-      <div style="font-size:10px;color:#888;margin-top:2px;">${desc}</div>
-    `;
+    row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;';
+    const nameEl = document.createElement('span');
+    nameEl.style.cssText = `color:${AMBER};font-size:14px;`;
+    nameEl.textContent = name;
+    const costEl = document.createElement('span');
+    costEl.style.cssText = 'font-size:11px;color:#888;';
+    costEl.textContent = `${line('BUILDM023TEXT')} ${cost}`;
+    header.appendChild(nameEl);
+    header.appendChild(costEl);
+    row.appendChild(header);
+
+    const descEl = document.createElement('div');
+    descEl.style.cssText = 'font-size:11px;color:#888;margin-top:2px;';
+    descEl.textContent = desc;
+    row.appendChild(descEl);
+
     return row;
   }
 
   private progressBar(pct: number): HTMLDivElement {
-    const bar = document.createElement('div');
-    bar.style.cssText = 'margin-top:4px;';
-    bar.innerHTML = `
-      <div style="display:flex;align-items:center;">
-        <div style="flex:1;height:6px;background:#222;">
-          <div style="width:${pct}%;height:100%;background:${AMBER};"></div>
-        </div>
-        <span style="width:35px;text-align:right;font-size:10px;color:#888;">${pct}%</span>
-      </div>
-    `;
-    return bar;
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-top:6px;display:flex;align-items:center;';
+    const barOuter = document.createElement('div');
+    barOuter.style.cssText = 'flex:1;height:8px;background:#222;';
+    const barInner = document.createElement('div');
+    barInner.style.cssText = `width:${pct}%;height:100%;background:${AMBER};`;
+    barOuter.appendChild(barInner);
+    const label = document.createElement('span');
+    label.style.cssText = 'width:40px;text-align:right;font-size:11px;color:#888;margin-left:8px;';
+    label.textContent = `${pct}%`;
+    wrapper.appendChild(barOuter);
+    wrapper.appendChild(label);
+    return wrapper;
   }
 
   dispose() {

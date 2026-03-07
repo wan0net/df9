@@ -109,6 +109,9 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   entries.push(['tile_airlock_door_closed', 'assets/walls/airlock_door_closed.png']);
   entries.push(['tile_airlock_door_open', 'assets/walls/airlock_door_open.png']);
   entries.push(['tile_airlock_door_broken', 'assets/walls/AirlockDoor_broken.png']);
+  // Ghost door aliases: EnvObjectData.spriteName → tile texture
+  // HeavyDoor spriteName='door_heavy_closed' but tile key='tile_heavy_door_closed'
+  entries.push(['tile_door_heavy_closed', 'assets/walls/door_heavy_closed.png']);
 
   // Build cursor sprites
   entries.push(['cursor_yes', 'assets/ui/ISO_build_YES.png']);
@@ -157,6 +160,13 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   entries.push(['asteroid01', 'assets/tiles/asteroid01.png']);
   entries.push(['asteroid01_b', 'assets/tiles/asteroid01_b.png']);
   entries.push(['asteroid01_bottom', 'assets/tiles/asteroid01_bottom.png']);
+
+  // Blood decals (Lua Character.BLOOD_DECALS)
+  entries.push(['decal_blood01', 'assets/effects/blood01.png']);
+  entries.push(['decal_blood02', 'assets/effects/blood02.png']);
+  entries.push(['decal_blood03', 'assets/effects/blood03.png']);
+  entries.push(['decal_blood04', 'assets/effects/blood04.png']);
+  entries.push(['decal_blood05', 'assets/effects/blood05.png']);
 
   // Extra Base straight variants
   entries.push(['Base_Straight02_bottom', 'assets/walls/Base_Straight02_bottom.png']);

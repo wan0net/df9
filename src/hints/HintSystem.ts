@@ -4,6 +4,7 @@
  */
 
 import { Base } from '../core/Base';
+import { line } from '../localization/Localization';
 
 export interface HintProviders {
   hasEnclosedRooms: () => boolean;
@@ -16,34 +17,35 @@ export interface HintProviders {
 
 interface HintDef {
   id: string;
-  message: string;
+  /** Linecode key for hint message. */
+  sLC: string;
   check: (p: HintProviders) => boolean;
 }
 
 const HINTS: HintDef[] = [
   {
     id: 'build_room',
-    message: 'Tip: Press C to enter room build mode. Drag to create an enclosed room for your crew.',
+    sLC: 'HINTSX016TEXT',
     check: (p) => !p.hasEnclosedRooms(),
   },
   {
     id: 'zone_room',
-    message: 'Tip: Press Z to assign zones to rooms. Zones determine what activities happen there.',
+    sLC: 'HINTSX026TEXT',
     check: (p) => p.hasEnclosedRooms() && !p.hasZonedRoom(),
   },
   {
     id: 'place_objects',
-    message: 'Tip: Press P to place objects. Generators provide power, fridges provide food.',
+    sLC: 'HINTSX050TEXT',
     check: (p) => p.hasZonedRoom() && !p.hasBuiltObject(),
   },
   {
     id: 'research',
-    message: 'Tip: Assign a Scientist to a Research zone to unlock new technologies.',
+    sLC: 'HINTSX038TEXT',
     check: (p) => p.hasBuiltObject() && !p.hasStartedResearch(),
   },
   {
     id: 'combat',
-    message: 'Warning: Hostile raiders detected! Assign Security personnel to defend the station.',
+    sLC: 'ALERTS017TEXT',
     check: (p) => p.hasHostiles(),
   },
 ];
@@ -67,7 +69,7 @@ export class HintSystem {
       if (this.shownHints.has(hint.id)) continue;
       if (hint.check(this.providers)) {
         this.shownHints.add(hint.id);
-        Base.addAlert('hint', hint.message);
+        Base.addAlert('hint', line(hint.sLC));
         break; // One hint per check
       }
     }

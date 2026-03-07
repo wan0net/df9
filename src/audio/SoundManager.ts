@@ -463,6 +463,10 @@ class SoundManagerClass {
 
   // ── Volume controls ───────────────────────────────────────────
 
+  getMasterVolume(): number { return this.settings.masterVolume; }
+  getMusicVolume(): number { return this.settings.musicVolume; }
+  getSfxVolume(): number { return this.settings.sfxVolume; }
+
   setMasterVolume(v: number) {
     this.settings.masterVolume = Math.max(0, Math.min(1, v));
     this.applyVolumes();

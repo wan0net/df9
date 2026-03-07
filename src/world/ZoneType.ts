@@ -2,6 +2,8 @@
  * Zone types — matches original Lua Zone.lua definitions.
  * All 13 zone types from the original game (12 player-assignable + EXTERIOR).
  */
+import { line } from '../localization/Localization';
+
 export enum ZoneType {
   PLAIN = 'PLAIN',
   GARDEN = 'GARDEN',
@@ -45,14 +47,14 @@ export interface ZoneSpriteConfig {
  */
 export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
   [ZoneType.PLAIN]: {
-    name: 'Unzoned',
+    name: line('ZONEUI005TEXT'),
     wallPrefix: 'Base',
     floors: [{ key: 'tile_floor', weight: 1 }],
     ambientLight: [0.36, 0.33, 0.27],
     roomLights: [{ tLightColor: [0.5, 0.3, 0.15], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
   },
   [ZoneType.GARDEN]: {
-    name: 'Garden',
+    name: line('ZONEUI069TEXT'),
     wallPrefix: 'Garden',
     floors: [
       { key: 'garden01', weight: 1 },
@@ -62,7 +64,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
     roomLights: [{ tLightColor: [0.5, 1, 0.8], nLightTileGapX: 3, nLightTileGapY: 3, nLightRadius: 3 }],
   },
   [ZoneType.INFIRMARY]: {
-    name: 'Infirmary',
+    name: line('ZONEUI049TEXT'),
     wallPrefix: 'Infirmary',
     floors: [
       { key: 'infirmary01', weight: 1 },
@@ -72,7 +74,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
     roomLights: [{ tLightColor: [0.25, 0.25, 0.25], nLightTileGapX: 5, nLightTileGapY: 5, nLightRadius: 4 }],
   },
   [ZoneType.LIFESUPPORT]: {
-    name: 'Life Support',
+    name: line('ZONEUI001TEXT'),
     wallPrefix: 'LifeSupport',
     floors: [
       { key: 'lifesupport01', weight: 1 },
@@ -82,21 +84,21 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
     roomLights: [{ tLightColor: [0.3, 0.5, 0.8], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 }],
   },
   [ZoneType.RESIDENCE]: {
-    name: 'Residence',
+    name: line('ZONEUI042TEXT'),
     wallPrefix: 'Residence',
     floors: [{ key: 'residence_floor', weight: 1 }],
     ambientLight: [0.52, 0.485, 0.41],
     roomLights: [{ tLightColor: [0.6, 0.5, 0.3], nLightTileGapX: 4, nLightTileGapY: 5, nLightRadius: 3 }],
   },
   [ZoneType.PUB]: {
-    name: 'Pub',
+    name: line('ZONEUI046TEXT'),
     wallPrefix: 'Pub',
     floors: [{ key: 'pub_floor', weight: 1 }],
     ambientLight: [0.8, 0.5, 1.0],
     roomLights: [{ tLightColor: [0.8, 0.4, 1.0], nLightTileGapX: 4, nLightTileGapY: 5, nLightRadius: 3 }],
   },
   [ZoneType.POWER]: {
-    name: 'Reactor',
+    name: line('ZONEUI003TEXT'),
     wallPrefix: 'Reactor',
     floors: [
       { key: 'reactor02', weight: 1 },
@@ -106,7 +108,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
     roomLights: [{ tLightColor: [0.6, 0.15, 0.1], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
   },
   [ZoneType.AIRLOCK]: {
-    name: 'Airlock',
+    name: line('ZONEUI036TEXT'),
     wallPrefix: 'Airlock',
     floors: [
       { key: 'airlock02', weight: 1 },
@@ -116,14 +118,14 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
     roomLights: [{ tLightColor: [0.3, 0.5, 0.6], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2.5 }],
   },
   [ZoneType.REFINERY]: {
-    name: 'Refinery',
+    name: line('ZONEUI037TEXT'),
     wallPrefix: 'Refinery',
     floors: [{ key: 'refinery01', weight: 1 }],
     ambientLight: [0.235, 0.22, 0.265],
     roomLights: [{ tLightColor: [0.3, 0.25, 0.35], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
   },
   [ZoneType.FITNESS]: {
-    name: 'Fitness',
+    name: line('ZONEUI109TEXT'),
     wallPrefix: 'Fitness',
     floors: [
       { key: 'fitness01', weight: 1 },
@@ -133,7 +135,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
     roomLights: [{ tLightColor: [0.5, 0.5, 0.5], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 }],
   },
   [ZoneType.RESEARCH]: {
-    name: 'Research Lab',
+    name: line('ZONEUI126TEXT'),
     wallPrefix: 'Research',
     floors: [
       { key: 'research01', weight: 1 },
@@ -143,7 +145,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
     roomLights: [{ tLightColor: [0.3, 0.5, 0.6], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 }],
   },
   [ZoneType.BRIG]: {
-    name: 'Brig',
+    name: line('ZONEUI142TEXT'),
     wallPrefix: 'Brig',
     floors: [
       { key: 'brig01', weight: 1 },

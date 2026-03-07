@@ -10,7 +10,7 @@ import { getAllTopics, getTopicForActivity } from './Topics';
 import {
   UNEMPLOYED, TEAM_ID_PLAYER, JOB_NAMES, tJobs,
   BUILDER, TECHNICIAN, MINER, EMERGENCY, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR,
-  STARTING_HIT_POINTS, BASE_SPEED,
+  STARTING_HIT_POINTS, BASE_SPEED, RUN_SPEED,
   MORALE_MAX, MORALE_MIN, MORALE_TICK,
   MAX_ROOM_MORALE_BOOST, ROOM_MORALE_TICK, ROOM_MORALE_FALLOFF_END,
   ANGER_MAX, ANGER_REDUCTION_PER_MORALE_TICK,
@@ -39,6 +39,7 @@ import {
   RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK, RACE_CHICKEN, RACE_SHAMON,
 } from './CharacterConstants';
 import { GameRules } from '../core/GameRules';
+import { line } from '../localization/Localization';
 import { Malady, type MaladyInstance } from '../malady/Malady';
 import { CharacterInventory, createRandomStartingStuff } from '../inventory/Inventory';
 import { ITEM_TEMPLATES } from '../inventory/InventoryData';
@@ -102,6 +103,8 @@ export class Character {
   bCuffed = false;
   /** Whether character is wearing a spacesuit */
   bSpacesuit = false;
+  /** Running state (Lua: sWalkOverride='run', bUseRunSpeed). */
+  bRunning = false;
   /** Remaining suit oxygen (in O2 units) */
   nSuitOxygen = 0;
   /** Cause of death (0 = alive) */
@@ -116,6 +119,10 @@ export class Character {
   bMarkedForCuff = false;
   /** Marked for execution by security (Lua tStatus.bMarkedForExecution). */
   bMarkedForExecution = false;
+  /** Base founder (original 3 crew, Lua tStatus.bBaseFounder). */
+  bBaseFounder = false;
+  /** Immune to parasite (Lua tStatus.bImmuneToParasite). */
+  bImmuneToParasite = false;
   /** Brawl partners keyed by character ID → start time (Lua tStatus.tBrawlingWith). */
   tBrawlingWith = new Map<number, number>();
 
@@ -134,6 +141,8 @@ export class Character {
   static readonly SHIFT_COOLDOWN = 360;
 
   // ── Survival state ─────────────────────────────────────────
+  /** Oxygen tick accumulator (Lua Character.OXYGEN_TICK = 0.25s). */
+  oxygenTimer = 0.25 + Math.random() * 0.25; // Lua: OXYGEN_TICK + random()*OXYGEN_TICK
   /** Suffocation timer in seconds (Lua tStatus.suffocationTime). Accumulates while O2 < OXYGEN_SUFFOCATING. */
   suffocationTime = 0;
   /** Low oxygen flag (Lua tStatus.bLowOxygen). */
@@ -534,13 +543,11 @@ export class Character {
       this.moraleTickAccum -= MORALE_TICK;
 
       // Anger reduction first (Lua tickMorale lines 5996-6001)
-      // Skip if incapacitated (Lua Character.lua:5998)
-      if (!this.bIncapacitated) {
-        if (this.bCuffed) {
-          this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK_BRIG);
-        } else {
-          this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK);
-        }
+      // Lua: prison check first (even incapacitated prisoners cool down)
+      if (this.bCuffed) {
+        this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK_BRIG);
+      } else if (!this.bIncapacitated) {
+        this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK);
       }
 
       // Hostiles skip morale
@@ -697,7 +704,7 @@ export class Character {
     }
   }
 
-  /** Start a rampage (Lua Character:beginRampage). */
+  /** Start a rampage (Lua Character:beginRampage, Character.lua:5832-5870). */
   beginRampage(eStatusType: number) {
     this.nAnger = ANGER_MAX;
     this.bRampaging = true;
@@ -707,10 +714,12 @@ export class Character {
         this.bNonviolentRampage = true;
       }
       addLog('TANTRUM_START', this);
+      Base.addAlert('rampage', line('ALERTS037TEXT', { name: this.getName() }));
     } else if (eStatusType === STATUS_RAMPAGE_VIOLENT) {
       this.bViolentRampage = true;
       this.bNonviolentRampage = false;
       addLog('RAMPAGE_START', this);
+      Base.addAlert('rampage', line('ALERTS038TEXT', { name: this.getName() }));
     }
 
     // Interrupt current task
@@ -791,6 +800,11 @@ export class Character {
     return false;
   }
 
+  /** Whether character is currently performing a work-shift task (Lua Character:isPerformingWorkShiftTask). */
+  isPerformingWorkShiftTask(): boolean {
+    return !!this.currentTask?.tags?.WorkShift;
+  }
+
   /** Called when a new task starts — reset duty timer if WorkShift task after cooldown.
    *  Lua Character:_newTaskStarted (lines 2963-2970). */
   onNewTaskStarted(task: Task) {
@@ -802,25 +816,32 @@ export class Character {
   /** Get effective competency for a job, modified by morale. */
   getEffectiveCompetency(jobId?: number): number {
     const job = jobId ?? this.tStats.nJob;
-    const base = this.tStats.tCompetency[job] ?? 0;
+    const base = (this.tStats.tCompetency[job] ?? 0) * 0.95; // Lua Character.lua:572
     if (Math.abs(this.nMorale) > MORALE_COMPETENCY_THRESHOLD) {
       const sign = this.nMorale > 0 ? 1 : -1;
-      return Math.max(0, Math.min(1, base + sign * MORALE_COMPETENCY_MODIFIER * base));
+      return Math.max(0, Math.min(1, base * (1 + sign * MORALE_COMPETENCY_MODIFIER)));
     }
     return base;
   }
 
-  /** Get effective movement speed, modified by morale and maladies. */
+  /** Get effective movement speed, modified by morale and maladies.
+   *  Lua: Character:getAdjustedSpeed — running skips morale modifier. */
   getEffectiveSpeed(): number {
-    let speed = BASE_SPEED;
-    if (this.nMorale < -MORALE_SPEED_THRESHOLD) {
-      speed *= (1 + MORALE_LOW_SPEED_MODIFIER);
-    } else if (this.nMorale > MORALE_SPEED_THRESHOLD) {
-      speed *= (1 + MORALE_HIGH_SPEED_MODIFIER);
+    const diseaseSpeedMod = Malady.getSpeedModifier(this);
+
+    // Running: use RUN_SPEED with only disease modifier (Lua: bUseRunSpeed)
+    if (this.bRunning) {
+      return RUN_SPEED * diseaseSpeedMod;
     }
-    // Apply malady speed modifier
-    speed *= Malady.getSpeedModifier(this);
-    return speed;
+
+    // Walking: apply morale + disease modifiers
+    let moraleMod = 1;
+    if (this.nMorale < -MORALE_SPEED_THRESHOLD) {
+      moraleMod = 1 + MORALE_LOW_SPEED_MODIFIER; // 0.7x
+    } else if (this.nMorale > MORALE_SPEED_THRESHOLD) {
+      moraleMod = 1 + MORALE_HIGH_SPEED_MODIFIER; // 1.1x
+    }
+    return BASE_SPEED * moraleMod * diseaseSpeedMod;
   }
 
   // ── Job XP ────────────────────────────────────────────────
@@ -992,6 +1013,26 @@ export class Character {
   /** Check if character can carry more items. */
   canCarry(): boolean {
     return this.inventory.getTotalCount() < Character.MAX_INVENTORY;
+  }
+
+  // ── Puppet control (Lua Character:forcePuppet/releasePuppet) ──────────
+
+  /** Force character into puppet state (Lua Character:forcePuppet).
+   *  Returns true if successfully puppeted. */
+  forcePuppet(): boolean {
+    // Can only puppet if current task priority <= SURVIVAL_NORMAL
+    if (this.currentTask && (this.currentTask as any).priorityLevel > 2) return false;
+    // Puppet by nullifying current task — caller sets new Puppet task
+    this.currentTask = null;
+    return true;
+  }
+
+  /** Release puppet control (Lua Character:releasePuppet). */
+  releasePuppet(): void {
+    if (this.currentTask && this.currentTask.name === 'Puppet') {
+      (this.currentTask as any).release?.();
+      this.currentTask = null;
+    }
   }
 
   destroy() {

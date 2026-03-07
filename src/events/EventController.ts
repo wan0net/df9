@@ -14,6 +14,8 @@ import { DerelictEvent } from './DerelictEvent';
 import { HostileDockingEvent } from './HostileDockingEvent';
 import { CompoundEvent } from './CompoundEvent';
 import { TraderEvent } from './TraderEvent';
+import type { DialogSystem, DialogResult } from '../ui/DialogSystem';
+import { line } from '../localization/Localization';
 import {
   EVENT_DEFS, type EventDef,
   FORECAST_SIZE, FORECAST_ALERT_TIME,
@@ -89,6 +91,8 @@ export class EventController implements TickableSystem {
   onHostileSpawn: SpawnHostileFn | null = null;
   onBreachWall: BreachWallFn | null = null;
   onDocking: DockingFn | null = null;
+  /** Dialog system for event accept/reject choices. */
+  dialogSystem: DialogSystem | null = null;
 
   init() {
     GameRules.registerSystem(1, this);
@@ -248,12 +252,13 @@ export class EventController implements TickableSystem {
     for (const key of Object.keys(EVENT_DEFS)) {
       const def = EVENT_DEFS[key];
 
-      // Population gates (use estimate for forecast)
-      if (def.minPopulation >= 0 && populationEstimate < def.minPopulation) continue;
-      if (def.maxPopulation >= 0 && populationEstimate > def.maxPopulation) continue;
+      // Max population gate
+      if (def.maxPopulation >= 0 && populationEstimate >= def.maxPopulation) continue;
 
-      // Time gate
-      if (def.minTime >= 0 && atTime < def.minTime) continue;
+      // Lua EventController.lua:596 — OR gate: eligible if pop > minPop OR time > minTime
+      const popOk = def.minPopulation < 0 || populationEstimate > def.minPopulation;
+      const timeOk = def.minTime < 0 || atTime > def.minTime;
+      if (!popOk && !timeOk) continue;
 
       // Max consecutive same-event
       if (def.name === lastType && consecutiveCount >= MAX_CONSECUTIVE_SAME) continue;
@@ -319,7 +324,7 @@ export class EventController implements TickableSystem {
     for (const entry of this.forecast) {
       if (!entry.alerted && !entry.def.bSkipAlert && now >= entry.alertTime) {
         entry.alerted = true;
-        Base.addAlert('event', `Incoming: ${entry.def.name} in ${Math.ceil(entry.scheduledTime - now)}s`);
+        Base.addAlert('event', line(entry.def.sAlertLC ?? 'ALERTS023TEXT'));
       }
     }
 
@@ -352,7 +357,7 @@ export class EventController implements TickableSystem {
     event.start(GameRules.simTime);
     this.currentEvent = event;
     this.currentEventEntry = entry;
-    Base.addAlert('event', `Event: ${entry.def.name}`);
+    Base.addAlert('event', line('ALERTS023TEXT'));
   }
 
   /** Handle event setup failure (Lua: EventController._failed). */
@@ -375,14 +380,40 @@ export class EventController implements TickableSystem {
     }
   }
 
+  /**
+   * Helper: resolve a dialog result into whether to spawn.
+   * Lua dialogTick: accepted or ignored (screwYou) → spawn; rejected → don't spawn.
+   */
+  private shouldSpawn(result: DialogResult): boolean {
+    return result === 'accepted' || result === 'ignored';
+  }
+
   private createEvent(def: EventDef): Event | null {
     switch (def.name) {
       case 'Immigration': {
+        // Lua: population cap check before immigration (non-hostile)
+        if (this.population >= POPULATION_CAP) return null;
+
         const immEvent = new ImmigrationEvent();
         immEvent.onCompleteCallback = () => {
           const count = immEvent.getImmigrantCount();
-          this.onImmigration?.(count);
-          Base.addAlert('immigration', `${count} new crew member${count > 1 ? 's' : ''} arrived!`);
+          if (this.dialogSystem) {
+            this.dialogSystem.showImmigrationDialog(def.nChanceObey, (result) => {
+              if (this.shouldSpawn(result)) {
+                this.onImmigration?.(count);
+                // Lua: sAcceptedSuccessAlert (ALERTS030) or sRejectionFailAlert (ALERTS025)
+                const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
+                Base.addAlert('immigration', line(alertLC));
+              } else {
+                // Lua: sRejectionSuccessAlert (ALERTS024)
+                Base.addAlert('immigration', line('ALERTS024TEXT'));
+              }
+            });
+          } else {
+            // No dialog system — auto-accept (Lua: skipDialog path)
+            this.onImmigration?.(count);
+            Base.addAlert('immigration', line('ALERTS041TEXT'));
+          }
         };
         return immEvent;
       }
@@ -398,8 +429,22 @@ export class EventController implements TickableSystem {
         hostileEvent.onCompleteCallback = () => {
           const count = hostileEvent.getRaiderCount();
           const hp = this.getScaledRaiderHP();
-          this.onHostileSpawn?.(count, hp);
-          Base.addAlert('hostile', `${count} raider${count > 1 ? 's' : ''} have arrived!`);
+          if (this.dialogSystem) {
+            this.dialogSystem.showHostileImmigrationDialog(def.nChanceObey, (result) => {
+              if (this.shouldSpawn(result)) {
+                // Hostile immigrants always spawn on accept or ignored refusal
+                this.onHostileSpawn?.(count, hp);
+                const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
+                Base.addAlert('hostile', line(alertLC));
+              } else {
+                // Rarely obeys — raiders leave
+                Base.addAlert('hostile', line('ALERTS024TEXT'));
+              }
+            });
+          } else {
+            this.onHostileSpawn?.(count, hp);
+            Base.addAlert('hostile', line('ALERTS041TEXT'));
+          }
         };
         return hostileEvent;
       }
@@ -409,14 +454,14 @@ export class EventController implements TickableSystem {
           this.onBreachWall?.();
           this.onHostileSpawn?.(1, this.getScaledRaiderHP());
           Base.incrementStat('nBreachShipsDestroyed');
-          Base.addAlert('breach', 'Raiders have breached the hull!');
+          Base.addAlert('breach', line('ALERTS009TEXT'));
         };
         return breachEvent;
       }
       case 'Derelict Ship': {
         const derelictEvent = new DerelictEvent();
         derelictEvent.onCompleteCallback = () => {
-          Base.addAlert('derelict', 'Derelict ship detected — salvage opportunities available');
+          Base.addAlert('derelict', line('ALERTS032TEXT'));
         };
         return derelictEvent;
       }
@@ -425,16 +470,31 @@ export class EventController implements TickableSystem {
         hostileDerelictEvent.onCompleteCallback = () => {
           const count = hostileDerelictEvent.getRaiderCount();
           this.onHostileSpawn?.(count, this.getScaledRaiderHP());
-          Base.addAlert('hostile', `Hostile derelict — ${count} raider${count > 1 ? 's' : ''} aboard!`);
+          Base.addAlert('hostile', line('ALERTS010TEXT'));
         };
         return hostileDerelictEvent;
       }
       case 'Docking': {
+        // Lua: population cap check for friendly docking
+        if (this.population >= POPULATION_CAP) return null;
+
         const count = 1 + Math.floor(Math.random() * 2);
         const dockEvent = new ImmigrationEvent();
         dockEvent.onCompleteCallback = () => {
-          this.onDocking?.(count);
-          Base.addAlert('docking', `Friendly ship docked — ${count} immigrant${count > 1 ? 's' : ''} arriving`);
+          if (this.dialogSystem) {
+            this.dialogSystem.showDockingDialog(false, def.nChanceObey, (result) => {
+              if (this.shouldSpawn(result)) {
+                this.onDocking?.(count);
+                const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
+                Base.addAlert('docking', line(alertLC));
+              } else {
+                Base.addAlert('docking', line('ALERTS024TEXT'));
+              }
+            });
+          } else {
+            this.onDocking?.(count);
+            Base.addAlert('docking', line('ALERTS041TEXT'));
+          }
         };
         return dockEvent;
       }
@@ -443,16 +503,40 @@ export class EventController implements TickableSystem {
         hostileDockEvent.onCompleteCallback = () => {
           const count = hostileDockEvent.getRaiderCount();
           const hp = this.getScaledRaiderHP();
-          this.onHostileSpawn?.(count, hp);
-          Base.addAlert('hostile', `Hostile ship has docked — ${count} raider${count > 1 ? 's' : ''} boarding!`);
+          if (this.dialogSystem) {
+            this.dialogSystem.showDockingDialog(true, def.nChanceObey, (result) => {
+              if (this.shouldSpawn(result)) {
+                this.onHostileSpawn?.(count, hp);
+                const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
+                Base.addAlert('hostile', line(alertLC));
+              } else {
+                Base.addAlert('hostile', line('ALERTS024TEXT'));
+              }
+            });
+          } else {
+            this.onHostileSpawn?.(count, hp);
+            Base.addAlert('hostile', line('ALERTS041TEXT'));
+          }
         };
         return hostileDockEvent;
       }
       case 'Trader': {
         const traderEvent = new TraderEvent();
         traderEvent.onCompleteCallback = () => {
-          this.onImmigration?.(1);
-          Base.addAlert('immigration', 'A trader has arrived!');
+          if (this.dialogSystem) {
+            this.dialogSystem.showTraderDialog(def.nChanceObey, (result) => {
+              if (this.shouldSpawn(result)) {
+                this.onImmigration?.(1);
+                const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
+                Base.addAlert('immigration', line(alertLC));
+              } else {
+                Base.addAlert('immigration', line('ALERTS024TEXT'));
+              }
+            });
+          } else {
+            this.onImmigration?.(1);
+            Base.addAlert('immigration', line('ALERTS041TEXT'));
+          }
         };
         return traderEvent;
       }
@@ -467,32 +551,46 @@ export class EventController implements TickableSystem {
 
   /** Fire the compound event (final siege). */
   private fireCompoundEvent() {
-    const compound = new CompoundEvent();
+    const doFireCompound = () => {
+      const compound = new CompoundEvent();
 
-    const raiderEvent = new HostileImmigrationEvent(this.getScaledRaiderCount() + 2);
-    raiderEvent.onCompleteCallback = () => {
-      this.onHostileSpawn?.(raiderEvent.getRaiderCount(), this.getScaledRaiderHP());
+      const raiderEvent = new HostileImmigrationEvent(this.getScaledRaiderCount() + 2);
+      raiderEvent.onCompleteCallback = () => {
+        this.onHostileSpawn?.(raiderEvent.getRaiderCount(), this.getScaledRaiderHP());
+      };
+
+      const breachEvent = new BreachingEvent();
+      breachEvent.onCompleteCallback = () => {
+        this.onBreachWall?.();
+      };
+
+      const meteorEvent = new MeteorEvent();
+      meteorEvent.onMeteorLandCallback = () => {
+        this.onMeteorLand?.();
+      };
+
+      compound.addSubEvent(raiderEvent);
+      compound.addSubEvent(breachEvent);
+      compound.addSubEvent(meteorEvent);
+
+      compound.start(GameRules.simTime);
+      this.currentEvent = compound;
+      this.currentEventEntry = null;
+      this.bRanMegaEvent = true;
+      Base.addAlert('siege', line('ALERTS040TEXT'));
     };
 
-    const breachEvent = new BreachingEvent();
-    breachEvent.onCompleteCallback = () => {
-      this.onBreachWall?.();
-    };
-
-    const meteorEvent = new MeteorEvent();
-    meteorEvent.onMeteorLandCallback = () => {
-      this.onMeteorLand?.();
-    };
-
-    compound.addSubEvent(raiderEvent);
-    compound.addSubEvent(breachEvent);
-    compound.addSubEvent(meteorEvent);
-
-    compound.start(GameRules.simTime);
-    this.currentEvent = compound;
-    this.currentEventEntry = null;
-    this.bRanMegaEvent = true;
-    Base.addAlert('siege', 'COMPOUND EVENT: Multiple threats detected!');
+    // Show compound event dialog if dialog system available
+    // Lua: compound events always proceed regardless of player choice
+    const compoundDef = EVENT_DEFS['CompoundEvent'];
+    if (this.dialogSystem) {
+      this.dialogSystem.showCompoundEventDialog(compoundDef?.nChanceObey ?? 0.33, (_result) => {
+        // Compound event fires regardless of dialog choice (Lua: can't avoid final siege)
+        doFireCompound();
+      });
+    } else {
+      doFireCompound();
+    }
   }
 
   /** Get active events (compat — returns current event in array or empty). */

@@ -14,6 +14,7 @@ import type { TileGrid } from '../../world/TileGrid';
 
 export class BuildEnvObject extends Task {
   readonly name = 'BuildEnvObject';
+  nJobExperience = 0; // Lua OptionData.lua: BuildEnvObject has no explicit nJobExperience (default 0)
   private targetObj: EnvObject;
   private commandId: number;
   private grid: TileGrid | null = null;
@@ -26,7 +27,7 @@ export class BuildEnvObject extends Task {
   }
 
   getAdvertisedNeeds(): NeedAdvertisement[] {
-    return [{ need: 'duty', amount: 25 }];
+    return [{ need: 'duty', amount: 10 }]; // Lua OptionData: Duty=10
   }
 
   protected onStart() {

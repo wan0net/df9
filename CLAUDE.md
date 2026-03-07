@@ -64,12 +64,12 @@ src/
 ├── research/            # ResearchSystem, ResearchData
 ├── rooms/               # Room detection (BFS flood fill)
 ├── save/                # SaveLoad (full state), AutoSave
-├── ui/                  # StartMenu, NewGameScreen, UIManager, InspectorPanel, JobRoster
+├── ui/                  # StartMenu, NewGameScreen, UIManager, InspectorPanel, JobRoster, CreditsScreen, SettingsPanel, DebugMenu, TutorialSystem
 ├── utility/             # Task base, UtilityAI, ActivityOption, 20 task types
 ├── world/               # TileGrid, TileTypes, IsometricUtils, WallAutoGen, WorldGen, ZoneType, Asteroid
 └── zones/               # Zone, BedZone, BrigZone, FitnessZone, HospitalZone, Pub, ResearchZone, Airlock
 e2e/
-└── game.spec.ts         # 37 Playwright E2E tests
+└── game.spec.ts         # 213+ Playwright E2E tests
 ```
 
 ### Key Systems
@@ -102,7 +102,7 @@ Walls exist as tile type `WALL=4` in the grid for room boundary logic, but rende
 | D | Toggle door placement mode |
 | X | Toggle demolish mode |
 | M | Toggle mine mode |
-| Z | Toggle zone assignment mode |
+| (click floor) | Room inspector with Rezone tab |
 | P | Toggle object placement mode |
 | I | Inspect mode (none) |
 | R | Toggle job roster |
@@ -112,6 +112,10 @@ Walls exist as tile type `WALL=4` in the grid for room boundary logic, but rende
 | Arrow keys | Pan camera |
 | Scroll wheel | Zoom |
 | Right/middle drag | Pan camera |
+| ` (backtick) | Toggle debug menu |
+| F | Flip object (in object placement mode) |
+| W | Toggle wall build mode |
+| V | Toggle vaporize/demolish mode |
 
 ## Testing
 

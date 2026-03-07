@@ -8,6 +8,7 @@ import {
   getInjuryList, getMinorInjuryList, getSpawnableDiseases,
 } from './MaladyData';
 import { Base } from '../core/Base';
+import { line } from '../localization/Localization';
 import {
   CAUSE_OF_DEATH, STATUS_DEAD, TEAM_ID_PLAYER, DOCTOR,
 } from '../characters/CharacterConstants';
@@ -359,7 +360,7 @@ export const Malady = {
     if (nTeam === TEAM_ID_PLAYER && !tS.tResearch[key].bEncountered) {
       if (!Malady.isInjury(key)) {
         const friendlyName = tMalady.sFriendlyName ?? key;
-        Base.addAlert('disease', `New disease encountered: ${friendlyName}`);
+        Base.addAlert('disease', line('ALERTS021TEXT', { name: friendlyName }));
       }
       tS.tResearch[key].bEncountered = true;
     }
@@ -412,6 +413,15 @@ export const Malady = {
   /** Get all research entries. */
   getResearch(): Record<string, ResearchEntry> {
     return { ...tS.tResearch };
+  },
+
+  /** Debug: complete all malady research (Lua DebugMenu:onResearchAllMaladyButtonPressed). */
+  researchAllCures() {
+    for (const [name, entry] of Object.entries(tS.tResearch)) {
+      if (entry.bEncountered && entry.nCureProgress < entry.nResearchCure) {
+        this.addResearch(name, entry.nResearchCure);
+      }
+    }
   },
 
   // ── Malady Creation ────────────────────────────────────────

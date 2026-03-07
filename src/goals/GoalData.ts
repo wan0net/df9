@@ -1,12 +1,18 @@
 /**
  * GoalData.ts — Goal/achievement definitions.
- * Mirrors GoalData.lua: 16 goals (15 active + 1 commented out in Lua).
+ * Mirrors GoalData.lua: 16 goals using GOALSS linecodes.
  */
+
+import { line } from '../localization/Localization';
 
 export interface GoalDef {
   sName: string;
-  friendlyName: string;
-  description: string;
+  /** Linecode key for friendly name — resolved at display time. */
+  sNameLC: string;
+  /** Linecode key for description — resolved at display time. */
+  sDescLC: string;
+  get friendlyName(): string;
+  get description(): string;
   /** Check function key — matched in GoalSystem. */
   checkType: string;
   /** Threshold value for completion (if applicable). */
@@ -27,118 +33,32 @@ export const TARGET_RAIDERS_CONVERTED = 10;
 export const TARGET_HOSTILES_ASPHYXIATED = 10;
 export const TARGET_HOSTILE_TURRET_KILLS = 20;
 export const TARGET_BODIES = 100;
+export const TARGET_HOSTILE_MONSTER_KILLS = 10;
+
+/** Create a goal def with lazy linecode resolution via getters. */
+function goal(sName: string, sNameLC: string, sDescLC: string, checkType: string, nThreshold: number): GoalDef {
+  return {
+    sName, sNameLC, sDescLC, checkType, nThreshold,
+    get friendlyName() { return line(sNameLC); },
+    get description() { return line(sDescLC, { TARGET: String(nThreshold) }); },
+  };
+}
 
 export const GOAL_DEFS: GoalDef[] = [
-  {
-    sName: 'Citizens',
-    friendlyName: 'Populace',
-    description: `Have ${TARGET_CITIZENS} citizens`,
-    checkType: 'citizens',
-    nThreshold: TARGET_CITIZENS,
-  },
-  {
-    sName: 'Matter',
-    friendlyName: 'Stockpiled',
-    description: `Accumulate ${TARGET_MATTER} matter`,
-    checkType: 'matter',
-    nThreshold: TARGET_MATTER,
-  },
-  {
-    sName: 'BuiltEverything',
-    friendlyName: 'Master Builder',
-    description: 'Build one of every object type',
-    checkType: 'builtEverything',
-    nThreshold: 1,
-  },
-  {
-    sName: 'HostilesKilled',
-    friendlyName: 'Exterminator',
-    description: `Kill ${TARGET_HOSTILES_KILLED} hostiles`,
-    checkType: 'hostilesKilled',
-    nThreshold: TARGET_HOSTILES_KILLED,
-  },
-  {
-    sName: 'BaseTiles',
-    friendlyName: 'Empire Builder',
-    description: `Own ${TARGET_BASE_TILES} base tiles`,
-    checkType: 'baseTiles',
-    nThreshold: TARGET_BASE_TILES,
-  },
-  {
-    sName: 'MealsServed',
-    friendlyName: 'Master Chef',
-    description: `Serve ${TARGET_MEALS} meals`,
-    checkType: 'mealsServed',
-    nThreshold: TARGET_MEALS,
-  },
-  {
-    sName: 'CuresResearched',
-    friendlyName: 'Plague Doctor',
-    description: `Research ${TARGET_CURES} disease cures`,
-    checkType: 'curesResearched',
-    nThreshold: TARGET_CURES,
-  },
-  {
-    sName: 'AllTechs',
-    friendlyName: 'Technologist',
-    description: 'Research all available technologies',
-    checkType: 'allTechs',
-    nThreshold: 1,
-  },
-  {
-    sName: 'HappyCitizens',
-    friendlyName: 'Utopia',
-    description: `Have ${TARGET_HAPPY_CITIZENS} citizens with morale above ${TARGET_HAPPY_MORALE}`,
-    checkType: 'happyCitizens',
-    nThreshold: TARGET_HAPPY_CITIZENS,
-  },
-  {
-    sName: 'BreachShipsDestroyed',
-    friendlyName: 'Ship Breaker',
-    description: `Destroy ${TARGET_BREACH_SHIPS} breach ships`,
-    checkType: 'breachShipsDestroyed',
-    nThreshold: TARGET_BREACH_SHIPS,
-  },
-  {
-    sName: 'AllPossessions',
-    friendlyName: 'Collector',
-    description: 'Collect all displayable possessions',
-    checkType: 'allPossessions',
-    nThreshold: 1,
-  },
-  {
-    sName: 'RaidersConverted',
-    friendlyName: 'Diplomat',
-    description: `Convert ${TARGET_RAIDERS_CONVERTED} raiders`,
-    checkType: 'raidersConverted',
-    nThreshold: TARGET_RAIDERS_CONVERTED,
-  },
-  {
-    sName: 'HostilesAsphyxiated',
-    friendlyName: 'Airlock Justice',
-    description: `Asphyxiate ${TARGET_HOSTILES_ASPHYXIATED} hostiles`,
-    checkType: 'hostilesAsphyxiated',
-    nThreshold: TARGET_HOSTILES_ASPHYXIATED,
-  },
-  {
-    sName: 'HostilesKilledByTurrets',
-    friendlyName: 'Automated Defense',
-    description: `Kill ${TARGET_HOSTILE_TURRET_KILLS} hostiles with turrets`,
-    checkType: 'hostilesKilledByTurrets',
-    nThreshold: TARGET_HOSTILE_TURRET_KILLS,
-  },
-  {
-    sName: 'BodiesRefined',
-    friendlyName: 'Recycler',
-    description: `Recycle ${TARGET_BODIES} corpses`,
-    checkType: 'bodiesRefined',
-    nThreshold: TARGET_BODIES,
-  },
-  {
-    sName: 'FinalSiege',
-    friendlyName: 'Last Stand',
-    description: 'Survive the final siege',
-    checkType: 'finalSiege',
-    nThreshold: 1,
-  },
+  goal('Citizens', 'GOALSS001TEXT', 'GOALSS002TEXT', 'citizens', TARGET_CITIZENS),
+  goal('Matter', 'GOALSS003TEXT', 'GOALSS004TEXT', 'matter', TARGET_MATTER),
+  goal('BuiltEverything', 'GOALSS005TEXT', 'GOALSS006TEXT', 'builtEverything', 1),
+  goal('HostilesKilled', 'GOALSS007TEXT', 'GOALSS008TEXT', 'hostilesKilled', TARGET_HOSTILES_KILLED),
+  goal('BaseTiles', 'GOALSS010TEXT', 'GOALSS011TEXT', 'baseTiles', TARGET_BASE_TILES),
+  goal('MealsServed', 'GOALSS017TEXT', 'GOALSS018TEXT', 'mealsServed', TARGET_MEALS),
+  goal('CuresResearched', 'GOALSS015TEXT', 'GOALSS016TEXT', 'curesResearched', TARGET_CURES),
+  goal('AllTechs', 'GOALSS019TEXT', 'GOALSS020TEXT', 'allTechs', 1),
+  goal('HappyCitizens', 'GOALSS021TEXT', 'GOALSS022TEXT', 'happyCitizens', TARGET_HAPPY_CITIZENS),
+  goal('BreachShipsDestroyed', 'GOALSS023TEXT', 'GOALSS024TEXT', 'breachShipsDestroyed', TARGET_BREACH_SHIPS),
+  goal('AllPossessions', 'GOALSS025TEXT', 'GOALSS026TEXT', 'allPossessions', 1),
+  goal('RaidersConverted', 'GOALSS027TEXT', 'GOALSS028TEXT', 'raidersConverted', TARGET_RAIDERS_CONVERTED),
+  goal('HostilesAsphyxiated', 'GOALSS029TEXT', 'GOALSS030TEXT', 'hostilesAsphyxiated', TARGET_HOSTILES_ASPHYXIATED),
+  goal('HostilesKilledByTurrets', 'GOALSS035TEXT', 'GOALSS036TEXT', 'hostilesKilledByTurrets', TARGET_HOSTILE_TURRET_KILLS),
+  goal('BodiesRefined', 'GOALSS031TEXT', 'GOALSS032TEXT', 'bodiesRefined', TARGET_BODIES),
+  goal('FinalSiege', 'GOALSS037TEXT', 'GOALSS038TEXT', 'finalSiege', 1),
 ];

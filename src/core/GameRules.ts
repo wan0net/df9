@@ -181,6 +181,20 @@ class GameRulesClass {
     this.bRunning = true;
     this.currentMode = MODE_INSPECT;
 
+    // Lua GameRules.randomSetup — reset state fields
+    this.nLastDutyAccident = 0;
+    this.nLastNewShip = 0;
+    this.bHasHadEnclosedRooms = false;
+    this.bHasZoned = false;
+    this.bHasStartedResearch = false;
+
+    // Reset flags
+    this.matterMult = 1;
+    this.bDisasterMode = false;
+    this.bInCutscene = false;
+    this.bTimeLocked = false;
+    this.bProhibitSuffocation = false;
+
     // Start power holiday — 10 minute grace period (Lua GameRules.lua)
     this.bPowerHoliday = true;
     this.powerHolidayEndTime = GameRulesClass.POWER_HOLIDAY_DURATION;

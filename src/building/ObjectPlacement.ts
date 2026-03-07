@@ -16,6 +16,7 @@ import type { RoomManager } from '../rooms/RoomManager';
 import type { Room } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
 import { researchSystem } from '../research/ResearchSystem';
+import { VISIBILITY_HIDDEN } from '../rooms/Room';
 
 export class ObjectPlacement {
   private grid: TileGrid;
@@ -93,8 +94,13 @@ export class ObjectPlacement {
         if (!data.noRoom && data.zoneName) {
           const room = this.roomManager.getRoomAt(floorTile.x, floorTile.y);
           if (!room) { lastReason = 'Must be in a room'; continue; }
+          // Lua: hidden rooms block placement
+          if (room.nLastVisibility === VISIBILITY_HIDDEN) { lastReason = 'Room not yet explored'; continue; }
           if (room.zone !== data.zoneName && !data.additionalZones.includes(room.zone)) {
-            lastReason = `Requires ${data.zoneName} zone`; continue;
+            // Lua: auto-zone PLAIN rooms
+            if (room.zone !== 'PLAIN') {
+              lastReason = `Requires ${data.zoneName} zone`; continue;
+            }
           }
         }
         found = true;
@@ -111,12 +117,21 @@ export class ObjectPlacement {
         return { valid: false, reason: 'Must place on floor' };
       }
 
-      // Zone check — mirrors allowObjInRoom.
+      // Zone check — mirrors allowObjInRoom + auto-zone (Lua World.lua:1628-1634).
       if (!data.noRoom && data.zoneName) {
         const room = this.roomManager.getRoomAt(tileX, tileY);
         if (!room) return { valid: false, reason: 'Must be in a room' };
+        // Lua: hidden rooms block placement (World.lua:1625-1627)
+        if (room.nLastVisibility === VISIBILITY_HIDDEN) {
+          return { valid: false, reason: 'Room not yet explored' };
+        }
         if (room.zone !== data.zoneName && !data.additionalZones.includes(room.zone)) {
-          return { valid: false, reason: `Requires ${data.zoneName} zone` };
+          // Lua: auto-zone PLAIN rooms when placing zone-specific objects (World.lua:1631-1633)
+          if (room.zone === 'PLAIN') {
+            // Allow placement — room will be auto-zoned in placeObject()
+          } else {
+            return { valid: false, reason: `Requires ${data.zoneName} zone` };
+          }
         }
       }
 
@@ -178,7 +193,8 @@ export class ObjectPlacement {
         if (!data.noRoom && data.zoneName) {
           const room = this.roomManager.getRoomAt(c.x, c.y);
           if (!room) continue;
-          if (room.zone !== data.zoneName && !data.additionalZones.includes(room.zone)) continue;
+          // Allow PLAIN rooms (will be auto-zoned after placement)
+          if (room.zone !== data.zoneName && !data.additionalZones.includes(room.zone) && room.zone !== 'PLAIN') continue;
         }
         floorTile = c;
         break;
@@ -194,6 +210,20 @@ export class ObjectPlacement {
 
     const obj = EnvObjectManager.createObject(sName, placeTileX, placeTileY, bFlipX, bFlipY, false);
     if (!obj) return 0;
+
+    // Lua auto-zone: if placing zone-specific object in PLAIN room, auto-set zone
+    if (data.zoneName && !data.door && !data.againstWall) {
+      const room = this.roomManager.getRoomAt(placeTileX, placeTileY);
+      if (room && room.zone === 'PLAIN') {
+        room.zone = data.zoneName;
+      }
+    } else if (data.zoneName && data.againstWall) {
+      // For wall objects, check the room at the floor tile
+      const room = this.roomManager.getRoomAt(placeTileX, placeTileY);
+      if (room && room.zone === 'PLAIN') {
+        room.zone = data.zoneName;
+      }
+    }
 
     // Lua: WALL→DOOR conversion happens AFTER construction completes (Door:setLoc
     // is called from EnvObject.createEnvObject, which runs on build completion).

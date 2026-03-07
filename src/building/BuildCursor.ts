@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
+import { isAsteroid } from '../world/Asteroid';
 import { tileToScreen, screenToTile, offsetToIso, isoToOffset } from '../world/IsometricUtils';
 import { getTexture } from '../renderer/AssetLoader';
 import { CHARACTER_SAFETY_TOLERANCE } from '../config';
@@ -32,6 +33,19 @@ export class BuildCursor {
     return this.dragTiles.length;
   }
 
+  /** Get drag rectangle dimensions in iso-axial space (Lua "Floor Area: W x H"). */
+  get dragDimensions(): { w: number; h: number } {
+    if (!this.dragStartTile || this.dragTiles.length === 0) return { w: 0, h: 0 };
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const t of this.dragTiles) {
+      if (t.x < minX) minX = t.x;
+      if (t.x > maxX) maxX = t.x;
+      if (t.y < minY) minY = t.y;
+      if (t.y > maxY) maxY = t.y;
+    }
+    return { w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+
   updateHover(worldX: number, worldY: number) {
     this._hoveredTile = screenToTile(worldX, worldY);
   }
@@ -41,7 +55,7 @@ export class BuildCursor {
     this.dragTiles = [];
   }
 
-  updateDrag(endTileX: number, endTileY: number, buildMode: 'room' | 'floor' | 'wall' | 'door' | 'demolish') {
+  updateDrag(endTileX: number, endTileY: number, buildMode: 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase' | 'mine') {
     if (!this.dragStartTile) return;
 
     const startIso = offsetToIso(this.dragStartTile.x, this.dragStartTile.y);
@@ -79,7 +93,7 @@ export class BuildCursor {
     this.clearGhosts();
   }
 
-  canPlace(x: number, y: number, mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish'): boolean {
+  canPlace(x: number, y: number, mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase' | 'mine'): boolean {
     if (!this.grid.inBounds(x, y)) return false;
     // Mirrors WorldConstants.CHARACTER_SAFETY_TOLERANCE = 2: no building within 2 tiles of world edge
     const tol = CHARACTER_SAFETY_TOLERANCE;
@@ -96,12 +110,18 @@ export class BuildCursor {
         return current === TileType.WALL;
       case 'demolish':
         return current === TileType.FLOOR || current === TileType.WALL || current === TileType.DOOR;
+      case 'vaporize':
+        return current !== TileType.SPACE;
+      case 'erase':
+        return current === TileType.FLOOR_PENDING || current === TileType.WALL_PENDING;
+      case 'mine':
+        return isAsteroid(current);
       default:
         return false;
     }
   }
 
-  private renderGhosts(buildMode: 'room' | 'floor' | 'wall' | 'door' | 'demolish') {
+  private renderGhosts(buildMode: 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase' | 'mine') {
     this.clearGhosts();
 
     for (const t of this.dragTiles) {
@@ -145,7 +165,7 @@ export class BuildCursor {
     this.ghosts = [];
   }
 
-  showHoverGhost(mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish') {
+  showHoverGhost(mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase' | 'mine') {
     if (!this._hoveredTile || this.dragStartTile) return;
     this.clearGhosts();
     const { x, y } = this._hoveredTile;

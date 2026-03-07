@@ -34,8 +34,9 @@ export class EnvObjectRenderer {
     this.removeObject(id);
 
     const objDef = tObjects[objectType];
-    // Doors are rendered as tile sprites by TileRenderer3D — skip here.
-    if (objDef?.door) return;
+    // Built doors are rendered as tile sprites by TileRenderer3D — skip here.
+    // Ghost (unbuilt) doors still need a visible sprite so the player can see the placement.
+    if (objDef?.door && built) return;
     const spriteName = objDef?.spriteName ?? objectType;
     const spriteKey = built ? spriteName : spriteName; // ghost uses same sprite
 
@@ -159,7 +160,13 @@ export class EnvObjectRenderer {
       return this.createFromPlaceholder(placeholderTex, gridW, gridH, built);
     }
 
-    // 3. Fallback: simple colored quad
+    // 3. Try tile texture (doors use 'tile_' prefixed textures from wall sheet)
+    const tileTex = getTexture(`tile_${spriteName}`);
+    if (tileTex) {
+      return this.createFromTileTexture(tileTex, gridW, built);
+    }
+
+    // 4. Fallback: simple colored quad
     return this.createFallbackQuad(gridW, gridH, built);
   }
 
@@ -209,6 +216,27 @@ export class EnvObjectRenderer {
       transparent: true,
       alphaTest: 0.01,
       opacity: built ? 0.85 : 0.3,
+      depthWrite: false,
+    });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  /** Create mesh from a tile texture (doors), using the image's real aspect ratio. */
+  private createFromTileTexture(tex: THREE.Texture, gridW: number, built: boolean): THREE.Mesh {
+    const targetW = gridW * TILE_W;
+    // Use actual image dimensions for correct aspect ratio
+    const imgW = tex.image?.width || targetW;
+    const imgH = tex.image?.height || targetW;
+    const aspect = imgH / imgW;
+    const renderW = targetW;
+    const renderH = targetW * aspect;
+
+    const geo = new THREE.PlaneGeometry(renderW, renderH);
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      alphaTest: 0.01,
+      opacity: built ? 1.0 : 0.3,
       depthWrite: false,
     });
     return new THREE.Mesh(geo, mat);

@@ -14,7 +14,7 @@ export class CameraController3D {
   /** Camera scroll position (top-left corner in world coordinates). */
   scrollX = 0;
   scrollY = 0;
-  zoom = 1;
+  zoom = 1; // Note: Lua START_ZOOM=2.5, but 1 gives better initial view
 
   private keysDown: Set<string> = new Set();
   private dragStart: { x: number; y: number; scrollX: number; scrollY: number } | null = null;

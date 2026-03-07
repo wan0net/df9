@@ -40,6 +40,8 @@ export interface EventDef {
   nMinExteriorRooms?: number;
   /** Estimated population change when this event fires (for forecast accumulation). */
   nPopulationDelta?: number;
+  /** Linecode key for forecast alert (Lua: sAlertLC). */
+  sAlertLC?: string;
 }
 
 // ── Population cap (from Lua BootConfig.lua) ──────────────────────
@@ -63,6 +65,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceHostile: 0,
     nAllowedSetupFailures: 0,
     nPopulationDelta: 3,
+    sAlertLC: 'ALERTS028TEXT',  // Lua ImmigrationEvent.lua:27
   },
   HostileImmigration: {
     name: 'Hostile Immigration',
@@ -77,6 +80,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 0.33,
     nChanceHostile: 1,
     nPopulationDelta: -1,
+    sAlertLC: 'ALERTS028TEXT',  // Lua HostileImmigrationEvent.lua:16
   },
   Meteor: {
     name: 'Meteor Shower',
@@ -90,6 +94,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     sExpMod: 'asteroids',
     nChanceObey: 0,
     nChanceHostile: 0,
+    sAlertLC: 'ALERTS026TEXT',  // Lua MeteorEvent.lua:20
   },
   Breaching: {
     name: 'Breaching',
@@ -104,6 +109,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 0,
     nChanceHostile: 1,
     bSkipAlert: true,
+    sAlertLC: 'ALERTS031TEXT',  // Lua: breaching event alert
   },
   Derelict: {
     name: 'Derelict Ship',
@@ -118,6 +124,8 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 1,
     nChanceHostile: 0,
     nPopulationDelta: 1,
+    bSkipAlert: true,  // Lua DerelictEvent.lua:22
+    sAlertLC: 'ALERTS023TEXT',  // Lua DerelictEvent.lua:19
   },
   HostileDerelict: {
     name: 'Hostile Derelict',
@@ -132,6 +140,9 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 0,
     nChanceHostile: 1,
     nPopulationDelta: -1,
+    nMaxUndiscoveredRooms: 15,  // Lua HostileDerelictEvent.lua:22
+    bSkipAlert: true,  // inherits from DerelictEvent
+    sAlertLC: 'ALERTS023TEXT',  // inherits from DerelictEvent
   },
   Docking: {
     name: 'Docking',
@@ -146,6 +157,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 1,
     nChanceHostile: 0,
     nPopulationDelta: 2,
+    sAlertLC: 'ALERTS028TEXT',  // Lua DockingEvent.lua:18
   },
   HostileDocking: {
     name: 'Hostile Docking',
@@ -160,6 +172,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 0.33,
     nChanceHostile: 0.66,
     nPopulationDelta: -1,
+    sAlertLC: 'ALERTS028TEXT',  // inherits from DockingEvent
   },
   Trader: {
     name: 'Trader',
@@ -174,6 +187,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 0.66,
     nChanceHostile: 0,
     nPopulationDelta: 1,
+    sAlertLC: 'ALERTS028TEXT',  // Lua TraderEvent.lua:11
   },
   CompoundEvent: {
     name: 'Compound Event',
@@ -189,6 +203,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceHostile: 1,
     bSkipAlert: true,
     nPopulationDelta: -3,
+    sAlertLC: 'ALERTS040TEXT',  // Lua CompoundEvent.lua:27
   },
 };
 
@@ -290,7 +305,8 @@ export function getNextEventTimeDelta(elapsedTime: number, nTimeBetween: number)
 
   const nMin = 0.6 * nTimeBetween;
   const nMax = 1.4 * nTimeBetween;
-  return nMin * alpha + nMax * (1 - alpha) + (Math.random() * 40 - 20);
+  // Lua: math.random(-20, 20) returns integers in [-20, 20]
+  return nMin * alpha + nMax * (1 - alpha) + Math.floor(Math.random() * 41) - 20;
 }
 
 /**

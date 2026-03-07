@@ -3,6 +3,8 @@
  * Mirrors CharacterConstants.lua: teams, jobs, personality, morale, anger, combat, O2.
  */
 
+import { line } from '../localization/Localization';
+
 // ── Team / Faction IDs ──────────────────────────────────────────────────
 export const TEAM_ID_NONE = 0;
 export const TEAM_ID_PLAYER = 1;
@@ -122,20 +124,20 @@ export const tJobs = [
 ];
 
 export const JOB_NAMES: Record<number, string> = {
-  [UNEMPLOYED]: 'Unemployed',
-  [BUILDER]: 'Builder',
-  [TECHNICIAN]: 'Technician',
-  [MINER]: 'Miner',
-  [EMERGENCY]: 'Security',
-  [RAIDER]: 'Raider',
-  [BARTENDER]: 'Bartender',
-  [BOTANIST]: 'Botanist',
-  [SCIENTIST]: 'Scientist',
-  [EMERGENCY2]: 'Security',
-  [EMERGENCY3]: 'Security',
-  [DOCTOR]: 'Doctor',
-  [JANITOR]: 'Janitor',
-  [TRADER]: 'Trader',
+  [UNEMPLOYED]: line('DUTIES001TEXT'),
+  [BUILDER]: line('DUTIES003TEXT'),
+  [TECHNICIAN]: line('DUTIES005TEXT'),
+  [MINER]: line('DUTIES007TEXT'),
+  [EMERGENCY]: line('DUTIES009TEXT'),
+  [RAIDER]: line('DUTIES011TEXT'),
+  [BARTENDER]: line('DUTIES013TEXT'),
+  [BOTANIST]: line('DUTIES016TEXT'),
+  [SCIENTIST]: line('DUTIES018TEXT'),
+  [EMERGENCY2]: line('DUTIES009TEXT'),
+  [EMERGENCY3]: line('DUTIES009TEXT'),
+  [DOCTOR]: line('DUTIES020TEXT'),
+  [JANITOR]: line('DUTIES022TEXT'),
+  [TRADER]: line('DUTIES024TEXT'),
 };
 
 // ── Competency / XP ─────────────────────────────────────────────────────

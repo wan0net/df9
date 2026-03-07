@@ -281,6 +281,15 @@ export class TileGrid {
   }
 
   /**
+   * Clear tile HP entry — resets to undamaged (removes from sparse map).
+   * Mirrors Lua World._buildTile: "World.tileHealth[tileAddr] = nil"
+   */
+  clearTileHP(x: number, y: number): void {
+    if (!this.inBounds(x, y)) return;
+    this.tileHP.delete(this.idx(x, y));
+  }
+
+  /**
    * Get HP for a tile (TILE_STARTING_HIT_POINTS = 100 if undamaged).
    */
   getTileHP(x: number, y: number): number {

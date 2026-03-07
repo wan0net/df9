@@ -15,7 +15,7 @@ export class ImmigrationEvent extends Event {
 
   constructor() {
     super();
-    this.immigrantCount = 1 + Math.floor(Math.random() * 3); // 1-3 immigrants
+    this.immigrantCount = 1 + Math.floor(Math.random() * 2); // 1-2 immigrants (Lua: tNumSpawnsRange={1,2})
   }
 
   getImmigrantCount(): number {

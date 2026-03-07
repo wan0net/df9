@@ -1,6 +1,8 @@
 import type { SceneContext, SceneState } from '../renderer/SceneManager';
 import { getTexture } from '../renderer/AssetLoader';
 import { SoundManager } from '../audio/SoundManager';
+import { line } from '../localization/Localization';
+import { playWarbleFullscreen } from './WarbleEffect';
 
 const AMBER_HEX = '#dfa200';
 const GREEN_HEX = '#a5d318';
@@ -73,15 +75,15 @@ const REGION_NOUNS = [
   'Arm','Rim','Expanse','Corridor','Worlds','Systems','Marches','Wastes','Space','Cloud',
 ];
 
-/** Severity labels — MiscUtil.tSeverityCodes (9 steps, low→high) */
-const SEVERITY_LABELS = [
-  'Ridiculously Low','Extremely Low','Low',
-  'Semi-Low','Average','Semi-High',
-  'High','Really High','Extremely High',
+/** Severity linecodes — MiscUtil.tSeverityCodes (9 steps, low→high) */
+const SEVERITY_CODES = [
+  'UIMISC008TEXT','UIMISC003TEXT','UIMISC001TEXT',
+  'UIMISC002TEXT','UIMISC010TEXT','UIMISC004TEXT',
+  'UIMISC005TEXT','UIMISC006TEXT','UIMISC009TEXT',
 ];
 
-/** Distance labels — MiscUtil.tDistanceCodes (5 steps) */
-const DISTANCE_LABELS = ['Very Distant','Distant','Proximal','Close','Very Close'];
+/** Distance linecodes — MiscUtil.tDistanceCodes (5 steps) */
+const DISTANCE_CODES = ['UIMISC042TEXT','UIMISC013TEXT','UIMISC012TEXT','UIMISC041TEXT','UIMISC011TEXT'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -91,11 +93,13 @@ function cellHash(x: number, y: number, salt: number): number {
 }
 
 function severityText(v: number): string {
-  return SEVERITY_LABELS[Math.min(SEVERITY_LABELS.length - 1, Math.floor(v * SEVERITY_LABELS.length))];
+  const idx = Math.min(SEVERITY_CODES.length - 1, Math.floor(v * SEVERITY_CODES.length));
+  return line(SEVERITY_CODES[idx]);
 }
 
 function distanceText(v: number): string {
-  return DISTANCE_LABELS[Math.min(DISTANCE_LABELS.length - 1, Math.floor(v * DISTANCE_LABELS.length))];
+  const idx = Math.min(DISTANCE_CODES.length - 1, Math.floor(v * DISTANCE_CODES.length));
+  return line(DISTANCE_CODES[idx]);
 }
 
 /** density color: high=green, low=red — NewBaseInspector.lua:105-107 */
@@ -130,7 +134,8 @@ function getAge(x: number): number {
 function setColored(el: HTMLElement, label: string, value: string, color: string) {
   el.textContent = '';
   const lbl = document.createElement('span');
-  lbl.textContent = label + ': ';
+  // Linecodes already end with ":" — just add a space
+  lbl.textContent = label + ' ';
   lbl.style.color = AMBER_HEX;
   const val = document.createElement('span');
   val.textContent = value;
@@ -182,6 +187,7 @@ export class NewGameScreenState implements SceneState {
   private panelDistance!: HTMLDivElement;
   private panelThreat!: HTMLDivElement;
   private panelInterference!: HTMLDivElement;
+  private helpFolder!: HTMLDivElement;
   private helpText!: HTMLDivElement;
   private deployOverlay!: HTMLDivElement;
   private deployMsg!: HTMLDivElement;
@@ -259,15 +265,27 @@ export class NewGameScreenState implements SceneState {
     this.buildHelpText();
     this.buildDeployOverlay();
 
-    // Title — mirrors "FlavorTextALabel" at top of galaxy area
-    this.overlay.appendChild(this.el('div',
-      `position:absolute;top:20px;width:100%;text-align:center;color:${AMBER_HEX};font-size:22px;font-weight:700;letter-spacing:3px;z-index:5;`,
-      'SELECT LANDING ZONE'));
+    // Flavor text — Lua: FlavorTextALabel (NEWBAS021TEXT) + FlavorTextBLabel (NEWBAS022TEXT)
+    // Positioned at 314px from left edge (just right of left sidebar)
+    const flavorA = this.el('div',
+      `position:absolute;top:14px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:14px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;`,
+      line('NEWBAS021TEXT'));
+    this.overlay.appendChild(flavorA);
+    const flavorB = this.el('div',
+      `position:absolute;top:68px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:10px;z-index:5;font-family:'Dosis',sans-serif;font-style:italic;`,
+      line('NEWBAS022TEXT'));
+    this.overlay.appendChild(flavorB);
+
+    // "Region Selection" header on left sidebar — Lua: NewBase.lua top label
+    const regionSelHeader = this.el('div',
+      `position:absolute;top:16px;left:16px;color:${AMBER_HEX};font-size:12px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;letter-spacing:1px;font-style:italic;`,
+      'Region Selection');
+    this.overlay.appendChild(regionSelHeader);
 
     // Back
     const backBtn = this.el('div',
       `position:absolute;bottom:30px;left:24px;color:#888;font-size:14px;cursor:pointer;z-index:5;font-family:'Orbitron',monospace;letter-spacing:1px;`,
-      '< Back');
+      line('NEWBUI001TEXT'));
     backBtn.addEventListener('click', this.onBack);
     backBtn.addEventListener('mouseenter', () => { backBtn.style.color = AMBER_HEX; });
     backBtn.addEventListener('mouseleave', () => { backBtn.style.color = '#888'; });
@@ -338,23 +356,63 @@ export class NewGameScreenState implements SceneState {
   }
 
   private buildInfoPanel() {
-    // Info panel on right side — Lua: labels at W/2 - 565 to W/2 - 320
-    // Positioned just left of the right sidebar
+    // Inspector panel on right side — NewBaseInspectorLayout.lua
+    // Panel: 550px wide, positioned right of galaxy map, left of right sidebar
+    const panelW = 400;
     const panelRight = RIGHT_SIDEBAR_W + 10;
     this.infoPanel = document.createElement('div');
-    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:24px;width:240px;padding:16px;color:${AMBER_HEX};font-size:13px;line-height:2;z-index:5;display:none;font-family:'Orbitron',monospace;`;
+    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:0;width:${panelW}px;color:${AMBER_HEX};font-size:13px;z-index:5;display:none;font-family:'Dosis',sans-serif;`;
 
-    this.panelName         = document.createElement('div');
-    this.panelName.style.cssText = 'font-weight:700;font-size:15px;margin-bottom:4px;';
-    this.panelAge          = document.createElement('div');
-    this.panelAge.style.cssText  = 'color:#aaa;margin-bottom:8px;font-size:12px;';
-    const sep              = document.createElement('div');
-    sep.style.cssText      = 'border-top:1px solid rgba(223,162,0,0.3);margin:6px 0;';
+    // Black background behind everything
+    const blackBg = document.createElement('div');
+    blackBg.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);`;
+    this.infoPanel.appendChild(blackBg);
+
+    // Content container (relative, on top of bg)
+    const content = document.createElement('div');
+    content.style.cssText = 'position:relative;z-index:1;';
+
+    // Amber header with region name — Lua: HeaderBG (amber) + LabelName (black text)
+    const header = document.createElement('div');
+    header.style.cssText = `background:${AMBER_HEX};padding:12px 16px;`;
+    this.panelName = document.createElement('div');
+    this.panelName.style.cssText = `color:#000;font-weight:600;font-size:20px;font-family:'Dosis',sans-serif;`;
+    this.panelAge = document.createElement('div');
+    this.panelAge.style.cssText = `color:#000;font-size:14px;margin-top:4px;font-family:'Dosis',sans-serif;`;
+    header.append(this.panelName, this.panelAge);
+    content.appendChild(header);
+
+    // Stats section — Lua: StatsBG (amber opaque) with property labels
+    const stats = document.createElement('div');
+    stats.style.cssText = `background:rgba(223,162,0,0.15);padding:12px 16px;border-top:1px solid rgba(223,162,0,0.3);`;
     this.panelDensity      = document.createElement('div');
+    this.panelDensity.style.cssText = 'margin-bottom:6px;font-size:14px;';
     this.panelDistance     = document.createElement('div');
+    this.panelDistance.style.cssText = 'margin-bottom:6px;font-size:14px;';
     this.panelThreat       = document.createElement('div');
+    this.panelThreat.style.cssText = 'margin-bottom:6px;font-size:14px;';
     this.panelInterference = document.createElement('div');
-    this.infoPanel.append(this.panelName, this.panelAge, sep, this.panelDensity, this.panelDistance, this.panelThreat, this.panelInterference);
+    this.panelInterference.style.cssText = 'font-size:14px;';
+    stats.append(this.panelDensity, this.panelDistance, this.panelThreat, this.panelInterference);
+    content.appendChild(stats);
+
+    // Help folder — Lua: FolderHeader (amber tab) + LabelFolder "Help" + LabelHelpText
+    this.helpFolder = document.createElement('div');
+    this.helpFolder.style.cssText = 'border-top:2px solid rgba(223,162,0,0.5);';
+    const helpTab = document.createElement('div');
+    helpTab.style.cssText = `background:${AMBER_HEX};display:inline-block;padding:4px 16px;color:#000;font-weight:700;font-size:16px;font-family:'Dosis',sans-serif;`;
+    helpTab.textContent = line('NEWBAS013TEXT');
+    this.helpFolder.appendChild(helpTab);
+    const helpFooter = document.createElement('div');
+    helpFooter.style.cssText = `background:${AMBER_HEX};height:3px;margin-top:-1px;`;
+    this.helpFolder.appendChild(helpFooter);
+    const helpBody = document.createElement('div');
+    helpBody.style.cssText = `padding:12px 16px;color:${AMBER_HEX};font-size:12px;line-height:1.6;white-space:pre-line;font-family:'Dosis',sans-serif;`;
+    helpBody.textContent = line('NEWBAS014TEXT');
+    this.helpFolder.appendChild(helpBody);
+    content.appendChild(this.helpFolder);
+
+    this.infoPanel.appendChild(content);
     this.overlay.appendChild(this.infoPanel);
   }
 
@@ -375,8 +433,8 @@ export class NewGameScreenState implements SceneState {
     confirmImg.style.cssText = `width:100%;height:100%;`;
     this.confirmBtnEl.appendChild(confirmImg);
 
-    // Label below confirm
-    const confirmLabel = this.el('div', `color:rgba(0,0,0,0.7);font-size:10px;text-align:center;margin-top:2px;font-weight:700;letter-spacing:1px;`, 'ACCEPT');
+    // Label below confirm — Lua: LabelAccept, dosisregular35, Gui.BLACK
+    const confirmLabel = this.el('div', `color:#000;font-size:14px;text-align:left;margin-top:4px;font-weight:600;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS002TEXT'));
     this.confirmBtnEl.appendChild(confirmLabel);
 
     this.confirmBtnEl.addEventListener('mouseenter', () => {
@@ -399,7 +457,7 @@ export class NewGameScreenState implements SceneState {
     declineImg.style.cssText = `width:100%;height:100%;`;
     this.declineBtnEl.appendChild(declineImg);
 
-    const declineLabel = this.el('div', `color:rgba(0,0,0,0.7);font-size:10px;text-align:center;margin-top:2px;font-weight:700;letter-spacing:1px;`, 'DECLINE');
+    const declineLabel = this.el('div', `color:#000;font-size:14px;text-align:left;margin-top:4px;font-weight:600;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS003TEXT'));
     this.declineBtnEl.appendChild(declineLabel);
 
     this.declineBtnEl.addEventListener('mouseenter', () => {
@@ -440,7 +498,7 @@ export class NewGameScreenState implements SceneState {
     this.launchActiveEl.appendChild(activeImg);
 
     // DEPLOY label centered over the red button area
-    const deployLabel = this.el('div', `position:absolute;top:55%;left:50%;transform:translate(-50%,-50%);color:white;font-size:14px;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, 'DEPLOY');
+    const deployLabel = this.el('div', `position:absolute;top:55%;left:50%;transform:translate(-50%,-50%);color:white;font-size:14px;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, line('NEWBUI002TEXT'));
     this.launchActiveEl.appendChild(deployLabel);
 
     this.launchActiveEl.addEventListener('mouseenter', () => {
@@ -461,10 +519,17 @@ export class NewGameScreenState implements SceneState {
   }
 
   private buildHelpText() {
-    // Help text — bottom center, amber background bar
+    // Help text bar — Lua: SelectRegionHelpTextBG at -(H/2)+78 (78px from bottom)
+    // Width 570, height 50, amber bg with icon + text
     this.helpText = document.createElement('div') as HTMLDivElement;
-    this.helpText.style.cssText = `position:absolute;bottom:60px;left:50%;transform:translateX(-50%);color:#000;font-size:14px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:8px 24px;font-family:'Orbitron',monospace;letter-spacing:1px;`;
-    this.helpText.textContent = 'CLICK A REGION ON THE GALAXY MAP';
+    this.helpText.style.cssText = `position:absolute;bottom:78px;left:${LEFT_SIDEBAR_W + 140}px;color:#000;font-size:14px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:10px 20px 10px 40px;font-family:'Dosis',sans-serif;letter-spacing:1px;display:flex;align-items:center;`;
+    // Hazard stripe icon (Lua: SelectRegionHelpIcon = ui_hud_buttonPlay)
+    const icon = this.el('span',
+      `display:inline-block;width:24px;height:24px;border:2px solid #000;border-radius:50%;text-align:center;line-height:22px;font-size:14px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
+      '?');
+    this.helpText.appendChild(icon);
+    const textSpan = this.el('span', '', line('NEWBAS001TEXT'));
+    this.helpText.appendChild(textSpan);
     this.overlay.appendChild(this.helpText);
   }
 
@@ -473,7 +538,7 @@ export class NewGameScreenState implements SceneState {
     this.deployOverlay = document.createElement('div');
     this.deployOverlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;font-family:'Orbitron',monospace;color:${AMBER_HEX};`;
     this.deployMsg   = this.el('div', 'font-size:20px;margin-bottom:20px;letter-spacing:2px;') as HTMLDivElement;
-    this.deployEta   = this.el('div', 'font-size:16px;margin-bottom:20px;letter-spacing:1px;', 'ESTIMATED ARRIVAL IN...') as HTMLDivElement;
+    this.deployEta   = this.el('div', 'font-size:16px;margin-bottom:20px;letter-spacing:1px;', line('NEWBAS018TEXT')) as HTMLDivElement;
     this.deployYears = this.el('div', 'font-size:48px;font-weight:bold;letter-spacing:3px;') as HTMLDivElement;
     this.deployOverlay.append(this.deployMsg, this.deployEta, this.deployYears);
     this.overlay.appendChild(this.deployOverlay);
@@ -501,15 +566,15 @@ export class NewGameScreenState implements SceneState {
   private showInspector(zone: LandingZone) {
     const { x, y, density, threat, distance, interference } = zone;
 
-    this.panelName.textContent    = getRegionName(x, y);
-    this.panelName.style.color    = AMBER_HEX;
+    // Header — black text on amber bg (Lua: LabelName, LabelAge with Gui.BLACK)
+    this.panelName.textContent = getRegionName(x, y);
+    this.panelAge.textContent  = `${line('NEWBAS008TEXT')} ${getAge(x)} ${line('NEWBAS009TEXT')}`;
 
-    this.panelAge.textContent  = `Age: ${getAge(x)} Billion Years`;
-
-    setColored(this.panelDensity,      'Stellar Density', severityText(density),      densityColor(density));
-    setColored(this.panelDistance,     'Distance',        distanceText(distance),     AMBER_HEX);
-    setColored(this.panelThreat,       'Threat',          severityText(threat),       threatColor(threat));
-    setColored(this.panelInterference, 'Interference',    severityText(interference), AMBER_HEX);
+    // Stats — colored values
+    setColored(this.panelDensity,      line('NEWBAS020TEXT'), severityText(density),      densityColor(density));
+    setColored(this.panelDistance,     line('NEWBAS010TEXT'), distanceText(distance),     AMBER_HEX);
+    setColored(this.panelThreat,       line('NEWBAS015TEXT'), severityText(threat),       threatColor(threat));
+    setColored(this.panelInterference, line('NEWBAS016TEXT'), severityText(interference), AMBER_HEX);
 
     // Only trigger slide-in animation on first appearance
     const wasHidden = this.infoPanel.style.display === 'none';
@@ -532,8 +597,16 @@ export class NewGameScreenState implements SceneState {
 
     this.selectedZone = this.makeLandingZone(gx, gy);
     this.state = 'SelectedLandingZone';
-    this.helpText.textContent = 'REVIEW REGION AND CONFIRM';
+    // Update help text to "ACCEPT or DECLINE region for deployment"
+    this.helpText.textContent = '';
+    const selIcon = this.el('span',
+      `display:inline-block;width:24px;height:24px;border:2px solid #000;border-radius:50%;text-align:center;line-height:22px;font-size:14px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
+      'O');
+    this.helpText.appendChild(selIcon);
+    const selText = this.el('span', '', line('NEWBAS004TEXT'));
+    this.helpText.appendChild(selText);
     SoundManager.playUI('Intro_UIAppear');  // Lua: previewappear
+    playWarbleFullscreen(this.overlay, 0.3, 0.3);
     this.showInspector(this.selectedZone);
     this.confirmBtnEl.style.display = 'block';
     this.declineBtnEl.style.display = 'block';
@@ -556,6 +629,7 @@ export class NewGameScreenState implements SceneState {
     if (this.state !== 'SelectedLandingZone') return;
     SoundManager.playUI('Intro_AcceptButton');  // Lua: accept
     SoundManager.playUI('Intro_LaunchOpen');     // Lua: launchopen
+    playWarbleFullscreen(this.overlay, 0.6, 0.5);
     this.state = 'ConfirmedLandingZone';
     this.confirmBtnEl.style.display = 'none';
     this.declineBtnEl.style.display = 'none';
@@ -583,8 +657,8 @@ export class NewGameScreenState implements SceneState {
     this.launchCoverEl.style.transform = 'none';
     this.launchCoverEl.style.opacity   = '1';
 
-    this.helpText.textContent      = 'CLICK A REGION ON THE GALAXY MAP';
-    this.helpText.style.display    = 'block';
+    this.rebuildHelpTextContent(line('NEWBAS001TEXT'));
+    this.helpText.style.display    = 'flex';
   }
 
   private onCancel() {
@@ -604,14 +678,25 @@ export class NewGameScreenState implements SceneState {
     this.launchCoverEl.style.transform = 'none';
     this.launchCoverEl.style.opacity   = '1';
 
-    this.helpText.textContent      = 'CLICK A REGION ON THE GALAXY MAP';
-    this.helpText.style.display    = 'block';
+    this.rebuildHelpTextContent(line('NEWBAS001TEXT'));
+    this.helpText.style.display    = 'flex';
+  }
+
+  private rebuildHelpTextContent(text: string) {
+    this.helpText.textContent = '';
+    const icon = this.el('span',
+      `display:inline-block;width:24px;height:24px;border:2px solid #000;border-radius:50%;text-align:center;line-height:22px;font-size:14px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
+      '?');
+    this.helpText.appendChild(icon);
+    const span = this.el('span', '', text);
+    this.helpText.appendChild(span);
   }
 
   private onDeploy() {
     if (this.state !== 'ConfirmedLandingZone') return;
     SoundManager.playUI('Intro_LaunchButton');  // Lua: launchbutton
     SoundManager.stopMusic();                    // Lua: stopMusic()
+    playWarbleFullscreen(this.overlay, 1.2, 0.5);
     this.state      = 'Deploying';
     this.deployTime = 0;
     this.launchActiveEl.style.display = 'none';
@@ -622,7 +707,7 @@ export class NewGameScreenState implements SceneState {
     this.launchCoverEl.style.display  = 'none';
 
     const name = this.selectedZone ? getRegionName(this.selectedZone.x, this.selectedZone.y) : 'Unknown';
-    this.deployMsg.textContent    = `SEED POD DEPLOYED TO ${name.toUpperCase()}`;
+    this.deployMsg.textContent    = `${line('NEWBAS017TEXT')}${name.toUpperCase()}`;
     this.deployEta.style.opacity  = '0';
     this.deployYears.style.opacity = '0';
     this.deployOverlay.style.display = 'flex';
@@ -673,7 +758,7 @@ export class NewGameScreenState implements SceneState {
     if (t3 < END_ANIM_BEFORE_COUNTDOWN_DELAY) {
       this.deployEta.style.opacity   = '1';
       this.deployYears.style.opacity = '1';
-      this.deployYears.textContent   = `${MAX_YEARS} YEARS`;
+      this.deployYears.textContent   = `${MAX_YEARS}${line('NEWBAS019TEXT')}`;
       return;
     }
 
@@ -681,14 +766,14 @@ export class NewGameScreenState implements SceneState {
     const t4 = t3 - END_ANIM_BEFORE_COUNTDOWN_DELAY;
     if (t4 < END_ANIM_COUNTDOWN_TIME) {
       const years = Math.floor(MAX_YEARS * (1 - t4 / END_ANIM_COUNTDOWN_TIME));
-      this.deployYears.textContent = `${years} YEARS`;
+      this.deployYears.textContent = `${years}${line('NEWBAS019TEXT')}`;
       return;
     }
 
     // Phase 5: fade out text
     const t5 = t4 - END_ANIM_COUNTDOWN_TIME;
     if (t5 < END_ANIM_FADE_OUT_TIME) {
-      this.deployYears.textContent = '0 YEARS';
+      this.deployYears.textContent = `0${line('NEWBAS019TEXT')}`;
       const alpha = String(1 - t5 / END_ANIM_FADE_OUT_TIME);
       this.deployMsg.style.opacity   = alpha;
       this.deployEta.style.opacity   = alpha;
@@ -734,7 +819,7 @@ export class NewGameScreenState implements SceneState {
       ctx.fillStyle    = GREEN_HEX;
       ctx.textAlign    = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText('QUICK-START MODE', tx + cellSize * 0.6, ty);
+      ctx.fillText(line('UIMISC045TEXT'), tx + cellSize * 0.6, ty);
       ctx.textAlign    = 'left';
       ctx.textBaseline = 'alphabetic';
     }

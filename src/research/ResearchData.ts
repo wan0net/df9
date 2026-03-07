@@ -1,7 +1,9 @@
 /**
  * ResearchData.ts — Full tech tree.
- * Mirrors ResearchData.lua exactly.
+ * Mirrors ResearchData.lua exactly. Uses RESRCH/PROPSX linecodes where Lua specifies sName/sDesc.
  */
+
+import { line } from '../localization/Localization';
 
 export interface ResearchDef {
   sName: string;
@@ -24,8 +26,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Spacesuit ───────────────────────────────────────────────
   SpaceSuit2: {
     sName: 'SpaceSuit2',
-    friendlyName: 'Spacesuit Mk II',
-    description: 'Improved spacesuit with better oxygen reserves.',
+    get friendlyName() { return line('RESRCH019TEXT'); },
+    get description() { return line('RESRCH020TEXT'); },
     nCost: 1200,
     prerequisites: [],
     unlocks: ['SpaceSuit2'],
@@ -34,16 +36,16 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Builder upgrades ────────────────────────────────────────
   VaporizeLevel2: {
     sName: 'VaporizeLevel2',
-    friendlyName: 'Vaporize Mk II',
-    description: 'Faster vaporization of unwanted structures.',
+    get friendlyName() { return line('RESRCH001TEXT'); },
+    get description() { return line('RESRCH002TEXT'); },
     nCost: 1200,
     prerequisites: [],
     unlocks: [],
   },
   BuildLevel2: {
     sName: 'BuildLevel2',
-    friendlyName: 'Build Mk II',
-    description: 'Builders construct faster.',
+    get friendlyName() { return line('RESRCH011TEXT'); },
+    get description() { return line('RESRCH012TEXT'); },
     nCost: 1000,
     prerequisites: [],
     unlocks: [],
@@ -52,8 +54,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Maintenance ─────────────────────────────────────────────
   MaintenanceLevel2: {
     sName: 'MaintenanceLevel2',
-    friendlyName: 'Improved Maintenance',
-    description: 'Technicians repair more per visit.',
+    get friendlyName() { return line('RESRCH009TEXT'); },
+    get description() { return line('RESRCH010TEXT'); },
     nCost: 1200,
     prerequisites: ['MaintenanceLevel2Discovered'],
     unlocks: [],
@@ -63,8 +65,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Botanist ────────────────────────────────────────────────
   PlantLevel2: {
     sName: 'PlantLevel2',
-    friendlyName: 'Botany Mk II',
-    description: 'Plants grow stronger and live longer.',
+    get friendlyName() { return line('RESRCH013TEXT'); },
+    get description() { return line('RESRCH014TEXT'); },
     nCost: 1000,
     prerequisites: [],
     unlocks: [],
@@ -74,24 +76,24 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Combat ──────────────────────────────────────────────────
   LaserRifles: {
     sName: 'LaserRifles',
-    friendlyName: 'Laser Rifles',
-    description: 'Equip security with ranged laser weapons.',
+    get friendlyName() { return line('RESRCH003TEXT'); },
+    get description() { return line('RESRCH004TEXT'); },
     nCost: 1100,
     prerequisites: [],
     unlocks: ['LaserRifles'],
   },
   ArmorLevel2: {
     sName: 'ArmorLevel2',
-    friendlyName: 'Armor Mk II',
-    description: 'Better armor for security personnel.',
+    get friendlyName() { return line('RESRCH005TEXT'); },
+    get description() { return line('RESRCH006TEXT'); },
     nCost: 900,
     prerequisites: [],
     unlocks: ['ArmorLevel2'],
   },
   TeamTactics: {
     sName: 'TeamTactics',
-    friendlyName: 'Team Tactics',
-    description: 'Security squads fight more effectively together.',
+    get friendlyName() { return line('RESRCH017TEXT'); },
+    get description() { return line('RESRCH018TEXT'); },
     nCost: 2400,
     prerequisites: ['TeamTacticsDiscovered'],
     unlocks: [],
@@ -100,24 +102,24 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── O2 Recycler upgrades ───────────────────────────────────
   OxygenRecyclerLevel2: {
     sName: 'OxygenRecyclerLevel2',
-    friendlyName: 'O2 Recycler Mk II',
-    description: 'Improved oxygen recycling.',
+    get friendlyName() { return line('PROPSX062TEXT'); },
+    get description() { return line('PROPSX063TEXT'); },
     nCost: 1000,
     prerequisites: ['AirScrubber'],
     unlocks: ['OxygenRecyclerLevel2'],
   },
   OxygenRecyclerLevel3: {
     sName: 'OxygenRecyclerLevel3',
-    friendlyName: 'O2 Recycler Mk III',
-    description: 'Advanced oxygen recycling.',
+    get friendlyName() { return line('RECYCLE001TEXT'); },
+    get description() { return line('RECYCLE002TEXT'); },
     nCost: 2000,
     prerequisites: ['OxygenRecyclerLevel2'],
     unlocks: ['OxygenRecyclerLevel3'],
   },
   OxygenRecyclerLevel4: {
     sName: 'OxygenRecyclerLevel4',
-    friendlyName: 'O2 Recycler Mk IV',
-    description: 'Maximum oxygen recycling.',
+    get friendlyName() { return line('RECYCLE004TEXT'); },
+    get description() { return line('RECYCLE005TEXT'); },
     nCost: 4000,
     prerequisites: ['OxygenRecyclerLevel3'],
     unlocks: ['OxygenRecyclerLevel4'],
@@ -126,24 +128,24 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Generator upgrades ─────────────────────────────────────
   GeneratorLevel2: {
     sName: 'GeneratorLevel2',
-    friendlyName: 'Generator Mk II',
-    description: 'More efficient power generation.',
+    get friendlyName() { return line('PROPSX096TEXT'); },
+    get description() { return line('PROPSX097TEXT'); },
     nCost: 1000,
     prerequisites: [],
     unlocks: ['GeneratorLevel2'],
   },
   GeneratorLevel3: {
     sName: 'GeneratorLevel3',
-    friendlyName: 'Generator Mk III',
-    description: 'Advanced power generation.',
+    get friendlyName() { return line('PROPSX100TEXT'); },
+    get description() { return line('PROPSX101TEXT'); },
     nCost: 1500,
     prerequisites: ['GeneratorLevel2'],
     unlocks: ['GeneratorLevel3'],
   },
   GeneratorLevel4: {
     sName: 'GeneratorLevel4',
-    friendlyName: 'Generator Mk IV',
-    description: 'Maximum power generation.',
+    get friendlyName() { return line('PROPSX102TEXT'); },
+    get description() { return line('PROPSX103TEXT'); },
     nCost: 2000,
     prerequisites: ['GeneratorLevel3'],
     unlocks: ['GeneratorLevel4'],
@@ -152,8 +154,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Air Scrubber ───────────────────────────────────────────
   AirScrubber: {
     sName: 'AirScrubber',
-    friendlyName: 'Air Scrubber',
-    description: 'Compact air filtration unit.',
+    get friendlyName() { return line('PROPSX078TEXT'); },
+    get description() { return line('PROPSX079TEXT'); },
     nCost: 500,
     prerequisites: [],
     unlocks: ['AirScrubber'],
@@ -162,8 +164,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── HappyBot ──────────────────────────────────────────────
   HappyBot: {
     sName: 'HappyBot',
-    friendlyName: 'HappyBot',
-    description: 'Morale-boosting robot assistant.',
+    get friendlyName() { return line('PROPSX104TEXT'); },
+    get description() { return line('PROPSX105TEXT'); },
     nCost: 2000,
     prerequisites: ['AirScrubber'],
     unlocks: ['HappyBot'],
@@ -172,8 +174,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Door upgrades ──────────────────────────────────────────
   DoorLevel2: {
     sName: 'DoorLevel2',
-    friendlyName: 'Heavy Door',
-    description: 'Reinforced blast door.',
+    get friendlyName() { return line('PROPSX064TEXT'); },
+    get description() { return line('PROPSX065TEXT'); },
     nCost: 900,
     prerequisites: [],
     unlocks: ['HeavyDoor'],
@@ -182,8 +184,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Food upgrades ─────────────────────────────────────────
   FridgeLevel2: {
     sName: 'FridgeLevel2',
-    friendlyName: 'Food Replicator Mk II',
-    description: 'Better food variety and capacity.',
+    get friendlyName() { return line('PROPSX069TEXT'); },
+    get description() { return line('PROPSX068TEXT'); },
     nCost: 900,
     prerequisites: ['FridgeLevel2Discovered'],
     unlocks: ['FridgeLevel2'],
@@ -192,8 +194,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Refinery upgrades ─────────────────────────────────────
   RefineryDropoffLevel2: {
     sName: 'RefineryDropoffLevel2',
-    friendlyName: 'Refinery Mk II',
-    description: 'Improved matter extraction.',
+    get friendlyName() { return line('PROPSX066TEXT'); },
+    get description() { return line('PROPSX067TEXT'); },
     nCost: 1200,
     prerequisites: [],
     unlocks: ['RefineryDropoffLevel2'],
@@ -202,8 +204,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // ── Turret upgrades ───────────────────────────────────────
   WallMountedTurret2: {
     sName: 'WallMountedTurret2',
-    friendlyName: 'Turret Mk II',
-    description: 'Upgraded turret systems.',
+    get friendlyName() { return line('PROPSX080TEXT'); },
+    get description() { return line('PROPSX081TEXT'); },
     nCost: 2000,
     prerequisites: ['WallMountedTurretLevel2Discovered'],
     unlocks: ['WallMountedTurret2'],
@@ -213,8 +215,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   // These gate other research. Discovered via datacubes/derelicts.
   FridgeLevel2Discovered: {
     sName: 'FridgeLevel2Discovered',
-    friendlyName: 'Replicator Mk II Blueprint',
-    description: 'A schematic for an improved food replicator.',
+    get friendlyName() { return line('PROPSX069TEXT'); },
+    get description() { return line('PROPSX068TEXT'); },
     nCost: 1,
     prerequisites: [],
     unlocks: [],
@@ -222,8 +224,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   },
   TeamTacticsDiscovered: {
     sName: 'TeamTacticsDiscovered',
-    friendlyName: 'Team Tactics Blueprint',
-    description: 'Tactical training documentation.',
+    get friendlyName() { return line('RESRCH017TEXT'); },
+    get description() { return line('RESRCH018TEXT'); },
     nCost: 1,
     prerequisites: [],
     unlocks: [],
@@ -231,8 +233,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   },
   MaintenanceLevel2Discovered: {
     sName: 'MaintenanceLevel2Discovered',
-    friendlyName: 'Maintenance Mk II Blueprint',
-    description: 'Advanced repair techniques documentation.',
+    get friendlyName() { return line('RESRCH009TEXT'); },
+    get description() { return line('RESRCH010TEXT'); },
     nCost: 1,
     prerequisites: [],
     unlocks: [],
@@ -240,8 +242,8 @@ export const RESEARCH_DEFS: Record<string, ResearchDef> = {
   },
   WallMountedTurretLevel2Discovered: {
     sName: 'WallMountedTurretLevel2Discovered',
-    friendlyName: 'Turret Mk II Blueprint',
-    description: 'Upgraded turret schematics.',
+    get friendlyName() { return line('PROPSX080TEXT'); },
+    get description() { return line('PROPSX081TEXT'); },
     nCost: 1,
     prerequisites: [],
     unlocks: [],

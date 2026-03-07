@@ -6,6 +6,7 @@
 import { Event } from './Event';
 import { Base } from '../core/Base';
 import { SoundManager } from '../audio/SoundManager';
+import { line } from '../localization/Localization';
 
 export class MeteorEvent extends Event {
   readonly name = 'Meteor';
@@ -39,7 +40,7 @@ export class MeteorEvent extends Event {
 
       // Fire meteor land callback
       this.onMeteorLandCallback?.();
-      Base.addAlert('meteor', `Meteor impact! (${this.meteorsLanded}/${this.meteorCount})`);
+      Base.addAlert('meteor', line('ALERTS033TEXT'));
     }
   }
 }
