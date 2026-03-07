@@ -923,11 +923,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         return { cost: count * MAT_VAPE_FLOOR, tileCount: count, mode: buildMode, w: dims.w, h: dims.h };
       }
       if (buildMode === 'room' || buildMode === 'floor' || buildMode === 'wall') {
-        // Room mode: walls are auto-generated around perimeter (same cost as floor)
-        const wallCount = buildMode === 'room' ? (2 * (dims.w + dims.h)) : 0;
-        const floorCount = count;
-        const totalCost = (floorCount + wallCount) * MAT_BUILD_FLOOR;
-        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount };
+        // Room mode: the dragged area IS the full room including walls.
+        // Perimeter = walls, interior = floors. All cost MAT_BUILD_FLOOR each.
+        const totalCost = count * MAT_BUILD_FLOOR;
+        if (buildMode === 'room') {
+          // Lua BuildHelper:getSizeText — floor area is (w-2) x (h-2)
+          const floorW = Math.max(0, dims.w - 2);
+          const floorH = Math.max(0, dims.h - 2);
+          const floorCount = floorW * floorH;
+          const wallCount = count - floorCount;
+          return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH };
+        }
+        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h };
       }
       return null;
     },

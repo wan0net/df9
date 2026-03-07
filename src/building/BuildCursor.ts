@@ -101,7 +101,7 @@ export class BuildCursor {
     const current = this.grid.get(x, y);
     switch (mode) {
       case 'room':
-        return current === TileType.SPACE || current === TileType.WALL;
+        return current === TileType.SPACE || current === TileType.WALL || current === TileType.WALL_DESTROYED;
       case 'floor':
         return current === TileType.SPACE;
       case 'wall':

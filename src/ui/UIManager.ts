@@ -1511,7 +1511,8 @@ export class UIManager {
         // Lua format: "Floor Area: W x H\nCost: N (W wall H floor)"
         let html = '';
         if (costInfo.w && costInfo.h && costInfo.mode === 'room') {
-          html += `<div style="color:${AMBER};">Floor Area: ${costInfo.w} x ${costInfo.h}</div>`;
+          // Lua BuildHelper:getSizeText — "show player floor area, not floor + wall"
+          html += `<div style="color:${AMBER};">Floor Area: ${costInfo.floorW} x ${costInfo.floorH}</div>`;
           html += `<div style="color:${costColor};">Cost: ${costInfo.cost} (${costInfo.wallCount} wall ${costInfo.floorCount} floor)</div>`;
         } else if (costInfo.mode === 'demolish') {
           html += `<div style="color:${costColor};">+${Math.abs(costInfo.cost)} matter (${costInfo.tileCount} tiles)</div>`;
