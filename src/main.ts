@@ -235,6 +235,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const buildCursor = new BuildCursor(threeRenderer.scene, grid);
   const roomManager = new RoomManager(grid);
   tileRenderer.setRoomManager(roomManager);
+  buildSystem.setRoomManager(roomManager);
   const oxygenSystem = new OxygenSystem(roomManager, grid);
   const characterManager = new CharacterManager(grid, roomManager);
   characterManager.setWallAutoGen(wallAutoGen);
@@ -751,6 +752,79 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   let selectedEntity: SelectedEntity = null;
   const prevCommandTiles = new Set<string>();
 
+  // ── Confirm/Cancel build flow (Lua CommandObject) ──────────────
+  // Tracks pending tile changes before confirm. Matter is deducted only on confirm.
+  interface SavedTile { x: number; y: number; previousType: number; previousO2: number }
+  let pendingSavedTiles: SavedTile[] = [];
+  let pendingBuildCost = 0;    // positive = costs matter
+  let pendingVaporizeCost = 0; // negative = refund
+  let pendingCancelCost = 0;   // negative = refund
+  let lastDragW = 0;
+  let lastDragH = 0;
+
+  function pendingTotalCost(): number {
+    return pendingBuildCost + pendingVaporizeCost + pendingCancelCost;
+  }
+
+  function pendingAvailableMatter(): number {
+    return GameRules.nMatter - pendingTotalCost();
+  }
+
+  /** Save tile states before modification for cancel/restore. */
+  function saveTileStates(tiles: { x: number; y: number }[]) {
+    for (const t of tiles) {
+      // Don't double-save if already saved
+      if (pendingSavedTiles.some(s => s.x === t.x && s.y === t.y)) continue;
+      pendingSavedTiles.push({
+        x: t.x, y: t.y,
+        previousType: grid.get(t.x, t.y),
+        previousO2: grid.getO2(t.x, t.y),
+      });
+    }
+  }
+
+  function confirmBuild(): boolean {
+    const total = pendingTotalCost();
+    if (GameRules.nMatter < total) {
+      SoundManager.playSfx('disallow');
+      return false;
+    }
+    GameRules.nMatter -= total;
+    pendingSavedTiles = [];
+    pendingBuildCost = 0;
+    pendingVaporizeCost = 0;
+    pendingCancelCost = 0;
+    SoundManager.playSfx('confirm');
+    return true;
+  }
+
+  function cancelBuild() {
+    // Restore all saved tiles to their previous state
+    const changed: { x: number; y: number }[] = [];
+    for (const s of pendingSavedTiles) {
+      grid.set(s.x, s.y, s.previousType);
+      grid.setO2(s.x, s.y, s.previousO2);
+      changed.push({ x: s.x, y: s.y });
+    }
+    // Cancel any build commands for restored tiles
+    for (const s of pendingSavedTiles) {
+      CommandQueue.cancelAt(s.x, s.y);
+    }
+    if (changed.length > 0) {
+      wallAutoGen.update(changed);
+      roomManager.markDirty(changed);
+    }
+    pendingSavedTiles = [];
+    pendingBuildCost = 0;
+    pendingVaporizeCost = 0;
+    pendingCancelCost = 0;
+    SoundManager.playSfx('degauss');
+  }
+
+  function hasPendingBuild(): boolean {
+    return pendingSavedTiles.length > 0;
+  }
+
   // Keyboard bindings
   inputManager.onKeyPress('KeyC', () => { buildMode = buildMode === 'room' ? 'none' : 'room'; });
   inputManager.onKeyPress('KeyW', () => { buildMode = buildMode === 'wall' ? 'none' : 'wall'; });
@@ -776,11 +850,15 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       uiManager.toggleGoalsPanel();
       return;
     }
+    if (hasPendingBuild()) {
+      cancelBuild();
+    }
     buildMode = 'none';
     buildCursor.cancelDrag();
     selectedEntity = null;
     uiManager.setSelectedEntity(null);
     tutorialFlags.deselected = true;
+    GameRules.bRunning = true;
   });
   inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; tutorialFlags.vizModes = true; });
   inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
@@ -923,8 +1001,6 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         return { cost: count * MAT_VAPE_FLOOR, tileCount: count, mode: buildMode, w: dims.w, h: dims.h };
       }
       if (buildMode === 'room' || buildMode === 'floor' || buildMode === 'wall') {
-        // Room mode: the dragged area IS the full room including walls.
-        // Perimeter = walls, interior = floors. All cost MAT_BUILD_FLOOR each.
         const totalCost = count * MAT_BUILD_FLOOR;
         if (buildMode === 'room') {
           // Lua BuildHelper:getSizeText — floor area is (w-2) x (h-2)
@@ -932,12 +1008,17 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           const floorH = Math.max(0, dims.h - 2);
           const floorCount = floorW * floorH;
           const wallCount = count - floorCount;
-          return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH };
+          // Lua BuildHelper:getCapacityText — projected capacity for key objects
+          const capacityLines = getProjectedCapacity(floorW, floorH);
+          return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH, capacityLines };
         }
         return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h };
       }
       return null;
     },
+    onConfirmBuild: () => confirmBuild(),
+    onCancelBuild: () => cancelBuild(),
+    hasPendingBuild: () => hasPendingBuild(),
     getCorpseCount: () => characterManager.getPickups().filter(p => p.constructor.name === 'Corpse').length,
     onDemolishObject: (obj) => {
       const refund = obj.getVaporizeMatterYield();
@@ -1129,6 +1210,46 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     for (const key of currentTiles) prevCommandTiles.add(key);
   }
 
+  /**
+   * Lua BuildHelper:getCapacityText — calculate how many key objects fit in floor area.
+   * Uses getCapacityInDimension(objSize, objMargin, floorSize) from BuildHelper.lua.
+   */
+  function getProjectedCapacity(floorW: number, floorH: number): string[] {
+    if (floorW <= 0 || floorH <= 0) return [];
+    // Lua tPropsToCheck: key objects for capacity estimation
+    const propsToCheck = ['OxygenRecycler', 'Bed', 'RefineryDropoff', 'Generator',
+      'ResearchDesk', 'StandingTable', 'Bar', 'HospitalBed'];
+    const lines: string[] = [];
+
+    function capInDim(objSize: number, objMargin: number, floorSize: number): number {
+      floorSize = floorSize - (objSize + objMargin * 2);
+      if (floorSize < 0) return 0;
+      let cap = 1;
+      while (floorSize > 0) {
+        floorSize -= (objSize + objMargin);
+        cap++;
+      }
+      if (floorSize < 0) cap--;
+      return cap;
+    }
+
+    for (const propName of propsToCheck) {
+      const data = getObjectData(propName);
+      if (!data) continue;
+      const zoneName = data.zoneName;
+      if (!zoneName) continue;
+      const capX = capInDim(data.width, data.margin, floorW);
+      const capY = capInDim(data.height, data.margin, floorH);
+      const capXf = capInDim(data.height, data.margin, floorW);
+      const capYf = capInDim(data.width, data.margin, floorH);
+      const capacity = Math.max(capX * capY, capXf * capYf);
+      if (capacity > 0) {
+        lines.push(`${zoneName}: ${capacity} ${data.friendlyName}`);
+      }
+    }
+    return lines;
+  }
+
   function handleBuildInput() {
     const worldPos = inputManager.getWorldPointer();
     buildCursor.updateHover(worldPos.x, worldPos.y);
@@ -1256,34 +1377,44 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     }
 
-    // Left held — update drag
+    // Left held — update drag + buildscroll sfx (Lua BuildHelper:refresh)
     if (inputManager.isLeftDown() && buildCursor.isDragging && isDragMode) {
       buildCursor.updateDrag(tile.x, tile.y, buildMode as 'room' | 'floor' | 'wall' | 'demolish' | 'vaporize' | 'erase');
+      // Lua: play buildscroll sfx when drag dimensions change
+      const dims = buildCursor.dragDimensions;
+      if (dims.w !== lastDragW || dims.h !== lastDragH) {
+        lastDragW = dims.w;
+        lastDragH = dims.h;
+        SoundManager.playSfx('buildscroll');
+      }
     }
 
-    // Left released — commit drag
+    // Left released — accumulate pending build (Lua: tiles placed but matter not deducted until confirm)
     if (inputManager.leftJustReleased && buildCursor.isDragging) {
       const tiles = buildCursor.endDrag();
+      lastDragW = 0;
+      lastDragH = 0;
       if (tiles.length > 0) {
+        saveTileStates(tiles);
         if (buildMode === 'room') {
-          const cost = buildSystem.buildRoom(tiles, GameRules.nMatter);
-          GameRules.nMatter -= cost;
+          const cost = buildSystem.buildRoom(tiles, pendingAvailableMatter());
+          pendingBuildCost += cost;
         } else if (buildMode === 'floor') {
-          const cost = buildSystem.placeFloors(tiles, GameRules.nMatter);
-          GameRules.nMatter -= cost;
+          const cost = buildSystem.placeFloors(tiles, pendingAvailableMatter());
+          pendingBuildCost += cost;
         } else if (buildMode === 'wall') {
-          const cost = buildSystem.placeWalls(tiles, GameRules.nMatter);
-          GameRules.nMatter -= cost;
+          const cost = buildSystem.placeWalls(tiles, pendingAvailableMatter());
+          pendingBuildCost += cost;
         } else if (buildMode === 'demolish') {
           const refund = buildSystem.demolish(tiles);
-          GameRules.addMatter(refund);
+          pendingVaporizeCost -= refund;
         } else if (buildMode === 'vaporize') {
           const refund = buildSystem.vaporize(tiles);
-          GameRules.addMatter(refund);
+          pendingVaporizeCost -= refund;
           SoundManager.playSfx('vaporize');
         } else if (buildMode === 'erase') {
           const refund = buildSystem.erase(tiles);
-          GameRules.addMatter(refund);
+          pendingCancelCost -= refund;
         }
         onTilesChanged(tiles);
       }
@@ -1505,6 +1636,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     _cameraController: cameraController,
     _grid: grid,
     _buildSystem: buildSystem,
+    confirmBuild: () => confirmBuild(),
+    cancelBuild: () => cancelBuild(),
+    hasPendingBuild: () => hasPendingBuild(),
+    getPendingBuildCost: () => pendingTotalCost(),
     getPopulation: () => characterManager.getPopulation(),
     getMatter: () => GameRules.nMatter,
     getRoomCount: () => roomManager.getRooms().length,

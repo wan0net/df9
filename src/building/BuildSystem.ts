@@ -5,6 +5,7 @@ import { MAT_BUILD_FLOOR, MAT_BUILD_DOOR, MAT_VAPE_FLOOR, MAT_VAPE_OBJECT_PCT } 
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { isAsteroid, vaporizeTile } from '../world/Asteroid';
+import { RoomManager } from '../rooms/RoomManager';
 
 /**
  * Build modes matching original Lua GameRules MODE_ constants:
@@ -24,10 +25,16 @@ export type BuildMode = 'none' | 'room' | 'floor' | 'wall' | 'door' | 'demolish'
 export class BuildSystem {
   private grid: TileGrid;
   private wallAutoGen: WallAutoGen;
+  private roomManager: RoomManager | null = null;
 
   constructor(grid: TileGrid, wallAutoGen: WallAutoGen) {
     this.grid = grid;
     this.wallAutoGen = wallAutoGen;
+  }
+
+  /** Set room manager reference (needed for canBuildWall prop margin checks). */
+  setRoomManager(rm: RoomManager) {
+    this.roomManager = rm;
   }
 
   /**
@@ -99,6 +106,8 @@ export class BuildSystem {
    *  - Must be SPACE or counts-as-floor
    *  - Blocked by path-blocking objects
    *  - Blocked by doors at the tile
+   *  - Blocked by room prop margins (Lua testWallPlacementIntersectsProp)
+   *  - Blocked if in front of a door
    */
   canBuildWall(tx: number, ty: number): boolean {
     const tile = this.grid.get(tx, ty);
@@ -118,6 +127,31 @@ export class BuildSystem {
     // Lua: "if ObjectList.getDoorAtTile(tx,ty) then return false end"
     const door = EnvObjectManager.getDoorAt(tx, ty);
     if (door) return false;
+
+    // Lua: check room props' margins block wall placement
+    if (this.roomManager) {
+      const room = this.roomManager.getRoomAt(tx, ty);
+      if (room) {
+        for (const prop of EnvObjectManager.getObjectsInRoom(room)) {
+          // againstWall props occupy the wall tile itself
+          if (prop.tData.againstWall && prop.tileX === tx && prop.tileY === ty) {
+            return false;
+          }
+          // Check margin intersection: if prop has margin > 0 and wall is within margin
+          if (prop.tData.margin > 0) {
+            const dx = Math.abs(tx - prop.tileX);
+            const dy = Math.abs(ty - prop.tileY);
+            const dist = dx + dy;
+            if (dist <= prop.tData.margin + Math.max(prop.tData.width, prop.tData.height)) {
+              // Wall is within margin range — check if it's actually in the footprint+margin
+              if (dx <= prop.tData.margin && dy <= prop.tData.margin) {
+                return false;
+              }
+            }
+          }
+        }
+      }
+    }
 
     return true;
   }
@@ -186,6 +220,7 @@ export class BuildSystem {
 
       if (bDemolished) {
         this.grid.clearTileHP(t.x, t.y);
+        this._cheatOxygen(t.x, t.y);
         changed.push(t);
       }
     }
@@ -198,9 +233,10 @@ export class BuildSystem {
 
   /** Vaporize (MODE_VAPORIZE). Lua World._vaporizeTile — instant removal:
    *    1. object on tile → vaporize object, then remove tile
-   *    2. wall-mounted objects on adjacent walls → vaporize those too
+   *    2. wall: also remove wall-mounted object on adjacent tile (Lua _getEnvObjectOnWall)
    *    3. tile → SPACE (floor, wall, door all become space)
-   *    4. asteroid → vaporizeTile(bCompletely=true) — full removal */
+   *    4. asteroid → vaporizeTile(bCompletely=true) — full removal
+   *    5. Average O2 from neighbors (Lua _cheatOxygen) */
   vaporize(tiles: { x: number; y: number }[]): number {
     let refund = 0;
     const changed: { x: number; y: number }[] = [];
@@ -217,6 +253,12 @@ export class BuildSystem {
 
       if (current === TileType.WALL || current === TileType.WALL_PENDING ||
           current === TileType.WALL_DESTROYED) {
+        // Lua: also vaporize wall-mounted object on adjacent tile
+        const wallObj = this._getObjectOnWall(t.x, t.y);
+        if (wallObj) {
+          refund += wallObj.getVaporizeMatterYield();
+          EnvObjectManager.removeObject(wallObj);
+        }
         this.grid.set(t.x, t.y, TileType.SPACE);
         refund += MAT_VAPE_FLOOR;
         bVaporized = true;
@@ -235,6 +277,7 @@ export class BuildSystem {
 
       if (bVaporized) {
         this.grid.clearTileHP(t.x, t.y);
+        this._cheatOxygen(t.x, t.y);
         changed.push(t);
       }
     }
@@ -243,6 +286,44 @@ export class BuildSystem {
       this.wallAutoGen.cleanupOrphans(changed);
     }
     return refund;
+  }
+
+  /**
+   * Lua World._cheatOxygen: average O2 from diagonal neighbors to avoid instant vacuum.
+   * Uses directions 2-5 (diagonal/edge-sharing neighbors), checks bIndoors + not occluded.
+   */
+  private _cheatOxygen(tx: number, ty: number) {
+    const neighbors = this.grid.getDiagonalNeighbors(tx, ty);
+    let totalO2 = 0;
+    let count = 0;
+    for (const n of neighbors) {
+      const nType = this.grid.get(n.x, n.y);
+      // Lua: bIndoors and not bOcclude — floor/door tiles that aren't walls
+      if (nType === TileType.FLOOR || nType === TileType.DOOR ||
+          nType === TileType.FLOOR_PENDING) {
+        totalO2 += this.grid.getO2(n.x, n.y);
+        count++;
+      }
+    }
+    const newO2 = count > 0 ? Math.round(totalO2 / count) : 0;
+    this.grid.setO2(tx, ty, newO2);
+  }
+
+  /**
+   * Lua World._getEnvObjectOnWall: find wall-mounted object on adjacent tile.
+   * When vaporizing a wall, also remove any againstWall object mounted to it.
+   */
+  private _getObjectOnWall(wallTileX: number, wallTileY: number) {
+    // Check all diagonal neighbors for objects that are mounted against this wall
+    const neighbors = this.grid.getDiagonalNeighbors(wallTileX, wallTileY);
+    for (const n of neighbors) {
+      const obj = EnvObjectManager.getObjectAt(n.x, n.y);
+      if (obj && obj.tData.againstWall) {
+        // This wall-mounted object is adjacent to the wall being vaporized
+        return obj;
+      }
+    }
+    return null;
   }
 
   /** Erase (MODE_CANCEL_COMMAND). Cancel pending build/mine commands at tiles.

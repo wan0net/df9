@@ -91,6 +91,9 @@ export class UIManager {
   private getRooms: () => Room[];
   private getPendingBuildCost: (() => { cost: number; tileCount: number; mode: BuildMode } | null) | null = null;
   private getCorpseCount: (() => number) | null = null;
+  private onConfirmBuild: (() => boolean) | null = null;
+  private onCancelBuild: (() => void) | null = null;
+  private hasPendingBuild: (() => boolean) | null = null;
 
   // HUD elements
   private matterText!: HTMLSpanElement;
@@ -197,6 +200,9 @@ export class UIManager {
     onRezoneRoom?: (room: Room, zone: ZoneType) => void;
     getPendingBuildCost?: () => { cost: number; tileCount: number; mode: BuildMode } | null;
     getCorpseCount?: () => number;
+    onConfirmBuild?: () => boolean;
+    onCancelBuild?: () => void;
+    hasPendingBuild?: () => boolean;
   }) {
     this.container = container;
     this.getBuildMode = callbacks.getBuildMode;
@@ -218,6 +224,9 @@ export class UIManager {
     this.getRooms = callbacks.getRooms;
     this.getPendingBuildCost = callbacks.getPendingBuildCost ?? null;
     this.getCorpseCount = callbacks.getCorpseCount ?? null;
+    this.onConfirmBuild = callbacks.onConfirmBuild ?? null;
+    this.onCancelBuild = callbacks.onCancelBuild ?? null;
+    this.hasPendingBuild = callbacks.hasPendingBuild ?? null;
 
     this.createUI(callbacks.onSetJob, callbacks);
   }
@@ -650,6 +659,7 @@ export class UIManager {
           if (this.getBuildMode() === 'room' || this.getBuildMode() === 'floor' ||
               this.getBuildMode() === 'door' || this.getBuildMode() === 'zone' ||
               this.getBuildMode() === 'object') {
+            if (this.onCancelBuild) this.onCancelBuild();
             this.setBuildMode('none');
             GameRules.bRunning = true;
           } else {
@@ -718,8 +728,9 @@ export class UIManager {
     cancelEl.appendChild(cancelLbl);
     cancelEl.appendChild(cancelHk);
     cancelEl.addEventListener('click', () => {
-      SoundManager.playSfx('degauss');
+      if (this.onCancelBuild) this.onCancelBuild();
       this.setBuildMode('none');
+      GameRules.bRunning = true;
     });
     cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = 'rgba(255,68,68,0.3)'; });
     cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; });
@@ -792,8 +803,11 @@ export class UIManager {
     confirmEl.appendChild(confirmIcon);
     confirmEl.appendChild(confirmLbl);
     confirmEl.addEventListener('click', () => {
-      SoundManager.playSfx('confirm');
+      if (this.onConfirmBuild) {
+        this.onConfirmBuild();
+      }
       this.setBuildMode('none');
+      GameRules.bRunning = true;
     });
     confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = 'rgba(68,255,68,0.2)'; });
     confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; });
@@ -819,8 +833,9 @@ export class UIManager {
     mineConfirmHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
     mineConfirmEl.append(mineConfirmIcon, mineConfirmLbl, mineConfirmHk);
     mineConfirmEl.addEventListener('click', () => {
-      SoundManager.playSfx('confirm');
+      if (this.onConfirmBuild) this.onConfirmBuild();
       this.setBuildMode('none');
+      GameRules.bRunning = true;
     });
     mineConfirmEl.addEventListener('mouseenter', () => { mineConfirmEl.style.background = 'rgba(68,255,68,0.2)'; });
     mineConfirmEl.addEventListener('mouseleave', () => { mineConfirmEl.style.background = 'transparent'; });
@@ -1502,24 +1517,31 @@ export class UIManager {
       }
     }
 
-    // ── Build cost overlay (Lua ConstructMenu:getMatterCostText) ─────
+    // ── Build cost overlay (Lua BuildHelper + ConstructMenu:getMatterCostText) ─────
     if (this.getPendingBuildCost) {
       const costInfo = this.getPendingBuildCost() as any;
       if (costInfo && costInfo.tileCount > 0) {
         const canAfford = GameRules.nMatter >= costInfo.cost;
-        const costColor = costInfo.mode === 'demolish' ? '#4f4' : (canAfford ? AMBER : '#f44');
-        // Lua format: "Floor Area: W x H\nCost: N (W wall H floor)"
+        const costColor = costInfo.mode === 'demolish' || costInfo.mode === 'vaporize'
+          ? '#4f4' : (canAfford ? AMBER : '#f44');
         let html = '';
         if (costInfo.w && costInfo.h && costInfo.mode === 'room') {
           // Lua BuildHelper:getSizeText — "show player floor area, not floor + wall"
-          html += `<div style="color:${AMBER};">Floor Area: ${costInfo.floorW} x ${costInfo.floorH}</div>`;
-          html += `<div style="color:${costColor};">Cost: ${costInfo.cost} (${costInfo.wallCount} wall ${costInfo.floorCount} floor)</div>`;
-        } else if (costInfo.mode === 'demolish') {
+          html += `<div style="color:${AMBER};">${line('HUDHUD039TEXT')} ${costInfo.floorW} x ${costInfo.floorH}</div>`;
+          html += `<div style="color:${costColor};">${line('HUDHUD042TEXT')} ${costInfo.cost} (${costInfo.wallCount} ${line('HUDHUD040TEXT')}, ${costInfo.floorCount} ${line('HUDHUD041TEXT')})</div>`;
+          // Lua BuildHelper:getCapacityText — projected capacity for key objects
+          if (costInfo.floorW > 0 && costInfo.floorH > 0 && costInfo.capacityLines && costInfo.capacityLines.length > 0) {
+            html += `<div style="color:${AMBER};margin-top:4px;">${line('HUDHUD043TEXT')}</div>`;
+            for (const cl of costInfo.capacityLines) {
+              html += `<div style="color:${AMBER};padding-left:12px;font-size:12px;">${cl}</div>`;
+            }
+          }
+        } else if (costInfo.mode === 'demolish' || costInfo.mode === 'vaporize') {
           html += `<div style="color:${costColor};">+${Math.abs(costInfo.cost)} matter (${costInfo.tileCount} tiles)</div>`;
         } else {
-          html += `<div style="color:${costColor};">Cost: ${costInfo.cost} (${costInfo.tileCount} tiles)</div>`;
+          html += `<div style="color:${costColor};">${line('HUDHUD042TEXT')} ${costInfo.cost} (${costInfo.tileCount} tiles)</div>`;
         }
-        if (!canAfford && costInfo.mode !== 'demolish') {
+        if (!canAfford && costInfo.mode !== 'demolish' && costInfo.mode !== 'vaporize') {
           html += `<div style="color:#f44;font-size:11px;">${line('BUILDM016TEXT')}</div>`;
         }
         this.costOverlay.innerHTML = html;
