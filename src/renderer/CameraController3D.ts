@@ -154,6 +154,14 @@ export class CameraController3D {
     this.updateCamera();
   }
 
+  /** Add zoom increment (Lua GameRules.AddZoom, called by zoom buttons). */
+  addZoom(steps: number) {
+    this.zoomBuffer += steps * ZOOM_STEP * this.zoom;
+    // Center zoom on screen center
+    this.zoomMouseX = window.innerWidth / 2;
+    this.zoomMouseY = window.innerHeight / 2;
+  }
+
   /** Trigger camera shake (Lua Camera:shake). */
   shake(magnitude: number, duration: number) {
     this.shakeMagnitude = magnitude;

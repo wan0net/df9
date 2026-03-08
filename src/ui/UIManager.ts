@@ -97,6 +97,9 @@ export class UIManager {
   private getCharacters: () => Character[];
   private getEnvObjects: () => EnvObject[];
   private toggleO2Overlay: () => void;
+  private onZoomIn: (() => void) | null = null;
+  private onZoomOut: (() => void) | null = null;
+  private toggleWalls: (() => void) | null = null;
   private getRooms: () => Room[];
   private getPendingBuildCost: (() => { cost: number; tileCount: number; mode: BuildMode; buildCost?: number; vaporizeCost?: number; cancelCost?: number } | null) | null = null;
   private getCorpseCount: (() => number) | null = null;
@@ -178,6 +181,8 @@ export class UIManager {
   // Inspect sub-menu (screenshot: "Back" + ">> Inspect" replaces sidebar)
   private inspectSub!: HTMLDivElement;
   private inspectSubActive = false;
+  /** Lua NewSideBar.lua: bWasPaused — track pause state before construct menu opens. */
+  private wasPausedBeforeConstruct = false;
 
   // Inspector panel
   private inspectorPanel!: InspectorPanel;
@@ -211,6 +216,9 @@ export class UIManager {
     getCharacters: () => Character[];
     getEnvObjects: () => EnvObject[];
     toggleO2Overlay: () => void;
+    onZoomIn?: () => void;
+    onZoomOut?: () => void;
+    toggleWalls?: () => void;
     getRooms: () => Room[];
     onSetJob: (character: Character, jobId: number) => void;
     goalSystem: GoalSystem;
@@ -243,6 +251,9 @@ export class UIManager {
     this.getCharacters = callbacks.getCharacters;
     this.getEnvObjects = callbacks.getEnvObjects;
     this.toggleO2Overlay = callbacks.toggleO2Overlay;
+    this.onZoomIn = callbacks.onZoomIn ?? null;
+    this.onZoomOut = callbacks.onZoomOut ?? null;
+    this.toggleWalls = callbacks.toggleWalls ?? null;
     this.getRooms = callbacks.getRooms;
     this.getPendingBuildCost = callbacks.getPendingBuildCost ?? null;
     this.getCorpseCount = callbacks.getCorpseCount ?? null;
@@ -423,6 +434,8 @@ export class UIManager {
 
       const idx = i;
       wrapper.addEventListener('click', () => {
+        // Lua: speed buttons gated by bTimeLocked (locked during construct menu)
+        if (GameRules.bTimeLocked) return;
         if (speeds[idx] === 0) { GameRules.bRunning = !GameRules.bRunning; }
         else { GameRules.bRunning = true; GameRules.setTimeScale(speeds[idx]); }
       });
@@ -499,11 +512,11 @@ export class UIManager {
     );
     hudBottom.appendChild(o2Btn.el);
 
-    // Walls toggle button
+    // Walls toggle button (Lua: StatusBar.onWallsButtonPressed)
     const wallsBtn = this._makeBottomButton(
       'assets/ui/hud/ui_hud_buttonvis_walls.png',
       'assets/ui/hud/ui_hud_buttonvis_walls_active.png',
-      () => {}, // walls toggle wired in main.ts
+      () => { this.toggleWalls?.(); },
     );
     hudBottom.appendChild(wallsBtn.el);
 
@@ -516,7 +529,7 @@ export class UIManager {
     const zoomInBtn = this._makeBottomButton(
       'assets/ui/hud/ui_hud_button_zoomin.png',
       'assets/ui/hud/ui_hud_button_zoomin_active.png',
-      () => {},
+      () => { this.onZoomIn?.(); },
     );
     hudBottom.appendChild(zoomInBtn.el);
 
@@ -524,7 +537,7 @@ export class UIManager {
     const zoomOutBtn = this._makeBottomButton(
       'assets/ui/hud/ui_hud_button_zoomout.png',
       'assets/ui/hud/ui_hud_button_zoomout_active.png',
-      () => {},
+      () => { this.onZoomOut?.(); },
     );
     hudBottom.appendChild(zoomOutBtn.el);
 
@@ -689,18 +702,24 @@ export class UIManager {
         }
         if (def.action === 'construct') {
           // Toggle construct mode — show/hide sub-menu
-          // Lua: pause game + enable cutaway on open, restore on close
+          // Lua NewSideBar.lua: openConstructMenu/closeConstructMenu
           SoundManager.playUI('UI_ShortStatic');
           const cm = this.getBuildMode();
           if (cm === 'room' || cm === 'floor' || cm === 'wall' ||
               cm === 'door' || cm === 'zone' || cm === 'object' ||
               cm === 'demolish' || cm === 'vaporize' || cm === 'erase') {
+            // Close construct menu (Lua: closeConstructMenu)
             if (this.onCancelBuild) this.onCancelBuild();
             this.setBuildMode('none');
-            GameRules.bRunning = true;
+            // Lua: restore pause state + unlock time scale
+            if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
+            GameRules.bTimeLocked = false;
           } else {
+            // Open construct menu (Lua: openConstructMenu)
+            this.wasPausedBeforeConstruct = !GameRules.bRunning;
             this.setBuildMode('room');
             GameRules.bRunning = false;
+            GameRules.bTimeLocked = true; // Lua: lockTimeScale(true)
           }
           this.refreshObjectPicker();
           return;
@@ -798,7 +817,9 @@ export class UIManager {
     cancelEl.addEventListener('click', () => {
       if (this.onCancelBuild) this.onCancelBuild();
       this.setBuildMode('none');
-      GameRules.bRunning = true;
+      // Lua: closeConstructMenu — restore pause state + unlock time
+      if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
+      GameRules.bTimeLocked = false;
     });
     cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = '#FF3D00'; cancelLbl.style.color = '#000'; }); // Lua: CONSTRUCT_CANCEL bg, black text
     cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; cancelLbl.style.color = '#FF3D00'; });
@@ -820,7 +841,9 @@ export class UIManager {
         this.onConfirmBuild();
       }
       this.setBuildMode('none');
-      GameRules.bRunning = true;
+      // Lua: closeConstructMenu — restore pause state + unlock time
+      if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
+      GameRules.bTimeLocked = false;
     });
     confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = '#A5D318'; confirmIcon.style.color = '#000'; confirmLbl.style.color = '#000'; }); // Lua CONSTRUCT_CONFIRM
     confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.color = '#A5D318'; confirmLbl.style.color = '#A5D318'; });

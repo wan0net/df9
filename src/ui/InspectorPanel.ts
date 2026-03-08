@@ -247,7 +247,7 @@ export class InspectorPanel {
     const jobSpan = document.createElement('span');
     const dutyStr = char.isAlive() && char.onDuty() ? ` ${line('DUTIES015TEXT')}` : '';
     jobSpan.textContent = `[${char.getJobName()}${dutyStr}]`;
-    jobSpan.style.cssText = 'font-size:22px;color:#888;'; // Lua dosissemibold22
+    jobSpan.style.cssText = 'font-size:26px;color:#888;'; // Lua dosisregular26
     nameRow.appendChild(jobSpan);
     header.appendChild(nameRow);
 
