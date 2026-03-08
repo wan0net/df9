@@ -303,7 +303,8 @@ class GameRulesClass {
   /** Lua GameRules.timeSlower — [ key, halves speed or pauses. */
   timeSlower() {
     if (this.playerTimeScale <= 1) {
-      this.setTimeScale(0);
+      this.playerTimeScale = 0; // Direct set to bypass MIN clamp
+      return;
     } else {
       this.setTimeScale(Math.max(MIN_PLAYER_TIME_SCALE, this.playerTimeScale * 0.5));
     }
