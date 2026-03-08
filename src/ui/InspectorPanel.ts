@@ -8,7 +8,7 @@ import type { EnvObject } from '../envobjects/EnvObject';
 import { GameRules } from '../core/GameRules';
 import { Door, DOOR_STATE, DOOR_OPERATION } from '../envobjects/Door';
 import type { Room } from '../rooms/Room';
-import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH } from '../characters/CharacterConstants';
+import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL } from '../characters/CharacterConstants';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 
 import { line } from '../localization/Localization';
@@ -598,54 +598,68 @@ export class InspectorPanel {
 
   private renderActionsTab(container: HTMLDivElement, char: Character) {
     const isDead = !char.isAlive();
+    const isPlayer = char.tStats.nTeam === TEAM_ID_PLAYER;
 
-    // Cuff / Uncuff
-    const cuffBtn = this.makeActionButton(
-      char.bCuffed ? line('INSPEC194TEXT') : line('INSPEC193TEXT'),
-      isDead,
-      () => { if (this.onCuffCharacter) this.onCuffCharacter(char); },
+    // 1. Assign Residence (Lua CitizenActionTab button 1: bed assignment)
+    const bedLabel = line('INSPEC160TEXT');
+    const bedBtn = this.makeActionButton(
+      bedLabel,
+      isDead || !isPlayer,
+      () => { /* bed assignment requires MODE_PICK — not yet wired */ },
     );
-    container.appendChild(cuffBtn);
+    container.appendChild(bedBtn);
 
-    // Send to Brig
-    const brigRooms = this.getBrigRooms ? this.getBrigRooms() : [];
-    const brigBtn = this.makeActionButton(
-      line('INSPUI013TEXT'),
-      isDead || brigRooms.length === 0,
-      () => {
-        if (this.onCuffCharacter && !char.bCuffed) this.onCuffCharacter(char);
-      },
-    );
-    if (brigRooms.length === 0) {
-      const note = document.createElement('div');
-      note.textContent = line('INSPUI014TEXT');
-      note.style.cssText = 'font-size:18px;color:#666;margin-top:-4px;margin-bottom:8px;';
-      container.appendChild(brigBtn);
-      container.appendChild(note);
-    } else {
-      container.appendChild(brigBtn);
-    }
-
-    // Send to Infirmary / Cancel Hospitalization (Lua CitizenActionTab: INSPEC147/148TEXT)
-    const isHospitalized = char.bCuffed && char.maladies.length > 0; // simplified check
+    // 2. Send to Hospital / Cancel (Lua CitizenActionTab button 3: MEMORY_SENT_TO_HOSPITAL toggle)
+    const isHospitalized = !!char.retrieveMemory(MEMORY_SENT_TO_HOSPITAL);
     const hospBtn = this.makeActionButton(
       isHospitalized ? line('INSPEC148TEXT') : line('INSPEC147TEXT'),
-      isDead,
+      isDead || !isPlayer,
       () => {
-        // Toggle hospitalization — quarantine flag on character
-        if (this.onCuffCharacter) this.onCuffCharacter(char);
+        if (isHospitalized) {
+          char.clearMemory(MEMORY_SENT_TO_HOSPITAL);
+        } else {
+          char.storeMemory(MEMORY_SENT_TO_HOSPITAL, true, 9999999);
+        }
       },
+      isHospitalized ? AMBER : AMBER,
     );
+    if (isHospitalized) hospBtn.style.borderColor = hospBtn.style.color = '#4f4'; // selected state
     container.appendChild(hospBtn);
 
-    // Execute (red)
+    // 3. Cuff / Uncuff (Lua CitizenActionTab button 4)
+    const cuffLabel = char.isMarkedForCuff() ? line('INSPEC194TEXT') : line('INSPEC193TEXT');
+    const canCuff = !isDead && char.canBeCuffed();
+    const cuffBtn = this.makeActionButton(
+      cuffLabel,
+      !canCuff && !char.bCuffed && !char.isMarkedForCuff(),
+      () => {
+        char.setMarkedForCuff(!char.bCuffed && !char.isMarkedForCuff());
+      },
+    );
+    if (char.isMarkedForCuff()) cuffBtn.style.borderColor = cuffBtn.style.color = '#4f4'; // selected
+    container.appendChild(cuffBtn);
+
+    // 4. Execute / Cancel (Lua CitizenActionTab button 5: bMarkedForExecution toggle)
+    const isMarkedExec = char.bMarkedForExecution;
     const execBtn = this.makeActionButton(
-      line('INSPEC195TEXT'),
-      isDead,
-      () => { if (this.onExecuteCharacter) this.onExecuteCharacter(char); },
+      isMarkedExec ? line('INSPEC198TEXT') : line('INSPEC195TEXT'),
+      isDead || !isPlayer,
+      () => {
+        char.bMarkedForExecution = !char.bMarkedForExecution;
+      },
       '#f44',
     );
+    if (isMarkedExec) execBtn.style.borderColor = execBtn.style.color = '#ff0'; // selected
     container.appendChild(execBtn);
+
+    // 5. Assign to Brig (Lua CitizenActionTab button 6)
+    const isMonsterOrBot = char.tStats.nRace === 3 || char.tStats.nRace === 4; // MONSTER/KILLBOT
+    const brigBtn = this.makeActionButton(
+      line('INSPEC160TEXT'), // "Unassigned" placeholder — full brig assignment needs MODE_PICK
+      isDead || isMonsterOrBot,
+      () => { /* brig assignment requires MODE_PICK — not yet wired */ },
+    );
+    container.appendChild(brigBtn);
   }
 
   private makeActionButton(
