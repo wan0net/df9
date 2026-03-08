@@ -222,13 +222,13 @@ export class StartMenuState implements SceneState {
       el.style.cssText = `
         color: ${AMBER};
         font-family: 'Orbitron', monospace;
-        font-size: 28px;
-        font-weight: 400;
-        padding: 16px 0;
+        font-size: 40px;
+        font-weight: 300;
+        padding: 20px 0;
         cursor: pointer;
         text-align: right;
-        letter-spacing: 2px;
-        min-width: 400px;
+        letter-spacing: 3px;
+        min-width: 630px;
       `;
       el.addEventListener('mouseenter', () => {
         el.style.color = BRIGHT_AMBER;
@@ -247,12 +247,12 @@ export class StartMenuState implements SceneState {
 
     this.overlay.appendChild(btnsPanel);
 
-    // Version label (bottom-left)
+    // Version label (bottom-center, Lua: "Version 1.06" centered)
     const version = document.createElement('div');
-    version.textContent = 'v0.1';
+    version.textContent = 'Version 0.1';
     version.style.cssText = `
-      position:absolute;bottom:10px;left:10px;
-      color:#444;font-size:12px;font-family:'Orbitron',monospace;
+      position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+      color:${AMBER};font-size:14px;font-family:'Orbitron',monospace;
       pointer-events:none;
     `;
     this.overlay.appendChild(version);

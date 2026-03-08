@@ -4743,26 +4743,32 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result!.width).toBe('418px'); // Lua: nButtonWidth=418
   });
 
-  test('construct submenu includes Door/Airlock button (Lua ConstructMenu)', async () => {
-    // Press C to enter construct mode, which shows the construct submenu
+  test('construct submenu matches screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase', async () => {
+    // Screenshot 20.32.27: Cancel, Confirm, >>Construct, Room, Wall, Floor, Object, Tear Down, Vaporize, Erase
+    // No Door/Airlock button in the original game screenshot
     await page.keyboard.press('c');
     await page.waitForTimeout(100);
     const result = await page.evaluate(() => {
       const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return { foundDoorHotkey: false, foundDoorLabel: false };
+      if (!sidebar) return { hotkeys: [] as string[] };
       const spans = sidebar.querySelectorAll('span');
-      let foundDoorHotkey = false;
-      let foundDoorLabel = false;
+      const hotkeys: string[] = [];
       for (const span of spans) {
-        if (span.textContent === '[D]') foundDoorHotkey = true;
-        if (span.textContent === 'Door') foundDoorLabel = true;
+        const t = span.textContent?.trim() || '';
+        if (t.startsWith('[') && t.endsWith(']') && t.length <= 4) {
+          hotkeys.push(t);
+        }
       }
-      return { foundDoorHotkey, foundDoorLabel };
+      return { hotkeys };
     });
-    // Press Escape to exit construct mode
     await page.keyboard.press('Escape');
-    expect(result.foundDoorHotkey).toBe(true);
-    expect(result.foundDoorLabel).toBe(true);
+    // Expected hotkeys in order: [C] Room, [W] Wall, [B] Floor, [P] Object, [X] Tear Down, [V] Vaporize, [E] Erase
+    expect(result.hotkeys).toContain('[C]');
+    expect(result.hotkeys).toContain('[W]');
+    expect(result.hotkeys).toContain('[P]');
+    expect(result.hotkeys).toContain('[E]');
+    // No [D] for Door — not in original game screenshot
+    expect(result.hotkeys).not.toContain('[D]');
   });
 
   test('morale emoticon colors match Lua StatusBar thresholds', async () => {

@@ -787,15 +787,16 @@ export class UIManager {
 
     // ── Build mode buttons — matching screenshot order ──
     // Screenshot order: Cancel, Confirm, label, then mode buttons
+    // Screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase
+    // No Door/Airlock button (doors auto-placed at room boundaries in original)
     const subBtns: { label: string; hotkey: string; mode: BuildMode }[] = [
-      { label: line('HUDHUD011TEXT'), hotkey: 'E', mode: 'erase' },     // Erase (cancel pending builds)
-      { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },      // Area (Room)
+      { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },      // Room (Area)
       { label: line('HUDHUD014TEXT'), hotkey: 'W', mode: 'wall' },      // Wall
       { label: line('HUDHUD027TEXT'), hotkey: 'B', mode: 'floor' },     // Floor
-      { label: line('HUDHUD015TEXT'), hotkey: 'D', mode: 'door' },      // Airlock (Door)
-      { label: line('HUDHUD017TEXT'), hotkey: 'X', mode: 'demolish' },  // Tear Down (walls→floor, objects removed)
-      { label: line('BUILDM009TEXT'), hotkey: 'V', mode: 'vaporize' },  // Vaporize (everything→space)
       { label: line('ZONEUI014TEXT'), hotkey: 'P', mode: 'object' },    // Object
+      { label: line('HUDHUD017TEXT'), hotkey: 'X', mode: 'demolish' },  // Tear Down
+      { label: line('BUILDM009TEXT'), hotkey: 'V', mode: 'vaporize' },  // Vaporize
+      { label: line('HUDHUD011TEXT'), hotkey: 'E', mode: 'erase' },     // Erase
     ];
     this.constructSubModes = [];
     for (const sb of subBtns) {
@@ -970,17 +971,36 @@ export class UIManager {
     this.beaconSub.appendChild(clearBeaconEl);
 
     // Violence level buttons (Lua: Non-lethal, Necessary, Lethal)
+    // Screenshot: Lethal uses RED text, active level gets amber background
     const violenceBtns = [
-      { label: line('HUDHUD051TEXT'), level: 'nonlethal' },  // Force: Non-lethal
-      { label: line('HUDHUD049TEXT'), level: 'default' },    // Force: Necessary
-      { label: line('HUDHUD050TEXT'), level: 'lethal' },     // Force: Lethal
+      { label: line('HUDHUD051TEXT'), level: 'nonlethal', color: AMBER },  // Force: Non-lethal
+      { label: line('HUDHUD049TEXT'), level: 'default', color: AMBER },    // Force: Necessary
+      { label: line('HUDHUD050TEXT'), level: 'lethal', color: '#FF3D00' }, // Force: Lethal (Lua Gui.RED)
     ];
     for (const vb of violenceBtns) {
-      const el = this._createBeaconButton(vb.label, () => {
+      const el = document.createElement('div');
+      el.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+      const lbl = document.createElement('span');
+      lbl.textContent = vb.label;
+      lbl.style.cssText = `font-size:18px;color:${vb.color};font-family:'Dosis',sans-serif;font-weight:400;`;
+      el.appendChild(lbl);
+      el.addEventListener('click', () => {
         SoundManager.playUI('UI_Select');
         this.selectedViolenceLevel = vb.level;
       });
+      el.addEventListener('mouseenter', () => {
+        SoundManager.playUI('UI_Hilight');
+        el.style.background = vb.color;
+        lbl.style.color = '#000';
+      });
+      el.addEventListener('mouseleave', () => {
+        // Restore: active level keeps amber bg, others transparent
+        const isActive = this.selectedViolenceLevel === vb.level;
+        el.style.background = isActive ? AMBER : 'transparent';
+        lbl.style.color = isActive ? '#000' : vb.color;
+      });
       (el as any)._violenceLevel = vb.level;
+      (el as any)._violenceColor = vb.color;
       this.beaconSub.appendChild(el);
     }
     sidebar.appendChild(this.beaconSub);
@@ -1623,16 +1643,17 @@ export class UIManager {
       for (const sb of this.sidebarBtns) {
         sb.el.style.display = 'none';
       }
-      // Highlight active violence level
+      // Highlight active violence level (screenshot: active gets amber bg)
       const children = this.beaconSub.children;
       for (let i = 0; i < children.length; i++) {
         const el = children[i] as HTMLElement;
         const vLevel = (el as any)._violenceLevel;
+        const vColor = (el as any)._violenceColor || AMBER;
         if (vLevel) {
           const active = vLevel === this.selectedViolenceLevel;
           el.style.background = active ? AMBER : 'transparent';
           const lbl = el.children[0] as HTMLElement;
-          if (lbl) lbl.style.color = active ? '#000' : AMBER;
+          if (lbl) lbl.style.color = active ? '#000' : vColor;
         }
       }
     } else {
