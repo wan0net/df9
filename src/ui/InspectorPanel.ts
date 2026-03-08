@@ -409,7 +409,8 @@ export class InspectorPanel {
   }
 
   private renderDutyTab(container: HTMLDivElement, char: Character) {
-    for (const jobId of tJobs) {
+    // Lua CitizenDutyTab tJobOptions: UNEMPLOYED first, then all jobs
+    for (const jobId of [UNEMPLOYED, ...tJobs]) {
       const name = JOB_NAMES[jobId] ?? 'Unknown';
       const comp = char.tStats.tCompetency[jobId] ?? 0;
       const isCurrent = char.getJob() === jobId;
