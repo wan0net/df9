@@ -176,13 +176,13 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(titleBottom);
 
-    // Subtitle — "More info at http://SpacebaseDF9.com" (Lua StartMenuLayout: below logo)
+    // Subtitle — Lua WebsiteText: UIMISC016TEXT, dosismedium32, center-justified
     const subtitle = document.createElement('div');
-    subtitle.textContent = 'More info at http://SpacebaseDF9.com';
+    subtitle.textContent = line('UIMISC016TEXT');
     subtitle.style.cssText = `
       position:absolute;top:200px;left:40px;
-      font-family:'Orbitron',monospace;
-      font-size:32px;color:${AMBER};opacity:0.8; /* Lua dosismedium32 WebsiteText */
+      font-family:'Dosis',sans-serif;font-weight:500;
+      font-size:32px;color:${AMBER};opacity:0.8; /* Lua dosismedium32 */
       letter-spacing:1px;
     `;
     this.overlay.appendChild(subtitle);
@@ -240,7 +240,7 @@ export class StartMenuState implements SceneState {
         color: ${AMBER};
         font-family: 'Orbitron', monospace;
         font-size: 65px;
-        font-weight: 300;
+        font-weight: 400;
         height: 70px;
         line-height: 70px;
         margin-bottom: 10px;
@@ -268,7 +268,7 @@ export class StartMenuState implements SceneState {
 
     // Version label (bottom-center, Lua: "Version 1.06" centered)
     const version = document.createElement('div');
-    version.textContent = 'Version 0.1';
+    version.textContent = 'Version 1.06'; // Lua original version
     version.style.cssText = `
       position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
       color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif; /* Lua dosissemibold22 */

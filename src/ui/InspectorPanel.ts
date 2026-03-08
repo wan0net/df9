@@ -209,7 +209,7 @@ export class InspectorPanel {
       input.type = 'text';
       input.value = char.getName();
       input.style.cssText = `
-        font-size:35px;font-weight:bold;color:${AMBER};background:#111; /* Lua inspectName=gothic50 → nevis35 */
+        font-size:26px;font-weight:600;color:${AMBER};background:#111; /* Lua NameLabel=dosissemibold26 */
         border:1px solid ${AMBER};outline:none;font-family:'nevis','Dosis',sans-serif;
         width:180px;padding:1px 4px;
       `;
@@ -235,7 +235,7 @@ export class InspectorPanel {
     } else {
       const nameSpan = document.createElement('span');
       nameSpan.textContent = char.getName();
-      nameSpan.style.cssText = `font-size:35px;font-weight:bold;color:${AMBER};cursor:pointer; /* Lua inspectName */`;
+      nameSpan.style.cssText = `font-size:26px;font-weight:600;color:${AMBER};cursor:pointer; /* Lua NameLabel=dosissemibold26 */`;
       nameSpan.title = 'Click to edit name';
       nameSpan.addEventListener('click', () => {
         this.editingName = true;
