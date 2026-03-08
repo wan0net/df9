@@ -1068,6 +1068,12 @@ export class UIManager {
     }
     sidebar.appendChild(this.beaconSub);
 
+    // Endcap — Lua: ui_hud_anglebottom positioned at bottom of button column
+    const endcap = document.createElement('img');
+    endcap.src = 'assets/ui/hud/ui_hud_anglebottom.png';
+    endcap.style.cssText = `width:100%;height:auto;display:block;pointer-events:none;`;
+    sidebar.appendChild(endcap);
+
     // Utility buttons — Lua puts Save/Load in StartMenu, but we keep small links at sidebar bottom for convenience
     const utilContainer = document.createElement('div');
     utilContainer.className = 'sidebar-util';

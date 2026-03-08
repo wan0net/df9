@@ -358,10 +358,10 @@ export class NewGameScreenState implements SceneState {
   private buildInfoPanel() {
     // Inspector panel on right side — NewBaseInspectorLayout.lua
     // Panel: 550px wide, positioned right of galaxy map, left of right sidebar
-    const panelW = 400;
+    const panelW = 550; // Lua NewBaseInspectorLayout: WIDTH = 550
     const panelRight = RIGHT_SIDEBAR_W + 10;
     this.infoPanel = document.createElement('div');
-    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:0;width:${panelW}px;color:${AMBER_HEX};font-size:26px;z-index:5;display:none;font-family:'Dosis',sans-serif;`; /* Lua dosissemibold26 */
+    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:0;width:${panelW}px;color:${AMBER_HEX};font-size:26px;z-index:5;display:none;font-family:'Dosis',sans-serif;pointer-events:none;`; /* Lua dosissemibold26, pointer-events:none so hover preview doesn't block canvas clicks */
 
     // Black background behind everything
     const blackBg = document.createElement('div');
