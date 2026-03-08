@@ -14,7 +14,7 @@ export class CameraController3D {
   /** Camera scroll position (top-left corner in world coordinates). */
   scrollX = 0;
   scrollY = 0;
-  zoom = 1; // Note: Lua START_ZOOM=2.5, but 1 gives better initial view
+  zoom = 2.5; // Lua START_ZOOM=2.5 (GameRules.lua:178)
 
   private keysDown: Set<string> = new Set();
   private dragStart: { x: number; y: number; scrollX: number; scrollY: number } | null = null;
@@ -67,7 +67,7 @@ export class CameraController3D {
     // Mouse wheel zoom — accumulate into zoomBuffer for smooth interpolation
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const delta = -Math.sign(e.deltaY) * ZOOM_STEP * this.zoom;
+      const delta = -Math.sign(e.deltaY) * ZOOM_STEP;
       this.zoomBuffer += delta;
       // Store mouse position for zoom-toward-cursor
       const rect = canvas.getBoundingClientRect();
@@ -116,7 +116,7 @@ export class CameraController3D {
 
     // ── Smooth zoom: drain zoomBuffer by ZOOM_RATE per frame (Lua Camera) ──
     if (Math.abs(this.zoomBuffer) > 0.0001) {
-      const drain = Math.sign(this.zoomBuffer) * Math.min(Math.abs(this.zoomBuffer), ZOOM_RATE * this.zoom + 0.01);
+      const drain = Math.sign(this.zoomBuffer) * Math.min(Math.abs(this.zoomBuffer), ZOOM_RATE);
       const oldZoom = this.zoom;
       this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + drain));
       this.zoomBuffer -= drain;
@@ -156,7 +156,7 @@ export class CameraController3D {
 
   /** Add zoom increment (Lua GameRules.AddZoom, called by zoom buttons). */
   addZoom(steps: number) {
-    this.zoomBuffer += steps * ZOOM_STEP * this.zoom;
+    this.zoomBuffer += steps * ZOOM_STEP;
     // Center zoom on screen center
     this.zoomMouseX = window.innerWidth / 2;
     this.zoomMouseY = window.innerHeight / 2;
