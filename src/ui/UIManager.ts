@@ -754,6 +754,28 @@ export class UIManager {
     cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; cancelLbl.style.color = '#FF3D00'; });
     this.constructSub.appendChild(cancelEl);
 
+    // ── Confirm button (green) — Lua ConfirmButton at position 2 (screenshot: right after Cancel) ──
+    const confirmEl = document.createElement('div');
+    confirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const confirmIcon = document.createElement('span');
+    confirmIcon.textContent = '\u2714';
+    confirmIcon.style.cssText = `font-size:18px;color:#A5D318;`; // Lua CONSTRUCT_CONFIRM = Gui.GREEN
+    const confirmLbl = document.createElement('span');
+    confirmLbl.textContent = line('HUDHUD019TEXT');
+    confirmLbl.style.cssText = `font-size:18px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN
+    confirmEl.appendChild(confirmIcon);
+    confirmEl.appendChild(confirmLbl);
+    confirmEl.addEventListener('click', () => {
+      if (this.onConfirmBuild) {
+        this.onConfirmBuild();
+      }
+      this.setBuildMode('none');
+      GameRules.bRunning = true;
+    });
+    confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = '#A5D318'; confirmIcon.style.color = '#000'; confirmLbl.style.color = '#000'; }); // Lua CONSTRUCT_CONFIRM
+    confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.color = '#A5D318'; confirmLbl.style.color = '#A5D318'; });
+    this.constructSub.appendChild(confirmEl);
+
     // ── ">> Construct" label — Lua HUDHUD012TEXT ──
     const constructLabel = document.createElement('div');
     constructLabel.textContent = line('HUDHUD012TEXT');
@@ -763,9 +785,8 @@ export class UIManager {
     `;
     this.constructSub.appendChild(constructLabel);
 
-    // ── Build mode buttons — matching Lua ConstructMenu order ──
-    // Lua order: Cancel, Erase, Area(Room), Wall, Floor, [Airlock], Demolish, Vaporize, Confirm, Object
-    // Lua ConstructMenu order: Erase, Area, Wall, Floor, Airlock, Demolish, Vaporize, Object
+    // ── Build mode buttons — matching screenshot order ──
+    // Screenshot order: Cancel, Confirm, label, then mode buttons
     const subBtns: { label: string; hotkey: string; mode: BuildMode }[] = [
       { label: line('HUDHUD011TEXT'), hotkey: 'E', mode: 'erase' },     // Erase (cancel pending builds)
       { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },      // Area (Room)
@@ -816,28 +837,6 @@ export class UIManager {
       });
       this.constructSub.appendChild(el);
     }
-
-    // ── Confirm button (green) — Lua ConfirmButton — appears after all mode buttons ──
-    const confirmEl = document.createElement('div');
-    confirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
-    const confirmIcon = document.createElement('span');
-    confirmIcon.textContent = '\u2714';
-    confirmIcon.style.cssText = `font-size:18px;color:#A5D318;`; // Lua CONSTRUCT_CONFIRM = Gui.GREEN
-    const confirmLbl = document.createElement('span');
-    confirmLbl.textContent = line('HUDHUD019TEXT');
-    confirmLbl.style.cssText = `font-size:18px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN
-    confirmEl.appendChild(confirmIcon);
-    confirmEl.appendChild(confirmLbl);
-    confirmEl.addEventListener('click', () => {
-      if (this.onConfirmBuild) {
-        this.onConfirmBuild();
-      }
-      this.setBuildMode('none');
-      GameRules.bRunning = true;
-    });
-    confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = '#A5D318'; confirmIcon.style.color = '#000'; confirmLbl.style.color = '#000'; }); // Lua CONSTRUCT_CONFIRM
-    confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.color = '#A5D318'; confirmLbl.style.color = '#A5D318'; });
-    this.constructSub.appendChild(confirmEl);
 
     sidebar.appendChild(this.constructSub);
 
@@ -942,7 +941,7 @@ export class UIManager {
     const beaconDoneEl = document.createElement('div');
     beaconDoneEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const beaconDoneLbl = document.createElement('span');
-    beaconDoneLbl.textContent = 'Done';
+    beaconDoneLbl.textContent = line('HUDHUD035TEXT'); // Lua: "Done"
     beaconDoneLbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;`;
     const beaconDoneHk = document.createElement('span');
     beaconDoneHk.textContent = 'ESC';
@@ -963,8 +962,8 @@ export class UIManager {
     secLabel.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
     this.beaconSub.appendChild(secLabel);
 
-    // Clear Beacon button
-    const clearBeaconEl = this._createBeaconButton('\u2716 Clear Beacon', () => {
+    // Clear Beacon button — Lua HUDHUD037TEXT
+    const clearBeaconEl = this._createBeaconButton(`\u2716 ${line('HUDHUD037TEXT')}`, () => {
       // Placeholder: clear all beacons
       SoundManager.playUI('UI_Select');
     });
@@ -1573,8 +1572,8 @@ export class UIManager {
       this.objectSubMenuEl.style.display = 'none';
       this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`;
       for (const sb of this.sidebarBtns) sb.el.style.display = 'none';
-      // Highlight active sub-button (skip cancelEl + constructLabel = 2 children)
-      const SUB_OFFSET = 2;
+      // Highlight active sub-button (skip cancelEl + confirmEl + constructLabel = 3 children)
+      const SUB_OFFSET = 3;
       const subBtns = this.constructSub.children;
       for (let i = 0; i < this.constructSubModes.length; i++) {
         const el = subBtns[i + SUB_OFFSET] as HTMLElement;
