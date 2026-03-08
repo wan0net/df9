@@ -115,7 +115,7 @@ export class InspectorPanel {
     this.el.style.cssText = `
       position:absolute;left:0;top:0;width:${PANEL_W}px;height:100%;
       background:rgba(0,0,0,0.85);
-      color:#ccc;font-family:'nevis','Dosis',sans-serif;font-size:13px;
+      color:#ccc;font-family:'nevis','Dosis',sans-serif;font-size:20px; /* Lua nevisBody=20 */
       display:none;pointer-events:auto;z-index:16;overflow-y:auto;
     `;
 
@@ -165,11 +165,11 @@ export class InspectorPanel {
     topBar.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:6px 10px;`;
     const backBtn = document.createElement('div');
     backBtn.textContent = 'Back';
-    backBtn.style.cssText = `font-size:14px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`;
+    backBtn.style.cssText = `font-size:22px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
     backBtn.addEventListener('click', () => this.setEntity(null));
     const closeBtn = document.createElement('div');
     closeBtn.textContent = 'X';
-    closeBtn.style.cssText = `font-size:14px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`;
+    closeBtn.style.cssText = `font-size:22px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
     closeBtn.addEventListener('click', () => this.setEntity(null));
     topBar.appendChild(backBtn);
     topBar.appendChild(closeBtn);
@@ -177,7 +177,7 @@ export class InspectorPanel {
 
     const inspLabel = document.createElement('div');
     inspLabel.textContent = `>> ${line('HUDHUD005TEXT')}`;
-    inspLabel.style.cssText = `font-size:11px;color:${AMBER};padding:0 10px 4px;font-family:'Dosis',sans-serif;`;
+    inspLabel.style.cssText = `font-size:22px;color:${AMBER};padding:0 10px 4px;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
     this.contentEl.appendChild(inspLabel);
 
     switch (this.entity.type) {
@@ -209,7 +209,7 @@ export class InspectorPanel {
       input.type = 'text';
       input.value = char.getName();
       input.style.cssText = `
-        font-size:16px;font-weight:bold;color:${AMBER};background:#111;
+        font-size:35px;font-weight:bold;color:${AMBER};background:#111; /* Lua inspectName=gothic50 → nevis35 */
         border:1px solid ${AMBER};outline:none;font-family:'nevis','Dosis',sans-serif;
         width:180px;padding:1px 4px;
       `;
@@ -235,7 +235,7 @@ export class InspectorPanel {
     } else {
       const nameSpan = document.createElement('span');
       nameSpan.textContent = char.getName();
-      nameSpan.style.cssText = `font-size:16px;font-weight:bold;color:${AMBER};cursor:pointer;`;
+      nameSpan.style.cssText = `font-size:35px;font-weight:bold;color:${AMBER};cursor:pointer; /* Lua inspectName */`;
       nameSpan.title = 'Click to edit name';
       nameSpan.addEventListener('click', () => {
         this.editingName = true;
@@ -247,7 +247,7 @@ export class InspectorPanel {
     const jobSpan = document.createElement('span');
     const dutyStr = char.isAlive() && char.onDuty() ? ` ${line('DUTIES015TEXT')}` : '';
     jobSpan.textContent = `[${char.getJobName()}${dutyStr}]`;
-    jobSpan.style.cssText = 'font-size:12px;color:#888;';
+    jobSpan.style.cssText = 'font-size:22px;color:#888;'; // Lua dosissemibold22
     nameRow.appendChild(jobSpan);
     header.appendChild(nameRow);
 
@@ -317,7 +317,7 @@ export class InspectorPanel {
         btn.textContent = sd.label;
         btn.title = sd.title;
         btn.style.cssText = `
-          font-size:10px;color:${AMBER};border:1px solid ${AMBER};
+          font-size:18px;color:${AMBER};border:1px solid ${AMBER}; /* Lua dosissemibold18 */
           padding:2px 5px;cursor:pointer;
         `;
         btn.addEventListener('click', sd.action);
@@ -353,7 +353,7 @@ export class InspectorPanel {
       btn.textContent = t.label;
       const isActive = this.currentTab === t.tab;
       btn.style.cssText = `
-        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:12px;
+        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px; /* Lua dosissemibold20 */
         background:${isActive ? AMBER : 'transparent'};
         color:${isActive ? '#000' : AMBER};
       `;
@@ -415,7 +415,7 @@ export class InspectorPanel {
         <div style="flex:1;height:8px;background:#222;margin:0 6px;">
           <div style="width:${Math.round(comp * 100)}%;height:100%;background:${isCurrent ? AMBER : '#666'};"></div>
         </div>
-        <span style="width:30px;text-align:right;font-size:11px;color:#888;">${Math.round(comp * 100)}%</span>
+        <span style="width:40px;text-align:right;font-size:22px;color:#888;">${Math.round(comp * 100)}%</span>
       `;
       container.appendChild(row);
     }
@@ -452,7 +452,7 @@ export class InspectorPanel {
 
     // XP + Anger stats
     const statsDiv = document.createElement('div');
-    statsDiv.style.cssText = 'margin-top:6px;font-size:12px;color:#ccc;';
+    statsDiv.style.cssText = 'margin-top:6px;font-size:20px;color:#ccc;'; // Lua nevisBody=20
     statsDiv.innerHTML = `
       <div style="margin-bottom:4px;">${line('INSPUI007TEXT')} ${char.tStats.nXP}</div>
       <div style="margin-bottom:4px;">${line('INSPUI008TEXT')} ${char.nAnger}</div>
@@ -482,11 +482,11 @@ export class InspectorPanel {
       row.style.cssText = 'margin-bottom:4px;';
       row.innerHTML = `
         <div style="display:flex;align-items:center;">
-          <span style="width:95px;font-size:11px;color:#888;">${s.label}</span>
+          <span style="width:95px;font-size:22px;color:#888;">${s.label}</span>
           <div style="flex:1;height:6px;background:#222;margin:0 4px;position:relative;">
             <div style="width:${pct}%;height:100%;background:${AMBER};"></div>
           </div>
-          <span style="width:65px;text-align:right;font-size:10px;color:#888;">${desc}</span>
+          <span style="width:65px;text-align:right;font-size:20px;color:#888;">${desc}</span>
         </div>
       `;
       container.appendChild(row);
@@ -507,13 +507,13 @@ export class InspectorPanel {
     if (activeTraits.length > 0) {
       const traitDiv = document.createElement('div');
       traitDiv.style.cssText = `margin-top:6px;padding-top:6px;border-top:1px solid #333;`;
-      traitDiv.innerHTML = `<div style="font-size:11px;color:${AMBER};margin-bottom:4px;">${line('INSPUI009TEXT')}</div>`;
+      traitDiv.innerHTML = `<div style="font-size:22px;color:${AMBER};margin-bottom:4px;">${line('INSPUI009TEXT')}</div>`;
       for (const t of activeTraits) {
         const tag = document.createElement('span');
         tag.textContent = t.label;
         tag.style.cssText = `
           display:inline-block;margin:2px;padding:2px 6px;
-          border:1px solid #555;color:#ccc;font-size:10px;
+          border:1px solid #555;color:#ccc;font-size:18px;
         `;
         traitDiv.appendChild(tag);
       }
@@ -539,7 +539,7 @@ export class InspectorPanel {
       const row = document.createElement('div');
       row.style.cssText = `
         display:flex;gap:8px;margin-bottom:4px;padding:3px 4px;border-bottom:1px solid #222;
-        font-size:11px;line-height:1.3;
+        font-size:20px;line-height:1.3;
       `;
       // Spacedate timestamp (Lua: shows "9122.12.18" before each entry)
       const timeSpan = document.createElement('span');
@@ -578,7 +578,7 @@ export class InspectorPanel {
     if (brigRooms.length === 0) {
       const note = document.createElement('div');
       note.textContent = line('INSPUI014TEXT');
-      note.style.cssText = 'font-size:10px;color:#666;margin-top:-4px;margin-bottom:8px;';
+      note.style.cssText = 'font-size:18px;color:#666;margin-top:-4px;margin-bottom:8px;';
       container.appendChild(brigBtn);
       container.appendChild(note);
     } else {
@@ -606,7 +606,7 @@ export class InspectorPanel {
     const baseColor = disabled ? '#555' : color;
     btn.style.cssText = `
       padding:6px 12px;margin-bottom:6px;cursor:${disabled ? 'default' : 'pointer'};
-      border:1px solid ${baseColor};color:${baseColor};font-size:12px;text-align:center;
+      border:1px solid ${baseColor};color:${baseColor};font-size:20px;text-align:center; /* Lua dosissemibold20 */
       opacity:${disabled ? '0.5' : '1'};
     `;
     if (!disabled) {
@@ -640,9 +640,9 @@ export class InspectorPanel {
 
     const emergencyStr = obj.getEmergencyString();
     header.innerHTML = `
-      <div style="font-size:16px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
+      <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
         ${obj.tData.friendlyName}
-        ${emergencyStr ? `<span style="color:#f44;font-size:11px;margin-left:8px;">[${emergencyStr}]</span>` : ''}
+        ${emergencyStr ? `<span style="color:#f44;font-size:20px;margin-left:8px;">[${emergencyStr}]</span>` : ''}
       </div>
       <div style="margin-bottom:6px;">
         ${this.bar(line('INSPEC054TEXT').replace(':', ''), Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}
@@ -702,7 +702,7 @@ export class InspectorPanel {
     // Room header — zone name + room ID
     const header = this.makeSection();
     header.innerHTML = `
-      <div style="font-size:16px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
+      <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
         ${zoneName} <span style="color:#888;">Room #${room.id}</span>
       </div>
     `;
@@ -721,7 +721,7 @@ export class InspectorPanel {
       const tabEl = document.createElement('div');
       tabEl.textContent = tab.label;
       tabEl.style.cssText = `
-        flex:1;text-align:center;padding:4px 0;cursor:pointer;font-size:12px;
+        flex:1;text-align:center;padding:4px 0;cursor:pointer;font-size:20px; /* Lua dosissemibold20 */
         background:${active ? 'rgba(223,162,0,0.3)' : 'rgba(30,30,30,0.8)'};
         color:${active ? AMBER : '#888'};
         border:1px solid ${active ? AMBER : '#444'};
@@ -770,7 +770,7 @@ export class InspectorPanel {
       const isActive = room.zone === zone;
       const btn = document.createElement('div');
       btn.style.cssText = `
-        padding:6px 10px;margin-bottom:3px;cursor:pointer;font-size:13px;
+        padding:6px 10px;margin-bottom:3px;cursor:pointer;font-size:22px; /* Lua dosissemibold22 */
         background:${isActive ? 'rgba(223,162,0,0.25)' : 'transparent'};
         color:${isActive ? AMBER : '#aaa'};
         border:1px solid ${isActive ? AMBER : '#444'};
@@ -825,7 +825,7 @@ export class InspectorPanel {
   /** Structured "Label: Value" info row matching Lua CitizenInspector layout. */
   private makeInfoRow(label: string, value: string, valueColor: string): HTMLDivElement {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;padding:2px 0;font-size:13px;';
+    row.style.cssText = 'display:flex;align-items:center;padding:2px 0;font-size:22px;'; // Lua dosissemibold22
     const labelSpan = document.createElement('span');
     labelSpan.textContent = label + ' ';
     labelSpan.style.cssText = `color:#888;font-weight:600;`;
@@ -851,11 +851,11 @@ export class InspectorPanel {
     const pct = Math.max(0, Math.min(100, (value / max) * 100));
     return `
       <div style="display:flex;align-items:center;">
-        <span style="width:70px;font-size:11px;color:#888;">${label}</span>
+        <span style="width:70px;font-size:22px;color:#888;">${label}</span>
         <div style="flex:1;height:8px;background:#222;margin:0 6px;">
           <div style="width:${Math.round(pct)}%;height:100%;background:${color};"></div>
         </div>
-        <span style="width:50px;text-align:right;font-size:11px;">${Math.round(value)}/${max}</span>
+        <span style="width:60px;text-align:right;font-size:22px;">${Math.round(value)}/${max}</span>
       </div>
     `;
   }
@@ -865,7 +865,7 @@ export class InspectorPanel {
     closeBtn.textContent = `[X] ${line('UIMISC041TEXT')}`;
     closeBtn.style.cssText = `
       text-align:center;padding:6px;cursor:pointer;color:${AMBER};
-      border-top:1px solid #333;font-size:12px;
+      border-top:1px solid #333;font-size:20px; /* Lua dosissemibold20 */
     `;
     closeBtn.addEventListener('click', () => {
       this.entity = null;
