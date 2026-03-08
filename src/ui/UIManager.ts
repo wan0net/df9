@@ -645,10 +645,10 @@ export class UIManager {
       }
       const label = document.createElement('div');
       label.textContent = def.label;
-      label.style.cssText = `font-size:18px;color:${AMBER};flex:1;display:none;font-family:'Dosis',sans-serif;font-weight:400;`;
+      label.style.cssText = `font-size:40px;color:${AMBER};flex:1;display:none;font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
       const hotkey = document.createElement('div');
       hotkey.textContent = def.hotkey;
-      hotkey.style.cssText = `font-size:12px;color:${AMBER};display:none;font-family:'Dosis',sans-serif;font-weight:600;`;
+      hotkey.style.cssText = `font-size:20px;color:${AMBER};display:none;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua dosissemibold20
 
       btn.appendChild(icon);
       btn.appendChild(label);
@@ -740,10 +740,10 @@ export class UIManager {
     inspBackEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const inspBackLbl = document.createElement('span');
     inspBackLbl.textContent = line('HUDHUD018TEXT'); // "Back"
-    inspBackLbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;flex:1;`;
+    inspBackLbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;flex:1;`; // Lua dosisregular40
     const inspBackHk = document.createElement('span');
-    inspBackHk.textContent = 'esc';
-    inspBackHk.style.cssText = `font-size:12px;color:${AMBER};font-family:'Dosis',sans-serif;opacity:0.6;`;
+    inspBackHk.textContent = 'ESC';
+    inspBackHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;opacity:0.6;`; // Lua dosissemibold22
     inspBackEl.appendChild(inspBackLbl);
     inspBackEl.appendChild(inspBackHk);
     inspBackEl.addEventListener('click', () => {
@@ -756,8 +756,8 @@ export class UIManager {
 
     // ">> Inspect" label
     const inspLabel = document.createElement('div');
-    inspLabel.textContent = line('HUDHUD005TEXT'); // "Inspect" (with >> prefix matching Lua pattern)
-    inspLabel.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
+    inspLabel.textContent = '>> ' + line('HUDHUD005TEXT'); // Lua prepends ">>" to submenu headers
+    inspLabel.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`; // Lua dosissemibold22
     this.inspectSub.appendChild(inspLabel);
 
     sidebar.appendChild(this.inspectSub);
@@ -771,13 +771,13 @@ export class UIManager {
     cancelEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const cancelIcon = document.createElement('span');
     cancelIcon.textContent = '\u{1F6AB}';
-    cancelIcon.style.cssText = `font-size:18px;`;
+    cancelIcon.style.cssText = `font-size:24px;`;
     const cancelLbl = document.createElement('span');
     cancelLbl.textContent = 'Cancel';
-    cancelLbl.style.cssText = `font-size:18px;color:#FF3D00;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua CONSTRUCT_CANCEL = Gui.RED
+    cancelLbl.style.cssText = `font-size:40px;color:#FF3D00;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua CONSTRUCT_CANCEL = Gui.RED, dosisregular40
     const cancelHk = document.createElement('span');
     cancelHk.textContent = 'x'; // Screenshot: lowercase "x" hotkey on right
-    cancelHk.style.cssText = `font-size:12px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    cancelHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`; // Lua dosissemibold22
     cancelEl.appendChild(cancelIcon);
     cancelEl.appendChild(cancelLbl);
     cancelEl.appendChild(cancelHk);
@@ -795,10 +795,10 @@ export class UIManager {
     confirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const confirmIcon = document.createElement('span');
     confirmIcon.textContent = '\u2714';
-    confirmIcon.style.cssText = `font-size:18px;color:#A5D318;`; // Lua CONSTRUCT_CONFIRM = Gui.GREEN
+    confirmIcon.style.cssText = `font-size:24px;color:#A5D318;`; // Lua CONSTRUCT_CONFIRM = Gui.GREEN
     const confirmLbl = document.createElement('span');
     confirmLbl.textContent = line('HUDHUD019TEXT');
-    confirmLbl.style.cssText = `font-size:18px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN
+    confirmLbl.style.cssText = `font-size:40px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN, dosisregular40
     confirmEl.appendChild(confirmIcon);
     confirmEl.appendChild(confirmLbl);
     confirmEl.addEventListener('click', () => {
@@ -816,9 +816,9 @@ export class UIManager {
     const constructLabel = document.createElement('div');
     constructLabel.textContent = line('HUDHUD012TEXT');
     constructLabel.style.cssText = `
-      font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
+      font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
       padding:4px 12px;opacity:0.7;
-    `;
+    `; // Lua dosissemibold22
     this.constructSub.appendChild(constructLabel);
 
     // ── Build mode buttons — matching screenshot order ──
@@ -845,15 +845,15 @@ export class UIManager {
       // Icon on LEFT (screenshot: yellow isometric icon)
       const iconEl = document.createElement('span');
       iconEl.textContent = sb.icon;
-      iconEl.style.cssText = `font-size:20px;color:${AMBER};width:28px;text-align:center;flex-shrink:0;`;
+      iconEl.style.cssText = `font-size:24px;color:${AMBER};width:48px;text-align:center;flex-shrink:0;`;
       // Label in CENTER
       const lbl = document.createElement('span');
       lbl.textContent = sb.label;
-      lbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;flex:1;`;
+      lbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;flex:1;`; // Lua dosisregular40
       // Hotkey on RIGHT (screenshot: small lowercase letter)
       const hk = document.createElement('span');
       hk.textContent = sb.hotkey;
-      hk.style.cssText = `font-size:12px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`;
+      hk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`; // Lua dosissemibold22
       el.appendChild(iconEl);
       el.appendChild(lbl);
       el.appendChild(hk);
@@ -907,13 +907,13 @@ export class UIManager {
     mineConfirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const mineConfirmIcon = document.createElement('span');
     mineConfirmIcon.textContent = '\u2714';
-    mineConfirmIcon.style.cssText = `font-size:18px;color:#A5D318;`; // Lua Gui.GREEN
+    mineConfirmIcon.style.cssText = `font-size:24px;color:#A5D318;`; // Lua Gui.GREEN
     const mineConfirmLbl = document.createElement('span');
     mineConfirmLbl.textContent = line('HUDHUD019TEXT');
-    mineConfirmLbl.style.cssText = `font-size:18px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN
+    mineConfirmLbl.style.cssText = `font-size:40px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN, dosisregular40
     const mineConfirmHk = document.createElement('span');
     mineConfirmHk.textContent = 'ESC';
-    mineConfirmHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    mineConfirmHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`; // Lua dosissemibold22
     mineConfirmEl.append(mineConfirmIcon, mineConfirmLbl, mineConfirmHk);
     mineConfirmEl.addEventListener('click', () => {
       if (this.onConfirmBuild) this.onConfirmBuild();
@@ -926,8 +926,8 @@ export class UIManager {
 
     // ">> Mine" label
     const mineLabel = document.createElement('div');
-    mineLabel.textContent = line('HUDHUD008TEXT');
-    mineLabel.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
+    mineLabel.textContent = '>> ' + line('HUDHUD008TEXT'); // Lua prepends ">>" to submenu headers
+    mineLabel.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`; // Lua dosissemibold22
     this.mineSub.appendChild(mineLabel);
 
     // Mine button [M]
@@ -935,10 +935,10 @@ export class UIManager {
     mineBtnEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;background:${AMBER};`;
     const mineBtnHk = document.createElement('span');
     mineBtnHk.textContent = '[M]';
-    mineBtnHk.style.cssText = `font-size:13px;color:#000;font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
+    mineBtnHk.style.cssText = `font-size:22px;color:#000;font-family:'Dosis',sans-serif;font-weight:600;width:40px;`; // Lua dosissemibold22
     const mineBtnLbl = document.createElement('span');
     mineBtnLbl.textContent = line('HUDHUD008TEXT');
-    mineBtnLbl.style.cssText = `font-size:18px;color:#000;font-family:'Dosis',sans-serif;font-weight:400;`;
+    mineBtnLbl.style.cssText = `font-size:40px;color:#000;font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
     mineBtnEl.append(mineBtnHk, mineBtnLbl);
     mineBtnEl.addEventListener('click', () => {
       SoundManager.playUI('UI_Select');
@@ -951,13 +951,13 @@ export class UIManager {
     mineEraseEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const mineEraseIcon = document.createElement('span');
     mineEraseIcon.textContent = '\u2716';
-    mineEraseIcon.style.cssText = `font-size:16px;color:${AMBER};`;
+    mineEraseIcon.style.cssText = `font-size:24px;color:${AMBER};`;
     const mineEraseHk = document.createElement('span');
     mineEraseHk.textContent = '[E]';
-    mineEraseHk.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
+    mineEraseHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:40px;`; // Lua dosissemibold22
     const mineEraseLbl = document.createElement('span');
     mineEraseLbl.textContent = line('HUDHUD011TEXT');
-    mineEraseLbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
+    mineEraseLbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
     mineEraseEl.append(mineEraseIcon, mineEraseHk, mineEraseLbl);
     mineEraseEl.addEventListener('click', () => {
       SoundManager.playUI('UI_Select');
@@ -989,10 +989,10 @@ export class UIManager {
     beaconDoneEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const beaconDoneLbl = document.createElement('span');
     beaconDoneLbl.textContent = line('HUDHUD035TEXT'); // Lua: "Done"
-    beaconDoneLbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;`;
+    beaconDoneLbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;`; // Lua dosisregular40
     const beaconDoneHk = document.createElement('span');
     beaconDoneHk.textContent = 'ESC';
-    beaconDoneHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    beaconDoneHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`; // Lua dosissemibold22
     beaconDoneEl.appendChild(beaconDoneLbl);
     beaconDoneEl.appendChild(beaconDoneHk);
     beaconDoneEl.addEventListener('click', () => {
@@ -1006,7 +1006,7 @@ export class UIManager {
     // ">> Security" label
     const secLabel = document.createElement('div');
     secLabel.textContent = line('HUDHUD036TEXT');
-    secLabel.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
+    secLabel.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`; // Lua dosissemibold22
     this.beaconSub.appendChild(secLabel);
 
     // Clear Beacon button — Lua HUDHUD037TEXT
@@ -1028,7 +1028,7 @@ export class UIManager {
       el.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
       const lbl = document.createElement('span');
       lbl.textContent = vb.label;
-      lbl.style.cssText = `font-size:18px;color:${vb.color};font-family:'Dosis',sans-serif;font-weight:400;`;
+      lbl.style.cssText = `font-size:40px;color:${vb.color};font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
       el.appendChild(lbl);
       el.addEventListener('click', () => {
         SoundManager.playUI('UI_Select');
@@ -1085,7 +1085,7 @@ export class UIManager {
     el.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const lbl = document.createElement('span');
     lbl.textContent = label;
-    lbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
+    lbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
     el.appendChild(lbl);
     el.addEventListener('click', onClick);
     el.addEventListener('mouseenter', () => {
@@ -1193,9 +1193,9 @@ export class UIManager {
     const zoneLabel = document.createElement('div');
     zoneLabel.textContent = line('HUDHUD024TEXT');
     zoneLabel.style.cssText = `
-      font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
+      font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
       padding:4px 12px;opacity:0.7;
-    `;
+    `; // Lua dosissemibold22
     this.objectMenuEl.appendChild(zoneLabel);
 
     // ── Zone category buttons — Lua ObjectMenu zone buttons ──
@@ -1274,10 +1274,10 @@ export class UIManager {
       col.style.cssText = 'flex:1;';
       const lbl = document.createElement('div');
       lbl.textContent = objData.friendlyName;
-      lbl.style.cssText = `font-size:18px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
+      lbl.style.cssText = `font-size:40px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
       const cost = document.createElement('div');
       cost.textContent = `${line('HUDHUD042TEXT')} ${objData.matterCost}`;
-      cost.style.cssText = `font-size:13px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.7;`;
+      cost.style.cssText = `font-size:18px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.7;`; // Lua dosissemibold18
       col.appendChild(lbl);
       col.appendChild(cost);
       el.appendChild(col);
@@ -1285,7 +1285,7 @@ export class UIManager {
       // Hotkey on RIGHT (screenshot: small lowercase letter)
       const hk = document.createElement('span');
       hk.textContent = hotkey ? hotkey.toLowerCase() : '';
-      hk.style.cssText = `font-size:12px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`;
+      hk.style.cssText = `font-size:22px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`; // Lua dosissemibold22
       el.appendChild(hk);
 
       const capturedName = objName;
@@ -1345,13 +1345,13 @@ export class UIManager {
     `;
     const lbl = document.createElement('span');
     lbl.textContent = label;
-    lbl.style.cssText = `font-size:18px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;flex:1;`;
+    lbl.style.cssText = `font-size:40px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;flex:1;`; // Lua dosisregular40
     el.appendChild(lbl);
     // Hotkey on RIGHT (screenshot: small lowercase letter)
     if (hotkey) {
       const hk = document.createElement('span');
       hk.textContent = hotkey.toLowerCase();
-      hk.style.cssText = `font-size:12px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`;
+      hk.style.cssText = `font-size:22px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`; // Lua dosissemibold22
       el.appendChild(hk);
     }
 

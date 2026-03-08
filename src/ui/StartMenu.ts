@@ -176,13 +176,24 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(titleBottom);
 
+    // Subtitle — "More info at http://SpacebaseDF9.com" (Lua StartMenuLayout: below logo)
+    const subtitle = document.createElement('div');
+    subtitle.textContent = 'More info at http://SpacebaseDF9.com';
+    subtitle.style.cssText = `
+      position:absolute;top:200px;left:40px;
+      font-family:'Orbitron',monospace;
+      font-size:16px;color:${AMBER};opacity:0.8;
+      letter-spacing:1px;
+    `;
+    this.overlay.appendChild(subtitle);
+
     // Buttons panel — right side, right-aligned (mirrors Lua nMenuItemsX=100, RIGHT_JUSTIFY)
     const btnsPanel = document.createElement('div');
     btnsPanel.style.cssText = `
-      position:absolute;right:80px;top:50%;transform:translateY(-50%);
+      position:absolute;right:60px;top:50%;transform:translateY(-50%);
       display:flex;flex-direction:column;align-items:flex-end;gap:0;
       pointer-events:auto;
-    `;
+    `; // Lua: nMenuItemsX=100 from center, RIGHT_JUSTIFY
 
     // Screenshot order: Resume, New Base, Learn to Play, (Load Base when no game),
     // Settings, Credits, Save and Quit (when game running)
@@ -228,14 +239,16 @@ export class StartMenuState implements SceneState {
       el.style.cssText = `
         color: ${AMBER};
         font-family: 'Orbitron', monospace;
-        font-size: 40px;
+        font-size: 65px;
         font-weight: 300;
-        padding: 20px 0;
+        height: 70px;
+        line-height: 70px;
+        margin-bottom: 10px;
         cursor: pointer;
         text-align: right;
         letter-spacing: 3px;
         min-width: 630px;
-      `;
+      `; // Lua: orbitronWhite=65px, nLineHeight=80, button scale 630×70
       el.addEventListener('mouseenter', () => {
         el.style.color = BRIGHT_AMBER;
         SoundManager.playUI('UI_Hilight');
