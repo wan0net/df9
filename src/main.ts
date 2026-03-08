@@ -994,7 +994,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     toggleO2Overlay: () => { showO2Overlay = !showO2Overlay; },
     onZoomIn: () => { cameraController.addZoom(3); },
     onZoomOut: () => { cameraController.addZoom(-3); },
-    toggleWalls: () => { /* cutaway mode stub — TODO: implement wall cutaway toggle */ },
+    toggleWalls: () => {
+      GameRules.cycleCutawayMode();
+      tileRenderer.setCutaway(GameRules.isCutawayModeEnabled());
+    },
     getRooms: () => roomManager.getRooms(),
     onSetJob: (character, jobId) => { character.setJob(jobId); },
     goalSystem,
@@ -1186,6 +1189,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Selection highlight
     selectionHighlight.update(selectedEntity);
+
+    // Sync cutaway state to renderer (Lua: World.updateCutaway called whenever mode changes)
+    tileRenderer.setCutaway(GameRules.isCutawayModeEnabled());
+
+    // Sync O2 overlay button state
+    uiManager.o2OverlayActive = showO2Overlay;
 
     // UI
     uiManager.update();

@@ -110,6 +110,8 @@ class GameRulesClass {
   static readonly POWER_HOLIDAY_DURATION = 600;
   /** Prohibit suffocation (Lua GameRules.bProhibitSuffocation). */
   bProhibitSuffocation = false;
+  /** Cutaway mode — hide back walls to show interior (Lua GameRules.cutawayMode). */
+  cutawayMode = false;
 
   sStarDate = '0.0';
   sStarTime = '00';
@@ -197,6 +199,7 @@ class GameRulesClass {
     this.bInCutscene = false;
     this.bTimeLocked = false;
     this.bProhibitSuffocation = false;
+    this.cutawayMode = false;
 
     // Start power holiday — 10 minute grace period (Lua GameRules.lua)
     this.bPowerHoliday = true;
@@ -241,6 +244,23 @@ class GameRulesClass {
     } else {
       this.nMatter += amount; // costs not multiplied
     }
+  }
+
+  // ── Cutaway mode (Lua GameRules.lua:1547-1559) ──────────────────
+
+  /** Toggle cutaway mode (Lua GameRules.cycleCutawayMode). */
+  cycleCutawayMode() {
+    this.cutawayMode = !this.cutawayMode;
+  }
+
+  /** Enable or disable cutaway mode (Lua GameRules.enableCutawayMode). */
+  enableCutawayMode(bEnable: boolean) {
+    this.cutawayMode = bEnable;
+  }
+
+  /** Check if cutaway mode is enabled (Lua GameRules.isCutawayModeEnabled). */
+  isCutawayModeEnabled(): boolean {
+    return this.cutawayMode;
   }
 
   // ── Time scaling ──────────────────────────────────────────────────

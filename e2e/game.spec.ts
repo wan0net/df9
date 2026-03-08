@@ -4911,4 +4911,23 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.low).toBeGreaterThanOrEqual(0.3);
     expect(result.high).toBeLessThanOrEqual(2.0);
   });
+
+  test('cutaway mode toggles wall top visibility (Lua GameRules.cycleCutawayMode)', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const GameRules = df9._gameRules;
+      // Initially off
+      const initial = GameRules.isCutawayModeEnabled();
+      // Toggle on
+      GameRules.cycleCutawayMode();
+      const afterOn = GameRules.isCutawayModeEnabled();
+      // Toggle off
+      GameRules.cycleCutawayMode();
+      const afterOff = GameRules.isCutawayModeEnabled();
+      return { initial, afterOn, afterOff };
+    });
+    expect(result.initial).toBe(false);
+    expect(result.afterOn).toBe(true);
+    expect(result.afterOff).toBe(false);
+  });
 });

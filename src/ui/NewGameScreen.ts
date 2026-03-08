@@ -751,13 +751,18 @@ export class NewGameScreenState implements SceneState {
       const STEP = 0.25, TOTAL = 1.0;
       const t = Math.min(this.inspectorTimer / TOTAL, 1);
       const stepped = Math.floor(t / STEP) * STEP / TOTAL;
-      this.infoPanel.style.opacity   = String(Math.min(stepped * (TOTAL / STEP), 1));
-      this.infoPanel.style.transform = `translateX(${(1 - Math.min(stepped * (TOTAL / STEP), 1)) * 30}px)`;
+      const progress = Math.min(stepped * (TOTAL / STEP), 1);
+      this.infoPanel.style.opacity   = String(progress);
+      this.infoPanel.style.transform = `translateX(${(1 - progress) * 30}px)`;
+      // Lua NewBaseInspector.lua:180 — rZoomedMap:setRot(0, 0, DFMath.lerp(15, 0, t))
+      const rotAngle = 15 * (1 - t);
+      this.canvas.style.transform = `rotate(${rotAngle}deg)`;
       if (this.inspectorTimer >= TOTAL) {
         this.inspectorTimer  = 0;
         this.inspectorActive = false;
         this.infoPanel.style.opacity   = '1';
         this.infoPanel.style.transform = 'none';
+        this.canvas.style.transform = 'none';
       }
     }
     this.draw();

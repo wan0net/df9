@@ -100,6 +100,8 @@ export class UIManager {
   private onZoomIn: (() => void) | null = null;
   private onZoomOut: (() => void) | null = null;
   private toggleWalls: (() => void) | null = null;
+  /** Whether O2 overlay is currently active — set from main.ts for button selected state. */
+  o2OverlayActive = false;
   private getRooms: () => Room[];
   private getPendingBuildCost: (() => { cost: number; tileCount: number; mode: BuildMode; buildCost?: number; vaporizeCost?: number; cancelCost?: number } | null) | null = null;
   private getCorpseCount: (() => number) | null = null;
@@ -117,6 +119,11 @@ export class UIManager {
   private moraleText!: HTMLSpanElement;
   private moraleIcon!: HTMLImageElement;
   private machineHealthText!: HTMLSpanElement;
+  // O2 and Wall toggle button refs for selected state (Lua: setSelected per tick)
+  private o2BtnInactive!: HTMLImageElement;
+  private o2BtnActive!: HTMLImageElement;
+  private wallsBtnInactive!: HTMLImageElement;
+  private wallsBtnActive!: HTMLImageElement;
   private corpseText!: HTMLSpanElement;
   private prevMatter = -1;
   private displayedMatter = -1;
@@ -183,6 +190,8 @@ export class UIManager {
   private inspectSubActive = false;
   /** Lua NewSideBar.lua: bWasPaused — track pause state before construct menu opens. */
   private wasPausedBeforeConstruct = false;
+  /** Lua NewSideBar.lua: bCutawayModeWasEnabled — save cutaway state before construct menu. */
+  private bCutawayModeWasEnabled = false;
 
   // Inspector panel
   private inspectorPanel!: InspectorPanel;
@@ -510,6 +519,8 @@ export class UIManager {
       'assets/ui/hud/ui_hud_buttonvis_o2_active.png',
       () => this.toggleO2Overlay(),
     );
+    this.o2BtnInactive = o2Btn.inactiveImg;
+    this.o2BtnActive = o2Btn.activeImg;
     hudBottom.appendChild(o2Btn.el);
 
     // Walls toggle button (Lua: StatusBar.onWallsButtonPressed)
@@ -518,6 +529,8 @@ export class UIManager {
       'assets/ui/hud/ui_hud_buttonvis_walls_active.png',
       () => { this.toggleWalls?.(); },
     );
+    this.wallsBtnInactive = wallsBtn.inactiveImg;
+    this.wallsBtnActive = wallsBtn.activeImg;
     hudBottom.appendChild(wallsBtn.el);
 
     // Divider (Lua: BottomButtonDividerLine, scale={4, 54})
@@ -563,8 +576,9 @@ export class UIManager {
     this.uiRoot.appendChild(this.tileInfoEl);
   }
 
-  /** Create a bottom-bar icon button with inactive/active sprite swap on hover. */
-  private _makeBottomButton(inactiveSrc: string, activeSrc: string, onClick: () => void): { el: HTMLDivElement } {
+  /** Create a bottom-bar icon button with inactive/active sprite swap on hover.
+   *  Returns image refs so caller can set persistent selected state (Lua: setSelected). */
+  private _makeBottomButton(inactiveSrc: string, activeSrc: string, onClick: () => void): { el: HTMLDivElement; inactiveImg: HTMLImageElement; activeImg: HTMLImageElement } {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'position:relative;width:44px;height:46px;cursor:pointer;';
 
@@ -584,17 +598,33 @@ export class UIManager {
 
     wrapper.appendChild(inactiveImg);
     wrapper.appendChild(activeImg);
+    // Hover feedback — only show active on hover if not already selected
     wrapper.addEventListener('mouseenter', () => {
       inactiveImg.style.display = 'none';
       activeImg.style.display = 'block';
     });
     wrapper.addEventListener('mouseleave', () => {
-      inactiveImg.style.display = 'block';
-      activeImg.style.display = 'none';
+      // On leave, respect the selected state: if selected, keep active shown
+      if (!(wrapper as HTMLDivElement & { _selected?: boolean })._selected) {
+        inactiveImg.style.display = 'block';
+        activeImg.style.display = 'none';
+      }
     });
     wrapper.addEventListener('click', onClick);
 
-    return { el: wrapper };
+    return { el: wrapper, inactiveImg, activeImg };
+  }
+
+  /** Set persistent selected state on a toggle button (Lua: setSelected). */
+  private _setButtonSelected(wrapper: HTMLDivElement, inactive: HTMLImageElement, active: HTMLImageElement, selected: boolean) {
+    (wrapper as HTMLDivElement & { _selected?: boolean })._selected = selected;
+    if (selected) {
+      inactive.style.display = 'none';
+      active.style.display = 'block';
+    } else {
+      inactive.style.display = 'block';
+      active.style.display = 'none';
+    }
   }
 
   private hudCell(): HTMLDivElement {
@@ -714,12 +744,17 @@ export class UIManager {
             // Lua: restore pause state + unlock time scale
             if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
             GameRules.bTimeLocked = false;
+            // Lua: restore cutaway mode
+            GameRules.enableCutawayMode(this.bCutawayModeWasEnabled);
           } else {
             // Open construct menu (Lua: openConstructMenu)
             this.wasPausedBeforeConstruct = !GameRules.bRunning;
+            this.bCutawayModeWasEnabled = GameRules.isCutawayModeEnabled();
             this.setBuildMode('room');
             GameRules.bRunning = false;
             GameRules.bTimeLocked = true; // Lua: lockTimeScale(true)
+            // Lua: enable cutaway while building
+            GameRules.enableCutawayMode(true);
           }
           this.refreshObjectPicker();
           return;
@@ -817,9 +852,10 @@ export class UIManager {
     cancelEl.addEventListener('click', () => {
       if (this.onCancelBuild) this.onCancelBuild();
       this.setBuildMode('none');
-      // Lua: closeConstructMenu — restore pause state + unlock time
+      // Lua: closeConstructMenu — restore pause state + unlock time + cutaway
       if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
       GameRules.bTimeLocked = false;
+      GameRules.enableCutawayMode(this.bCutawayModeWasEnabled);
     });
     cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = '#FF3D00'; cancelLbl.style.color = '#000'; }); // Lua: CONSTRUCT_CANCEL bg, black text
     cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; cancelLbl.style.color = '#FF3D00'; });
@@ -841,9 +877,10 @@ export class UIManager {
         this.onConfirmBuild();
       }
       this.setBuildMode('none');
-      // Lua: closeConstructMenu — restore pause state + unlock time
+      // Lua: closeConstructMenu — restore pause state + unlock time + cutaway
       if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
       GameRules.bTimeLocked = false;
+      GameRules.enableCutawayMode(this.bCutawayModeWasEnabled);
     });
     confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = '#A5D318'; confirmIcon.style.color = '#000'; confirmLbl.style.color = '#000'; }); // Lua CONSTRUCT_CONFIRM
     confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.color = '#A5D318'; confirmLbl.style.color = '#A5D318'; });
@@ -1618,6 +1655,16 @@ export class UIManager {
       this.speedImgs[i].inactive.style.display = active ? 'none' : 'block';
       this.speedImgs[i].active.style.display = active ? 'block' : 'none';
     }
+
+    // ── O2 / Wall toggle button selected state (Lua StatusBar.onTick setSelected) ──
+    this._setButtonSelected(
+      this.o2BtnInactive.parentElement as HTMLDivElement,
+      this.o2BtnInactive, this.o2BtnActive, this.o2OverlayActive,
+    );
+    this._setButtonSelected(
+      this.wallsBtnInactive.parentElement as HTMLDivElement,
+      this.wallsBtnInactive, this.wallsBtnActive, GameRules.isCutawayModeEnabled(),
+    );
 
     // ── Capacity (pop / bed count) ────────────────────────
     const pop = this.getPopulation();

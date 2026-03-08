@@ -130,7 +130,7 @@ export class StartMenuState implements SceneState {
     // Gradient fade bars (TextBGFadeTop / TextBGFadeBottom from UI/Shared grad64)
     const gradTop = document.createElement('div');
     gradTop.style.cssText = `
-      position:absolute;top:0;left:0;width:100%;height:180px;
+      position:absolute;top:0;left:0;width:100%;height:64px;
       background:linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0));
       pointer-events:none;
     `;
@@ -138,7 +138,7 @@ export class StartMenuState implements SceneState {
 
     const gradBottom = document.createElement('div');
     gradBottom.style.cssText = `
-      position:absolute;bottom:0;left:0;width:100%;height:180px;
+      position:absolute;bottom:0;left:0;width:100%;height:64px;
       background:linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0));
       pointer-events:none;
     `;

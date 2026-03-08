@@ -122,6 +122,8 @@ function createSpriteQuad(
 
 export class TileRenderer3D {
   private meshes: Map<number, THREE.Object3D[]> = new Map();
+  /** Wall top meshes, tracked separately for cutaway mode toggling. */
+  private wallTopMeshes: Set<THREE.Object3D> = new Set();
   private grid: TileGrid;
   private scene: THREE.Scene;
   private roomManager: RoomManager | null = null;
@@ -133,6 +135,9 @@ export class TileRenderer3D {
   private visMaxX = 0;
   private visMinY = 0;
   private visMaxY = 0;
+
+  /** Current cutaway state — tracks whether wall tops are hidden. */
+  private cutawayActive = false;
 
   constructor(scene: THREE.Scene, grid: TileGrid) {
     this.scene = scene;
@@ -222,6 +227,7 @@ export class TileRenderer3D {
     if (existing) {
       for (const o of existing) {
         this.scene.remove(o);
+        this.wallTopMeshes.delete(o);
         if (o instanceof THREE.Mesh) {
           o.geometry.dispose();
         }
@@ -330,6 +336,8 @@ export class TileRenderer3D {
       if (top) {
         this.scene.add(top);
         result.push(top);
+        this.wallTopMeshes.add(top);
+        if (this.cutawayActive) top.visible = false;
       }
 
     } else if (tileType === TileType.DOOR) {
@@ -445,6 +453,14 @@ export class TileRenderer3D {
           o.material.color.setRGB(1, 1, 1);
         }
       }
+    }
+  }
+
+  /** Toggle cutaway mode — hide/show wall top meshes (Lua World.updateCutaway). */
+  setCutaway(enabled: boolean) {
+    this.cutawayActive = enabled;
+    for (const mesh of this.wallTopMeshes) {
+      mesh.visible = !enabled;
     }
   }
 }
