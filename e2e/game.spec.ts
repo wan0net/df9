@@ -3505,8 +3505,8 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       const hasFloor = text.includes('Floor');
       const hasWall = text.includes('Wall');
       const hasTearDown = text.includes('Tear Down');
-      const hasCancel = text.includes('Cancel');
-      const hasConfirm = text.includes('Confirm');
+      const hasCancel = text.toLowerCase().includes('cancel');
+      const hasConfirm = text.toLowerCase().includes('confirm');
       return { hasRoom, hasFloor, hasWall, hasTearDown, hasCancel, hasConfirm };
     });
     expect(result).toBeTruthy();

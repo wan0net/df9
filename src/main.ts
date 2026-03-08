@@ -1002,28 +1002,26 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       character.kill(CAUSE_OF_DEATH.UNSPECIFIED);
     },
     getPendingBuildCost: () => {
-      if (!buildCursor.isDragging) return null;
-      const count = buildCursor.dragTileCount;
-      if (count === 0) return null;
-      const dims = buildCursor.dragDimensions;
-      if (buildMode === 'demolish' || buildMode === 'vaporize' || buildMode === 'erase') {
-        return { cost: count * MAT_VAPE_FLOOR, tileCount: count, mode: buildMode, w: dims.w, h: dims.h };
+      // Lua ConstructMenu:getMatterCostText — show cumulative pending costs
+      const hasPending = pendingSavedTiles.length > 0;
+      const hasDrag = buildCursor.isDragging && buildCursor.dragTileCount > 0;
+      if (!hasPending && !hasDrag) return null;
+
+      // Current drag info (for room size display, etc.)
+      const count = hasDrag ? buildCursor.dragTileCount : 0;
+      const dims = hasDrag ? buildCursor.dragDimensions : { w: 0, h: 0 };
+      const totalCost = pendingBuildCost + pendingVaporizeCost + pendingCancelCost;
+
+      if (buildMode === 'room' && hasDrag) {
+        const floorW = Math.max(0, dims.w - 2);
+        const floorH = Math.max(0, dims.h - 2);
+        const floorCount = floorW * floorH;
+        const wallCount = count - floorCount;
+        const capacityLines = getProjectedCapacity(floorW, floorH);
+        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH, capacityLines, buildCost: pendingBuildCost, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
       }
-      if (buildMode === 'room' || buildMode === 'floor' || buildMode === 'wall') {
-        const totalCost = count * MAT_BUILD_FLOOR;
-        if (buildMode === 'room') {
-          // Lua BuildHelper:getSizeText — floor area is (w-2) x (h-2)
-          const floorW = Math.max(0, dims.w - 2);
-          const floorH = Math.max(0, dims.h - 2);
-          const floorCount = floorW * floorH;
-          const wallCount = count - floorCount;
-          // Lua BuildHelper:getCapacityText — projected capacity for key objects
-          const capacityLines = getProjectedCapacity(floorW, floorH);
-          return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH, capacityLines };
-        }
-        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h };
-      }
-      return null;
+
+      return { cost: totalCost, tileCount: count || pendingSavedTiles.length, mode: buildMode, w: dims.w, h: dims.h, buildCost: pendingBuildCost, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
     },
     onConfirmBuild: () => confirmBuild(),
     onCancelBuild: () => cancelBuild(),

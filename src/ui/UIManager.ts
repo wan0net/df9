@@ -98,7 +98,7 @@ export class UIManager {
   private getEnvObjects: () => EnvObject[];
   private toggleO2Overlay: () => void;
   private getRooms: () => Room[];
-  private getPendingBuildCost: (() => { cost: number; tileCount: number; mode: BuildMode } | null) | null = null;
+  private getPendingBuildCost: (() => { cost: number; tileCount: number; mode: BuildMode; buildCost?: number; vaporizeCost?: number; cancelCost?: number } | null) | null = null;
   private getCorpseCount: (() => number) | null = null;
   private onConfirmBuild: (() => boolean) | null = null;
   private onCancelBuild: (() => void) | null = null;
@@ -220,7 +220,7 @@ export class UIManager {
     onCenterCamera?: (char: Character) => void;
     onSelectRoom?: (room: Room) => void;
     onRezoneRoom?: (room: Room, zone: ZoneType) => void;
-    getPendingBuildCost?: () => { cost: number; tileCount: number; mode: BuildMode } | null;
+    getPendingBuildCost?: () => { cost: number; tileCount: number; mode: BuildMode; buildCost?: number; vaporizeCost?: number; cancelCost?: number } | null;
     getCorpseCount?: () => number;
     onConfirmBuild?: () => boolean;
     onCancelBuild?: () => void;
@@ -787,8 +787,8 @@ export class UIManager {
     cancelIcon.textContent = '\u{1F6AB}';
     cancelIcon.style.cssText = `font-size:24px;`;
     const cancelLbl = document.createElement('span');
-    cancelLbl.textContent = 'Cancel';
-    cancelLbl.style.cssText = `font-size:40px;color:#FF3D00;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua CONSTRUCT_CANCEL = Gui.RED, dosisregular40
+    cancelLbl.textContent = line('BUILDM014TEXT');
+    cancelLbl.style.cssText = `font-size:40px;color:#FF3D00;font-family:'Dosis',sans-serif;font-weight:400;`; // Lua CONSTRUCT_CANCEL = Gui.RED, dosisregular40
     const cancelHk = document.createElement('span');
     cancelHk.textContent = 'x'; // Screenshot: lowercase "x" hotkey on right
     cancelHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`; // Lua dosissemibold22
@@ -812,7 +812,7 @@ export class UIManager {
     confirmIcon.style.cssText = `font-size:24px;color:#A5D318;`; // Lua CONSTRUCT_CONFIRM = Gui.GREEN
     const confirmLbl = document.createElement('span');
     confirmLbl.textContent = line('HUDHUD019TEXT');
-    confirmLbl.style.cssText = `font-size:40px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN, dosisregular40
+    confirmLbl.style.cssText = `font-size:40px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:400;`; // Lua Gui.GREEN, dosisregular40
     confirmEl.appendChild(confirmIcon);
     confirmEl.appendChild(confirmLbl);
     confirmEl.addEventListener('click', () => {
@@ -1858,35 +1858,51 @@ export class UIManager {
       }
     }
 
-    // ── Build cost overlay (Lua BuildHelper + ConstructMenu:getMatterCostText) ─────
+    // ── Build cost overlay (Lua ConstructMenu:getMatterCostText) ─────
     if (this.getPendingBuildCost) {
       const costInfo = this.getPendingBuildCost() as any;
-      if (costInfo && costInfo.tileCount > 0) {
-        const canAfford = GameRules.nMatter >= costInfo.cost;
-        const costColor = costInfo.mode === 'demolish' || costInfo.mode === 'vaporize'
-          ? '#4f4' : (canAfford ? AMBER : '#f44');
+      if (costInfo) {
         let html = '';
-        if (costInfo.w && costInfo.h && costInfo.mode === 'room') {
-          // Lua BuildHelper:getSizeText — "show player floor area, not floor + wall"
+        // Lua BuildHelper: room mode shows area dimensions + capacity
+        if (costInfo.w && costInfo.h && costInfo.mode === 'room' && costInfo.tileCount > 0) {
           html += `<div style="color:${AMBER};">${line('HUDHUD039TEXT')} ${costInfo.floorW} x ${costInfo.floorH}</div>`;
-          html += `<div style="color:${costColor};">${line('HUDHUD042TEXT')} ${costInfo.cost} (${costInfo.wallCount} ${line('HUDHUD040TEXT')}, ${costInfo.floorCount} ${line('HUDHUD041TEXT')})</div>`;
-          // Lua BuildHelper:getCapacityText — projected capacity for key objects
-          if (costInfo.floorW > 0 && costInfo.floorH > 0 && costInfo.capacityLines && costInfo.capacityLines.length > 0) {
+          if (costInfo.capacityLines && costInfo.capacityLines.length > 0) {
             html += `<div style="color:${AMBER};margin-top:4px;">${line('HUDHUD043TEXT')}</div>`;
             for (const cl of costInfo.capacityLines) {
-              html += `<div style="color:${AMBER};padding-left:12px;font-size:22px;">${cl}</div>`; /* Lua dosissemibold22 */
+              html += `<div style="color:${AMBER};padding-left:12px;font-size:22px;">${cl}</div>`;
             }
           }
-        } else if (costInfo.mode === 'demolish' || costInfo.mode === 'vaporize') {
-          html += `<div style="color:${costColor};">+${Math.abs(costInfo.cost)} matter (${costInfo.tileCount} tiles)</div>`;
+        }
+        // Lua ConstructMenu:getMatterCostText — three separate cost lines
+        const bc = costInfo.buildCost ?? 0;
+        const vc = costInfo.vaporizeCost ?? 0;
+        const cc = costInfo.cancelCost ?? 0;
+        // Build cost: positive=spending → show "-", negative=refund → show "+"
+        if (bc !== 0) {
+          const sign = bc < 0 ? '+' : '-';
+          html += `<div style="color:${AMBER};">${sign}${Math.abs(bc)} ${line('BUILDM017TEXT')}</div>`;
+        }
+        // Vaporize/demolish cost: negative=refund → show "+"
+        if (vc !== 0) {
+          const sign = vc < 0 ? '+' : '-';
+          html += `<div style="color:${AMBER};">${sign}${Math.abs(vc)} ${line('BUILDM018TEXT')}</div>`;
+        }
+        // Cancel/undo cost: negative=refund → show "+"
+        if (cc !== 0) {
+          const sign = cc < 0 ? '+' : '-';
+          html += `<div style="color:${AMBER};">${sign}${Math.abs(cc)} ${line('BUILDM019TEXT')}</div>`;
+        }
+        // "Not enough matter" warning (Lua: NoFundsLabel)
+        const totalCost = costInfo.cost ?? (bc + vc + cc);
+        if (totalCost > 0 && GameRules.nMatter < totalCost) {
+          html += `<div style="color:#f44;font-size:22px;">${line('BUILDM016TEXT')}</div>`;
+        }
+        if (html) {
+          this.costOverlay.innerHTML = html;
+          this.costOverlay.style.display = 'block';
         } else {
-          html += `<div style="color:${costColor};">${line('HUDHUD042TEXT')} ${costInfo.cost} (${costInfo.tileCount} tiles)</div>`;
+          this.costOverlay.style.display = 'none';
         }
-        if (!canAfford && costInfo.mode !== 'demolish' && costInfo.mode !== 'vaporize') {
-          html += `<div style="color:#f44;font-size:22px;">${line('BUILDM016TEXT')}</div>`; /* Lua dosissemibold22 */
-        }
-        this.costOverlay.innerHTML = html;
-        this.costOverlay.style.display = 'block';
       } else {
         this.costOverlay.style.display = 'none';
       }

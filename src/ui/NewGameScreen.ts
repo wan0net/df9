@@ -384,7 +384,7 @@ export class NewGameScreenState implements SceneState {
 
     // Stats section — Lua: StatsBG (amber opaque) with property labels
     const stats = document.createElement('div');
-    stats.style.cssText = `background:rgba(223,162,0,0.15);padding:12px 16px;border-top:1px solid rgba(223,162,0,0.3);`;
+    stats.style.cssText = `background:#3B2600;padding:12px 16px;border-top:1px solid rgba(223,162,0,0.3);`; /* Lua Gui.AMBER_OPAQUE = {0.23, 0.15, 0, 1} = #3B2600 */
     this.panelDensity      = document.createElement('div');
     this.panelDensity.style.cssText = 'margin-bottom:6px;font-size:28px;'; /* Lua dosissemibold28 */
     this.panelDistance     = document.createElement('div');
