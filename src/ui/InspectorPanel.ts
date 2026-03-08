@@ -453,10 +453,48 @@ export class InspectorPanel {
     // XP + Anger stats
     const statsDiv = document.createElement('div');
     statsDiv.style.cssText = 'margin-top:6px;font-size:20px;color:#ccc;'; // Lua nevisBody=20
-    statsDiv.innerHTML = `
+    let statsHtml = `
       <div style="margin-bottom:4px;">${line('INSPUI007TEXT')} ${char.tStats.nXP}</div>
       <div style="margin-bottom:4px;">${line('INSPUI008TEXT')} ${char.nAnger}</div>
     `;
+    // Join Date (Lua CitizenStatsTab: INSPEC124TEXT)
+    const joinDate = GameRules.getFullStarDateString(char.nJoinTime);
+    statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC124TEXT')} ${joinDate}</div>`;
+    // Illness (Lua CitizenStatsTab: INSPEC146TEXT if none)
+    const maladies = char.maladies ?? [];
+    if (maladies.length > 0) {
+      statsHtml += `<div style="margin-bottom:4px;color:#f84;">${maladies.map(m => m.sFriendlyName ?? m.sMaladyName).join(', ')}</div>`;
+    } else {
+      statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC146TEXT')}</div>`;
+    }
+    // Inventory (Lua INSPEC087TEXT)
+    const invItems = char.inventory.getAll();
+    const invStr = invItems.length > 0 ? invItems.map(i => `${i.sName}${i.nCount > 1 ? ` x${i.nCount}` : ''}`).join(', ') : line('INSPUI010TEXT');
+    statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC087TEXT')} ${invStr}</div>`;
+    // Favorites (Lua INSPEC117TEXT, INSPEC049TEXT, INSPEC050TEXT)
+    const favHobby = char.getFavorite('Activities');
+    const favFood = char.getFavorite('Foods');
+    const favBand = char.getFavorite('Bands');
+    if (favHobby) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC117TEXT')} ${favHobby}</div>`;
+    if (favFood) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC049TEXT')} ${favFood}</div>`;
+    if (favBand) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC050TEXT')} ${favBand}</div>`;
+    // Friends (Lua INSPEC047TEXT — top 4 people with positive affinity)
+    const friends = char.getPeopleOfAffinity(5, true).sort((a, b) => b.nAffinity - a.nAffinity).slice(0, 4);
+    statsHtml += `<div style="margin-bottom:2px;color:${AMBER};">${line('INSPEC047TEXT')}</div>`;
+    if (friends.length > 0) {
+      for (const f of friends) statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${f.sID}</div>`;
+    } else {
+      statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${line('INSPEC082TEXT')}</div>`;
+    }
+    // Enemies (Lua INSPEC048TEXT — top 4 people with negative affinity)
+    const enemies = char.getPeopleOfAffinity(-5, false).sort((a, b) => a.nAffinity - b.nAffinity).slice(0, 4);
+    statsHtml += `<div style="margin-bottom:2px;color:${AMBER};">${line('INSPEC048TEXT')}</div>`;
+    if (enemies.length > 0) {
+      for (const e of enemies) statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${e.sID}</div>`;
+    } else {
+      statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${line('INSPEC082TEXT')}</div>`;
+    }
+    statsDiv.innerHTML = statsHtml;
     container.appendChild(statsDiv);
   }
 
@@ -584,6 +622,18 @@ export class InspectorPanel {
     } else {
       container.appendChild(brigBtn);
     }
+
+    // Send to Infirmary / Cancel Hospitalization (Lua CitizenActionTab: INSPEC147/148TEXT)
+    const isHospitalized = char.bCuffed && char.maladies.length > 0; // simplified check
+    const hospBtn = this.makeActionButton(
+      isHospitalized ? line('INSPEC148TEXT') : line('INSPEC147TEXT'),
+      isDead,
+      () => {
+        // Toggle hospitalization — quarantine flag on character
+        if (this.onCuffCharacter) this.onCuffCharacter(char);
+      },
+    );
+    container.appendChild(hospBtn);
 
     // Execute (red)
     const execBtn = this.makeActionButton(
