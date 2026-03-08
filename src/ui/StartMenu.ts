@@ -195,8 +195,8 @@ export class StartMenuState implements SceneState {
       pointer-events:auto;
     `; // Lua: nMenuItemsX=100 from center, RIGHT_JUSTIFY
 
-    // Screenshot order: Resume, New Base, Learn to Play, (Load Base when no game),
-    // Settings, Credits, Save and Quit (when game running)
+    // Lua StartMenu button order: Resume, New Game, Learn to Play, Load Base,
+    // Save Base, Settings, Credits, Quit (web: no Quit — can't close browser)
     const buttons: { label: string; action: () => void }[] = [];
     if (this.gameRunning && this.onResume) {
       buttons.push({ label: line('UIMISC023TEXT'), action: this.onResume });
@@ -205,25 +205,13 @@ export class StartMenuState implements SceneState {
       { label: line('UIMISC024TEXT'), action: this.onNewGame },
       { label: line('UIMISC045TEXT'), action: this.onTutorial },
     );
-    // Load Base — always available (Lua StartMenu button 4)
-    if (!this.gameRunning) {
-      buttons.push({ label: line('UIMISC044TEXT'), action: () => {
-        this.saveSlotPanel.showLoad(this.overlay, (slotName) => {
-          this.onLoadBase(slotName);
-        }, () => {});
-      }});
-    }
-    // Settings (Lua StartMenu: UIMISC025TEXT)
-    buttons.push({
-      label: line('UIMISC025TEXT'),
-      action: () => { this.settingsPanel.show(this.overlay, () => {}); },
-    });
-    // Credits (Lua StartMenu: UIMISC026TEXT)
-    buttons.push({
-      label: line('UIMISC026TEXT'),
-      action: () => { this.creditsScreen.show(this.overlay, () => {}); },
-    });
-    // Save and Quit — last button when game running (screenshot order)
+    // Load Base — ALWAYS available (Lua StartMenu button 4, not conditional)
+    buttons.push({ label: line('UIMISC044TEXT'), action: () => {
+      this.saveSlotPanel.showLoad(this.overlay, (slotName) => {
+        this.onLoadBase(slotName);
+      }, () => {});
+    }});
+    // Save Base — when game running (Lua StartMenu button 5)
     if (this.gameRunning && this.onSaveBase) {
       const saveFn = this.onSaveBase;
       buttons.push({ label: line('UIMISC027TEXT'), action: () => {
@@ -232,6 +220,16 @@ export class StartMenuState implements SceneState {
         }, () => {});
       }});
     }
+    // Settings (Lua StartMenu button 6: UIMISC025TEXT)
+    buttons.push({
+      label: line('UIMISC025TEXT'),
+      action: () => { this.settingsPanel.show(this.overlay, () => {}); },
+    });
+    // Credits (Lua StartMenu button 7: UIMISC026TEXT)
+    buttons.push({
+      label: line('UIMISC026TEXT'),
+      action: () => { this.creditsScreen.show(this.overlay, () => {}); },
+    });
 
     for (const btn of buttons) {
       const el = document.createElement('div');
