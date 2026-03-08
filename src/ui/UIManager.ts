@@ -174,6 +174,10 @@ export class UIManager {
   private beaconSub!: HTMLDivElement;
   selectedViolenceLevel = 'default';
 
+  // Inspect sub-menu (screenshot: "Back" + ">> Inspect" replaces sidebar)
+  private inspectSub!: HTMLDivElement;
+  private inspectSubActive = false;
+
   // Inspector panel
   private inspectorPanel!: InspectorPanel;
 
@@ -689,6 +693,7 @@ export class UIManager {
         }
         if (def.action === 'inspect') {
           this.setBuildMode('none');
+          this.inspectSubActive = true; // Show inspect submenu (screenshot 20.32.12)
           return;
         }
         // Standard toggle
@@ -726,6 +731,37 @@ export class UIManager {
       this.sidebarBtns.push({ el: btn, label, hotkey, icon, iconImg, mode: def.mode, btnLabel: def.label });
     }
 
+    // ── Inspect sub-menu (screenshot 20.32.12: "Back" + ">> Inspect") ──
+    this.inspectSub = document.createElement('div');
+    this.inspectSub.style.cssText = `display:none;`;
+
+    // Back button (ESC)
+    const inspBackEl = document.createElement('div');
+    inspBackEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const inspBackLbl = document.createElement('span');
+    inspBackLbl.textContent = line('HUDHUD018TEXT'); // "Back"
+    inspBackLbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;flex:1;`;
+    const inspBackHk = document.createElement('span');
+    inspBackHk.textContent = 'esc';
+    inspBackHk.style.cssText = `font-size:12px;color:${AMBER};font-family:'Dosis',sans-serif;opacity:0.6;`;
+    inspBackEl.appendChild(inspBackLbl);
+    inspBackEl.appendChild(inspBackHk);
+    inspBackEl.addEventListener('click', () => {
+      SoundManager.playSfx('degauss');
+      this.inspectSubActive = false;
+    });
+    inspBackEl.addEventListener('mouseenter', () => { inspBackEl.style.background = `rgba(223,162,0,0.2)`; });
+    inspBackEl.addEventListener('mouseleave', () => { inspBackEl.style.background = 'transparent'; });
+    this.inspectSub.appendChild(inspBackEl);
+
+    // ">> Inspect" label
+    const inspLabel = document.createElement('div');
+    inspLabel.textContent = line('HUDHUD005TEXT'); // "Inspect" (with >> prefix matching Lua pattern)
+    inspLabel.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
+    this.inspectSub.appendChild(inspLabel);
+
+    sidebar.appendChild(this.inspectSub);
+
     // Construct sub-menu — Lua ConstructMenu.lua: replaces sidebar buttons entirely
     this.constructSub = document.createElement('div');
     this.constructSub.style.cssText = `display:none;`;
@@ -740,8 +776,8 @@ export class UIManager {
     cancelLbl.textContent = 'Cancel';
     cancelLbl.style.cssText = `font-size:18px;color:#FF3D00;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua CONSTRUCT_CANCEL = Gui.RED
     const cancelHk = document.createElement('span');
-    cancelHk.textContent = 'ESC';
-    cancelHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    cancelHk.textContent = 'x'; // Screenshot: lowercase "x" hotkey on right
+    cancelHk.style.cssText = `font-size:12px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
     cancelEl.appendChild(cancelIcon);
     cancelEl.appendChild(cancelLbl);
     cancelEl.appendChild(cancelHk);
@@ -1396,6 +1432,11 @@ export class UIManager {
 
   // ── Public API ──────────────────────────────────────────────────
 
+  /** Dismiss the inspect submenu (called on ESC). */
+  dismissInspectSub() {
+    this.inspectSubActive = false;
+  }
+
   /** Set the selected entity to show in the inspector panel. */
   setSelectedEntity(entity: SelectedEntity) {
     if (entity) this.hideActivePanel();
@@ -1680,8 +1721,23 @@ export class UIManager {
       this.beaconSub.style.display = 'none';
     }
 
+    // ── Inspect sub-menu: replaces sidebar buttons (screenshot 20.32.12) ──
+    if (this.inspectSubActive && !isConstructActive && !isMineActive && !isBeaconActive) {
+      this.inspectSub.style.display = 'block';
+      for (const sb of this.sidebarBtns) {
+        sb.el.style.display = 'none';
+      }
+      this.sidebarEl.style.width = `${SIDEBAR_W}px`;
+    } else {
+      this.inspectSub.style.display = 'none';
+      // Clear inspect sub when entering another mode
+      if (isConstructActive || isMineActive || isBeaconActive) {
+        this.inspectSubActive = false;
+      }
+    }
+
     // Restore sidebar buttons and width when no submenu is active
-    if (!isConstructActive && !isMineActive && !isBeaconActive) {
+    if (!isConstructActive && !isMineActive && !isBeaconActive && !this.inspectSubActive) {
       for (const sb of this.sidebarBtns) {
         sb.el.style.display = 'flex';
       }

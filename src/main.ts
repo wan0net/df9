@@ -857,6 +857,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     buildCursor.cancelDrag();
     selectedEntity = null;
     uiManager.setSelectedEntity(null);
+    uiManager.dismissInspectSub();
     tutorialFlags.deselected = true;
     GameRules.bRunning = true;
   });
