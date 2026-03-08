@@ -1536,12 +1536,21 @@ export class UIManager {
       this.matterFlashTimer = 30;
       this.matterText.style.color = currentMatter > this.prevMatter ? '#A5D318' : '#FF3D00'; // Lua Gui.GREEN / Gui.RED
     }
-    // Tick displayed value toward real value (Lua: animated counter with sound)
+    // Tick displayed value toward real value (Lua StatusBar:tickMatterCount — exact rate multipliers)
     if (this.displayedMatter !== currentMatter) {
-      const diff = currentMatter - this.displayedMatter;
-      const step = Math.max(1, Math.abs(Math.floor(diff / 10)));
-      if (diff > 0) this.displayedMatter = Math.min(currentMatter, this.displayedMatter + step);
-      else this.displayedMatter = Math.max(currentMatter, this.displayedMatter - step);
+      const delta = Math.abs(currentMatter - this.displayedMatter);
+      // Lua: nCounterTickMult based on delta magnitude
+      let mult: number;
+      if (delta < 500) mult = 1;
+      else if (delta < 1500) mult = 2;
+      else if (delta < 2500) mult = 4;
+      else mult = 6;
+      const increment = mult * 2;
+      if (this.displayedMatter < currentMatter) {
+        this.displayedMatter = Math.min(currentMatter, this.displayedMatter + increment);
+      } else {
+        this.displayedMatter = Math.max(currentMatter, this.displayedMatter - increment);
+      }
     }
     if (this.matterFlashTimer > 0) {
       this.matterFlashTimer--;

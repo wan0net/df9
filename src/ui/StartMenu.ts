@@ -184,6 +184,8 @@ export class StartMenuState implements SceneState {
       pointer-events:auto;
     `;
 
+    // Screenshot order: Resume, New Base, Learn to Play, (Load Base when no game),
+    // Settings, Credits, Save and Quit (when game running)
     const buttons: { label: string; action: () => void }[] = [];
     if (this.gameRunning && this.onResume) {
       buttons.push({ label: line('UIMISC023TEXT'), action: this.onResume });
@@ -191,12 +193,26 @@ export class StartMenuState implements SceneState {
     buttons.push(
       { label: line('UIMISC024TEXT'), action: this.onNewGame },
       { label: line('UIMISC045TEXT'), action: this.onTutorial },
-      { label: line('UIMISC044TEXT'), action: () => {
+    );
+    // Load Base — always available (Lua StartMenu button 4)
+    if (!this.gameRunning) {
+      buttons.push({ label: line('UIMISC044TEXT'), action: () => {
         this.saveSlotPanel.showLoad(this.overlay, (slotName) => {
           this.onLoadBase(slotName);
         }, () => {});
-      }},
-    );
+      }});
+    }
+    // Settings (Lua StartMenu: UIMISC025TEXT)
+    buttons.push({
+      label: line('UIMISC025TEXT'),
+      action: () => { this.settingsPanel.show(this.overlay, () => {}); },
+    });
+    // Credits (Lua StartMenu: UIMISC026TEXT)
+    buttons.push({
+      label: line('UIMISC026TEXT'),
+      action: () => { this.creditsScreen.show(this.overlay, () => {}); },
+    });
+    // Save and Quit — last button when game running (screenshot order)
     if (this.gameRunning && this.onSaveBase) {
       const saveFn = this.onSaveBase;
       buttons.push({ label: line('UIMISC027TEXT'), action: () => {
@@ -205,16 +221,6 @@ export class StartMenuState implements SceneState {
         }, () => {});
       }});
     }
-    // Settings button (Lua StartMenu: UIMISC025TEXT = SETTINGS)
-    buttons.push({
-      label: line('UIMISC025TEXT'),
-      action: () => { this.settingsPanel.show(this.overlay, () => {}); },
-    });
-    // Credits button (Lua StartMenu: UIMISC026TEXT = CREDITS)
-    buttons.push({
-      label: line('UIMISC026TEXT'),
-      action: () => { this.creditsScreen.show(this.overlay, () => {}); },
-    });
 
     for (const btn of buttons) {
       const el = document.createElement('div');
