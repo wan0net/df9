@@ -6,7 +6,7 @@
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
 import { GameRules } from '../core/GameRules';
-import { Door, DOOR_STATE } from '../envobjects/Door';
+import { Door, DOOR_STATE, DOOR_OPERATION } from '../envobjects/Door';
 import type { Room } from '../rooms/Room';
 import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH } from '../characters/CharacterConstants';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
@@ -676,10 +676,24 @@ export class InspectorPanel {
     switch (door.state) {
       case DOOR_STATE.OPEN: return `<span style="color:#4f4;">${line('PROPSX056TEXT')}</span>`;
       case DOOR_STATE.CLOSED: return line('PROPSX057TEXT');
-      case DOOR_STATE.LOCKED: return `<span style="color:#f44;">${line('PROPSX059TEXT')}</span>`;
+      case DOOR_STATE.LOCKED:
+        // Distinguish vacuum-locked from user-locked (Lua PROPSX052 vs PROPSX059)
+        if (door.bTouchesVacuum && door.bEastSideVacuum !== door.bWestSideVacuum && door.operation !== DOOR_OPERATION.LOCKED) {
+          return `<span style="color:#f44;">${line('PROPSX052TEXT')}</span>`;
+        }
+        return `<span style="color:#f44;">${line('PROPSX059TEXT')}</span>`;
       case DOOR_STATE.BROKEN_OPEN: return `<span style="color:#f44;">${line('PROPSX053TEXT')}</span>`;
       case DOOR_STATE.BROKEN_CLOSED: return `<span style="color:#f44;">${line('PROPSX054TEXT')}</span>`;
       default: return line('INSPEC103TEXT');
+    }
+  }
+
+  private getDoorOperationLabel(door: Door): string {
+    switch (door.operation) {
+      case DOOR_OPERATION.NORMAL: return 'Normal';
+      case DOOR_OPERATION.LOCKED: return 'Locked';
+      case DOOR_OPERATION.FORCED_OPEN: return 'Forced Open';
+      default: return 'Normal';
     }
   }
 
@@ -704,7 +718,11 @@ export class InspectorPanel {
       ${obj.tData.nPowerOutput > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC165TEXT')} ${obj.getPowerOutput()}</div>` : ''}
       ${obj.tData.nPowerDraw > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC164TEXT')} ${obj.getPowerDraw()}</div>` : ''}
       ${obj.tData.oxygenLevel > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC059TEXT')} ${obj.getOxygenOutput()}</div>` : ''}
-      ${obj instanceof Door ? `<div style="margin-bottom:4px;">${line('PROPSX055TEXT')} ${this.getDoorStatusText(obj)}</div>` : ''}
+      ${obj instanceof Door ? `<div style="margin-bottom:4px;">${line('PROPSX055TEXT')} ${this.getDoorStatusText(obj)}</div>
+        <div style="margin-bottom:4px;">${line('PROPSX058TEXT')}
+          <span style="cursor:pointer;color:${AMBER};border:1px solid ${AMBER};padding:2px 8px;margin-left:4px;"
+                id="inspector-door-cycle">${this.getDoorOperationLabel(obj)}</span>
+        </div>` : ''}
       ${obj.sBuilderName ? `<div style="margin-bottom:4px;">${line('INSPEC111TEXT')} ${obj.sBuilderName}</div>` : ''}
       ${obj.sBuildTime ? `<div style="margin-bottom:4px;">${line('INSPEC110TEXT')} ${obj.sBuildTime}</div>` : ''}
       <div style="margin-bottom:4px;">${line('INSPUI015TEXT')} (${obj.tileX}, ${obj.tileY})</div>
@@ -715,6 +733,15 @@ export class InspectorPanel {
         </div>` : ''}
     `;
     this.contentEl.appendChild(header);
+
+    // Wire door cycle button
+    const doorCycleBtn = header.querySelector('#inspector-door-cycle') as HTMLElement;
+    if (doorCycleBtn && obj instanceof Door) {
+      doorCycleBtn.addEventListener('click', () => {
+        (obj as Door).cycle();
+        this.update();
+      });
+    }
 
     // Wire toggle button
     const toggleBtn = header.querySelector('#inspector-toggle-active') as HTMLElement;
