@@ -114,6 +114,7 @@ export class UIManager {
 
   // HUD elements
   private matterText!: HTMLSpanElement;
+  private matterLabel!: HTMLSpanElement;
   private popText!: HTMLSpanElement;
   private capacityText!: HTMLSpanElement;
   private starDateText!: HTMLSpanElement;
@@ -371,14 +372,14 @@ export class UIManager {
 
     const matterGroup = document.createElement('div');
     matterGroup.style.cssText = 'display:flex;flex-direction:column;';
-    const matterLabel = document.createElement('span');
-    matterLabel.textContent = line('HUDHUD002TEXT'); // "Matter"
-    matterLabel.style.cssText = `font-size:26px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua dosissemibold26
+    this.matterLabel = document.createElement('span');
+    this.matterLabel.textContent = line('HUDHUD002TEXT'); // "Matter"
+    this.matterLabel.style.cssText = `font-size:26px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua dosissemibold26
     this.matterText = document.createElement('span');
     this.matterText.id = 'hud-matter';
     this.matterText.style.cssText = `font-size:70px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`; // Lua dosisregular70
     this.matterText.textContent = '0';
-    matterGroup.appendChild(matterLabel);
+    matterGroup.appendChild(this.matterLabel);
     matterGroup.appendChild(this.matterText);
     row1.appendChild(matterGroup);
 
@@ -457,6 +458,7 @@ export class UIManager {
         if (GameRules.bTimeLocked) return;
         if (speeds[idx] === 0) { GameRules.togglePause(); }
         else { GameRules.setTimeScale(speeds[idx]); }
+        SoundManager.playUI('UI_Select'); // Lua StatusBar.lua:349
       });
       wrapper.addEventListener('mouseenter', () => { wrapper.style.opacity = '0.7'; });
       wrapper.addEventListener('mouseleave', () => { wrapper.style.opacity = '1'; });
@@ -1660,7 +1662,9 @@ export class UIManager {
     if (this.displayedMatter < 0) this.displayedMatter = currentMatter;
     if (this.prevMatter >= 0 && currentMatter !== this.prevMatter) {
       this.matterFlashTimer = 30;
-      this.matterText.style.color = currentMatter > this.prevMatter ? '#A5D318' : '#FF3D00'; // Lua Gui.GREEN / Gui.RED
+      const matterColor = currentMatter > this.prevMatter ? '#A5D318' : '#FF3D00'; // Lua Gui.GREEN / Gui.RED
+      this.matterText.style.color = matterColor;
+      this.matterLabel.style.color = matterColor; // Lua: label also tinted
     }
     // Tick displayed value toward real value (Lua StatusBar:tickMatterCount — exact rate multipliers)
     if (this.displayedMatter !== currentMatter) {
@@ -1682,6 +1686,7 @@ export class UIManager {
       this.matterFlashTimer--;
       if (this.matterFlashTimer === 0 && this.displayedMatter === currentMatter) {
         this.matterText.style.color = AMBER;
+        this.matterLabel.style.color = '#AF7F00';
       }
     }
     this.prevMatter = currentMatter;
