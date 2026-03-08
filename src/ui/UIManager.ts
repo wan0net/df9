@@ -324,7 +324,7 @@ export class UIManager {
     const hudTop = document.createElement('div');
     hudTop.style.cssText = `
       position:absolute;top:8px;right:10px;pointer-events:auto;
-      color:${AMBER};font-size:13px;display:flex;flex-direction:column;align-items:flex-end;
+      color:${AMBER};font-size:22px;display:flex;flex-direction:column;align-items:flex-end; /* Lua dosissemibold22 base */
     `;
 
     // ── Row 1: Matter + O2 Capacity ──
@@ -341,10 +341,10 @@ export class UIManager {
     matterGroup.style.cssText = 'display:flex;flex-direction:column;';
     const matterLabel = document.createElement('span');
     matterLabel.textContent = line('HUDHUD002TEXT'); // "Matter"
-    matterLabel.style.cssText = `font-size:12px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua Gui.GREY = dimmed amber
+    matterLabel.style.cssText = `font-size:26px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua dosissemibold26
     this.matterText = document.createElement('span');
     this.matterText.id = 'hud-matter';
-    this.matterText.style.cssText = `font-size:36px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`;
+    this.matterText.style.cssText = `font-size:70px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`; // Lua dosisregular70
     this.matterText.textContent = '0';
     matterGroup.appendChild(matterLabel);
     matterGroup.appendChild(this.matterText);
@@ -360,15 +360,15 @@ export class UIManager {
     capGroup.style.cssText = 'display:flex;flex-direction:column;';
     const capLabel = document.createElement('span');
     capLabel.textContent = line('HUDHUD003TEXT'); // "O2 Capacity"
-    capLabel.style.cssText = `font-size:12px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua Gui.GREY = dimmed amber
+    capLabel.style.cssText = `font-size:26px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua dosissemibold26
     const capValues = document.createElement('div');
     capValues.style.cssText = 'display:flex;align-items:baseline;gap:0;';
     this.popText = document.createElement('span');
     this.popText.id = 'hud-pop';
-    this.popText.style.cssText = `font-size:36px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`;
+    this.popText.style.cssText = `font-size:70px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`; // Lua dosisregular70
     this.popText.textContent = '0';
     this.capacityText = document.createElement('span');
-    this.capacityText.style.cssText = 'font-size:16px;color:#AF7F00;'; // Lua Gui.GREY = dimmed amber
+    this.capacityText.style.cssText = 'font-size:30px;color:#AF7F00;'; // Lua dosissemibold30
     capValues.appendChild(this.popText);
     capValues.appendChild(this.capacityText);
     capGroup.appendChild(capLabel);
@@ -388,7 +388,7 @@ export class UIManager {
     // Stardate (Lua: dosissemibold30 style, own row below divider)
     this.starDateText = document.createElement('span');
     this.starDateText.id = 'hud-stardate';
-    this.starDateText.style.cssText = `font-size:15px;font-weight:600;color:${AMBER};font-family:'Dosis',sans-serif;`;
+    this.starDateText.style.cssText = `font-size:30px;font-weight:600;color:${AMBER};font-family:'Dosis',sans-serif;`; // Lua dosissemibold30
     row2.appendChild(this.starDateText);
 
     // Speed buttons (Lua: PauseButton at x=900, Speed1 at 956, Speed2 at 1012, Speed3 at 1068)
@@ -454,22 +454,22 @@ export class UIManager {
     const hudBottom = document.createElement('div');
     hudBottom.style.cssText = `
       position:absolute;bottom:10px;right:10px;pointer-events:auto;
-      color:${AMBER};display:flex;align-items:center;gap:8px;font-size:13px;
+      color:${AMBER};display:flex;align-items:center;gap:8px;font-size:22px; /* Lua dosissemibold22 */
     `;
 
     // Corpse count
     this.corpseText = document.createElement('span');
-    this.corpseText.style.cssText = `font-size:13px;color:${AMBER};`;
+    this.corpseText.style.cssText = `font-size:22px;color:${AMBER};`; // Lua dosissemibold22
     hudBottom.appendChild(this.corpseText);
 
     // Machine health
     this.machineHealthText = document.createElement('span');
-    this.machineHealthText.style.cssText = `font-size:13px;color:${AMBER};`; // Lua: Gui.AMBER
+    this.machineHealthText.style.cssText = `font-size:22px;color:${AMBER};`; // Lua dosissemibold22
     hudBottom.appendChild(this.machineHealthText);
 
     // Morale text/icon
     this.moraleText = document.createElement('span');
-    this.moraleText.style.cssText = `font-size:13px;color:${AMBER};`;
+    this.moraleText.style.cssText = `font-size:22px;color:${AMBER};`; // Lua dosissemibold22
     hudBottom.appendChild(this.moraleText);
 
     // Divider
@@ -520,7 +520,7 @@ export class UIManager {
     this.tileTipEl = document.createElement('div');
     this.tileTipEl.style.cssText = `
       position:absolute;bottom:50px;right:10px;
-      color:${AMBER};font-size:12px;font-family:'Dosis',sans-serif;font-weight:600;
+      color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif;font-weight:600; /* Lua dosissemibold22 */
       pointer-events:none;display:none;
     `;
     this.uiRoot.appendChild(this.tileTipEl);
@@ -529,7 +529,7 @@ export class UIManager {
     this.tileInfoEl = document.createElement('div');
     this.tileInfoEl.style.cssText = `
       position:absolute;top:52px;right:10px;
-      color:${AMBER};font-size:11px;font-family:'Dosis',sans-serif;font-weight:600;
+      color:${AMBER};font-size:18px;font-family:'Dosis',sans-serif;font-weight:600; /* Lua dosissemibold18 */
       pointer-events:none;opacity:0.7;
     `;
     this.tileInfoEl.textContent = '';
@@ -1394,7 +1394,7 @@ export class UIManager {
     this.alertContainer.id = 'alert-panel';
     this.alertContainer.style.cssText = `
       position:absolute;top:140px;right:10px;width:380px;
-      pointer-events:auto;font-size:12px;
+      pointer-events:auto;font-size:22px; /* Lua dosissemibold22 */
     `;
 
     // Alert list (shows newest alert as a notification card)
@@ -1407,7 +1407,7 @@ export class UIManager {
     minRow.style.cssText = `text-align:right;padding:2px 4px;`;
     const minBtn = document.createElement('span');
     minBtn.textContent = 'ALERTS';
-    minBtn.style.cssText = `color:${AMBER};cursor:pointer;font-size:11px;font-weight:bold;font-family:'Dosis',sans-serif;`;
+    minBtn.style.cssText = `color:${AMBER};cursor:pointer;font-size:18px;font-weight:bold;font-family:'Dosis',sans-serif;`; // Lua dosissemibold18
     minBtn.addEventListener('click', () => {
       this.alertMinimized = !this.alertMinimized;
       this.alertList.style.display = this.alertMinimized ? 'none' : 'flex';
@@ -1427,7 +1427,7 @@ export class UIManager {
     this.costOverlay.style.cssText = `
       position:absolute;bottom:10px;left:${SIDEBAR_W + 10}px;
       background:rgba(0,0,0,0.85);border:1px solid ${AMBER};
-      color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;font-size:13px;
+      color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;font-size:22px; /* Lua dosissemibold22 */
       padding:6px 12px;display:none;pointer-events:none;z-index:15;
     `;
     this.uiRoot.appendChild(this.costOverlay);
