@@ -3,6 +3,7 @@ import { getTexture } from '../renderer/AssetLoader';
 import { SoundManager } from '../audio/SoundManager';
 import { line } from '../localization/Localization';
 import { playWarbleFullscreen } from './WarbleEffect';
+import { GameRules } from '../core/GameRules';
 
 const AMBER_HEX = '#dfa200';
 const GREEN_HEX = '#a5d318';
@@ -281,6 +282,29 @@ export class NewGameScreenState implements SceneState {
       `position:absolute;top:16px;left:16px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;letter-spacing:1px;font-style:italic;` /* Lua dosissemibold26 */,
       'Region Selection');
     this.overlay.appendChild(regionSelHeader);
+
+    // Sandbox mode toggle — Lua: ButtonSandboxActive (50×50 checkbox at 170px from left, 605px from bottom)
+    // Label: "SANDBOX" (dosisregular35), checkbox toggles sandbox mode
+    const sandboxRow = document.createElement('div');
+    sandboxRow.style.cssText = `position:absolute;bottom:90px;left:30px;display:flex;align-items:center;gap:12px;z-index:5;cursor:pointer;`;
+    const sandboxCheck = document.createElement('div');
+    sandboxCheck.style.cssText = `width:50px;height:50px;border:2px solid ${AMBER_HEX};display:flex;align-items:center;justify-content:center;font-size:32px;color:${AMBER_HEX};`;
+    sandboxCheck.textContent = '';
+    const sandboxLabel = this.el('div', `color:${AMBER_HEX};font-size:35px;font-family:'Dosis',sans-serif;font-weight:400;letter-spacing:1px;`, 'SANDBOX'); /* Lua dosisregular35, LabelSandbox */
+    sandboxRow.appendChild(sandboxCheck);
+    sandboxRow.appendChild(sandboxLabel);
+    let sandboxActive = false;
+    sandboxRow.addEventListener('click', () => {
+      sandboxActive = !sandboxActive;
+      sandboxCheck.textContent = sandboxActive ? '\u2714' : '';
+      sandboxCheck.style.background = sandboxActive ? AMBER_HEX : 'transparent';
+      sandboxCheck.style.color = sandboxActive ? '#000' : AMBER_HEX;
+      GameRules.bSandboxMode = sandboxActive;
+      SoundManager.playUI('Intro_AcceptButton');
+    });
+    sandboxRow.addEventListener('mouseenter', () => { sandboxLabel.style.color = '#FFE696'; });
+    sandboxRow.addEventListener('mouseleave', () => { sandboxLabel.style.color = AMBER_HEX; });
+    this.overlay.appendChild(sandboxRow);
 
     // Back
     const backBtn = this.el('div',

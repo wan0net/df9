@@ -74,6 +74,8 @@ export interface SaveData {
   powerHolidayEndTime?: number | null;
   /** Per-tile O2 grid (RLE compressed). */
   o2Grid?: number[];
+  /** Sandbox mode (Lua NewBase.lua: disables hostile events until 100+ pop). */
+  bSandboxMode?: boolean;
 }
 
 export class SaveLoadSystem {
@@ -144,6 +146,7 @@ export class SaveLoadSystem {
       pickups: this.getPickupData?.(),
       powerHolidayEndTime: GameRules.powerHolidayEndTime,
       o2Grid: this.grid.getO2Data(),
+      bSandboxMode: GameRules.bSandboxMode,
     };
   }
 
@@ -195,6 +198,9 @@ export class SaveLoadSystem {
       GameRules.powerHolidayEndTime = GameRules.elapsedTime + 600;
       GameRules.bPowerHoliday = true;
     }
+
+    // Restore sandbox mode
+    GameRules.bSandboxMode = data.bSandboxMode ?? false;
 
     // Restore grid
     if (data.gridData && data.gridData.length === data.gridWidth * data.gridHeight) {

@@ -94,6 +94,8 @@ class GameRulesClass {
   /** Matter cost multiplier (Lua GameRules.matterMult, default 1). */
   matterMult = 1;
 
+  /** Sandbox mode — disables hostile events until 100+ population (Lua NewBase.lua sandbox). */
+  bSandboxMode = false;
   /** Disaster mode unlocked (Lua GameRules.bDisasterMode). */
   bDisasterMode = false;
   /** Game is in a cutscene (Lua GameRules.bInCutscene). */
@@ -190,6 +192,7 @@ class GameRulesClass {
 
     // Reset flags
     this.matterMult = 1;
+    // Note: bSandboxMode is NOT reset here — it's set before game start
     this.bDisasterMode = false;
     this.bInCutscene = false;
     this.bTimeLocked = false;

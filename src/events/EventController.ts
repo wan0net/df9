@@ -263,6 +263,9 @@ export class EventController implements TickableSystem {
       // Max consecutive same-event
       if (def.name === lastType && consecutiveCount >= MAX_CONSECUTIVE_SAME) continue;
 
+      // Sandbox mode: skip hostile events when population < 100 (Lua NewBase.lua onButtonSandboxActive)
+      if (GameRules.bSandboxMode && def.bHostile && populationEstimate < 100) continue;
+
       // Room gates (Lua EventController.lua:602-607 — zero weight when room counts exceed limits)
       if (def.nMaxUndiscoveredRooms !== undefined && def.nMaxUndiscoveredRooms >= 0 && nHiddenRooms >= def.nMaxUndiscoveredRooms) continue;
       if (def.nMaxExteriorRooms !== undefined && def.nMaxExteriorRooms >= 0 && nExteriorRooms >= def.nMaxExteriorRooms) continue;
