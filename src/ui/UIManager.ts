@@ -112,6 +112,7 @@ export class UIManager {
   // Speed button sprite pairs (inactive/active imgs), one per speed level 0-3
   private speedImgs: { inactive: HTMLImageElement; active: HTMLImageElement }[] = [];
   private moraleText!: HTMLSpanElement;
+  private moraleIcon!: HTMLImageElement;
   private machineHealthText!: HTMLSpanElement;
   private corpseText!: HTMLSpanElement;
   private prevMatter = -1;
@@ -451,31 +452,43 @@ export class UIManager {
     hudTop.appendChild(row2);
     this.uiRoot.appendChild(hudTop);
 
-    // Bottom-right panel: morale, machine health, corpses, divider, O2 button, walls button, zoom buttons
+    // Bottom-right panel (Lua StatusBarLayout order: DeadBodies, MachineDisrepair, Happiness, divider, O2, Walls, divider, ZoomIn, ZoomOut)
     const hudBottom = document.createElement('div');
     hudBottom.style.cssText = `
       position:absolute;bottom:10px;right:10px;pointer-events:auto;
       color:${AMBER};display:flex;align-items:center;gap:8px;font-size:22px; /* Lua dosissemibold22 */
     `;
 
-    // Corpse count
+    // Dead Bodies icon + count (Lua: CoffinIcon + DeadBodiesAmt)
+    const corpseIcon = document.createElement('img');
+    corpseIcon.src = 'assets/ui/hud/ui_hud_coffin.png';
+    corpseIcon.style.cssText = `width:26px;height:26px;filter:sepia(1) saturate(5) hue-rotate(5deg);opacity:0.8;`;
+    hudBottom.appendChild(corpseIcon);
     this.corpseText = document.createElement('span');
-    this.corpseText.style.cssText = `font-size:22px;color:${AMBER};`; // Lua dosissemibold22
+    this.corpseText.style.cssText = `font-size:22px;color:${AMBER};min-width:20px;`; // Lua dosissemibold22
     hudBottom.appendChild(this.corpseText);
 
-    // Machine health
+    // Machine Disrepair icon + % (Lua: iconJobTechnician + MachineDisrepairPercent)
+    const machineIcon = document.createElement('img');
+    machineIcon.src = 'assets/ui/hud/ui_jobs_iconJobTechnician.png';
+    machineIcon.style.cssText = `width:22px;height:22px;filter:sepia(1) saturate(5) hue-rotate(5deg);opacity:0.8;`;
+    hudBottom.appendChild(machineIcon);
     this.machineHealthText = document.createElement('span');
-    this.machineHealthText.style.cssText = `font-size:22px;color:${AMBER};`; // Lua dosissemibold22
+    this.machineHealthText.style.cssText = `font-size:22px;color:${AMBER};min-width:30px;`; // Lua dosissemibold22
     hudBottom.appendChild(this.machineHealthText);
 
-    // Morale text/icon
+    // Happiness icon + % (Lua: HappyStatIcon + HappyStatPercent)
+    this.moraleIcon = document.createElement('img');
+    this.moraleIcon.src = 'assets/ui/hud/ui_dialogicon_meh.png';
+    this.moraleIcon.style.cssText = `width:26px;height:26px;filter:sepia(1) saturate(5) hue-rotate(5deg);`;
+    hudBottom.appendChild(this.moraleIcon);
     this.moraleText = document.createElement('span');
-    this.moraleText.style.cssText = `font-size:22px;color:${AMBER};`; // Lua dosissemibold22
+    this.moraleText.style.cssText = `font-size:22px;color:${AMBER};min-width:30px;`; // Lua dosissemibold22
     hudBottom.appendChild(this.moraleText);
 
-    // Divider
+    // Divider (Lua: DividerLine2, scale={4, 54})
     const divider2 = document.createElement('div');
-    divider2.style.cssText = `width:2px;height:36px;background:${AMBER};opacity:0.6;`;
+    divider2.style.cssText = `width:4px;height:54px;background:${AMBER};opacity:0.6;`;
     hudBottom.appendChild(divider2);
 
     // O2 toggle button (sprite image with active state swap)
@@ -494,26 +507,26 @@ export class UIManager {
     );
     hudBottom.appendChild(wallsBtn.el);
 
-    // Divider
+    // Divider (Lua: BottomButtonDividerLine, scale={4, 54})
     const divider3 = document.createElement('div');
-    divider3.style.cssText = `width:2px;height:36px;background:${AMBER};opacity:0.6;`;
+    divider3.style.cssText = `width:4px;height:54px;background:${AMBER};opacity:0.6;`;
     hudBottom.appendChild(divider3);
 
-    // Zoom out button
-    const zoomOutBtn = this._makeBottomButton(
-      'assets/ui/hud/ui_hud_button_zoomout.png',
-      'assets/ui/hud/ui_hud_button_zoomout_active.png',
-      () => {},
-    );
-    hudBottom.appendChild(zoomOutBtn.el);
-
-    // Zoom in button
+    // Zoom in button (Lua: ZoominButton — note: zoomin is to the LEFT of zoomout in Lua layout)
     const zoomInBtn = this._makeBottomButton(
       'assets/ui/hud/ui_hud_button_zoomin.png',
       'assets/ui/hud/ui_hud_button_zoomin_active.png',
       () => {},
     );
     hudBottom.appendChild(zoomInBtn.el);
+
+    // Zoom out button (Lua: ZoomoutButton — rightmost)
+    const zoomOutBtn = this._makeBottomButton(
+      'assets/ui/hud/ui_hud_button_zoomout.png',
+      'assets/ui/hud/ui_hud_button_zoomout_active.png',
+      () => {},
+    );
+    hudBottom.appendChild(zoomOutBtn.el);
 
     this.uiRoot.appendChild(hudBottom);
 
@@ -1566,7 +1579,7 @@ export class UIManager {
     this.matterText.textContent = String(this.displayedMatter);
 
     // ── Stardate ──────────────────────────────────────────
-    this.starDateText.textContent = `${line('HUDHUD004TEXT')} ${GameRules.sStarDate} ${GameRules.sStarTime}`;
+    this.starDateText.textContent = `${line('HUDHUD004TEXT')} ${GameRules.sStarDate}`;
 
     // ── Speed buttons ─────────────────────────────────────
     const currentSpeed = !GameRules.bRunning ? 0 : GameRules.playerTimeScale;
@@ -1589,41 +1602,39 @@ export class UIManager {
       this.popText.style.color = AMBER;
     }
 
-    // ── Morale (emoticon) ─────────────────────────────────
+    // ── Morale / Happiness (Lua: updateHappinessPercent) ──
     const aliveChars = chars.filter(c => c.isAlive());
     if (aliveChars.length > 0) {
       const avgMorale = aliveChars.reduce((sum, c) => sum + c.nMorale, 0) / aliveChars.length;
-      // Lua StatusBar: raw morale -100..+100, thresholds at 10/50/70/90 with per-threshold colors
-      let emoticon: string;
-      let moraleColor: string;
-      if (avgMorale <= 10)       { emoticon = '>:('; moraleColor = '#FF3D00'; } // bigfrown, Gui.RED
-      else if (avgMorale <= 50)  { emoticon = ':(';  moraleColor = '#FF8000'; } // frown, Gui.ORANGE
-      else if (avgMorale <= 70)  { emoticon = ':|';  moraleColor = AMBER; }     // meh, Gui.AMBER
-      else if (avgMorale <= 90)  { emoticon = ':)';  moraleColor = '#D3D318'; } // smile, Gui.AMBERGREEN
-      else                       { emoticon = ':D';  moraleColor = '#A5D318'; } // bigsmile, Gui.GREEN
-      this.moraleText.textContent = `${emoticon} ${Math.round(avgMorale)}`;
-      this.moraleText.style.color = moraleColor;
+      const nTotalPercent = Math.floor(avgMorale);
+      // Lua StatusBar: thresholds at 10/50/70/90 with per-threshold icon + color
+      let iconName: string;
+      if (nTotalPercent <= 10)       { iconName = 'ui_dialogicon_bigfrown'; }
+      else if (nTotalPercent <= 50)  { iconName = 'ui_dialogicon_frown'; }
+      else if (nTotalPercent <= 70)  { iconName = 'ui_dialogicon_meh'; }
+      else if (nTotalPercent <= 90)  { iconName = 'ui_dialogicon_smile'; }
+      else                           { iconName = 'ui_dialogicon_bigsmile'; }
+      this.moraleIcon.src = `assets/ui/hud/${iconName}.png`;
+      this.moraleText.textContent = `${nTotalPercent}%`;
+      this.moraleText.style.color = AMBER;
     } else {
-      this.moraleText.textContent = '';
+      this.moraleIcon.src = 'assets/ui/hud/ui_dialogicon_meh.png';
+      this.moraleText.textContent = '0%';
     }
 
-    // ── Machine health ────────────────────────────────────
+    // ── Machine health (Lua: updateMachineDisrepairPercent) ──
     const builtObjects = envObjects.filter(o => o.bBuilt);
     if (builtObjects.length > 0) {
       const avgCondition = builtObjects.reduce((sum, o) => sum + o.nCondition, 0) / builtObjects.length;
-      this.machineHealthText.textContent = `${Math.round(avgCondition)}%`;
-      this.machineHealthText.style.color = avgCondition < 50 ? '#FF3D00' : avgCondition < 80 ? '#FF8000' : AMBER; // Lua: RED/ORANGE/AMBER
+      this.machineHealthText.textContent = `${Math.floor(avgCondition)}%`; // Lua: math.floor
+      this.machineHealthText.style.color = AMBER;
     } else {
-      this.machineHealthText.textContent = '';
+      this.machineHealthText.textContent = '0%';
     }
 
-    // ── Corpses (Lua: ":( XX" format, count Corpse pickups) ──
+    // ── Corpses (Lua: updateDeadBodies — shows raw count, always displays) ──
     const corpseCount = this.getCorpseCount?.() ?? 0;
-    if (corpseCount > 0) {
-      this.corpseText.textContent = `:( ${corpseCount}`;
-    } else {
-      this.corpseText.textContent = '';
-    }
+    this.corpseText.textContent = String(corpseCount);
 
     // ── Inspector replaces sidebar (Lua: inspector takes over left panel) ──
     const inspectorActive = this.inspectorPanel.hasEntity();
