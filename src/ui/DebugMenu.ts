@@ -60,7 +60,7 @@ export class DebugMenu {
       const hotkeyEl = document.createElement('span');
       hotkeyEl.textContent = btn.hotkey + '.';
       hotkeyEl.style.cssText = `
-        color:${AMBER};opacity:0.6;font-size:16px;
+        color:${AMBER};opacity:0.6;font-size:22px; /* Lua dosissemibold22 */
         margin-right:12px;min-width:20px;
       `;
       row.appendChild(hotkeyEl);
@@ -68,7 +68,7 @@ export class DebugMenu {
       const labelEl = document.createElement('span');
       labelEl.textContent = btn.label;
       labelEl.style.cssText = `
-        color:${AMBER};opacity:0.6;font-size:22px;
+        color:${AMBER};opacity:0.6;font-size:40px; /* Lua dosisregular40 */
       `;
       row.appendChild(labelEl);
 

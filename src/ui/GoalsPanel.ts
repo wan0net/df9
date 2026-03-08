@@ -51,10 +51,10 @@ export class GoalsPanel {
     `;
     const backLabel = document.createElement('span');
     backLabel.textContent = line('HUDHUD035TEXT');
-    backLabel.style.cssText = `color:${AMBER};font-size:28px;flex:1;`;
+    backLabel.style.cssText = `color:${AMBER};font-size:40px;flex:1;`; // Lua dosisregular40
     const backHotkey = document.createElement('span');
     backHotkey.textContent = 'ESC';
-    backHotkey.style.cssText = `color:${AMBER};font-size:16px;`;
+    backHotkey.style.cssText = `color:${AMBER};font-size:22px;`; // Lua dosissemibold22
     backBtn.appendChild(backLabel);
     backBtn.appendChild(backHotkey);
     backBtn.addEventListener('mouseenter', () => {
@@ -74,7 +74,7 @@ export class GoalsPanel {
     const title = document.createElement('div');
     title.style.cssText = `
       position:absolute;top:20px;left:380px;
-      color:${AMBER};font-size:32px;font-weight:500;
+      color:${AMBER};font-size:44px;font-weight:500; /* Lua dosismedium44 */
     `;
     title.textContent = line('HUDHUD052TEXT');
     this.el.appendChild(title);
@@ -83,7 +83,7 @@ export class GoalsPanel {
     const sortLabel = document.createElement('div');
     sortLabel.style.cssText = `
       position:absolute;top:74px;left:1031px;
-      color:${AMBER};font-size:22px;font-weight:500;
+      color:${AMBER};font-size:32px;font-weight:500; /* Lua dosismedium32 */
     `;
     sortLabel.textContent = line('GOALSS014TEXT');
     this.el.appendChild(sortLabel);
@@ -102,7 +102,7 @@ export class GoalsPanel {
     this.contentEl = document.createElement('div');
     this.contentEl.style.cssText = `
       position:absolute;top:160px;left:550px;width:970px;bottom:32px;
-      overflow-y:auto;color:#ccc;font-size:13px;
+      overflow-y:auto;color:#ccc;font-size:22px; /* Lua dosissemibold22 base */
     `;
     this.el.appendChild(this.contentEl);
 
@@ -113,7 +113,7 @@ export class GoalsPanel {
     const btn = document.createElement('div');
     btn.style.cssText = `
       position:absolute;top:${y}px;left:${x}px;
-      padding:6px 16px;cursor:pointer;font-size:14px;
+      padding:6px 16px;cursor:pointer;font-size:22px; /* Lua dosissemibold22 */
       border:1px solid ${AMBER};color:${AMBER};
       background:transparent;
     `;
@@ -226,7 +226,7 @@ export class GoalsPanel {
     // Goal icon (GoalEntryLayout.lua: GoalIcon pos(20,-16))
     const icon = document.createElement('span');
     icon.style.cssText = `
-      margin-left:20px;font-size:20px;min-width:28px;text-align:center;
+      margin-left:20px;font-size:28px;min-width:36px;text-align:center; /* Lua dosissemibold28 */
       color:${AMBER};
     `;
     // checkCircle for complete, iconHelp (?) for incomplete
@@ -235,7 +235,7 @@ export class GoalsPanel {
     // Goal name (GoalEntryLayout.lua: GoalName pos(64,-7) dosissemibold35)
     const nameEl = document.createElement('span');
     nameEl.style.cssText = `
-      margin-left:12px;flex:1;font-size:24px;font-weight:600;
+      margin-left:12px;flex:1;font-size:35px;font-weight:600; /* Lua dosissemibold35 */
       color:${AMBER};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     `;
     nameEl.textContent = gp.friendlyName;
@@ -305,7 +305,7 @@ export class GoalsPanel {
     // GoalDescription (GoalEntryLayout.lua: pos(96,-115) dosissemibold28, rect 800 wide)
     const descEl = document.createElement('div');
     descEl.style.cssText = `
-      font-size:18px;color:${AMBER};line-height:1.4;
+      font-size:28px;color:${AMBER};line-height:1.4; /* Lua dosissemibold28 */
     `;
     descEl.textContent = goal.description;
     descBox.appendChild(descEl);

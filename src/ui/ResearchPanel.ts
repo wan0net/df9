@@ -37,10 +37,10 @@ export class ResearchPanel {
     `;
     const backLabel = document.createElement('span');
     backLabel.textContent = line('HUDHUD035TEXT');
-    backLabel.style.cssText = `color:${AMBER};font-size:28px;flex:1;`;
+    backLabel.style.cssText = `color:${AMBER};font-size:40px;flex:1;`; // Lua dosisregular40
     const backHotkey = document.createElement('span');
     backHotkey.textContent = 'ESC';
-    backHotkey.style.cssText = `color:${AMBER};font-size:16px;`;
+    backHotkey.style.cssText = `color:${AMBER};font-size:22px;`; // Lua dosissemibold22
     backBtn.appendChild(backLabel);
     backBtn.appendChild(backHotkey);
     backBtn.addEventListener('mouseenter', () => {
@@ -61,7 +61,7 @@ export class ResearchPanel {
     title.textContent = line('INSPEC121TEXT');
     title.style.cssText = `
       position:absolute;top:20px;left:380px;
-      color:${AMBER};font-size:32px;font-weight:500;
+      color:${AMBER};font-size:44px;font-weight:500; /* Lua dosismedium44 */
     `;
     this.el.appendChild(title);
 
@@ -79,7 +79,7 @@ export class ResearchPanel {
       const btn = document.createElement('div');
       btn.textContent = t.label;
       btn.style.cssText = `
-        padding:8px 24px;cursor:pointer;font-size:16px;
+        padding:8px 24px;cursor:pointer;font-size:22px; /* Lua dosissemibold22 */
         border:1px solid ${AMBER};
       `;
       btn.addEventListener('click', () => {
@@ -95,7 +95,7 @@ export class ResearchPanel {
     this.contentEl = document.createElement('div');
     this.contentEl.style.cssText = `
       position:absolute;top:120px;left:380px;right:60px;bottom:20px;
-      overflow-y:auto;color:#ccc;font-size:13px;
+      overflow-y:auto;color:#ccc;font-size:22px; /* Lua dosissemibold22 base */
     `;
     this.el.appendChild(this.contentEl);
 
@@ -181,7 +181,7 @@ export class ResearchPanel {
         const row = this.makeResearchRow(def.friendlyName, def.description, def.nCost);
         if (def.prerequisites.length > 0) {
           const prereqText = document.createElement('div');
-          prereqText.style.cssText = 'font-size:11px;color:#666;margin-top:2px;';
+          prereqText.style.cssText = 'font-size:18px;color:#666;margin-top:2px;';
           const prereqNames = def.prerequisites
             .map(p => RESEARCH_DEFS[p]?.friendlyName ?? p)
             .join(', ');
@@ -194,7 +194,7 @@ export class ResearchPanel {
           startBtn.textContent = line('RSCHUI013TEXT');
           startBtn.style.cssText = `
             display:inline-block;margin-top:6px;padding:4px 16px;
-            border:1px solid ${AMBER};color:${AMBER};cursor:pointer;font-size:13px;
+            border:1px solid ${AMBER};color:${AMBER};cursor:pointer;font-size:22px;
           `;
           startBtn.addEventListener('click', () => {
             researchSystem.startResearch(id);
@@ -214,10 +214,10 @@ export class ResearchPanel {
         const row = document.createElement('div');
         row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
         const check = document.createElement('div');
-        check.style.cssText = 'color:#4f4;font-size:14px;';
+        check.style.cssText = 'color:#4f4;font-size:22px;';
         check.textContent = '\u2713 ' + def.friendlyName;
         const desc = document.createElement('div');
-        desc.style.cssText = 'font-size:11px;color:#666;margin-top:2px;';
+        desc.style.cssText = 'font-size:18px;color:#666;margin-top:2px;';
         desc.textContent = def.description;
         row.appendChild(check);
         row.appendChild(desc);
@@ -227,7 +227,7 @@ export class ResearchPanel {
 
     if (active.length === 0 && available.length === 0 && completed.length === 0) {
       const empty = document.createElement('div');
-      empty.style.cssText = 'color:#888;text-align:center;padding:40px;font-size:16px;';
+      empty.style.cssText = 'color:#888;text-align:center;padding:40px;font-size:26px;';
       empty.textContent = line('RSCHUI015TEXT');
       container.appendChild(empty);
     }
@@ -243,10 +243,10 @@ export class ResearchPanel {
         const row = document.createElement('div');
         row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
         const name = document.createElement('div');
-        name.style.cssText = `color:${AMBER};font-size:14px;`;
+        name.style.cssText = `color:${AMBER};font-size:26px;`; // Lua dosissemibold26
         name.textContent = entry.sMaladyName;
         const type = document.createElement('div');
-        type.style.cssText = 'font-size:11px;color:#888;margin-top:2px;';
+        type.style.cssText = 'font-size:18px;color:#888;margin-top:2px;';
         type.textContent = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
         row.appendChild(name);
         row.appendChild(type);
@@ -262,10 +262,10 @@ export class ResearchPanel {
         const row = document.createElement('div');
         row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
         const check = document.createElement('div');
-        check.style.cssText = 'color:#4f4;font-size:14px;';
+        check.style.cssText = 'color:#4f4;font-size:22px;';
         check.textContent = '\u2713 ' + entry.sMaladyName;
         const type = document.createElement('div');
-        type.style.cssText = 'font-size:11px;color:#666;margin-top:2px;';
+        type.style.cssText = 'font-size:18px;color:#666;margin-top:2px;';
         type.textContent = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
         row.appendChild(check);
         row.appendChild(type);
@@ -275,7 +275,7 @@ export class ResearchPanel {
 
     if (availableResearch.length === 0 && completedResearch.length === 0) {
       const empty = document.createElement('div');
-      empty.style.cssText = 'color:#888;text-align:center;padding:40px;font-size:16px;';
+      empty.style.cssText = 'color:#888;text-align:center;padding:40px;font-size:26px;';
       empty.textContent = line('RSCHUI016TEXT');
       container.appendChild(empty);
     }
@@ -285,7 +285,7 @@ export class ResearchPanel {
     const h = document.createElement('div');
     h.textContent = text;
     h.style.cssText = `
-      font-size:14px;font-weight:bold;color:${AMBER};
+      font-size:26px;font-weight:bold;color:${AMBER}; /* Lua dosissemibold26 */
       padding:10px 0 4px 0;border-bottom:1px solid #444;margin-bottom:6px;
     `;
     container.appendChild(h);
@@ -298,17 +298,17 @@ export class ResearchPanel {
     const header = document.createElement('div');
     header.style.cssText = 'display:flex;justify-content:space-between;';
     const nameEl = document.createElement('span');
-    nameEl.style.cssText = `color:${AMBER};font-size:14px;`;
+    nameEl.style.cssText = `color:${AMBER};font-size:26px;`; // Lua dosissemibold26
     nameEl.textContent = name;
     const costEl = document.createElement('span');
-    costEl.style.cssText = 'font-size:11px;color:#888;';
+    costEl.style.cssText = 'font-size:18px;color:#888;'; // Lua dosissemibold18
     costEl.textContent = `${line('BUILDM023TEXT')} ${cost}`;
     header.appendChild(nameEl);
     header.appendChild(costEl);
     row.appendChild(header);
 
     const descEl = document.createElement('div');
-    descEl.style.cssText = 'font-size:11px;color:#888;margin-top:2px;';
+    descEl.style.cssText = 'font-size:18px;color:#888;margin-top:2px;'; // Lua dosissemibold18
     descEl.textContent = desc;
     row.appendChild(descEl);
 
@@ -324,7 +324,7 @@ export class ResearchPanel {
     barInner.style.cssText = `width:${pct}%;height:100%;background:${AMBER};`;
     barOuter.appendChild(barInner);
     const label = document.createElement('span');
-    label.style.cssText = 'width:40px;text-align:right;font-size:11px;color:#888;margin-left:8px;';
+    label.style.cssText = 'width:50px;text-align:right;font-size:18px;color:#888;margin-left:8px;'; // Lua dosissemibold18
     label.textContent = `${pct}%`;
     wrapper.appendChild(barOuter);
     wrapper.appendChild(label);

@@ -113,10 +113,10 @@ export class JobRoster {
     `;
     const backLabel = document.createElement('span');
     backLabel.textContent = line('HUDHUD035TEXT');
-    backLabel.style.cssText = `color:${AMBER};font-size:28px;flex:1;`;
+    backLabel.style.cssText = `color:${AMBER};font-size:40px;flex:1;`; // Lua dosisregular40
     const backHotkey = document.createElement('span');
     backHotkey.textContent = 'ESC';
-    backHotkey.style.cssText = `color:${AMBER};font-size:16px;`;
+    backHotkey.style.cssText = `color:${AMBER};font-size:22px;`; // Lua dosissemibold22
     backBtn.appendChild(backLabel);
     backBtn.appendChild(backHotkey);
     backBtn.addEventListener('mouseenter', () => {
@@ -137,7 +137,7 @@ export class JobRoster {
     title.textContent = line('HUDHUD047TEXT');
     title.style.cssText = `
       position:absolute;top:20px;left:380px;
-      color:${AMBER};font-size:32px;font-weight:500;
+      color:${AMBER};font-size:44px;font-weight:500; /* Lua dosismedium44 */
     `;
     this.el.appendChild(title);
 
@@ -202,7 +202,7 @@ export class JobRoster {
     }
 
     const table = document.createElement('table');
-    table.style.cssText = 'border-collapse:collapse;color:#ccc;font-size:13px;width:100%;';
+    table.style.cssText = 'border-collapse:collapse;color:#ccc;font-size:22px;width:100%;'; // Lua dosissemibold22 base
 
     // ── Header row ──
     const thead = document.createElement('thead');
@@ -225,7 +225,7 @@ export class JobRoster {
       th.style.cssText = `
         text-align:center;padding:8px 6px;
         border-bottom:2px solid #555;
-        color:${AMBER};cursor:pointer;font-size:14px;
+        color:${AMBER};cursor:pointer;font-size:26px; /* Lua dosissemibold26 */
         font-weight:600;white-space:nowrap;
       `;
       if (colDef.idx <= 1) th.style.textAlign = 'left';
@@ -253,7 +253,7 @@ export class JobRoster {
     for (const jobId of DISPLAY_JOBS) {
       const td = document.createElement('td');
       td.style.cssText = `
-        text-align:center;padding:2px 6px;font-size:11px;
+        text-align:center;padding:2px 6px;font-size:22px; /* Lua dosissemibold22 */
         color:#888;border-bottom:1px solid #333;
       `;
       td.textContent = String(jobCounts[jobId] ?? 0);
@@ -271,13 +271,13 @@ export class JobRoster {
       // Job column (current job name)
       const jobTd = document.createElement('td');
       jobTd.textContent = char.getJobName();
-      jobTd.style.cssText = `padding:6px;color:${AMBER};white-space:nowrap;font-size:12px;`;
+      jobTd.style.cssText = `padding:6px;color:${AMBER};white-space:nowrap;font-size:26px;`; // Lua dosissemibold26
       tr.appendChild(jobTd);
 
       // Name column
       const nameTd = document.createElement('td');
       nameTd.textContent = char.getName();
-      nameTd.style.cssText = 'padding:6px;white-space:nowrap;min-width:140px;cursor:pointer;';
+      nameTd.style.cssText = 'padding:6px;white-space:nowrap;min-width:140px;cursor:pointer;font-size:26px;'; // Lua dosissemibold26
       nameTd.addEventListener('mouseenter', () => { nameTd.style.color = AMBER; });
       nameTd.addEventListener('mouseleave', () => { nameTd.style.color = '#ccc'; });
       tr.appendChild(nameTd);
@@ -308,14 +308,14 @@ export class JobRoster {
           // Star rating
           const stars = document.createElement('div');
           stars.textContent = renderStars(level);
-          stars.style.cssText = `font-size:12px;color:${AMBER};letter-spacing:1px;`;
+          stars.style.cssText = `font-size:20px;color:${AMBER};letter-spacing:1px;`; // Lua dosissemibold20
 
           // Affinity emoticon
           const affinity = char.getJobAffinity(jobId);
           const affDisplay = getAffinityDisplay(affinity);
           const affEl = document.createElement('div');
           affEl.textContent = affDisplay.icon;
-          affEl.style.cssText = `font-size:10px;color:${affDisplay.color};margin-top:1px;`;
+          affEl.style.cssText = `font-size:18px;color:${affDisplay.color};margin-top:1px;`; // Lua dosissemibold18
 
           td.appendChild(stars);
           td.appendChild(affEl);

@@ -930,35 +930,38 @@ export class UIManager {
     mineLabel.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`; // Lua dosissemibold22
     this.mineSub.appendChild(mineLabel);
 
-    // Mine button [M]
+    // Mine button — icon + label(flex:1) + hotkey(right), matching construct menu pattern
     const mineBtnEl = document.createElement('div');
     mineBtnEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;background:${AMBER};`;
-    const mineBtnHk = document.createElement('span');
-    mineBtnHk.textContent = '[M]';
-    mineBtnHk.style.cssText = `font-size:22px;color:#000;font-family:'Dosis',sans-serif;font-weight:600;width:40px;`; // Lua dosissemibold22
+    const mineBtnIcon = document.createElement('span');
+    mineBtnIcon.textContent = '\u26CF'; // ⛏ pickaxe
+    mineBtnIcon.style.cssText = `font-size:24px;color:#000;width:48px;text-align:center;flex-shrink:0;`;
     const mineBtnLbl = document.createElement('span');
     mineBtnLbl.textContent = line('HUDHUD008TEXT');
-    mineBtnLbl.style.cssText = `font-size:40px;color:#000;font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
-    mineBtnEl.append(mineBtnHk, mineBtnLbl);
+    mineBtnLbl.style.cssText = `font-size:40px;color:#000;font-family:'Dosis',sans-serif;font-weight:400;flex:1;`; // Lua dosisregular40
+    const mineBtnHk = document.createElement('span');
+    mineBtnHk.textContent = 'm';
+    mineBtnHk.style.cssText = `font-size:22px;color:#000;font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`; // Lua dosissemibold22
+    mineBtnEl.append(mineBtnIcon, mineBtnLbl, mineBtnHk);
     mineBtnEl.addEventListener('click', () => {
       SoundManager.playUI('UI_Select');
       // Already in mine mode, no-op
     });
     this.mineSub.appendChild(mineBtnEl);
 
-    // Erase button [E]
+    // Erase button — icon + label(flex:1) + hotkey(right)
     const mineEraseEl = document.createElement('div');
     mineEraseEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const mineEraseIcon = document.createElement('span');
     mineEraseIcon.textContent = '\u2716';
-    mineEraseIcon.style.cssText = `font-size:24px;color:${AMBER};`;
-    const mineEraseHk = document.createElement('span');
-    mineEraseHk.textContent = '[E]';
-    mineEraseHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:40px;`; // Lua dosissemibold22
+    mineEraseIcon.style.cssText = `font-size:24px;color:${AMBER};width:48px;text-align:center;flex-shrink:0;`;
     const mineEraseLbl = document.createElement('span');
     mineEraseLbl.textContent = line('HUDHUD011TEXT');
-    mineEraseLbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
-    mineEraseEl.append(mineEraseIcon, mineEraseHk, mineEraseLbl);
+    mineEraseLbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;flex:1;`; // Lua dosisregular40
+    const mineEraseHk = document.createElement('span');
+    mineEraseHk.textContent = 'e';
+    mineEraseHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`; // Lua dosissemibold22
+    mineEraseEl.append(mineEraseIcon, mineEraseLbl, mineEraseHk);
     mineEraseEl.addEventListener('click', () => {
       SoundManager.playUI('UI_Select');
       // Erase pending mine commands
@@ -968,14 +971,14 @@ export class UIManager {
       SoundManager.playUI('UI_Hilight');
       mineEraseEl.style.background = AMBER;
       mineEraseIcon.style.color = '#000';
-      mineEraseHk.style.color = '#000';
       mineEraseLbl.style.color = '#000';
+      mineEraseHk.style.color = '#000';
     });
     mineEraseEl.addEventListener('mouseleave', () => {
       mineEraseEl.style.background = 'transparent';
       mineEraseIcon.style.color = AMBER;
-      mineEraseHk.style.color = AMBER;
       mineEraseLbl.style.color = AMBER;
+      mineEraseHk.style.color = AMBER;
     });
     this.mineSub.appendChild(mineEraseEl);
     sidebar.appendChild(this.mineSub);
