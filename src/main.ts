@@ -1258,7 +1258,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     const isDragMode = buildMode === 'room' || buildMode === 'floor' ||
                        buildMode === 'wall' || buildMode === 'demolish' || buildMode === 'vaporize' ||
-                       buildMode === 'erase';
+                       buildMode === 'erase' || buildMode === 'mine';
 
     // Left button just pressed (skip if a UI element consumed the click)
     if (inputManager.leftJustPressed && !uiManager.uiClickConsumed) {
@@ -1340,14 +1340,6 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         } else {
           Base.addAlert('build', 'No object selected — pick one from the list');
         }
-      } else if (buildMode === 'mine') {
-        const tileVal = grid.get(tile.x, tile.y);
-        if (isAsteroid(tileVal)) {
-          CommandQueue.addCommand('mine', tile.x, tile.y);
-          Base.addAlert('mining', `Queued asteroid for mining at (${tile.x},${tile.y})`);
-        } else {
-          Base.addAlert('mining', `Not an asteroid at (${tile.x},${tile.y}) — tile type: ${tileVal}`);
-        }
       } else if (buildMode === 'beacon') {
         // Place emergency beacon at tile for first security squad
         const squads = SquadList.getAllSquads();
@@ -1373,13 +1365,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         }
       } else if (isDragMode) {
         buildCursor.startDrag(tile.x, tile.y);
-        buildCursor.updateDrag(tile.x, tile.y, buildMode as 'room' | 'floor' | 'wall' | 'demolish' | 'vaporize' | 'erase');
+        buildCursor.updateDrag(tile.x, tile.y, buildMode as 'room' | 'floor' | 'wall' | 'demolish' | 'vaporize' | 'erase' | 'mine');
       }
     }
 
     // Left held — update drag + buildscroll sfx (Lua BuildHelper:refresh)
     if (inputManager.isLeftDown() && buildCursor.isDragging && isDragMode) {
-      buildCursor.updateDrag(tile.x, tile.y, buildMode as 'room' | 'floor' | 'wall' | 'demolish' | 'vaporize' | 'erase');
+      buildCursor.updateDrag(tile.x, tile.y, buildMode as 'room' | 'floor' | 'wall' | 'demolish' | 'vaporize' | 'erase' | 'mine');
       // Lua: play buildscroll sfx when drag dimensions change
       const dims = buildCursor.dragDimensions;
       if (dims.w !== lastDragW || dims.h !== lastDragH) {
@@ -1415,15 +1407,19 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         } else if (buildMode === 'erase') {
           const refund = buildSystem.erase(tiles);
           pendingCancelCost -= refund;
+        } else if (buildMode === 'mine') {
+          for (const t of tiles) {
+            CommandQueue.addCommand('mine', t.x, t.y);
+          }
         }
         onTilesChanged(tiles);
       }
     }
 
     // Hover ghost
-    const noGhostModes = ['none', 'zone', 'object', 'mine'];
+    const noGhostModes = ['none', 'zone', 'object'];
     if (!inputManager.isLeftDown() && !buildCursor.isDragging && !noGhostModes.includes(buildMode)) {
-      buildCursor.showHoverGhost(buildMode as 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase');
+      buildCursor.showHoverGhost(buildMode as 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase' | 'mine');
     }
   }
 
@@ -1636,6 +1632,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     _cameraController: cameraController,
     _grid: grid,
     _buildSystem: buildSystem,
+    _envObjectManager: EnvObjectManager,
     confirmBuild: () => confirmBuild(),
     cancelBuild: () => cancelBuild(),
     hasPendingBuild: () => hasPendingBuild(),

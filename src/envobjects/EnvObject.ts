@@ -49,6 +49,10 @@ export class EnvObject implements TaggableObject {
   bFlipX: boolean;
   bFlipY: boolean;
 
+  /** For againstWall objects: the wall tile this object is mounted against (Lua getWallTile). */
+  wallTileX = -1;
+  wallTileY = -1;
+
   // Condition & wear
   nCondition = 100;
   private decayAccum = 0;

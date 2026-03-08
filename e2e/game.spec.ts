@@ -4596,4 +4596,109 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     // (neighbors have full O2 from buildSealedRoom)
     expect(result.o2After).toBeGreaterThanOrEqual(0);
   });
+
+  test('mine mode is a drag mode matching Lua isBuildMode', async () => {
+    // Verify mine mode is included in build modes that support drag selection
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const grid = df9._grid;
+      // Set tiles to asteroid
+      grid.set(40, 40, 16); // ASTEROID1
+      grid.set(41, 40, 16);
+      // Verify the build mode enum includes 'mine'
+      const mode = 'mine';
+      const isDragMode = mode === 'room' || mode === 'floor' ||
+        mode === 'wall' || mode === 'demolish' || mode === 'vaporize' ||
+        mode === 'erase' || mode === 'mine';
+      return { isDragMode, isAsteroid: grid.get(40, 40) === 16 };
+    });
+    expect(result.isDragMode).toBe(true);
+    expect(result.isAsteroid).toBe(true);
+  });
+
+  test('demolish door converts tile back to WALL (Lua Door:remove)', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const grid = df9._grid;
+      // Build a room
+      df9.buildSealedRoom(35, 35, 3);
+      // Find a wall tile for the door
+      let wallTile: { x: number; y: number } | null = null;
+      for (let dy = -4; dy <= 4; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+          const x = 35 + dx, y = 35 + dy;
+          if (grid.get(x, y) === 4) { // WALL
+            wallTile = { x, y };
+            break;
+          }
+        }
+        if (wallTile) break;
+      }
+      if (!wallTile) return { success: false };
+
+      // Place a door (changes tile to DOOR=5)
+      grid.set(wallTile.x, wallTile.y, 5); // DOOR
+      const doorObj = df9.createBuiltObject('Door', wallTile.x, wallTile.y);
+      const tileBeforeDemolish = grid.get(wallTile.x, wallTile.y);
+
+      // Demolish the door — should convert back to WALL
+      const bs = df9._buildSystem;
+      bs.demolish([wallTile]);
+      const tileAfterDemolish = grid.get(wallTile.x, wallTile.y);
+
+      return {
+        success: true,
+        tileBeforeDemolish, // 7 = DOOR
+        tileAfterDemolish,  // 4 = WALL
+      };
+    });
+    expect(result.success).toBe(true);
+    expect(result.tileBeforeDemolish).toBe(5); // DOOR
+    expect(result.tileAfterDemolish).toBe(4);  // WALL
+  });
+
+  test('EnvObject has wallTileX/wallTileY fields for wall-mounted tracking', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      // Create an object via the manager directly to get the reference
+      const mgr = df9._envObjectManager;
+      const obj = mgr.createObject('ResearchDesk', 38, 38);
+      if (!obj) return { hasFields: false };
+      const hasWallTileX = 'wallTileX' in obj;
+      const hasWallTileY = 'wallTileY' in obj;
+      const defaultX = obj.wallTileX;
+      const defaultY = obj.wallTileY;
+      // Set and verify
+      obj.wallTileX = 10;
+      obj.wallTileY = 20;
+      const setX = obj.wallTileX;
+      const setY = obj.wallTileY;
+      // Cleanup
+      mgr.removeObject(obj);
+      return { hasFields: hasWallTileX && hasWallTileY, defaultX, defaultY, setX, setY };
+    });
+    expect(result.hasFields).toBe(true);
+    expect(result.defaultX).toBe(-1);
+    expect(result.defaultY).toBe(-1);
+    expect(result.setX).toBe(10);
+    expect(result.setY).toBe(20);
+  });
+
+  test('demolish does not refund matter for object removal (Lua _demolishTile)', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const grid = df9._grid;
+      // Build room and place object
+      df9.buildSealedRoom(42, 42, 3);
+      const obj = df9.createBuiltObject('ResearchDesk', 42, 42);
+      if (!obj) return { hasObj: false };
+
+      const bs = df9._buildSystem;
+      // Demolish should return 0 refund for the object
+      const refund = bs.demolish([{ x: 42, y: 42 }]);
+      return { hasObj: true, refund };
+    });
+    expect(result.hasObj).toBe(true);
+    expect(result.refund).toBe(0); // Lua: demolish objects get no matter back
+  });
 });

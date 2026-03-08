@@ -211,6 +211,12 @@ export class ObjectPlacement {
     const obj = EnvObjectManager.createObject(sName, placeTileX, placeTileY, bFlipX, bFlipY, false);
     if (!obj) return 0;
 
+    // Lua: againstWall objects track which wall tile they're mounted on (EnvObject:getWallTile)
+    if (data.againstWall) {
+      obj.wallTileX = tileX;
+      obj.wallTileY = tileY;
+    }
+
     // Lua auto-zone: if placing zone-specific object in PLAIN room, auto-set zone
     if (data.zoneName && !data.door && !data.againstWall) {
       const room = this.roomManager.getRoomAt(placeTileX, placeTileY);

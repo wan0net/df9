@@ -6,6 +6,9 @@ import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { isAsteroid, vaporizeTile } from '../world/Asteroid';
 import { RoomManager } from '../rooms/RoomManager';
+import { getWallDirection, WallDirection } from '../world/WallDirection';
+import { getDiamondFootprint } from '../world/IsometricUtils';
+import { tObjects } from '../envobjects/EnvObjectData';
 
 /**
  * Build modes matching original Lua GameRules MODE_ constants:
@@ -132,19 +135,39 @@ export class BuildSystem {
     if (this.roomManager) {
       const room = this.roomManager.getRoomAt(tx, ty);
       if (room) {
+        // Check built props (Lua rRoom.tProps)
         for (const prop of EnvObjectManager.getObjectsInRoom(room)) {
-          // againstWall props occupy the wall tile itself
-          if (prop.tData.againstWall && prop.tileX === tx && prop.tileY === ty) {
+          if (this._testWallPlacementIntersectsProp(
+            prop.sName, tx, ty, prop.tileX, prop.tileY, prop.bFlipX, prop.bFlipY
+          )) {
             return false;
           }
-          // Check margin intersection: if prop has margin > 0 and wall is within margin
-          if (prop.tData.margin > 0) {
-            const dx = Math.abs(tx - prop.tileX);
-            const dy = Math.abs(ty - prop.tileY);
-            const dist = dx + dy;
-            if (dist <= prop.tData.margin + Math.max(prop.tData.width, prop.tData.height)) {
-              // Wall is within margin range — check if it's actually in the footprint+margin
-              if (dx <= prop.tData.margin && dy <= prop.tData.margin) {
+        }
+
+        // Lua: check doors' isInFrontOfDoor — wall can't block door access
+        for (const prop of EnvObjectManager.getObjectsInRoom(room)) {
+          if (prop.tData.door) {
+            // Door's front tiles are the floor tiles perpendicular to the door axis
+            const neighbors = this.grid.getDiagonalNeighbors(prop.tileX, prop.tileY);
+            for (const n of neighbors) {
+              if (n.x === tx && n.y === ty) {
+                const nType = this.grid.get(n.x, n.y);
+                if (nType === TileType.FLOOR || nType === TileType.FLOOR_PENDING) {
+                  return false; // wall would block door access
+                }
+              }
+            }
+          }
+        }
+
+        // Lua: check tPropPlacements (pending build_object commands)
+        for (const cmd of CommandQueue.getAllActive()) {
+          if (cmd.type === 'build_object' && cmd.status !== 'cancelled' && cmd.objectName) {
+            const propRoom = this.roomManager.getRoomAt(cmd.tileX, cmd.tileY);
+            if (propRoom === room) {
+              if (this._testWallPlacementIntersectsProp(
+                cmd.objectName, tx, ty, cmd.tileX, cmd.tileY, false, false
+              )) {
                 return false;
               }
             }
@@ -203,9 +226,13 @@ export class BuildSystem {
       const current = this.grid.get(t.x, t.y);
       let bDemolished = false;
 
+      // Lua _demolishTile: obj→remove() gives NO matter refund (only vaporize does)
       const obj = EnvObjectManager.getObjectAt(t.x, t.y);
       if (obj) {
-        refund += obj.getVaporizeMatterYield();
+        // Lua Door:remove() converts DOOR tiles back to WALL
+        if (obj.tData.door && current === TileType.DOOR) {
+          this.grid.set(t.x, t.y, TileType.WALL);
+        }
         EnvObjectManager.removeObject(obj);
         bDemolished = true;
       } else if (current === TileType.WALL || current === TileType.WALL_PENDING ||
@@ -289,6 +316,51 @@ export class BuildSystem {
   }
 
   /**
+   * Lua testWallPlacementIntersectsProp: check if wall at (wtx,wty) intersects
+   * a prop's footprint+margin. Uses getDiamondFootprint for accurate iso geometry.
+   */
+  private _testWallPlacementIntersectsProp(
+    sPropName: string, wtx: number, wty: number,
+    ptx: number, pty: number, bFlipX: boolean, bFlipY: boolean
+  ): boolean {
+    const tPropData = tObjects[sPropName];
+    if (!tPropData) return false;
+
+    // Lua: againstWall check — prop at same tile blocks wall
+    if (tPropData.againstWall) {
+      return ptx === wtx && pty === wty;
+    }
+
+    // Lua: margin check via _getPropFootprint(bBuffer=true, bIndexByAddr=true)
+    // The buffered footprint expands width/height by margin on each side
+    if (tPropData.margin && tPropData.margin > 0) {
+      const dx = Math.abs(wtx - ptx);
+      const dy = Math.abs(wty - pty);
+      if (dx + dy <= tPropData.margin + Math.max(tPropData.width, tPropData.height)) {
+        // Lua _getPropFootprint with bBuffer: expands footprint by margin in each direction
+        // For a 1x1 object with margin=1, the buffered footprint is a 3x3 diamond
+        const bufferedW = tPropData.width + tPropData.margin * 2;
+        const bufferedH = tPropData.height + tPropData.margin * 2;
+        // Offset origin back by margin tiles in each axis to center the buffer
+        let originX = ptx;
+        let originY = pty;
+        for (let m = 0; m < tPropData.margin; m++) {
+          // Step NW (reverse of SE): y-1, x adjusted
+          const odd = originY & 1;
+          if (!odd) originX--;
+          originY--;
+        }
+        const footprint = getDiamondFootprint(originX, originY, bufferedW, bufferedH, bFlipX, bFlipY);
+        for (const ft of footprint) {
+          if (ft.x === wtx && ft.y === wty) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Lua World._cheatOxygen: average O2 from diagonal neighbors to avoid instant vacuum.
    * Uses directions 2-5 (diagonal/edge-sharing neighbors), checks bIndoors + not occluded.
    */
@@ -312,15 +384,41 @@ export class BuildSystem {
   /**
    * Lua World._getEnvObjectOnWall: find wall-mounted object on adjacent tile.
    * When vaporizing a wall, also remove any againstWall object mounted to it.
+   * Lua checks a specific offset based on wall flip, then verifies via getWallTile().
    */
   private _getObjectOnWall(wallTileX: number, wallTileY: number) {
-    // Check all diagonal neighbors for objects that are mounted against this wall
+    const isOdd = wallTileY & 1;
+    const xLeft = isOdd ? 0 : -1;
+
+    // Lua: nOffsetX=1, nOffsetY=-1, but flipped walls use nOffsetX=-1
+    // nOffsetY=-1 = NE/NW neighbor row; nOffsetX=1 = right side (SE/NE)
+    const dir = getWallDirection(this.grid, wallTileX, wallTileY);
+    const bFlip = dir === WallDirection.NWSE;
+
+    // Lua offsets: (tileX+nOffsetX, tileY+nOffsetY)
+    // In staggered grid: nOffsetY=-1 means y-1 row, nOffsetX maps to xLeft+1 (right) or xLeft (left)
+    const checkX = bFlip ? (wallTileX + xLeft) : (wallTileX + xLeft + 1);
+    const checkY = wallTileY - 1;
+
+    if (this.grid.inBounds(checkX, checkY)) {
+      const obj = EnvObjectManager.getObjectAt(checkX, checkY);
+      if (obj && obj.tData.againstWall) {
+        // Lua verification: objAtTile:getWallTile() must match this wall
+        if (obj.wallTileX === wallTileX && obj.wallTileY === wallTileY) {
+          return obj;
+        }
+      }
+    }
+
+    // Fallback: also check all diagonal neighbors (covers objects placed without wallTile tracking)
     const neighbors = this.grid.getDiagonalNeighbors(wallTileX, wallTileY);
     for (const n of neighbors) {
+      if (n.x === checkX && n.y === checkY) continue; // already checked
       const obj = EnvObjectManager.getObjectAt(n.x, n.y);
       if (obj && obj.tData.againstWall) {
-        // This wall-mounted object is adjacent to the wall being vaporized
-        return obj;
+        if (obj.wallTileX === wallTileX && obj.wallTileY === wallTileY) {
+          return obj;
+        }
       }
     }
     return null;
