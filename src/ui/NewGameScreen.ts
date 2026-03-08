@@ -538,7 +538,7 @@ export class NewGameScreenState implements SceneState {
     this.deployOverlay = document.createElement('div');
     this.deployOverlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;font-family:'Orbitron',monospace;color:${AMBER_HEX};`;
     this.deployMsg   = this.el('div', 'font-size:20px;margin-bottom:20px;letter-spacing:2px;') as HTMLDivElement;
-    this.deployEta   = this.el('div', 'font-size:16px;margin-bottom:20px;letter-spacing:1px;', line('NEWBAS018TEXT')) as HTMLDivElement;
+    this.deployEta   = this.el('div', 'font-size:30px;margin-bottom:20px;letter-spacing:1px;', line('NEWBAS018TEXT')) as HTMLDivElement; /* Lua dosissemibold30 */
     this.deployYears = this.el('div', 'font-size:48px;font-weight:bold;letter-spacing:3px;') as HTMLDivElement;
     this.deployOverlay.append(this.deployMsg, this.deployEta, this.deployYears);
     this.overlay.appendChild(this.deployOverlay);

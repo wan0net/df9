@@ -814,7 +814,7 @@ export class UIManager {
 
     // ── ">> Construct" label — Lua HUDHUD012TEXT ──
     const constructLabel = document.createElement('div');
-    constructLabel.textContent = line('HUDHUD012TEXT');
+    constructLabel.textContent = '>> ' + line('HUDHUD012TEXT'); // Lua prepends ">>" to submenu headers
     constructLabel.style.cssText = `
       font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
       padding:4px 12px;opacity:0.7;
@@ -1008,7 +1008,7 @@ export class UIManager {
 
     // ">> Security" label
     const secLabel = document.createElement('div');
-    secLabel.textContent = line('HUDHUD036TEXT');
+    secLabel.textContent = '>> ' + line('HUDHUD036TEXT'); // Lua prepends ">>" to submenu headers
     secLabel.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`; // Lua dosissemibold22
     this.beaconSub.appendChild(secLabel);
 
@@ -1194,7 +1194,7 @@ export class UIManager {
 
     // ── ">> Select Zone Type" label (screenshot 20.32.31: Lua HUDHUD024TEXT) ──
     const zoneLabel = document.createElement('div');
-    zoneLabel.textContent = line('HUDHUD024TEXT');
+    zoneLabel.textContent = '>> ' + line('HUDHUD024TEXT'); // Lua prepends ">>" to submenu headers
     zoneLabel.style.cssText = `
       font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
       padding:4px 12px;opacity:0.7;

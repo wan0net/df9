@@ -167,10 +167,10 @@ export class ResearchPanel {
     if (active.length > 0) {
       this.sectionHeader(container, line('RSCHUI008TEXT'));
       for (const [, def] of active) {
-        const row = this.makeResearchRow(def.friendlyName, def.description, def.nCost);
-        const pct = Math.min(100, Math.round((progress / def.nCost) * 100));
-        row.appendChild(this.progressBar(pct));
-        container.appendChild(row);
+        const icon = this.getResearchIcon(def.sName);
+        container.appendChild(this.makeResearchEntry(
+          def.friendlyName, def.description, icon, progress, def.nCost, false,
+        ));
       }
     }
 
@@ -178,32 +178,18 @@ export class ResearchPanel {
     if (available.length > 0) {
       this.sectionHeader(container, line('RSCHUI009TEXT'));
       for (const [id, def] of available) {
-        const row = this.makeResearchRow(def.friendlyName, def.description, def.nCost);
-        if (def.prerequisites.length > 0) {
-          const prereqText = document.createElement('div');
-          prereqText.style.cssText = 'font-size:18px;color:#666;margin-top:2px;';
-          const prereqNames = def.prerequisites
-            .map(p => RESEARCH_DEFS[p]?.friendlyName ?? p)
-            .join(', ');
-          prereqText.textContent = `${line('RSCHUI001TEXT')} ${prereqNames}`;
-          row.appendChild(prereqText);
-        }
-        // Start button
+        const icon = this.getResearchIcon(id);
+        const entry = this.makeResearchEntry(
+          def.friendlyName, def.description, icon, 0, def.nCost, false,
+        );
+        // Click to start research
         if (!activeId) {
-          const startBtn = document.createElement('div');
-          startBtn.textContent = line('RSCHUI013TEXT');
-          startBtn.style.cssText = `
-            display:inline-block;margin-top:6px;padding:4px 16px;
-            border:1px solid ${AMBER};color:${AMBER};cursor:pointer;font-size:22px;
-          `;
-          startBtn.addEventListener('click', () => {
+          entry.addEventListener('click', () => {
             researchSystem.startResearch(id);
+            this.update();
           });
-          startBtn.addEventListener('mouseenter', () => { startBtn.style.background = 'rgba(223,162,0,0.2)'; });
-          startBtn.addEventListener('mouseleave', () => { startBtn.style.background = 'transparent'; });
-          row.appendChild(startBtn);
         }
-        container.appendChild(row);
+        container.appendChild(entry);
       }
     }
 
@@ -211,17 +197,10 @@ export class ResearchPanel {
     if (completed.length > 0) {
       this.sectionHeader(container, line('RSCHUI010TEXT'));
       for (const [, def] of completed) {
-        const row = document.createElement('div');
-        row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
-        const check = document.createElement('div');
-        check.style.cssText = 'color:#4f4;font-size:22px;';
-        check.textContent = '\u2713 ' + def.friendlyName;
-        const desc = document.createElement('div');
-        desc.style.cssText = 'font-size:18px;color:#666;margin-top:2px;';
-        desc.textContent = def.description;
-        row.appendChild(check);
-        row.appendChild(desc);
-        container.appendChild(row);
+        const icon = this.getResearchIcon(def.sName);
+        container.appendChild(this.makeResearchEntry(
+          def.friendlyName, def.description, '✓', def.nCost, def.nCost, true,
+        ));
       }
     }
 
@@ -237,40 +216,22 @@ export class ResearchPanel {
     const availableResearch = Malady.getAvailableResearch();
     const completedResearch = Malady.getCompletedResearch();
 
-    if (availableResearch.length > 0) {
-      this.sectionHeader(container, line('RSCHUI011TEXT'));
-      for (const entry of availableResearch) {
-        const row = document.createElement('div');
-        row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
-        const name = document.createElement('div');
-        name.style.cssText = `color:${AMBER};font-size:26px;`; // Lua dosissemibold26
-        name.textContent = entry.sMaladyName;
-        const type = document.createElement('div');
-        type.style.cssText = 'font-size:18px;color:#888;margin-top:2px;';
-        type.textContent = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
-        row.appendChild(name);
-        row.appendChild(type);
-        const pct = Math.min(100, Math.round((entry.nCureProgress / entry.nResearchCure) * 100));
-        row.appendChild(this.progressBar(pct));
-        container.appendChild(row);
-      }
+    for (const entry of availableResearch) {
+      const desc = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
+      const el = this.makeResearchEntry(
+        entry.sMaladyName, desc, '+',
+        entry.nCureProgress, entry.nResearchCure, false,
+      );
+      container.appendChild(el);
     }
 
-    if (completedResearch.length > 0) {
-      this.sectionHeader(container, line('RSCHUI012TEXT'));
-      for (const entry of completedResearch) {
-        const row = document.createElement('div');
-        row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
-        const check = document.createElement('div');
-        check.style.cssText = 'color:#4f4;font-size:22px;';
-        check.textContent = '\u2713 ' + entry.sMaladyName;
-        const type = document.createElement('div');
-        type.style.cssText = 'font-size:18px;color:#666;margin-top:2px;';
-        type.textContent = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
-        row.appendChild(check);
-        row.appendChild(type);
-        container.appendChild(row);
-      }
+    for (const entry of completedResearch) {
+      const desc = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
+      const el = this.makeResearchEntry(
+        entry.sMaladyName, desc, '✓',
+        entry.nResearchCure, entry.nResearchCure, true,
+      );
+      container.appendChild(el);
     }
 
     if (availableResearch.length === 0 && completedResearch.length === 0) {
@@ -281,54 +242,146 @@ export class ResearchPanel {
     }
   }
 
+
+  /**
+   * Create a research entry matching the screenshot layout:
+   * rounded amber-bordered name bar (icon + name + progress) above description shade box.
+   * Mirrors GoalEntry pattern from GoalEntryLayout.lua / ZoneResearchButtonLayout.lua.
+   */
+  private makeResearchEntry(
+    name: string, desc: string, icon: string,
+    nProgress: number, nTotal: number, bCompleted: boolean,
+  ): HTMLDivElement {
+    const ENTRY_WIDTH = 700;
+    const BAR_WIDTH = 200;
+    const entry = document.createElement('div');
+    entry.style.cssText = `position:relative;width:${ENTRY_WIDTH}px;margin-bottom:24px;`;
+
+    // Name bar — rounded pill (Lua: TemplateButton outline)
+    const nameBar = document.createElement('div');
+    nameBar.style.cssText = `
+      position:relative;height:64px;
+      background:#000;border:2px solid ${AMBER};border-radius:32px;
+      display:flex;align-items:center;box-sizing:border-box;
+    `;
+
+    // Icon (Lua: ProjectIcon from UI/JobRoster)
+    const iconEl = document.createElement('span');
+    iconEl.textContent = icon;
+    iconEl.style.cssText = `
+      margin-left:20px;font-size:28px;min-width:36px;text-align:center;
+      color:${AMBER};
+    `;
+    nameBar.appendChild(iconEl);
+
+    // Name (Lua: ProjectName, dosissemibold26)
+    const nameEl = document.createElement('span');
+    nameEl.textContent = name;
+    nameEl.style.cssText = `
+      margin-left:12px;flex:1;font-size:26px;font-weight:600;
+      color:${AMBER};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    `;
+    nameBar.appendChild(nameEl);
+
+    // Progress bar container on right side (Lua: ProjectProgressBar + ProjectProgressLabel)
+    const barContainer = document.createElement('div');
+    barContainer.style.cssText = `
+      position:absolute;right:0;top:0;width:${BAR_WIDTH + 32}px;height:64px;
+      display:flex;align-items:center;
+    `;
+
+    // Progress bar background
+    const barBg = document.createElement('div');
+    barBg.style.cssText = `
+      position:absolute;left:0;top:0;width:${BAR_WIDTH}px;height:64px;
+      background:#111;border:2px solid ${AMBER};border-radius:32px;
+      box-sizing:border-box;overflow:hidden;
+    `;
+
+    const pct = nTotal > 0 ? Math.min(100, Math.round((nProgress / nTotal) * 100)) : 0;
+    const fillPct = bCompleted ? 100 : pct;
+    const barFill = document.createElement('div');
+    barFill.style.cssText = `
+      width:${fillPct}%;height:100%;background:${AMBER};
+      border-radius:30px 0 0 30px;
+    `;
+    if (fillPct >= 100) barFill.style.borderRadius = '30px';
+    barBg.appendChild(barFill);
+
+    // Progress label (Lua: "N / TOTAL" or "Researched")
+    const progressLabel = document.createElement('span');
+    progressLabel.style.cssText = `
+      position:absolute;left:0;top:0;width:${BAR_WIDTH}px;height:64px;
+      display:flex;align-items:center;justify-content:flex-end;
+      padding-right:20px;box-sizing:border-box;
+      font-size:22px;font-weight:600;color:${AMBER};
+    `;
+    if (bCompleted) {
+      progressLabel.textContent = line('RSCHUI007TEXT');
+    } else {
+      progressLabel.textContent = `${nProgress} / ${nTotal}`;
+    }
+
+    barContainer.appendChild(barBg);
+    barContainer.appendChild(progressLabel);
+    nameBar.appendChild(barContainer);
+    entry.appendChild(nameBar);
+
+    // Description shade box below bar
+    const descBox = document.createElement('div');
+    descBox.style.cssText = `
+      width:${ENTRY_WIDTH}px;padding:12px 24px;box-sizing:border-box;
+      background:rgba(223,162,0,0.1);
+      border-left:2px solid rgba(223,162,0,0.3);
+      border-right:2px solid rgba(223,162,0,0.3);
+      border-bottom:2px solid rgba(223,162,0,0.3);
+    `;
+    const descEl = document.createElement('div');
+    descEl.textContent = desc;
+    descEl.style.cssText = `font-size:22px;color:${AMBER};line-height:1.4;font-style:italic;`;
+    descBox.appendChild(descEl);
+    entry.appendChild(descBox);
+
+    // Hover effects
+    entry.style.cursor = 'pointer';
+    entry.addEventListener('mouseenter', () => {
+      nameBar.style.background = AMBER;
+      nameEl.style.color = '#000';
+      iconEl.style.color = '#000';
+      descBox.style.background = 'rgba(223,162,0,0.25)';
+    });
+    entry.addEventListener('mouseleave', () => {
+      nameBar.style.background = '#000';
+      nameEl.style.color = AMBER;
+      iconEl.style.color = AMBER;
+      descBox.style.background = 'rgba(223,162,0,0.1)';
+    });
+
+    return entry;
+  }
+
+  /** Map research ID to a simple icon character (Lua uses UI/JobRoster sprites). */
+  private getResearchIcon(id: string): string {
+    // Map by research type/unlocks — approximate the Lua sprite icons
+    if (id.includes('Reactor') || id.includes('Power') || id.includes('DarkMatter')) return '⚛';
+    if (id.includes('Vaporize') || id.includes('Build')) return 'T';
+    if (id.includes('Green') || id.includes('Garden') || id.includes('Botani')) return '♥';
+    if (id.includes('Refinery') || id.includes('Matter')) return '▶';
+    if (id.includes('Suit') || id.includes('Space')) return '◉';
+    if (id.includes('Security') || id.includes('Turret')) return '⚔';
+    if (id.includes('Medical') || id.includes('Hospital')) return '+';
+    if (id.includes('Fitness') || id.includes('Gym')) return '★';
+    return '◆';
+  }
+
   private sectionHeader(container: HTMLDivElement, text: string) {
     const h = document.createElement('div');
     h.textContent = text;
     h.style.cssText = `
-      font-size:26px;font-weight:bold;color:${AMBER}; /* Lua dosissemibold26 */
+      font-size:26px;font-weight:bold;color:${AMBER};
       padding:10px 0 4px 0;border-bottom:1px solid #444;margin-bottom:6px;
     `;
     container.appendChild(h);
-  }
-
-  private makeResearchRow(name: string, desc: string, cost: number): HTMLDivElement {
-    const row = document.createElement('div');
-    row.style.cssText = 'padding:8px 0;border-bottom:1px solid #222;';
-
-    const header = document.createElement('div');
-    header.style.cssText = 'display:flex;justify-content:space-between;';
-    const nameEl = document.createElement('span');
-    nameEl.style.cssText = `color:${AMBER};font-size:26px;`; // Lua dosissemibold26
-    nameEl.textContent = name;
-    const costEl = document.createElement('span');
-    costEl.style.cssText = 'font-size:18px;color:#888;'; // Lua dosissemibold18
-    costEl.textContent = `${line('BUILDM023TEXT')} ${cost}`;
-    header.appendChild(nameEl);
-    header.appendChild(costEl);
-    row.appendChild(header);
-
-    const descEl = document.createElement('div');
-    descEl.style.cssText = 'font-size:18px;color:#888;margin-top:2px;'; // Lua dosissemibold18
-    descEl.textContent = desc;
-    row.appendChild(descEl);
-
-    return row;
-  }
-
-  private progressBar(pct: number): HTMLDivElement {
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'margin-top:6px;display:flex;align-items:center;';
-    const barOuter = document.createElement('div');
-    barOuter.style.cssText = 'flex:1;height:8px;background:#222;';
-    const barInner = document.createElement('div');
-    barInner.style.cssText = `width:${pct}%;height:100%;background:${AMBER};`;
-    barOuter.appendChild(barInner);
-    const label = document.createElement('span');
-    label.style.cssText = 'width:50px;text-align:right;font-size:18px;color:#888;margin-left:8px;'; // Lua dosissemibold18
-    label.textContent = `${pct}%`;
-    wrapper.appendChild(barOuter);
-    wrapper.appendChild(label);
-    return wrapper;
   }
 
   dispose() {
