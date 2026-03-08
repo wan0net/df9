@@ -96,14 +96,14 @@ export class TutorialSystem {
     const header = document.createElement('div');
     header.textContent = 'TUTORIAL';
     header.style.cssText = `
-      color:${AMBER};font-family:'Orbitron',monospace;font-size:14px;
+      color:${AMBER};font-family:'Dosis',sans-serif;font-size:35px; /* Lua dosissemibold35 */
       margin-bottom:8px;letter-spacing:1px;opacity:0.7;
     `;
     bg.appendChild(header);
 
     this.textEl = document.createElement('div');
     this.textEl.style.cssText = `
-      color:#fff;font-family:'Dosis',sans-serif;font-size:16px;
+      color:#fff;font-family:'Dosis',sans-serif;font-size:30px; /* Lua dosissemibold30 */
       line-height:1.5;
     `;
     bg.appendChild(this.textEl);

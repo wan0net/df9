@@ -182,7 +182,7 @@ export class StartMenuState implements SceneState {
     subtitle.style.cssText = `
       position:absolute;top:200px;left:40px;
       font-family:'Orbitron',monospace;
-      font-size:16px;color:${AMBER};opacity:0.8;
+      font-size:32px;color:${AMBER};opacity:0.8; /* Lua dosismedium32 WebsiteText */
       letter-spacing:1px;
     `;
     this.overlay.appendChild(subtitle);
@@ -271,7 +271,7 @@ export class StartMenuState implements SceneState {
     version.textContent = 'Version 0.1';
     version.style.cssText = `
       position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
-      color:${AMBER};font-size:14px;font-family:'Orbitron',monospace;
+      color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif; /* Lua dosissemibold22 */
       pointer-events:none;
     `;
     this.overlay.appendChild(version);
@@ -313,8 +313,8 @@ export class StartMenuState implements SceneState {
       const btn = document.createElement('div');
       btn.textContent = label;
       btn.style.cssText = `
-        color:${AMBER};font-size:16px;padding:10px 20px;cursor:pointer;
-        border:1px solid ${AMBER};font-family:'Orbitron',monospace;
+        color:${AMBER};font-size:44px;padding:10px 20px;cursor:pointer; /* Lua dosismedium44 */
+        border:1px solid ${AMBER};font-family:'Dosis',sans-serif;
       `;
       btn.addEventListener('click', action);
       btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(223,162,0,0.2)'; });

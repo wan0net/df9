@@ -450,12 +450,12 @@ export class DialogSystem {
 
     const title = document.createElement('div');
     title.textContent = dialog.title;
-    title.style.cssText = 'font-size: 16px; font-weight: bold; color: #ffaa00; margin-bottom: 16px;';
+    title.style.cssText = 'font-size: 32px; font-weight: 500; color: #ffaa00; margin-bottom: 16px;'; /* Lua dosismedium32 */
     el.appendChild(title);
 
     const request = document.createElement('div');
     request.textContent = dialog.request;
-    request.style.cssText = 'font-size: 12px; line-height: 1.5; margin-bottom: 20px;';
+    request.style.cssText = 'font-size: 26px; line-height: 1.5; margin-bottom: 20px;'; /* Lua dosissemibold26 */
     el.appendChild(request);
 
     const btnContainer = document.createElement('div');
@@ -503,7 +503,7 @@ export class DialogSystem {
 
     const response = document.createElement('div');
     response.textContent = text;
-    response.style.cssText = 'font-size: 12px; line-height: 1.5; margin-bottom: 20px; font-family: "Dosis", sans-serif; color: #cceeff;';
+    response.style.cssText = 'font-size: 26px; line-height: 1.5; margin-bottom: 20px; font-family: "Dosis", sans-serif; color: #cceeff;'; /* Lua dosissemibold26 */
     el.appendChild(response);
 
     const btn = this.createButton(buttonText, '#4488ff');
@@ -518,7 +518,7 @@ export class DialogSystem {
     const btn = document.createElement('button');
     btn.textContent = text;
     btn.style.cssText = `
-      font-family: 'Dosis', sans-serif; font-size: 11px; padding: 8px 18px;
+      font-family: 'Dosis', sans-serif; font-size: 30px; padding: 8px 18px; /* Lua dosissemibold30 */
       background: ${color}33; border: 1px solid ${color}; color: #fff;
       cursor: pointer; border-radius: 4px; transition: background 0.2s;
     `;

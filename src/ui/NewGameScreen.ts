@@ -268,23 +268,23 @@ export class NewGameScreenState implements SceneState {
     // Flavor text — Lua: FlavorTextALabel (NEWBAS021TEXT) + FlavorTextBLabel (NEWBAS022TEXT)
     // Positioned at 314px from left edge (just right of left sidebar)
     const flavorA = this.el('div',
-      `position:absolute;top:14px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:14px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;`,
+      `position:absolute;top:14px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;` /* Lua dosissemibold26 */,
       line('NEWBAS021TEXT'));
     this.overlay.appendChild(flavorA);
     const flavorB = this.el('div',
-      `position:absolute;top:68px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:10px;z-index:5;font-family:'Dosis',sans-serif;font-style:italic;`,
+      `position:absolute;top:68px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:18px;z-index:5;font-family:'Dosis',sans-serif;font-style:italic;` /* Lua dosissemibold18 */,
       line('NEWBAS022TEXT'));
     this.overlay.appendChild(flavorB);
 
     // "Region Selection" header on left sidebar — Lua: NewBase.lua top label
     const regionSelHeader = this.el('div',
-      `position:absolute;top:16px;left:16px;color:${AMBER_HEX};font-size:12px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;letter-spacing:1px;font-style:italic;`,
+      `position:absolute;top:16px;left:16px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;letter-spacing:1px;font-style:italic;` /* Lua dosissemibold26 */,
       'Region Selection');
     this.overlay.appendChild(regionSelHeader);
 
     // Back
     const backBtn = this.el('div',
-      `position:absolute;bottom:30px;left:24px;color:#888;font-size:14px;cursor:pointer;z-index:5;font-family:'Orbitron',monospace;letter-spacing:1px;`,
+      `position:absolute;bottom:30px;left:24px;color:#888;font-size:35px;cursor:pointer;z-index:5;font-family:'Dosis',sans-serif;letter-spacing:1px;` /* Lua dosisregular35 */,
       line('NEWBUI001TEXT'));
     backBtn.addEventListener('click', this.onBack);
     backBtn.addEventListener('mouseenter', () => { backBtn.style.color = AMBER_HEX; });
@@ -361,7 +361,7 @@ export class NewGameScreenState implements SceneState {
     const panelW = 400;
     const panelRight = RIGHT_SIDEBAR_W + 10;
     this.infoPanel = document.createElement('div');
-    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:0;width:${panelW}px;color:${AMBER_HEX};font-size:13px;z-index:5;display:none;font-family:'Dosis',sans-serif;`;
+    this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:0;width:${panelW}px;color:${AMBER_HEX};font-size:26px;z-index:5;display:none;font-family:'Dosis',sans-serif;`; /* Lua dosissemibold26 */
 
     // Black background behind everything
     const blackBg = document.createElement('div');
@@ -376,9 +376,9 @@ export class NewGameScreenState implements SceneState {
     const header = document.createElement('div');
     header.style.cssText = `background:${AMBER_HEX};padding:12px 16px;`;
     this.panelName = document.createElement('div');
-    this.panelName.style.cssText = `color:#000;font-weight:600;font-size:20px;font-family:'Dosis',sans-serif;`;
+    this.panelName.style.cssText = `color:#000;font-weight:600;font-size:52px;font-family:'Dosis',sans-serif;`; /* Lua dosisregular52 */
     this.panelAge = document.createElement('div');
-    this.panelAge.style.cssText = `color:#000;font-size:14px;margin-top:4px;font-family:'Dosis',sans-serif;`;
+    this.panelAge.style.cssText = `color:#000;font-size:28px;margin-top:4px;font-family:'Dosis',sans-serif;`; /* Lua dosissemibold28 */
     header.append(this.panelName, this.panelAge);
     content.appendChild(header);
 
@@ -386,13 +386,13 @@ export class NewGameScreenState implements SceneState {
     const stats = document.createElement('div');
     stats.style.cssText = `background:rgba(223,162,0,0.15);padding:12px 16px;border-top:1px solid rgba(223,162,0,0.3);`;
     this.panelDensity      = document.createElement('div');
-    this.panelDensity.style.cssText = 'margin-bottom:6px;font-size:14px;';
+    this.panelDensity.style.cssText = 'margin-bottom:6px;font-size:28px;'; /* Lua dosissemibold28 */
     this.panelDistance     = document.createElement('div');
-    this.panelDistance.style.cssText = 'margin-bottom:6px;font-size:14px;';
+    this.panelDistance.style.cssText = 'margin-bottom:6px;font-size:28px;'; /* Lua dosissemibold28 */
     this.panelThreat       = document.createElement('div');
-    this.panelThreat.style.cssText = 'margin-bottom:6px;font-size:14px;';
+    this.panelThreat.style.cssText = 'margin-bottom:6px;font-size:28px;'; /* Lua dosissemibold28 */
     this.panelInterference = document.createElement('div');
-    this.panelInterference.style.cssText = 'font-size:14px;';
+    this.panelInterference.style.cssText = 'font-size:28px;'; /* Lua dosissemibold28 */
     stats.append(this.panelDensity, this.panelDistance, this.panelThreat, this.panelInterference);
     content.appendChild(stats);
 
@@ -400,14 +400,14 @@ export class NewGameScreenState implements SceneState {
     this.helpFolder = document.createElement('div');
     this.helpFolder.style.cssText = 'border-top:2px solid rgba(223,162,0,0.5);';
     const helpTab = document.createElement('div');
-    helpTab.style.cssText = `background:${AMBER_HEX};display:inline-block;padding:4px 16px;color:#000;font-weight:700;font-size:16px;font-family:'Dosis',sans-serif;`;
+    helpTab.style.cssText = `background:${AMBER_HEX};display:inline-block;padding:4px 16px;color:#000;font-weight:700;font-size:52px;font-family:'Dosis',sans-serif;`; /* Lua dosisregular52, same as LabelFolder */
     helpTab.textContent = line('NEWBAS013TEXT');
     this.helpFolder.appendChild(helpTab);
     const helpFooter = document.createElement('div');
     helpFooter.style.cssText = `background:${AMBER_HEX};height:3px;margin-top:-1px;`;
     this.helpFolder.appendChild(helpFooter);
     const helpBody = document.createElement('div');
-    helpBody.style.cssText = `padding:12px 16px;color:${AMBER_HEX};font-size:12px;line-height:1.6;white-space:pre-line;font-family:'Dosis',sans-serif;`;
+    helpBody.style.cssText = `padding:12px 16px;color:${AMBER_HEX};font-size:28px;line-height:1.6;white-space:pre-line;font-family:'Dosis',sans-serif;`; /* Lua dosissemibold28, LabelHelpText */
     helpBody.textContent = line('NEWBAS014TEXT');
     this.helpFolder.appendChild(helpBody);
     content.appendChild(this.helpFolder);
@@ -434,7 +434,7 @@ export class NewGameScreenState implements SceneState {
     this.confirmBtnEl.appendChild(confirmImg);
 
     // Label below confirm — Lua: LabelAccept, dosisregular35, Gui.BLACK
-    const confirmLabel = this.el('div', `color:#000;font-size:14px;text-align:left;margin-top:4px;font-weight:600;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS002TEXT'));
+    const confirmLabel = this.el('div', `color:#000;font-size:35px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS002TEXT')); /* Lua dosisregular35 */
     this.confirmBtnEl.appendChild(confirmLabel);
 
     this.confirmBtnEl.addEventListener('mouseenter', () => {
@@ -457,7 +457,7 @@ export class NewGameScreenState implements SceneState {
     declineImg.style.cssText = `width:100%;height:100%;`;
     this.declineBtnEl.appendChild(declineImg);
 
-    const declineLabel = this.el('div', `color:#000;font-size:14px;text-align:left;margin-top:4px;font-weight:600;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS003TEXT'));
+    const declineLabel = this.el('div', `color:#000;font-size:35px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS003TEXT')); /* Lua dosisregular35 */
     this.declineBtnEl.appendChild(declineLabel);
 
     this.declineBtnEl.addEventListener('mouseenter', () => {
@@ -498,7 +498,7 @@ export class NewGameScreenState implements SceneState {
     this.launchActiveEl.appendChild(activeImg);
 
     // DEPLOY label centered over the red button area
-    const deployLabel = this.el('div', `position:absolute;top:55%;left:50%;transform:translate(-50%,-50%);color:white;font-size:14px;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, line('NEWBUI002TEXT'));
+    const deployLabel = this.el('div', `position:absolute;top:55%;left:50%;transform:translate(-50%,-50%);color:white;font-size:35px;font-family:'Dosis',sans-serif;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, line('NEWBUI002TEXT')); /* Lua dosisregular35 */
     this.launchActiveEl.appendChild(deployLabel);
 
     this.launchActiveEl.addEventListener('mouseenter', () => {
@@ -522,10 +522,10 @@ export class NewGameScreenState implements SceneState {
     // Help text bar — Lua: SelectRegionHelpTextBG at -(H/2)+78 (78px from bottom)
     // Width 570, height 50, amber bg with icon + text
     this.helpText = document.createElement('div') as HTMLDivElement;
-    this.helpText.style.cssText = `position:absolute;bottom:78px;left:${LEFT_SIDEBAR_W + 140}px;color:#000;font-size:14px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:10px 20px 10px 40px;font-family:'Dosis',sans-serif;letter-spacing:1px;display:flex;align-items:center;`;
+    this.helpText.style.cssText = `position:absolute;bottom:78px;left:${LEFT_SIDEBAR_W + 140}px;color:#000;font-size:30px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:10px 20px 10px 40px;font-family:'Dosis',sans-serif;letter-spacing:1px;display:flex;align-items:center;`; /* Lua dosissemibold30 */
     // Hazard stripe icon (Lua: SelectRegionHelpIcon = ui_hud_buttonPlay)
     const icon = this.el('span',
-      `display:inline-block;width:24px;height:24px;border:2px solid #000;border-radius:50%;text-align:center;line-height:22px;font-size:14px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
+      `display:inline-block;width:30px;height:30px;border:2px solid #000;border-radius:50%;text-align:center;line-height:28px;font-size:22px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
       '?');
     this.helpText.appendChild(icon);
     const textSpan = this.el('span', '', line('NEWBAS001TEXT'));
@@ -600,7 +600,7 @@ export class NewGameScreenState implements SceneState {
     // Update help text to "ACCEPT or DECLINE region for deployment"
     this.helpText.textContent = '';
     const selIcon = this.el('span',
-      `display:inline-block;width:24px;height:24px;border:2px solid #000;border-radius:50%;text-align:center;line-height:22px;font-size:14px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
+      `display:inline-block;width:30px;height:30px;border:2px solid #000;border-radius:50%;text-align:center;line-height:28px;font-size:22px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
       'O');
     this.helpText.appendChild(selIcon);
     const selText = this.el('span', '', line('NEWBAS004TEXT'));
@@ -685,7 +685,7 @@ export class NewGameScreenState implements SceneState {
   private rebuildHelpTextContent(text: string) {
     this.helpText.textContent = '';
     const icon = this.el('span',
-      `display:inline-block;width:24px;height:24px;border:2px solid #000;border-radius:50%;text-align:center;line-height:22px;font-size:14px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
+      `display:inline-block;width:30px;height:30px;border:2px solid #000;border-radius:50%;text-align:center;line-height:28px;font-size:22px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
       '?');
     this.helpText.appendChild(icon);
     const span = this.el('span', '', text);

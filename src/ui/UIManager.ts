@@ -437,7 +437,7 @@ export class UIManager {
     helpBtn.style.cssText = `
       width:28px;height:28px;border-radius:50%;border:2px solid ${AMBER};
       display:flex;align-items:center;justify-content:center;cursor:pointer;
-      font-size:16px;font-weight:bold;color:${AMBER};margin-left:6px;
+      font-size:22px;font-weight:bold;color:${AMBER};margin-left:6px; /* Lua dosissemibold22 */
     `;
     helpBtn.textContent = '?';
     helpBtn.addEventListener('click', () => {
@@ -1068,7 +1068,7 @@ export class UIManager {
       const el = document.createElement('div');
       el.textContent = ub.label;
       el.style.cssText = `
-        font-size:11px;color:${AMBER};opacity:0.6;
+        font-size:22px;color:${AMBER};opacity:0.6; /* Lua dosissemibold22 */
         padding:2px 4px;cursor:pointer;
       `;
       el.addEventListener('click', ub.action);
@@ -1125,7 +1125,7 @@ export class UIManager {
       el.style.cssText = `
         position:absolute;left:${x}px;top:${y}px;
         width:${btnW}px;height:${btnH}px;line-height:${btnH}px;
-        font-size:13px;color:${AMBER};background:rgba(0,0,0,0.85);
+        font-size:22px;color:${AMBER};background:rgba(0,0,0,0.85); /* Lua dosissemibold22 */
         padding-left:6px;cursor:pointer;box-sizing:border-box;
       `;
       el.addEventListener('click', () => this.setSelectedZone(zone));
@@ -1378,7 +1378,7 @@ export class UIManager {
     this.tooltipEl = document.createElement('div');
     this.tooltipEl.style.cssText = `
       position:absolute;top:50px;right:10px;width:280px;
-      background:rgba(0,0,0,0.8);color:#ccc;font-size:12px;
+      background:rgba(0,0,0,0.8);color:#ccc;font-size:22px; /* Lua dosissemibold22 */
       padding:8px;line-height:1.6;white-space:pre-wrap;
       display:none;pointer-events:none;
     `;
@@ -1820,7 +1820,7 @@ export class UIManager {
         content.style.cssText = 'flex:1;';
         const msg = document.createElement('div');
         msg.textContent = alert.message;
-        msg.style.cssText = `font-size:13px;color:${isHint ? HINTLOG_HIGHLIGHT : '#000'};font-family:'Dosis',sans-serif;font-weight:500;`;
+        msg.style.cssText = `font-size:22px;color:${isHint ? HINTLOG_HIGHLIGHT : '#000'};font-family:'Dosis',sans-serif;font-weight:500;`; /* Lua dosissemibold22 */
         // Lua: show relative time for recent alerts, absolute for older ones
         const elapsed = GameRules.simTime - alert.time;
         let timeLabel: string;
@@ -1831,7 +1831,7 @@ export class UIManager {
         else timeLabel = `${line('HUDHUD004TEXT')} ${GameRules.getFullStarDateString(alert.time)}`;
         const time = document.createElement('div');
         time.textContent = timeLabel;
-        time.style.cssText = `font-size:11px;color:${isHint ? '#a0d0cc' : '#333'};font-family:'Dosis',sans-serif;margin-top:2px;`;
+        time.style.cssText = `font-size:18px;color:${isHint ? '#a0d0cc' : '#333'};font-family:'Dosis',sans-serif;margin-top:2px;`; /* Lua dosissemibold18 */
         content.appendChild(msg);
         content.appendChild(time);
         el.appendChild(icon);
@@ -1856,7 +1856,7 @@ export class UIManager {
           if (costInfo.floorW > 0 && costInfo.floorH > 0 && costInfo.capacityLines && costInfo.capacityLines.length > 0) {
             html += `<div style="color:${AMBER};margin-top:4px;">${line('HUDHUD043TEXT')}</div>`;
             for (const cl of costInfo.capacityLines) {
-              html += `<div style="color:${AMBER};padding-left:12px;font-size:12px;">${cl}</div>`;
+              html += `<div style="color:${AMBER};padding-left:12px;font-size:22px;">${cl}</div>`; /* Lua dosissemibold22 */
             }
           }
         } else if (costInfo.mode === 'demolish' || costInfo.mode === 'vaporize') {
@@ -1865,7 +1865,7 @@ export class UIManager {
           html += `<div style="color:${costColor};">${line('HUDHUD042TEXT')} ${costInfo.cost} (${costInfo.tileCount} tiles)</div>`;
         }
         if (!canAfford && costInfo.mode !== 'demolish' && costInfo.mode !== 'vaporize') {
-          html += `<div style="color:#f44;font-size:11px;">${line('BUILDM016TEXT')}</div>`;
+          html += `<div style="color:#f44;font-size:22px;">${line('BUILDM016TEXT')}</div>`; /* Lua dosissemibold22 */
         }
         this.costOverlay.innerHTML = html;
         this.costOverlay.style.display = 'block';

@@ -93,7 +93,7 @@ export class SaveSlotPanel {
       row.appendChild(nameEl);
 
       const metaEl = document.createElement('div');
-      metaEl.style.cssText = 'color:rgba(223,162,0,0.6);font-size:14px;text-align:right;';
+      metaEl.style.cssText = 'color:rgba(223,162,0,0.6);font-size:22px;text-align:right;'; /* Lua dosissemibold22 */
       if (slot.meta) {
         metaEl.textContent = `${slot.meta.date}  Pop:${slot.meta.population}  Matter:${slot.meta.matter}`;
       } else {
@@ -131,7 +131,7 @@ export class SaveSlotPanel {
     if (slots.length === 0) {
       const empty = document.createElement('div');
       empty.textContent = mode === 'load' ? 'No saved games found.' : 'No existing saves.';
-      empty.style.cssText = `color:rgba(223,162,0,0.5);font-size:16px;padding:40px;text-align:center;`;
+      empty.style.cssText = `color:rgba(223,162,0,0.5);font-size:32px;padding:40px;text-align:center;`; /* Lua dosismedium32 */
       listContainer.appendChild(empty);
     }
 
@@ -148,7 +148,7 @@ export class SaveSlotPanel {
       input.value = 'Save ' + (slots.length + 1);
       input.style.cssText = `
         flex:1;background:rgba(0,0,0,0.6);border:1px solid ${AMBER};
-        color:${AMBER};font-family:'Dosis',sans-serif;font-size:16px;
+        color:${AMBER};font-family:'Dosis',sans-serif;font-size:32px; /* Lua dosismedium32 */
         padding:8px 12px;outline:none;
       `;
       input.addEventListener('focus', () => {
@@ -251,7 +251,7 @@ export class SaveSlotPanel {
     const btn = document.createElement('div');
     btn.textContent = label;
     btn.style.cssText = `
-      color:${AMBER};font-family:'Orbitron',monospace;font-size:14px;
+      color:${AMBER};font-family:'Dosis',sans-serif;font-size:44px; /* Lua dosismedium44 */
       padding:10px 20px;cursor:pointer;border:1px solid ${AMBER};
       text-align:center;min-width:100px;
     `;
