@@ -244,16 +244,19 @@ export class InspectorPanel {
       nameRow.appendChild(nameSpan);
     }
 
-    const jobSpan = document.createElement('span');
-    const dutyStr = char.isAlive() && char.onDuty() ? ` ${line('DUTIES015TEXT')}` : '';
-    jobSpan.textContent = `[${char.getJobName()}${dutyStr}]`;
-    jobSpan.style.cssText = 'font-size:26px;color:#888;'; // Lua dosisregular26
-    nameRow.appendChild(jobSpan);
     header.appendChild(nameRow);
 
+    // Job title — separate line below name (Lua TitleLabel at pos {150, -216}, dosisregular26)
+    const jobLine = document.createElement('div');
+    const dutyStr = char.isAlive() && char.onDuty() ? ` ${line('DUTIES015TEXT')}` : '';
+    jobLine.textContent = `${char.getJobName()}${dutyStr}`;
+    jobLine.style.cssText = `font-size:26px;color:#888;font-weight:400;`; // Lua dosisregular26
+    header.appendChild(jobLine);
+
     // Structured info rows (Lua CitizenInspector: Diagnosis, Morale, Location, Activity)
+    // Lua StatsBG: amber opaque panel behind stat rows
     const infoSection = document.createElement('div');
-    infoSection.style.cssText = 'margin-top:6px;';
+    infoSection.style.cssText = `margin-top:6px;background:#3B2600;padding:4px 8px;`; // Lua Gui.AMBER_OPAQUE
 
     // Diagnosis row
     const diagRow = this.makeInfoRow(
