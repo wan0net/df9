@@ -92,6 +92,11 @@ class GameRulesClass {
 
   currentMode = MODE_INSPECT;
 
+  /** Lua GameRules.selectedCharIndex — for ,/. character cycling. */
+  selectedCharIndex = 0;
+  /** Lua GameRules.selectedRoomIndex — for Shift+,/. room cycling. */
+  selectedRoomIndex = 0;
+
   /** Matter cost multiplier (Lua GameRules.matterMult, default 1). */
   matterMult = 1;
 
@@ -283,6 +288,24 @@ class GameRulesClass {
     } else {
       this.prePauseSpeed = this.playerTimeScale;
       this.playerTimeScale = 0;
+    }
+  }
+
+  /** Lua GameRules.timeFaster — ] key, doubles speed or unpauses to 1x. */
+  timeFaster() {
+    if (this.playerTimeScale === 0) {
+      this.setTimeScale(1);
+    } else {
+      this.setTimeScale(Math.min(MAX_PLAYER_TIME_SCALE, this.playerTimeScale * 2));
+    }
+  }
+
+  /** Lua GameRules.timeSlower — [ key, halves speed or pauses. */
+  timeSlower() {
+    if (this.playerTimeScale <= 1) {
+      this.setTimeScale(0);
+    } else {
+      this.setTimeScale(Math.max(MIN_PLAYER_TIME_SCALE, this.playerTimeScale * 0.5));
     }
   }
 

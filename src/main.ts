@@ -876,6 +876,49 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   inputManager.onKeyPress('Digit1', () => { GameRules.setTimeScale(1); tutorialFlags.timeSpeed = true; });
   inputManager.onKeyPress('Digit2', () => { GameRules.setTimeScale(2); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
   inputManager.onKeyPress('Digit3', () => { GameRules.setTimeScale(4); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  // ] / [ keys: speed up / slow down time (Lua GameScreen.lua:285-291)
+  inputManager.onKeyPress('BracketRight', () => { GameRules.timeFaster(); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  inputManager.onKeyPress('BracketLeft', () => { GameRules.timeSlower(); tutorialFlags.timeSpeed = true; });
+  // K key: toggle cutaway mode (Lua GameScreen.lua:216-218)
+  inputManager.onKeyPress('KeyK', () => {
+    GameRules.cycleCutawayMode();
+    tileRenderer.setCutaway(GameRules.isCutawayModeEnabled());
+    tutorialFlags.vizModes = true;
+  });
+  // +/= and -/_ keys: keyboard zoom (Lua GameScreen.lua:224-241, zoomAmount = ZOOM_WHEEL_STEP * 4)
+  inputManager.onKeyPress('Equal', () => { cameraController.addZoom(4); tutorialFlags.zoomed = true; });
+  inputManager.onKeyPress('Minus', () => { cameraController.addZoom(-4); tutorialFlags.zoomed = true; });
+  // ,/. keys: cycle characters (Lua GameScreen.lua:293-334)
+  inputManager.onKeyPress('Period', () => {
+    const chars = characterManager.getCharacters();
+    if (chars.length === 0) return;
+    GameRules.selectedCharIndex = (GameRules.selectedCharIndex + 1) % chars.length;
+    const c = chars[GameRules.selectedCharIndex];
+    selectedEntity = { type: 'character', data: c };
+    uiManager.setSelectedEntity(selectedEntity);
+  });
+  inputManager.onKeyPress('Comma', () => {
+    const chars = characterManager.getCharacters();
+    if (chars.length === 0) return;
+    GameRules.selectedCharIndex = (GameRules.selectedCharIndex - 1 + chars.length) % chars.length;
+    const c = chars[GameRules.selectedCharIndex];
+    selectedEntity = { type: 'character', data: c };
+    uiManager.setSelectedEntity(selectedEntity);
+  });
+  // Ctrl+S: save game (Lua GameScreen.lua:336-346)
+  inputManager.onKeyPress('KeyS', (e) => {
+    if (e?.ctrlKey || e?.metaKey) {
+      e.preventDefault();
+      saveLoadSystem.saveToStorage();
+    }
+  });
+  // Ctrl+L: load game (Lua GameScreen.lua:348-350)
+  inputManager.onKeyPress('KeyL', (e) => {
+    if (e?.ctrlKey || e?.metaKey) {
+      e.preventDefault();
+      saveLoadSystem.loadFromStorage();
+    }
+  });
   // F key: toggle flip for object placement (Lua: GameScreen.bFlipProp)
   inputManager.onKeyPress('KeyF', () => {
     if (buildMode === 'object') {

@@ -7,7 +7,7 @@ import type { CameraController3D } from '../renderer/CameraController3D';
  */
 export class InputManager {
   private keysDown = new Set<string>();
-  private keyCallbacks = new Map<string, (() => void)[]>();
+  private keyCallbacks = new Map<string, ((e?: KeyboardEvent) => void)[]>();
   private canvas: HTMLCanvasElement;
   private camera: CameraController3D;
 
@@ -26,7 +26,7 @@ export class InputManager {
     window.addEventListener('keydown', (e) => {
       this.keysDown.add(e.code);
       const cbs = this.keyCallbacks.get(e.code);
-      if (cbs) cbs.forEach(cb => cb());
+      if (cbs) cbs.forEach(cb => cb(e));
     });
 
     window.addEventListener('keyup', (e) => {
@@ -56,7 +56,7 @@ export class InputManager {
     return this.keysDown.has(code);
   }
 
-  onKeyPress(code: string, callback: () => void) {
+  onKeyPress(code: string, callback: (e?: KeyboardEvent) => void) {
     const cbs = this.keyCallbacks.get(code) ?? [];
     cbs.push(callback);
     this.keyCallbacks.set(code, cbs);
