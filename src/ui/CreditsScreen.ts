@@ -265,7 +265,7 @@ export class CreditsScreen {
       const header = document.createElement('div');
       header.textContent = section.title;
       header.style.cssText = `
-        color:${AMBER};font-family:'Orbitron',monospace;font-size:28px;
+        color:${AMBER};font-family:'Dosis',sans-serif;font-size:48px; /* Lua dosissemibold48 */
         text-align:center;margin-top:80px;margin-bottom:20px;
         font-weight:600;
       `;
@@ -278,7 +278,7 @@ export class CreditsScreen {
           const line = document.createElement('div');
           line.textContent = name;
           line.style.cssText = `
-            color:#fff;font-size:20px;text-align:center;
+            color:#fff;font-size:30px;text-align:center; /* Lua dosissemibold30 */
             line-height:32px;
           `;
           this.scrollContainer.appendChild(line);
@@ -294,7 +294,7 @@ export class CreditsScreen {
           const roleEl = document.createElement('div');
           roleEl.textContent = entry.role;
           roleEl.style.cssText = `
-            color:#aaa;font-size:18px;text-align:right;
+            color:#aaa;font-size:30px;text-align:right; /* Lua dosissemibold30 */
             line-height:32px;
           `;
           grid.appendChild(roleEl);
@@ -302,7 +302,7 @@ export class CreditsScreen {
           const nameEl = document.createElement('div');
           nameEl.textContent = entry.name;
           nameEl.style.cssText = `
-            color:#fff;font-size:18px;text-align:left;
+            color:#fff;font-size:30px;text-align:left; /* Lua dosissemibold30 */
             line-height:32px;
           `;
           grid.appendChild(nameEl);
@@ -320,7 +320,7 @@ export class CreditsScreen {
     const footer = document.createElement('div');
     footer.textContent = 'Click or press ESC to return';
     footer.style.cssText = `
-      text-align:center;color:#666;font-size:14px;
+      text-align:center;color:#666;font-size:22px; /* Lua dosissemibold22 */
       font-family:'Orbitron',monospace;padding-bottom:40px;
     `;
     this.scrollContainer.appendChild(footer);

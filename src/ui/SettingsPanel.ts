@@ -46,7 +46,7 @@ export class SettingsPanel {
     const title = document.createElement('div');
     title.textContent = line('SETMENU01TEXT');
     title.style.cssText = `
-      color:${AMBER};font-family:'Orbitron',monospace;font-size:24px;
+      color:${AMBER};font-family:'Orbitron',monospace;font-size:65px; /* Lua orbitronWhite */
       text-align:center;margin-bottom:30px;letter-spacing:2px;
     `;
     panel.appendChild(title);
@@ -101,7 +101,7 @@ export class SettingsPanel {
     const doneBtn = document.createElement('div');
     doneBtn.textContent = 'Done';
     doneBtn.style.cssText = `
-      color:${AMBER};font-family:'Orbitron',monospace;font-size:18px;
+      color:${AMBER};font-family:'Orbitron',monospace;font-size:35px; /* Lua dosissemibold35 */
       text-align:center;padding:12px;margin-top:20px;
       cursor:pointer;border:1px solid ${AMBER};
     `;
@@ -150,7 +150,7 @@ export class SettingsPanel {
 
     const labelEl = document.createElement('div');
     labelEl.style.cssText = `
-      color:${AMBER};font-size:16px;margin-bottom:6px;
+      color:${AMBER};font-size:35px;margin-bottom:6px; /* Lua dosissemibold35 */
       display:flex;justify-content:space-between;
     `;
     const nameSpan = document.createElement('span');
@@ -192,7 +192,7 @@ export class SettingsPanel {
 
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
-    labelEl.style.cssText = `color:${AMBER};font-size:18px;cursor:pointer;`;
+    labelEl.style.cssText = `color:${AMBER};font-size:35px;cursor:pointer;`; // Lua dosissemibold35
     labelEl.addEventListener('click', () => { check.click(); });
     row.appendChild(labelEl);
 
