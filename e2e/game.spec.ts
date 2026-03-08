@@ -4744,31 +4744,33 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   test('construct submenu matches screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase', async () => {
-    // Screenshot 20.32.27: Cancel, Confirm, >>Construct, Room, Wall, Floor, Object, Tear Down, Vaporize, Erase
+    // Screenshot 20.32.27: icon + label + lowercase hotkey on right
     // No Door/Airlock button in the original game screenshot
     await page.keyboard.press('c');
     await page.waitForTimeout(100);
     const result = await page.evaluate(() => {
       const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return { hotkeys: [] as string[] };
+      if (!sidebar) return { labels: [] as string[], hotkeys: [] as string[] };
       const spans = sidebar.querySelectorAll('span');
+      const labels: string[] = [];
       const hotkeys: string[] = [];
       for (const span of spans) {
         const t = span.textContent?.trim() || '';
-        if (t.startsWith('[') && t.endsWith(']') && t.length <= 4) {
-          hotkeys.push(t);
-        }
+        // Hotkeys are single lowercase letters (screenshot style)
+        if (t.length === 1 && t >= 'a' && t <= 'z') hotkeys.push(t);
+        // Labels are multi-character text
+        if (t.length > 2) labels.push(t);
       }
-      return { hotkeys };
+      return { labels, hotkeys };
     });
     await page.keyboard.press('Escape');
-    // Expected hotkeys in order: [C] Room, [W] Wall, [B] Floor, [P] Object, [X] Tear Down, [V] Vaporize, [E] Erase
-    expect(result.hotkeys).toContain('[C]');
-    expect(result.hotkeys).toContain('[W]');
-    expect(result.hotkeys).toContain('[P]');
-    expect(result.hotkeys).toContain('[E]');
-    // No [D] for Door — not in original game screenshot
-    expect(result.hotkeys).not.toContain('[D]');
+    // Expected hotkeys: c, w, b, p, x, v, e (lowercase, no brackets)
+    expect(result.hotkeys).toContain('c');
+    expect(result.hotkeys).toContain('w');
+    expect(result.hotkeys).toContain('p');
+    expect(result.hotkeys).toContain('e');
+    // No 'd' for Door — not in original game screenshot
+    expect(result.hotkeys).not.toContain('d');
   });
 
   test('morale emoticon colors match Lua StatusBar thresholds', async () => {
@@ -4828,11 +4830,11 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       const sidebar = document.getElementById('sidebar');
       if (!sidebar) return { hasZones: false, zoneCount: 0 };
       const spans = sidebar.querySelectorAll('span');
-      // Check for zone hotkeys matching Lua ObjectMenu: [Z], [A], [T], [G], [S], [B], [F], [R], [N], [H], [I]
-      const zoneHotkeys = ['[Z]', '[A]', '[T]', '[G]', '[S]', '[B]', '[F]', '[R]', '[N]', '[H]', '[I]'];
+      // Hotkeys are now lowercase without brackets (matching screenshots)
+      const zoneHotkeys = ['z', 'a', 't', 'g', 's', 'b', 'f', 'r', 'n', 'h', 'i'];
       let foundCount = 0;
       for (const span of spans) {
-        if (zoneHotkeys.includes(span.textContent || '')) foundCount++;
+        if (zoneHotkeys.includes(span.textContent?.trim() || '')) foundCount++;
       }
       return { hasZones: foundCount >= 5, zoneCount: foundCount };
     });

@@ -788,15 +788,16 @@ export class UIManager {
     // ── Build mode buttons — matching screenshot order ──
     // Screenshot order: Cancel, Confirm, label, then mode buttons
     // Screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase
+    // Layout: [icon] Label           hotkey  (matching screenshot 20.32.27)
     // No Door/Airlock button (doors auto-placed at room boundaries in original)
-    const subBtns: { label: string; hotkey: string; mode: BuildMode }[] = [
-      { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },      // Room (Area)
-      { label: line('HUDHUD014TEXT'), hotkey: 'W', mode: 'wall' },      // Wall
-      { label: line('HUDHUD027TEXT'), hotkey: 'B', mode: 'floor' },     // Floor
-      { label: line('ZONEUI014TEXT'), hotkey: 'P', mode: 'object' },    // Object
-      { label: line('HUDHUD017TEXT'), hotkey: 'X', mode: 'demolish' },  // Tear Down
-      { label: line('BUILDM009TEXT'), hotkey: 'V', mode: 'vaporize' },  // Vaporize
-      { label: line('HUDHUD011TEXT'), hotkey: 'E', mode: 'erase' },     // Erase
+    const subBtns: { label: string; hotkey: string; mode: BuildMode; icon: string }[] = [
+      { label: line('HUDHUD013TEXT'), hotkey: 'c', mode: 'room',      icon: '\u25A3' },  // Room (⬓ square with inner)
+      { label: line('HUDHUD014TEXT'), hotkey: 'w', mode: 'wall',      icon: '\u2592' },  // Wall (▒ medium shade)
+      { label: line('HUDHUD027TEXT'), hotkey: 'b', mode: 'floor',     icon: '\u2B1C' },  // Floor (⬜ large white square)
+      { label: line('ZONEUI014TEXT'), hotkey: 'p', mode: 'object',    icon: '\u2B1A' },  // Object (⬚ dotted square)
+      { label: line('HUDHUD017TEXT'), hotkey: 'x', mode: 'demolish',  icon: '\u21B5' },  // Tear Down (↵ arrow)
+      { label: line('BUILDM009TEXT'), hotkey: 'v', mode: 'vaporize',  icon: '\u26A1' },  // Vaporize (⚡ lightning)
+      { label: line('HUDHUD011TEXT'), hotkey: 'e', mode: 'erase',     icon: '\u2716' },  // Erase (✖ heavy multiply)
     ];
     this.constructSubModes = [];
     for (const sb of subBtns) {
@@ -805,14 +806,21 @@ export class UIManager {
         height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;
         gap:8px;position:relative;
       `;
-      const hk = document.createElement('span');
-      hk.textContent = `[${sb.hotkey}]`;
-      hk.style.cssText = `font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
+      // Icon on LEFT (screenshot: yellow isometric icon)
+      const iconEl = document.createElement('span');
+      iconEl.textContent = sb.icon;
+      iconEl.style.cssText = `font-size:20px;color:${AMBER};width:28px;text-align:center;flex-shrink:0;`;
+      // Label in CENTER
       const lbl = document.createElement('span');
       lbl.textContent = sb.label;
-      lbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
-      el.appendChild(hk);
+      lbl.style.cssText = `font-size:18px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;flex:1;`;
+      // Hotkey on RIGHT (screenshot: small lowercase letter)
+      const hk = document.createElement('span');
+      hk.textContent = sb.hotkey;
+      hk.style.cssText = `font-size:12px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`;
+      el.appendChild(iconEl);
       el.appendChild(lbl);
+      el.appendChild(hk);
       this.constructSubModes.push(sb.mode);
       el.addEventListener('click', () => {
         SoundManager.playUI('UI_Select');
@@ -828,13 +836,15 @@ export class UIManager {
       el.addEventListener('mouseenter', () => {
         SoundManager.playUI('UI_Hilight');
         el.style.background = AMBER;
-        hk.style.color = '#000';
+        iconEl.style.color = '#000';
         lbl.style.color = '#000';
+        hk.style.color = '#000';
       });
       el.addEventListener('mouseleave', () => {
         el.style.background = 'transparent';
-        hk.style.color = AMBER;
+        iconEl.style.color = AMBER;
         lbl.style.color = AMBER;
+        hk.style.color = AMBER;
       });
       this.constructSub.appendChild(el);
     }
@@ -1143,6 +1153,15 @@ export class UIManager {
     });
     this.objectMenuEl.appendChild(confirmEl);
 
+    // ── ">> Select Zone Type" label (screenshot 20.32.31: Lua HUDHUD024TEXT) ──
+    const zoneLabel = document.createElement('div');
+    zoneLabel.textContent = line('HUDHUD024TEXT');
+    zoneLabel.style.cssText = `
+      font-size:13px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
+      padding:4px 12px;opacity:0.7;
+    `;
+    this.objectMenuEl.appendChild(zoneLabel);
+
     // ── Zone category buttons — Lua ObjectMenu zone buttons ──
     // Lua order from ObjectMenuLayout.lua: All, Airlock, Reactor, Garden, LifeSupport,
     //   Pub, Refinery, Residence, Fitness, Research, Infirmary
@@ -1214,12 +1233,7 @@ export class UIManager {
         gap:8px;position:relative;background:${isSelected ? AMBER : 'transparent'};
       `;
 
-      // Hotkey
-      const hk = document.createElement('span');
-      hk.textContent = hotkey ? `[${hotkey}]` : '';
-      hk.style.cssText = `font-size:13px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
-
-      // Label + cost column
+      // Label + cost column (LEFT side)
       const col = document.createElement('div');
       col.style.cssText = 'flex:1;';
       const lbl = document.createElement('div');
@@ -1230,9 +1244,13 @@ export class UIManager {
       cost.style.cssText = `font-size:13px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.7;`;
       col.appendChild(lbl);
       col.appendChild(cost);
-
-      el.appendChild(hk);
       el.appendChild(col);
+
+      // Hotkey on RIGHT (screenshot: small lowercase letter)
+      const hk = document.createElement('span');
+      hk.textContent = hotkey ? hotkey.toLowerCase() : '';
+      hk.style.cssText = `font-size:12px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`;
+      el.appendChild(hk);
 
       const capturedName = objName;
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
@@ -1282,22 +1300,24 @@ export class UIManager {
     this.objectSubMenuEl.appendChild(confirmEl);
   }
 
-  /** Helper: create a standard sidebar menu button (Lua-style) */
+  /** Helper: create a standard sidebar menu button (Lua-style).
+   * Screenshot layout: label on left, hotkey as small lowercase letter on right. */
   private createMenuButton(width: number, height: number, hotkey: string, label: string, color: string, onClick: () => void): HTMLDivElement {
     const el = document.createElement('div');
     el.style.cssText = `
       height:${height}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;
     `;
-    if (hotkey) {
-      const hk = document.createElement('span');
-      hk.textContent = `[${hotkey}]`;
-      hk.style.cssText = `font-size:13px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;width:40px;`;
-      el.appendChild(hk);
-    }
     const lbl = document.createElement('span');
     lbl.textContent = label;
-    lbl.style.cssText = `font-size:18px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;`;
+    lbl.style.cssText = `font-size:18px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;flex:1;`;
     el.appendChild(lbl);
+    // Hotkey on RIGHT (screenshot: small lowercase letter)
+    if (hotkey) {
+      const hk = document.createElement('span');
+      hk.textContent = hotkey.toLowerCase();
+      hk.style.cssText = `font-size:12px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`;
+      el.appendChild(hk);
+    }
 
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
     el.addEventListener('click', onClick);
@@ -1598,12 +1618,12 @@ export class UIManager {
       for (let i = 0; i < this.constructSubModes.length; i++) {
         const el = subBtns[i + SUB_OFFSET] as HTMLElement;
         if (!el) continue;
-        const hk = el.children[0] as HTMLElement;
-        const lbl = el.children[1] as HTMLElement;
+        // Children: icon(0), label(1), hotkey(2)
         const isSubActive = buildMode === this.constructSubModes[i] && buildMode !== 'none';
         el.style.background = isSubActive ? AMBER : 'transparent';
-        if (hk) hk.style.color = isSubActive ? '#000' : AMBER;
-        if (lbl) lbl.style.color = isSubActive ? '#000' : AMBER;
+        for (let c = 0; c < el.children.length; c++) {
+          (el.children[c] as HTMLElement).style.color = isSubActive ? '#000' : AMBER;
+        }
       }
     } else if (isObjectMode) {
       // Object menu: show zone list or object list in sidebar (Lua ObjectMenu/SelectObjectForZoneMenu)
