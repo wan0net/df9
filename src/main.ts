@@ -998,6 +998,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       GameRules.cycleCutawayMode();
       tileRenderer.setCutaway(GameRules.isCutawayModeEnabled());
     },
+    onFlipObject: () => {
+      objectPlacement.bFlipProp = !objectPlacement.bFlipProp;
+    },
+    getFlipState: () => objectPlacement.bFlipProp,
     getRooms: () => roomManager.getRooms(),
     onSetJob: (character, jobId) => { character.setJob(jobId); },
     goalSystem,

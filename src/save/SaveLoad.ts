@@ -76,6 +76,14 @@ export interface SaveData {
   o2Grid?: number[];
   /** Sandbox mode (Lua NewBase.lua: disables hostile events until 100+ pop). */
   bSandboxMode?: boolean;
+  /** Cutaway mode (Lua GameRules.cutawayMode). */
+  cutawayMode?: boolean;
+  /** Disaster mode (Lua GameRules.bDisasterMode). */
+  bDisasterMode?: boolean;
+  /** Hint state flags for tutorial progression. */
+  bHasHadEnclosedRooms?: boolean;
+  bHasZoned?: boolean;
+  bHasStartedResearch?: boolean;
 }
 
 export class SaveLoadSystem {
@@ -147,6 +155,11 @@ export class SaveLoadSystem {
       powerHolidayEndTime: GameRules.powerHolidayEndTime,
       o2Grid: this.grid.getO2Data(),
       bSandboxMode: GameRules.bSandboxMode,
+      cutawayMode: GameRules.cutawayMode,
+      bDisasterMode: GameRules.bDisasterMode,
+      bHasHadEnclosedRooms: GameRules.bHasHadEnclosedRooms,
+      bHasZoned: GameRules.bHasZoned,
+      bHasStartedResearch: GameRules.bHasStartedResearch,
     };
   }
 
@@ -201,6 +214,11 @@ export class SaveLoadSystem {
 
     // Restore sandbox mode
     GameRules.bSandboxMode = data.bSandboxMode ?? false;
+    GameRules.cutawayMode = data.cutawayMode ?? false;
+    GameRules.bDisasterMode = data.bDisasterMode ?? false;
+    GameRules.bHasHadEnclosedRooms = data.bHasHadEnclosedRooms ?? false;
+    GameRules.bHasZoned = data.bHasZoned ?? false;
+    GameRules.bHasStartedResearch = data.bHasStartedResearch ?? false;
 
     // Restore grid
     if (data.gridData && data.gridData.length === data.gridWidth * data.gridHeight) {

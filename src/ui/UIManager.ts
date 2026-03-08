@@ -24,6 +24,7 @@ import { line } from '../localization/Localization';
 import { playWarble } from './WarbleEffect';
 
 const AMBER = '#dfa200';
+const BRIGHT_AMBER = '#FFE696';
 const SIDEBAR_W = 286;
 const SIDEBAR_COLLAPSED_W = 104;
 const BUTTON_H = 81;
@@ -100,6 +101,8 @@ export class UIManager {
   private onZoomIn: (() => void) | null = null;
   private onZoomOut: (() => void) | null = null;
   private toggleWalls: (() => void) | null = null;
+  private onFlipObject: (() => void) | null = null;
+  private getFlipState: (() => boolean) | null = null;
   /** Whether O2 overlay is currently active — set from main.ts for button selected state. */
   o2OverlayActive = false;
   private getRooms: () => Room[];
@@ -155,6 +158,9 @@ export class UIManager {
   private tileInfoEl!: HTMLDivElement;
   private tileTipClearTimer = 0;
   private readonly TILE_TIP_DURATION = 5; // seconds before auto-clear
+
+  // Flip button (Lua StatusBar.rFlipButton — shown in object placement mode)
+  private flipBtnEl!: HTMLDivElement;
 
   // Tooltip
   private tooltipEl!: HTMLDivElement;
@@ -228,6 +234,8 @@ export class UIManager {
     onZoomIn?: () => void;
     onZoomOut?: () => void;
     toggleWalls?: () => void;
+    onFlipObject?: () => void;
+    getFlipState?: () => boolean;
     getRooms: () => Room[];
     onSetJob: (character: Character, jobId: number) => void;
     goalSystem: GoalSystem;
@@ -263,6 +271,8 @@ export class UIManager {
     this.onZoomIn = callbacks.onZoomIn ?? null;
     this.onZoomOut = callbacks.onZoomOut ?? null;
     this.toggleWalls = callbacks.toggleWalls ?? null;
+    this.onFlipObject = callbacks.onFlipObject ?? null;
+    this.getFlipState = callbacks.getFlipState ?? null;
     this.getRooms = callbacks.getRooms;
     this.getPendingBuildCost = callbacks.getPendingBuildCost ?? null;
     this.getCorpseCount = callbacks.getCorpseCount ?? null;
@@ -574,6 +584,29 @@ export class UIManager {
     `;
     this.tileInfoEl.textContent = '';
     this.uiRoot.appendChild(this.tileInfoEl);
+
+    // Flip button — Lua StatusBar.rFlipButton, bottom-left, visible in object placement mode
+    this.flipBtnEl = document.createElement('div');
+    this.flipBtnEl.textContent = '\u21C4 FLIP (F)';
+    this.flipBtnEl.style.cssText = `
+      position:absolute;bottom:152px;left:10px;
+      background:rgba(0,0,0,0.8);border:1px solid ${AMBER};
+      color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif;font-weight:600;
+      padding:8px 16px;cursor:pointer;display:none;z-index:20;
+    `;
+    this.flipBtnEl.addEventListener('click', () => {
+      this.onFlipObject?.();
+      this.uiClickConsumed = true;
+    });
+    this.flipBtnEl.addEventListener('mouseenter', () => {
+      this.flipBtnEl.style.color = BRIGHT_AMBER;
+      this.flipBtnEl.style.borderColor = BRIGHT_AMBER;
+    });
+    this.flipBtnEl.addEventListener('mouseleave', () => {
+      this.flipBtnEl.style.color = AMBER;
+      this.flipBtnEl.style.borderColor = AMBER;
+    });
+    this.uiRoot.appendChild(this.flipBtnEl);
   }
 
   /** Create a bottom-bar icon button with inactive/active sprite swap on hover.
@@ -1784,6 +1817,17 @@ export class UIManager {
       this.objectMenuEl.style.display = 'none';
       this.objectSubMenuEl.style.display = 'none';
       this.objectMenuState = 'zones'; // Reset for next time
+    }
+
+    // ── Flip button: show in object placement mode (Lua StatusBar.showFlipZone) ──
+    if (isObjectMode && this.selectedObjectName) {
+      this.flipBtnEl.style.display = 'block';
+      // Update flip visual state
+      const flipped = this.getFlipState?.() ?? false;
+      this.flipBtnEl.style.background = flipped ? AMBER : 'rgba(0,0,0,0.8)';
+      this.flipBtnEl.style.color = flipped ? '#000' : AMBER;
+    } else {
+      this.flipBtnEl.style.display = 'none';
     }
 
     // ── Mine sub-menu: replaces sidebar buttons (Lua MineMenu) ──
