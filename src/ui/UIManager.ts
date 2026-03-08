@@ -455,8 +455,8 @@ export class UIManager {
       wrapper.addEventListener('click', () => {
         // Lua: speed buttons gated by bTimeLocked (locked during construct menu)
         if (GameRules.bTimeLocked) return;
-        if (speeds[idx] === 0) { GameRules.bRunning = !GameRules.bRunning; }
-        else { GameRules.bRunning = true; GameRules.setTimeScale(speeds[idx]); }
+        if (speeds[idx] === 0) { GameRules.togglePause(); }
+        else { GameRules.setTimeScale(speeds[idx]); }
       });
       wrapper.addEventListener('mouseenter', () => { wrapper.style.opacity = '0.7'; });
       wrapper.addEventListener('mouseleave', () => { wrapper.style.opacity = '1'; });
@@ -1691,7 +1691,7 @@ export class UIManager {
     this.starDateText.textContent = `${line('HUDHUD004TEXT')} ${GameRules.sStarDate}`;
 
     // ── Speed buttons ─────────────────────────────────────
-    const currentSpeed = !GameRules.bRunning ? 0 : GameRules.playerTimeScale;
+    const currentSpeed = (!GameRules.bRunning || GameRules.playerTimeScale === 0) ? 0 : GameRules.playerTimeScale;
     const speedMap = [0, 1, 2, 4];
     for (let i = 0; i < this.speedImgs.length; i++) {
       const active = speedMap[i] === currentSpeed;

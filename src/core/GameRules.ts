@@ -87,6 +87,7 @@ class GameRulesClass {
   deltaTime = 0;
 
   playerTimeScale = 1;
+  prePauseSpeed = 1;
   bRunning = true;
 
   currentMode = MODE_INSPECT;
@@ -182,6 +183,7 @@ class GameRulesClass {
     this.elapsedTime = 0;
     this.deltaTime = 0;
     this.playerTimeScale = 1;
+    this.prePauseSpeed = 1;
     this.bRunning = true;
     this.currentMode = MODE_INSPECT;
 
@@ -266,10 +268,22 @@ class GameRulesClass {
   // ── Time scaling ──────────────────────────────────────────────────
 
   setTimeScale(scale: number) {
+    if (this.bTimeLocked) return;
     this.playerTimeScale = Math.max(
       MIN_PLAYER_TIME_SCALE,
       Math.min(MAX_PLAYER_TIME_SCALE, scale),
     );
+  }
+
+  /** Lua GameRules.togglePause — spacebar pause toggle. */
+  togglePause() {
+    if (this.bTimeLocked) return;
+    if (this.playerTimeScale === 0) {
+      this.playerTimeScale = this.prePauseSpeed;
+    } else {
+      this.prePauseSpeed = this.playerTimeScale;
+      this.playerTimeScale = 0;
+    }
   }
 
   // ── Stardate calculation (GameRules.lua:1073-1104) ────────────────

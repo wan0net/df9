@@ -872,6 +872,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; tutorialFlags.vizModes = true; });
   inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
   inputManager.onKeyPress('KeyR', () => { uiManager.toggleJobRoster(); });
+  inputManager.onKeyPress('Space', () => { GameRules.togglePause(); tutorialFlags.timeSpeed = true; });
   inputManager.onKeyPress('Digit1', () => { GameRules.setTimeScale(1); tutorialFlags.timeSpeed = true; });
   inputManager.onKeyPress('Digit2', () => { GameRules.setTimeScale(2); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
   inputManager.onKeyPress('Digit3', () => { GameRules.setTimeScale(4); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
