@@ -8,6 +8,8 @@ const BRIGHT_AMBER = '#FFE696'; // Lua Gui.BRIGHT_AMBER = rgba(255,230,150,1)
 export interface SettingsCallbacks {
   getAutosaveEnabled?: () => boolean;
   setAutosaveEnabled?: (v: boolean) => void;
+  getUIScale?: () => number;
+  setUIScale?: (v: number) => void;
 }
 
 /**
@@ -65,6 +67,14 @@ export class SettingsPanel {
     panel.appendChild(this.createSlider('Master Volume', SoundManager.getMasterVolume(), (v) => {
       SoundManager.setMasterVolume(v);
     }));
+
+    // UI Scale slider
+    if (this.callbacks.getUIScale && this.callbacks.setUIScale) {
+      const currentScale = this.callbacks.getUIScale();
+      panel.appendChild(this.createSlider('UI Scale', currentScale, (v) => {
+        this.callbacks.setUIScale?.(v);
+      }, 0.3, 1.5));
+    }
 
     // Autosave checkbox (Lua: SETMENU04 = "AUTOSAVE", configKey = "autosave")
     if (this.callbacks.getAutosaveEnabled) {
@@ -144,9 +154,13 @@ export class SettingsPanel {
     window.addEventListener('keydown', this.keyHandler);
   }
 
-  private createSlider(label: string, initialValue: number, onChange: (v: number) => void): HTMLDivElement {
+  private createSlider(label: string, initialValue: number, onChange: (v: number) => void, minVal = 0, maxVal = 1): HTMLDivElement {
     const row = document.createElement('div');
     row.style.cssText = 'margin:16px 0;';
+
+    const range = maxVal - minVal;
+    const toSlider = (v: number) => Math.round(((v - minVal) / range) * 100);
+    const fromSlider = (s: number) => minVal + (s / 100) * range;
 
     const labelEl = document.createElement('div');
     labelEl.style.cssText = `
@@ -165,13 +179,13 @@ export class SettingsPanel {
     slider.type = 'range';
     slider.min = '0';
     slider.max = '100';
-    slider.value = String(Math.round(initialValue * 100));
+    slider.value = String(toSlider(initialValue));
     slider.style.cssText = `
       width:100%;accent-color:${AMBER};cursor:pointer;
       height:6px;
     `;
     slider.addEventListener('input', () => {
-      const v = parseInt(slider.value) / 100;
+      const v = fromSlider(parseInt(slider.value));
       valSpan.textContent = Math.round(v * 100) + '%';
       onChange(v);
     });

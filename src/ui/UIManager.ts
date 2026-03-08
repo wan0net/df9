@@ -268,6 +268,7 @@ export class UIManager {
       position:absolute;top:0;left:0;width:100%;height:100%;
       pointer-events:none;z-index:10;font-family:'Dosis',sans-serif;
     `;
+    this.applyUIScale();
 
     this.createSidebar();
     this.createHUD();
@@ -1893,6 +1894,44 @@ export class UIManager {
 
     // ── Job roster ────────────────────────────────────────
     this.jobRoster.update();
+  }
+
+  // ── UI Scale ───────────────────────────────────────────
+
+  /**
+   * Apply CSS transform scale to the entire UI root.
+   * The Lua game targets 1920×1152; on smaller screens, font sizes
+   * appear oversized. This scales the UI container uniformly.
+   * Default auto-calculates from viewport width vs 1920.
+   */
+  applyUIScale() {
+    const scale = UIManager.getUIScale();
+    if (scale === 1) {
+      this.uiRoot.style.transform = '';
+      this.uiRoot.style.width = '100%';
+      this.uiRoot.style.height = '100%';
+    } else {
+      this.uiRoot.style.transformOrigin = 'top left';
+      this.uiRoot.style.transform = `scale(${scale})`;
+      // Expand dimensions so scaled-down content fills viewport
+      this.uiRoot.style.width = `${100 / scale}%`;
+      this.uiRoot.style.height = `${100 / scale}%`;
+    }
+  }
+
+  /** Get current UI scale (0.5–2.0). 0 = auto (viewport-based). */
+  static getUIScale(): number {
+    const stored = localStorage.getItem('df9_ui_scale');
+    if (stored) {
+      const v = parseFloat(stored);
+      if (v > 0 && v <= 2) return v;
+    }
+    // Auto: scale to match Lua's 1920×1080 target resolution
+    return Math.min(1, window.innerWidth / 1920);
+  }
+
+  static setUIScale(scale: number) {
+    localStorage.setItem('df9_ui_scale', String(Math.max(0.3, Math.min(2, scale))));
   }
 
   dispose() {

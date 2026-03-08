@@ -165,6 +165,14 @@ function startGame() {
     settingsCallbacks: {
       getAutosaveEnabled: () => activeAutoSave?.isEnabled() ?? true,
       setAutosaveEnabled: (v) => activeAutoSave?.setEnabled(v),
+      getUIScale: () => UIManager.getUIScale(),
+      setUIScale: (v) => {
+        UIManager.setUIScale(v);
+        // Apply to active UIManager if game is running
+        if ((window as any).__df9?._uiManager) {
+          (window as any).__df9._uiManager.applyUIScale();
+        }
+      },
     },
   });
 
