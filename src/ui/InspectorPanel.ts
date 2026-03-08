@@ -64,6 +64,7 @@ export type SelectedEntity =
   | null;
 
 type InspectorTab = 'duty' | 'stats' | 'psych' | 'log' | 'actions';
+type ObjectTab = 'stats' | 'action' | 'about';
 type RoomTab = 'info' | 'rezone' | 'actions';
 
 export class InspectorPanel {
@@ -71,6 +72,7 @@ export class InspectorPanel {
   private contentEl!: HTMLDivElement;
   private entity: SelectedEntity = null;
   private currentTab: InspectorTab = 'duty';
+  private objectTab: ObjectTab = 'action'; // Lua default: ObjectActionTab selected on show
   private roomTab: RoomTab = 'info';
   private editingName = false;
   private onSetJob: ((character: Character, jobId: number) => void) | null = null;
@@ -128,6 +130,7 @@ export class InspectorPanel {
   setEntity(entity: SelectedEntity) {
     this.entity = entity;
     this.currentTab = 'duty';
+    this.objectTab = 'action'; // Lua: default tab is ObjectActionTab
     this.roomTab = 'info';
     this.editingName = false;
     if (entity) {
@@ -712,14 +715,11 @@ export class InspectorPanel {
   }
 
   private renderObject(obj: EnvObject) {
+    // ── Header area (always shown, Lua ObjectInspector main view) ──
     const header = this.makeSection();
     const condStr = obj.getConditionUIString();
-    const status = obj.isFunctioning() ? line('INSPEC089TEXT') : obj.isDestroyed() ? line('INSPEC053TEXT') : line('INSPEC091TEXT');
-    const statusColor = obj.isDestroyed() ? '#f44' :
-      obj.isDamaged() ? '#ff0' :
-      obj.isFunctioning() ? '#4f4' : '#888';
-
     const emergencyStr = obj.getEmergencyString();
+
     header.innerHTML = `
       <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
         ${obj.tData.friendlyName}
@@ -728,45 +728,72 @@ export class InspectorPanel {
       <div style="margin-bottom:6px;">
         ${this.bar(line('INSPEC054TEXT').replace(':', ''), Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}
       </div>
-      <div style="margin-bottom:4px;">${line('INSPEC054TEXT')} <span style="color:${statusColor};">${condStr} (${Math.round(obj.nCondition)}%)</span> | ${line('INSPEC093TEXT')} <span style="color:${statusColor};">${status}</span></div>
-      ${obj.tData.nPowerOutput > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC165TEXT')} ${obj.getPowerOutput()}</div>` : ''}
-      ${obj.tData.nPowerDraw > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC164TEXT')} ${obj.getPowerDraw()}</div>` : ''}
-      ${obj.tData.oxygenLevel > 0 ? `<div style="margin-bottom:4px;">${line('INSPEC059TEXT')} ${obj.getOxygenOutput()}</div>` : ''}
-      ${obj instanceof Door ? `<div style="margin-bottom:4px;">${line('PROPSX055TEXT')} ${this.getDoorStatusText(obj)}</div>
-        <div style="margin-bottom:4px;">${line('PROPSX058TEXT')}
-          <span style="cursor:pointer;color:${AMBER};border:1px solid ${AMBER};padding:2px 8px;margin-left:4px;"
-                id="inspector-door-cycle">${this.getDoorOperationLabel(obj)}</span>
-        </div>` : ''}
-      ${obj.sBuilderName ? `<div style="margin-bottom:4px;">${line('INSPEC111TEXT')} ${obj.sBuilderName}</div>` : ''}
-      ${obj.sBuildTime ? `<div style="margin-bottom:4px;">${line('INSPEC110TEXT')} ${obj.sBuildTime}</div>` : ''}
-      <div style="margin-bottom:4px;">${line('INSPUI015TEXT')} (${obj.tileX}, ${obj.tileY})</div>
-      ${obj.tData.bCanDeactivate ? `
-        <div style="margin-top:8px;">
-          <span style="cursor:pointer;color:${AMBER};border:1px solid ${AMBER};padding:2px 8px;"
-                id="inspector-toggle-active">${obj.bActive ? line('INSPEC171TEXT') : line('INSPEC172TEXT')}</span>
-        </div>` : ''}
+      <div style="margin-bottom:4px;">${line('INSPEC054TEXT')} <span style="color:${obj.nCondition < 50 ? '#f44' : '#4f4'};">${condStr} (${Math.round(obj.nCondition)}%)</span></div>
+      ${obj instanceof Door ? `<div style="margin-bottom:4px;">${line('PROPSX055TEXT')} ${this.getDoorStatusText(obj)}</div>` : ''}
+      <div style="margin-bottom:4px;background:#3B2600;padding:4px 8px;color:${AMBER};font-size:20px;">${obj.tData.description ?? ''}</div>
     `;
     this.contentEl.appendChild(header);
 
-    // Wire door cycle button
-    const doorCycleBtn = header.querySelector('#inspector-door-cycle') as HTMLElement;
-    if (doorCycleBtn && obj instanceof Door) {
-      doorCycleBtn.addEventListener('click', () => {
-        (obj as Door).cycle();
-        this.update();
-      });
+    // ── Tab bar: Stats | Action | About (Lua ObjectInspector 3 tabs) ──
+    const tabRow = document.createElement('div');
+    tabRow.style.cssText = 'display:flex;border-top:1px solid #333;border-bottom:1px solid #333;';
+    const objTabs: { key: ObjectTab; label: string }[] = [
+      { key: 'stats', label: line('INSPEC017TEXT') || 'Stats' },
+      { key: 'action', label: line('INSPUI005TEXT') || 'Action' },
+      { key: 'about', label: line('INSPUI004TEXT') || 'About' },
+    ];
+    for (const t of objTabs) {
+      const btn = document.createElement('div');
+      btn.textContent = t.label;
+      const isActive = this.objectTab === t.key;
+      btn.style.cssText = `
+        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px;
+        background:${isActive ? AMBER : 'transparent'};
+        color:${isActive ? '#000' : AMBER};
+      `;
+      btn.addEventListener('click', () => { this.objectTab = t.key; this.update(); });
+      tabRow.appendChild(btn);
     }
+    this.contentEl.appendChild(tabRow);
 
-    // Wire toggle button
-    const toggleBtn = header.querySelector('#inspector-toggle-active') as HTMLElement;
-    if (toggleBtn) {
-      toggleBtn.addEventListener('click', () => {
-        obj.bActive = !obj.bActive;
-        this.update();
-      });
+    // ── Tab content ──
+    const body = this.makeSection();
+    switch (this.objectTab) {
+      case 'stats': this.renderObjectStatsTab(body, obj); break;
+      case 'action': this.renderObjectActionTab(body, obj); break;
+      case 'about': this.renderObjectAboutTab(body, obj); break;
     }
+    this.contentEl.appendChild(body);
 
-    // Demolish button
+    this.addCloseButton();
+  }
+
+  /** Object Stats tab — power, oxygen, condition details. */
+  private renderObjectStatsTab(container: HTMLDivElement, obj: EnvObject) {
+    const status = obj.isFunctioning() ? line('INSPEC089TEXT') : obj.isDestroyed() ? line('INSPEC053TEXT') : line('INSPEC091TEXT');
+    const statusColor = obj.isDestroyed() ? '#f44' :
+      obj.isDamaged() ? '#ff0' :
+      obj.isFunctioning() ? '#4f4' : '#888';
+
+    let html = `<div style="margin-bottom:4px;">${line('INSPEC093TEXT')} <span style="color:${statusColor};">${status}</span></div>`;
+
+    if (obj.tData.nPowerOutput > 0) {
+      html += `<div style="margin-bottom:4px;">${line('INSPEC165TEXT')} ${obj.getPowerOutput()}</div>`;
+    }
+    if (obj.tData.nPowerDraw > 0) {
+      html += `<div style="margin-bottom:4px;">${line('INSPEC164TEXT')} ${obj.getPowerDraw()}</div>`;
+    }
+    if (obj.tData.oxygenLevel > 0) {
+      html += `<div style="margin-bottom:4px;">${line('INSPEC059TEXT')} ${obj.getOxygenOutput()}</div>`;
+    }
+    html += `<div style="margin-bottom:4px;">${line('INSPUI015TEXT')} (${obj.tileX}, ${obj.tileY})</div>`;
+
+    container.innerHTML = html;
+  }
+
+  /** Object Action tab — demolish, deactivate, door controls (Lua ObjectActionTab). */
+  private renderObjectActionTab(container: HTMLDivElement, obj: EnvObject) {
+    // 1. Demolish button (Lua ObjectActionTab button 1: with matter refund)
     if (obj.bBuilt) {
       const refund = obj.getVaporizeMatterYield();
       const demolishBtn = this.makeActionButton(
@@ -779,13 +806,59 @@ export class InspectorPanel {
         },
         '#f44',
       );
-      demolishBtn.style.marginTop = '8px';
-      demolishBtn.style.marginLeft = '8px';
-      demolishBtn.style.marginRight = '8px';
-      this.contentEl.appendChild(demolishBtn);
+      container.appendChild(demolishBtn);
     }
 
-    this.addCloseButton();
+    // 2. Deactivate toggle (Lua ObjectActionTab button 3: INSPEC171/172)
+    if (obj.tData.bCanDeactivate) {
+      const deactivateBtn = this.makeActionButton(
+        obj.bActive ? line('INSPEC171TEXT') : line('INSPEC172TEXT'),
+        false,
+        () => { obj.bActive = !obj.bActive; },
+      );
+      container.appendChild(deactivateBtn);
+    }
+
+    // 3. Door controls (Lua ObjectActionTab: DoorControls custom inspector)
+    if (obj instanceof Door) {
+      const doorSection = document.createElement('div');
+      doorSection.style.cssText = `margin-top:6px;padding:6px 0;border-top:1px solid #333;`;
+      doorSection.innerHTML = `
+        <div style="margin-bottom:4px;color:${AMBER};font-size:20px;">${line('PROPSX058TEXT')}
+          <span style="cursor:pointer;color:${AMBER};border:1px solid ${AMBER};padding:2px 8px;margin-left:4px;"
+                id="inspector-door-cycle">${this.getDoorOperationLabel(obj)}</span>
+        </div>
+      `;
+      container.appendChild(doorSection);
+
+      // Wire door cycle button
+      const doorCycleBtn = doorSection.querySelector('#inspector-door-cycle') as HTMLElement;
+      if (doorCycleBtn) {
+        doorCycleBtn.addEventListener('click', () => {
+          (obj as Door).cycle();
+          this.update();
+        });
+      }
+    }
+  }
+
+  /** Object About tab — description, builder info (Lua ObjectAboutTab). */
+  private renderObjectAboutTab(container: HTMLDivElement, obj: EnvObject) {
+    let html = '';
+    // Description (Lua ObjectInspector: rObject:getDescription())
+    const desc = obj.tData.description ?? '';
+    if (desc) {
+      html += `<div style="margin-bottom:8px;color:#ccc;font-size:20px;">${desc}</div>`;
+    }
+    // Builder name (Lua INSPEC111TEXT)
+    if (obj.sBuilderName) {
+      html += `<div style="margin-bottom:4px;">${line('INSPEC111TEXT')} ${obj.sBuilderName}</div>`;
+    }
+    // Build time (Lua INSPEC110TEXT)
+    if (obj.sBuildTime) {
+      html += `<div style="margin-bottom:4px;">${line('INSPEC110TEXT')} ${obj.sBuildTime}</div>`;
+    }
+    container.innerHTML = html;
   }
 
   // ── Room Inspector ──────────────────────────────────────
