@@ -35,7 +35,7 @@ function getDeathCauseName(cause: number): string {
 }
 
 const AMBER = '#dfa200';
-const PANEL_W = 280;
+const PANEL_W = 418; // Lua CitizenInspectorLayout.lua: nButtonWidth=418
 
 /** Morale value → text label (Lua CharacterConstants.lua morale thresholds). */
 function getMoraleText(morale: number): string {

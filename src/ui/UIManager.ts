@@ -27,6 +27,15 @@ const AMBER = '#dfa200';
 const SIDEBAR_W = 286;
 const SIDEBAR_COLLAPSED_W = 104;
 const BUTTON_H = 81;
+const CONSTRUCT_MENU_W = 430; // Lua SelectObjectSubmenuLayout.lua: nButtonWidth=430
+const OBJECT_PICKER_W = 330;  // Lua ObjectMenuLayout.lua: nButtonWidth=330
+const OBJECT_BTN_H = 72;     // Lua ObjectMenuLayout.lua: nButtonHeight=72
+const OBJECT_SUB_BTN_H = 81; // Lua SelectObjectSubmenuLayout.lua: nButtonHeight=81
+
+// Lua Gui.lua hint/alert log colors
+const HINTLOG_BG = '#5D807A';     // Lua Gui.HINTLOG_BG = {93/255,128/255,122/255}
+const HINTLOG_BG_ALT = '#709B93'; // Lua Gui.HINTLOG_BG_ALT = {112/255,155/255,147/255}
+const HINTLOG_HIGHLIGHT = '#BCFFFF'; // Lua Gui.HINTLOG_HIGHLIGHT = {188/255,255/255,255/255}
 
 // CSS filter to tint white/gray icons to amber (#dfa200)
 // brightness(0) → black, then invert+sepia+saturate+hue-rotate to amber
@@ -113,7 +122,7 @@ export class UIManager {
   private zonePicker!: HTMLDivElement;
   private zoneButtons: { el: HTMLDivElement; zone: ZoneType }[] = [];
 
-  // Object picker
+  // Object picker (Lua ObjectMenu → SelectObjectForZoneMenu, sidebar-integrated)
   private objectPicker!: HTMLDivElement;
   selectedObjectName = '';
   private currentObjectZone: ZoneType | null = null;
@@ -121,6 +130,14 @@ export class UIManager {
   private objectZoneOverride: ZoneType | null = null;
   /** Set true when a UI click should suppress game input for this frame. */
   uiClickConsumed = false;
+
+  // Object menu — Lua ObjectMenu (zone list) + SelectObjectForZoneMenu (object list)
+  private objectMenuEl!: HTMLDivElement;
+  private objectSubMenuEl!: HTMLDivElement;
+  /** Which level of object menu is showing: 'zones' = zone list, 'objects' = object list */
+  private objectMenuState: 'zones' | 'objects' = 'zones';
+  /** Selected zone in the object menu */
+  private objectMenuZone: ZoneType = ZoneType.PLAIN;
 
   // Tile tip text (Lua: StatusBar.tileTipText — shows last-clicked tile info)
   private tileTipEl!: HTMLDivElement;
@@ -320,7 +337,7 @@ export class UIManager {
     matterGroup.style.cssText = 'display:flex;flex-direction:column;';
     const matterLabel = document.createElement('span');
     matterLabel.textContent = line('HUDHUD002TEXT'); // "Matter"
-    matterLabel.style.cssText = `font-size:12px;color:#888;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`;
+    matterLabel.style.cssText = `font-size:12px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua Gui.GREY = dimmed amber
     this.matterText = document.createElement('span');
     this.matterText.id = 'hud-matter';
     this.matterText.style.cssText = `font-size:36px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`;
@@ -339,7 +356,7 @@ export class UIManager {
     capGroup.style.cssText = 'display:flex;flex-direction:column;';
     const capLabel = document.createElement('span');
     capLabel.textContent = line('HUDHUD003TEXT'); // "O2 Capacity"
-    capLabel.style.cssText = `font-size:12px;color:#888;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`;
+    capLabel.style.cssText = `font-size:12px;color:#AF7F00;font-family:'Dosis',sans-serif;font-weight:600;line-height:1;`; // Lua Gui.GREY = dimmed amber
     const capValues = document.createElement('div');
     capValues.style.cssText = 'display:flex;align-items:baseline;gap:0;';
     this.popText = document.createElement('span');
@@ -347,7 +364,7 @@ export class UIManager {
     this.popText.style.cssText = `font-size:36px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;line-height:1;`;
     this.popText.textContent = '0';
     this.capacityText = document.createElement('span');
-    this.capacityText.style.cssText = 'font-size:16px;color:#888;';
+    this.capacityText.style.cssText = 'font-size:16px;color:#AF7F00;'; // Lua Gui.GREY = dimmed amber
     capValues.appendChild(this.popText);
     capValues.appendChild(this.capacityText);
     capGroup.appendChild(capLabel);
@@ -357,7 +374,7 @@ export class UIManager {
 
     // ── Divider line (Lua: DividerLine) ──
     const divider = document.createElement('div');
-    divider.style.cssText = `width:100%;height:2px;background:${AMBER};opacity:0.5;margin:6px 0 4px;`;
+    divider.style.cssText = `width:100%;height:4px;background:${AMBER};margin:6px 0 4px;`; // Lua DividerLine: scale=(490,4)
     hudTop.appendChild(divider);
 
     // ── Row 2: Stardate + Speed buttons + ? ──
@@ -443,7 +460,7 @@ export class UIManager {
 
     // Machine health
     this.machineHealthText = document.createElement('span');
-    this.machineHealthText.style.cssText = 'font-size:13px;color:#888;';
+    this.machineHealthText.style.cssText = `font-size:13px;color:${AMBER};`; // Lua: Gui.AMBER
     hudBottom.appendChild(this.machineHealthText);
 
     // Morale text/icon
@@ -656,9 +673,10 @@ export class UIManager {
           // Toggle construct mode — show/hide sub-menu
           // Lua: pause game + enable cutaway on open, restore on close
           SoundManager.playUI('UI_ShortStatic');
-          if (this.getBuildMode() === 'room' || this.getBuildMode() === 'floor' ||
-              this.getBuildMode() === 'door' || this.getBuildMode() === 'zone' ||
-              this.getBuildMode() === 'object') {
+          const cm = this.getBuildMode();
+          if (cm === 'room' || cm === 'floor' || cm === 'wall' ||
+              cm === 'door' || cm === 'zone' || cm === 'object' ||
+              cm === 'demolish' || cm === 'vaporize' || cm === 'erase') {
             if (this.onCancelBuild) this.onCancelBuild();
             this.setBuildMode('none');
             GameRules.bRunning = true;
@@ -720,7 +738,7 @@ export class UIManager {
     cancelIcon.style.cssText = `font-size:18px;`;
     const cancelLbl = document.createElement('span');
     cancelLbl.textContent = 'Cancel';
-    cancelLbl.style.cssText = `font-size:18px;color:#ff4444;font-family:'Dosis',sans-serif;font-weight:600;`;
+    cancelLbl.style.cssText = `font-size:18px;color:#FF3D00;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua CONSTRUCT_CANCEL = Gui.RED
     const cancelHk = document.createElement('span');
     cancelHk.textContent = 'ESC';
     cancelHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
@@ -732,8 +750,8 @@ export class UIManager {
       this.setBuildMode('none');
       GameRules.bRunning = true;
     });
-    cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = 'rgba(255,68,68,0.3)'; });
-    cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; });
+    cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = '#FF3D00'; cancelLbl.style.color = '#000'; }); // Lua: CONSTRUCT_CANCEL bg, black text
+    cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; cancelLbl.style.color = '#FF3D00'; });
     this.constructSub.appendChild(cancelEl);
 
     // ── ">> Construct" label — Lua HUDHUD012TEXT ──
@@ -747,11 +765,13 @@ export class UIManager {
 
     // ── Build mode buttons — matching Lua ConstructMenu order ──
     // Lua order: Cancel, Erase, Area(Room), Wall, Floor, [Airlock], Demolish, Vaporize, Confirm, Object
+    // Lua ConstructMenu order: Erase, Area, Wall, Floor, Airlock, Demolish, Vaporize, Object
     const subBtns: { label: string; hotkey: string; mode: BuildMode }[] = [
       { label: line('HUDHUD011TEXT'), hotkey: 'E', mode: 'erase' },     // Erase (cancel pending builds)
-      { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },      // Room (Area)
+      { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },      // Area (Room)
       { label: line('HUDHUD014TEXT'), hotkey: 'W', mode: 'wall' },      // Wall
       { label: line('HUDHUD027TEXT'), hotkey: 'B', mode: 'floor' },     // Floor
+      { label: line('HUDHUD015TEXT'), hotkey: 'D', mode: 'door' },      // Airlock (Door)
       { label: line('HUDHUD017TEXT'), hotkey: 'X', mode: 'demolish' },  // Tear Down (walls→floor, objects removed)
       { label: line('BUILDM009TEXT'), hotkey: 'V', mode: 'vaporize' },  // Vaporize (everything→space)
       { label: line('ZONEUI014TEXT'), hotkey: 'P', mode: 'object' },    // Object
@@ -774,8 +794,14 @@ export class UIManager {
       this.constructSubModes.push(sb.mode);
       el.addEventListener('click', () => {
         SoundManager.playUI('UI_Select');
-        this.setBuildMode(this.getBuildMode() === sb.mode ? 'none' : sb.mode);
-        this.refreshObjectPicker();
+        const newMode = this.getBuildMode() === sb.mode ? 'none' : sb.mode;
+        this.setBuildMode(newMode);
+        if (newMode === 'object') {
+          // Entering object mode — show zone list (Lua ObjectMenu)
+          this.objectMenuState = 'zones';
+          this.selectedObjectName = '';
+          playWarble(this.sidebarEl);
+        }
       });
       el.addEventListener('mouseenter', () => {
         SoundManager.playUI('UI_Hilight');
@@ -796,10 +822,10 @@ export class UIManager {
     confirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const confirmIcon = document.createElement('span');
     confirmIcon.textContent = '\u2714';
-    confirmIcon.style.cssText = `font-size:18px;color:#44ff44;`;
+    confirmIcon.style.cssText = `font-size:18px;color:#A5D318;`; // Lua CONSTRUCT_CONFIRM = Gui.GREEN
     const confirmLbl = document.createElement('span');
     confirmLbl.textContent = line('HUDHUD019TEXT');
-    confirmLbl.style.cssText = `font-size:18px;color:#44ff44;font-family:'Dosis',sans-serif;font-weight:600;`;
+    confirmLbl.style.cssText = `font-size:18px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN
     confirmEl.appendChild(confirmIcon);
     confirmEl.appendChild(confirmLbl);
     confirmEl.addEventListener('click', () => {
@@ -809,11 +835,22 @@ export class UIManager {
       this.setBuildMode('none');
       GameRules.bRunning = true;
     });
-    confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = 'rgba(68,255,68,0.2)'; });
-    confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; });
+    confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = '#A5D318'; confirmIcon.style.color = '#000'; confirmLbl.style.color = '#000'; }); // Lua CONSTRUCT_CONFIRM
+    confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.color = '#A5D318'; confirmLbl.style.color = '#A5D318'; });
     this.constructSub.appendChild(confirmEl);
 
     sidebar.appendChild(this.constructSub);
+
+    // ── Object Menu — Lua ObjectMenu: zone category buttons (330×72) ──
+    this.objectMenuEl = document.createElement('div');
+    this.objectMenuEl.style.cssText = `display:none;`;
+    this.buildObjectZoneMenu();
+    sidebar.appendChild(this.objectMenuEl);
+
+    // ── Object Sub-Menu — Lua SelectObjectForZoneMenu: individual object buttons (430×81) ──
+    this.objectSubMenuEl = document.createElement('div');
+    this.objectSubMenuEl.style.cssText = `display:none;`;
+    sidebar.appendChild(this.objectSubMenuEl);
 
     // Mine sub-menu — Lua MineMenu: replaces sidebar with Confirm/>>Mine/Mine/Erase
     this.mineSub = document.createElement('div');
@@ -824,10 +861,10 @@ export class UIManager {
     mineConfirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const mineConfirmIcon = document.createElement('span');
     mineConfirmIcon.textContent = '\u2714';
-    mineConfirmIcon.style.cssText = `font-size:18px;color:#44ff44;`;
+    mineConfirmIcon.style.cssText = `font-size:18px;color:#A5D318;`; // Lua Gui.GREEN
     const mineConfirmLbl = document.createElement('span');
     mineConfirmLbl.textContent = line('HUDHUD019TEXT');
-    mineConfirmLbl.style.cssText = `font-size:18px;color:#44ff44;font-family:'Dosis',sans-serif;font-weight:600;`;
+    mineConfirmLbl.style.cssText = `font-size:18px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:600;`; // Lua Gui.GREEN
     const mineConfirmHk = document.createElement('span');
     mineConfirmHk.textContent = 'ESC';
     mineConfirmHk.style.cssText = `font-size:11px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
@@ -837,8 +874,8 @@ export class UIManager {
       this.setBuildMode('none');
       GameRules.bRunning = true;
     });
-    mineConfirmEl.addEventListener('mouseenter', () => { mineConfirmEl.style.background = 'rgba(68,255,68,0.2)'; });
-    mineConfirmEl.addEventListener('mouseleave', () => { mineConfirmEl.style.background = 'transparent'; });
+    mineConfirmEl.addEventListener('mouseenter', () => { mineConfirmEl.style.background = '#A5D318'; mineConfirmIcon.style.color = '#000'; mineConfirmLbl.style.color = '#000'; });
+    mineConfirmEl.addEventListener('mouseleave', () => { mineConfirmEl.style.background = 'transparent'; mineConfirmIcon.style.color = '#A5D318'; mineConfirmLbl.style.color = '#A5D318'; });
     this.mineSub.appendChild(mineConfirmEl);
 
     // ">> Mine" label
@@ -1033,91 +1070,228 @@ export class UIManager {
     this.uiRoot.appendChild(this.zonePicker);
   }
 
-  // ── Object Picker ───────────────────────────────────────────────
+  // ── Object Picker (Lua ObjectMenu + SelectObjectForZoneMenu, sidebar-integrated) ──
 
   private createObjectPicker() {
+    // Legacy floating picker — no longer used, kept as empty stub
     this.objectPicker = document.createElement('div');
-    this.objectPicker.style.cssText = `
-      position:absolute;top:10px;left:${SIDEBAR_W + 10}px;
-      display:none;pointer-events:auto;
-    `;
+    this.objectPicker.style.cssText = `display:none;`;
     this.uiRoot.appendChild(this.objectPicker);
   }
 
-  /** Resolve which zone to show objects for: explicit override > hovered room > fallback */
-  private getEffectiveObjectZone(): ZoneType {
-    if (this.objectZoneOverride) return this.objectZoneOverride;
-    const hoveredZone = this.getHoveredRoomZone();
-    if (hoveredZone) return hoveredZone;
-    return ZoneType.PLAIN;
+  private refreshObjectPicker() {
+    // No-op: object picker is now sidebar-integrated via objectMenuEl/objectSubMenuEl
   }
 
-  private refreshObjectPicker() {
-    this.objectPicker.innerHTML = '';
-    if (this.getBuildMode() !== 'object') {
-      this.objectPicker.style.display = 'none';
-      return;
-    }
+  /**
+   * Lua ObjectMenu zone buttons — Lua ObjectMenuLayout.lua:
+   * nButtonWidth=330, nButtonHeight=72
+   * Order: Back(ESC), Cancel(X), Confirm(C), then zone buttons
+   * Zone hotkeys: Z=All, A=Airlock, T=Reactor, G=Garden, S=LifeSupport, B=Pub,
+   *               F=Refinery, R=Residence, N=Fitness, H=Research, I=Infirmary
+   */
+  private buildObjectZoneMenu() {
+    this.objectMenuEl.innerHTML = '';
+    const btnW = OBJECT_PICKER_W; // 330
 
-    const zone = this.getEffectiveObjectZone();
-    this.currentObjectZone = zone;
-    const items = getMenuForZone(zone);
-    const btnW = 280;
-    const btnH = 44;
+    // ── Back button (ESC) — Lua ObjectMenuLayout BackButton ──
+    const backEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'ESC', line('HUDHUD018TEXT'), AMBER, () => {
+      SoundManager.playUI('UI_Select');
+      // Return to construct submenu
+      this.objectMenuState = 'zones';
+      this.objectMenuEl.style.display = 'none';
+      this.objectSubMenuEl.style.display = 'none';
+      // Re-enter the last non-object construct mode (room by default)
+      this.setBuildMode('room');
+    });
+    this.objectMenuEl.appendChild(backEl);
 
-    // ── Zone selector tabs ──
-    const tabRow = document.createElement('div');
-    tabRow.style.cssText = `display:flex;flex-wrap:wrap;gap:2px;margin-bottom:4px;width:${btnW}px;`;
-    for (const z of ZONE_LIST) {
-      const config = ZONE_SPRITES[z];
-      const isActive = z === zone;
-      const tab = document.createElement('div');
-      tab.textContent = config.name;
-      tab.style.cssText = `
-        font-size:11px;padding:3px 6px;cursor:pointer;
-        color:${isActive ? '#000' : AMBER};
-        background:${isActive ? AMBER : 'rgba(0,0,0,0.85)'};
-      `;
-      tab.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
-      tab.addEventListener('click', () => {
-        this.objectZoneOverride = z;
-        this.refreshObjectPicker();
+    // ── Cancel button (X) — Lua ObjectMenuLayout CancelButton ──
+    const cancelEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'X', line('HUDHUD020TEXT'), '#FF3D00', () => {
+      SoundManager.playUI('UI_Select');
+      if (this.onCancelBuild) this.onCancelBuild();
+      this.setBuildMode('none');
+      GameRules.bRunning = true;
+    });
+    this.objectMenuEl.appendChild(cancelEl);
+
+    // ── Confirm button (C) — Lua ObjectMenuLayout ConfirmButton ──
+    const confirmEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'C', line('HUDHUD019TEXT'), '#A5D318', () => {
+      SoundManager.playUI('UI_Select');
+      if (this.onConfirmBuild) this.onConfirmBuild();
+      this.setBuildMode('none');
+      GameRules.bRunning = true;
+    });
+    this.objectMenuEl.appendChild(confirmEl);
+
+    // ── Zone category buttons — Lua ObjectMenu zone buttons ──
+    // Lua order from ObjectMenuLayout.lua: All, Airlock, Reactor, Garden, LifeSupport,
+    //   Pub, Refinery, Residence, Fitness, Research, Infirmary
+    const zoneEntries: { zone: ZoneType; hotkey: string; lc: string }[] = [
+      { zone: ZoneType.PLAIN, hotkey: 'Z', lc: 'ZONEUI058TEXT' },       // All
+      { zone: ZoneType.AIRLOCK, hotkey: 'A', lc: 'ZONEUI036TEXT' },
+      { zone: ZoneType.POWER, hotkey: 'T', lc: 'ZONEUI003TEXT' },       // Reactor
+      { zone: ZoneType.GARDEN, hotkey: 'G', lc: 'ZONEUI069TEXT' },
+      { zone: ZoneType.LIFESUPPORT, hotkey: 'S', lc: 'ZONEUI001TEXT' },
+      { zone: ZoneType.PUB, hotkey: 'B', lc: 'ZONEUI046TEXT' },
+      { zone: ZoneType.REFINERY, hotkey: 'F', lc: 'ZONEUI037TEXT' },
+      { zone: ZoneType.RESIDENCE, hotkey: 'R', lc: 'ZONEUI042TEXT' },
+      { zone: ZoneType.FITNESS, hotkey: 'N', lc: 'ZONEUI109TEXT' },
+      { zone: ZoneType.RESEARCH, hotkey: 'H', lc: 'ZONEUI126TEXT' },
+      { zone: ZoneType.INFIRMARY, hotkey: 'I', lc: 'ZONEUI049TEXT' },
+    ];
+
+    for (const ze of zoneEntries) {
+      const el = this.createMenuButton(btnW, OBJECT_BTN_H, ze.hotkey, line(ze.lc), AMBER, () => {
+        SoundManager.playUI('UI_Select');
+        this.objectMenuZone = ze.zone;
+        this.objectMenuState = 'objects';
+        this.buildObjectSubMenu(ze.zone);
+        this.objectMenuEl.style.display = 'none';
+        this.objectSubMenuEl.style.display = 'block';
+        this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`; // 430px for object list
+        playWarble(this.sidebarEl);
       });
-      tab.addEventListener('mouseenter', () => { if (!isActive) tab.style.background = 'rgba(223,162,0,0.3)'; });
-      tab.addEventListener('mouseleave', () => { if (!isActive) tab.style.background = 'rgba(0,0,0,0.85)'; });
-      tabRow.appendChild(tab);
+      this.objectMenuEl.appendChild(el);
     }
-    this.objectPicker.appendChild(tabRow);
+  }
 
-    // ── Object list ──
-    for (let i = 0; i < items.length; i++) {
-      const objName = items[i];
+  /**
+   * Lua SelectObjectForZoneMenu — individual objects for a zone.
+   * Lua SelectObjectSubmenuLayout.lua: nButtonWidth=430, nButtonHeight=81
+   * Sequential hotkeys: 1-9, 0, A-F, O
+   */
+  private buildObjectSubMenu(zone: ZoneType) {
+    this.objectSubMenuEl.innerHTML = '';
+    const btnW = CONSTRUCT_MENU_W; // 430
+    const kHOTKEYS = ['1','2','3','4','5','6','7','8','9','0','A','B','C','D','E','F','O'];
+
+    // ── Back button — returns to zone list ──
+    const backEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, 'ESC', line('HUDHUD018TEXT'), AMBER, () => {
+      SoundManager.playUI('UI_Select');
+      this.objectMenuState = 'zones';
+      this.objectSubMenuEl.style.display = 'none';
+      this.objectMenuEl.style.display = 'block';
+      this.sidebarEl.style.width = `${OBJECT_PICKER_W}px`; // 330px for zone list
+      this.selectedObjectName = '';
+      playWarble(this.sidebarEl);
+    });
+    this.objectSubMenuEl.appendChild(backEl);
+
+    // ── Object buttons ──
+    const items = getMenuForZone(zone);
+    let hotkeyIdx = 0;
+    for (const objName of items) {
       const objData = tObjects[objName];
       if (!objData || !objData.showInObjectMenu) continue;
+
+      const hotkey = hotkeyIdx < kHOTKEYS.length ? kHOTKEYS[hotkeyIdx] : '';
+      hotkeyIdx++;
 
       const isSelected = objName === this.selectedObjectName;
       const el = document.createElement('div');
       el.style.cssText = `
-        width:${btnW}px;height:${btnH}px;
-        background:${isSelected ? 'rgba(223,162,0,0.3)' : 'rgba(0,0,0,0.85)'};
-        margin-bottom:2px;padding:6px 8px;cursor:pointer;box-sizing:border-box;
+        height:${OBJECT_SUB_BTN_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;
+        gap:8px;position:relative;background:${isSelected ? AMBER : 'transparent'};
       `;
-      el.innerHTML = `
-        <div style="font-size:14px;color:${AMBER};">${objData.friendlyName}</div>
-        <div style="font-size:11px;color:#888;">Cost: ${objData.matterCost}${objData.nPowerDraw ? ` | Power: ${objData.nPowerDraw}` : ''}${objData.nPowerOutput ? ` | +Power: ${objData.nPowerOutput}` : ''}</div>
-      `;
+
+      // Hotkey
+      const hk = document.createElement('span');
+      hk.textContent = hotkey ? `[${hotkey}]` : '';
+      hk.style.cssText = `font-size:13px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;width:32px;`;
+
+      // Label + cost column
+      const col = document.createElement('div');
+      col.style.cssText = 'flex:1;';
+      const lbl = document.createElement('div');
+      lbl.textContent = objData.friendlyName;
+      lbl.style.cssText = `font-size:18px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:400;`;
+      const cost = document.createElement('div');
+      cost.textContent = `${line('HUDHUD042TEXT')} ${objData.matterCost}`;
+      cost.style.cssText = `font-size:13px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.7;`;
+      col.appendChild(lbl);
+      col.appendChild(cost);
+
+      el.appendChild(hk);
+      el.appendChild(col);
+
+      const capturedName = objName;
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
       el.addEventListener('click', () => {
-        this.selectedObjectName = objName;
-        this.onObjectSelected(objName);
-        this.refreshObjectPicker(); // Re-render to show selection
+        SoundManager.playUI('UI_Select');
+        this.selectedObjectName = capturedName;
+        this.onObjectSelected(capturedName);
+        this.buildObjectSubMenu(zone); // Re-render to show selection
       });
-      el.addEventListener('mouseenter', () => { if (!isSelected) el.style.background = 'rgba(223,162,0,0.15)'; });
-      el.addEventListener('mouseleave', () => { if (!isSelected) el.style.background = 'rgba(0,0,0,0.85)'; });
-      this.objectPicker.appendChild(el);
+      el.addEventListener('mouseenter', () => {
+        SoundManager.playUI('UI_Hilight');
+        if (!isSelected) {
+          el.style.background = AMBER;
+          hk.style.color = '#000';
+          lbl.style.color = '#000';
+          cost.style.color = '#000';
+        }
+      });
+      el.addEventListener('mouseleave', () => {
+        if (!isSelected) {
+          el.style.background = 'transparent';
+          hk.style.color = AMBER;
+          lbl.style.color = AMBER;
+          cost.style.color = AMBER;
+        }
+      });
+
+      this.objectSubMenuEl.appendChild(el);
     }
 
-    this.objectPicker.style.display = 'block';
+    // ── Cancel button — Lua CancelButton ──
+    const cancelEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, 'X', line('HUDHUD020TEXT'), '#FF3D00', () => {
+      SoundManager.playUI('UI_Select');
+      if (this.onCancelBuild) this.onCancelBuild();
+      this.setBuildMode('none');
+      GameRules.bRunning = true;
+    });
+    this.objectSubMenuEl.appendChild(cancelEl);
+
+    // ── Confirm button — Lua ConfirmButton ──
+    const confirmEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, '', line('HUDHUD019TEXT'), '#A5D318', () => {
+      SoundManager.playUI('UI_Select');
+      if (this.onConfirmBuild) this.onConfirmBuild();
+      this.setBuildMode('none');
+      GameRules.bRunning = true;
+    });
+    this.objectSubMenuEl.appendChild(confirmEl);
+  }
+
+  /** Helper: create a standard sidebar menu button (Lua-style) */
+  private createMenuButton(width: number, height: number, hotkey: string, label: string, color: string, onClick: () => void): HTMLDivElement {
+    const el = document.createElement('div');
+    el.style.cssText = `
+      height:${height}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;
+    `;
+    if (hotkey) {
+      const hk = document.createElement('span');
+      hk.textContent = `[${hotkey}]`;
+      hk.style.cssText = `font-size:13px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;width:40px;`;
+      el.appendChild(hk);
+    }
+    const lbl = document.createElement('span');
+    lbl.textContent = label;
+    lbl.style.cssText = `font-size:18px;color:${color};font-family:'Dosis',sans-serif;font-weight:600;`;
+    el.appendChild(lbl);
+
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
+    el.addEventListener('click', onClick);
+    el.addEventListener('mouseenter', () => {
+      SoundManager.playUI('UI_Hilight');
+      el.style.background = color;
+      for (const c of el.children) (c as HTMLElement).style.color = '#000';
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.background = 'transparent';
+      for (const c of el.children) (c as HTMLElement).style.color = color;
+    });
+    return el;
   }
 
   // ── Tooltip ─────────────────────────────────────────────────────
@@ -1280,7 +1454,7 @@ export class UIManager {
     if (this.displayedMatter < 0) this.displayedMatter = currentMatter;
     if (this.prevMatter >= 0 && currentMatter !== this.prevMatter) {
       this.matterFlashTimer = 30;
-      this.matterText.style.color = currentMatter > this.prevMatter ? '#4f4' : '#f44';
+      this.matterText.style.color = currentMatter > this.prevMatter ? '#A5D318' : '#FF3D00'; // Lua Gui.GREEN / Gui.RED
     }
     // Tick displayed value toward real value (Lua: animated counter with sound)
     if (this.displayedMatter !== currentMatter) {
@@ -1317,7 +1491,7 @@ export class UIManager {
     this.popText.textContent = String(pop);
     this.capacityText.textContent = `/${maxCap}`;
     if (pop > maxCap) {
-      this.popText.style.color = '#f44';
+      this.popText.style.color = '#FF3D00'; // Lua Gui.RED
     } else {
       this.popText.style.color = AMBER;
     }
@@ -1326,14 +1500,16 @@ export class UIManager {
     const aliveChars = chars.filter(c => c.isAlive());
     if (aliveChars.length > 0) {
       const avgMorale = aliveChars.reduce((sum, c) => sum + c.nMorale, 0) / aliveChars.length;
-      // Lua StatusBar: raw morale -100..+100, thresholds at 10/50/70/90
+      // Lua StatusBar: raw morale -100..+100, thresholds at 10/50/70/90 with per-threshold colors
       let emoticon: string;
-      if (avgMorale <= 10) emoticon = '>:(';       // bigfrown
-      else if (avgMorale <= 50) emoticon = ':(';    // frown
-      else if (avgMorale <= 70) emoticon = ':|';    // meh
-      else if (avgMorale <= 90) emoticon = ':)';    // smile
-      else emoticon = ':D';                         // bigsmile
+      let moraleColor: string;
+      if (avgMorale <= 10)       { emoticon = '>:('; moraleColor = '#FF3D00'; } // bigfrown, Gui.RED
+      else if (avgMorale <= 50)  { emoticon = ':(';  moraleColor = '#FF8000'; } // frown, Gui.ORANGE
+      else if (avgMorale <= 70)  { emoticon = ':|';  moraleColor = AMBER; }     // meh, Gui.AMBER
+      else if (avgMorale <= 90)  { emoticon = ':)';  moraleColor = '#D3D318'; } // smile, Gui.AMBERGREEN
+      else                       { emoticon = ':D';  moraleColor = '#A5D318'; } // bigsmile, Gui.GREEN
       this.moraleText.textContent = `${emoticon} ${Math.round(avgMorale)}`;
+      this.moraleText.style.color = moraleColor;
     } else {
       this.moraleText.textContent = '';
     }
@@ -1343,7 +1519,7 @@ export class UIManager {
     if (builtObjects.length > 0) {
       const avgCondition = builtObjects.reduce((sum, o) => sum + o.nCondition, 0) / builtObjects.length;
       this.machineHealthText.textContent = `${Math.round(avgCondition)}%`;
-      this.machineHealthText.style.color = avgCondition < 50 ? '#f44' : avgCondition < 80 ? '#ff0' : '#888';
+      this.machineHealthText.style.color = avgCondition < 50 ? '#FF3D00' : avgCondition < 80 ? '#FF8000' : AMBER; // Lua: RED/ORANGE/AMBER
     } else {
       this.machineHealthText.textContent = '';
     }
@@ -1362,7 +1538,7 @@ export class UIManager {
 
     // ── Sidebar active states ─────────────────────────────
     const buildMode = this.getBuildMode();
-    const constructModes: BuildMode[] = ['room', 'floor', 'wall', 'door', 'zone', 'object', 'demolish'];
+    const constructModes: BuildMode[] = ['room', 'floor', 'wall', 'door', 'zone', 'object', 'demolish', 'vaporize', 'erase'];
     const isConstructActive = constructModes.includes(buildMode);
 
     for (const sb of this.sidebarBtns) {
@@ -1386,15 +1562,19 @@ export class UIManager {
       sb.hotkey.style.color = active ? '#000' : AMBER;
     }
 
-    // ── Construct sub-menu: replaces sidebar buttons (Lua behavior) ──
-    if (isConstructActive) {
+    // ── Construct sub-menu: replaces sidebar buttons ──
+    // Lua: ConstructMenu (430px) for build modes, ObjectMenu (330px) for zone browse,
+    //      SelectObjectForZoneMenu (430px) for object selection
+    const isObjectMode = buildMode === 'object';
+    if (isConstructActive && !isObjectMode) {
+      // Standard construct submenu (build/demolish modes)
       this.constructSub.style.display = 'block';
-      // Hide main sidebar buttons when construct menu is active
-      for (const sb of this.sidebarBtns) {
-        sb.el.style.display = 'none';
-      }
-      // Highlight active sub-button (skip first 3 children: Cancel, Confirm, label)
-      const SUB_OFFSET = 3;
+      this.objectMenuEl.style.display = 'none';
+      this.objectSubMenuEl.style.display = 'none';
+      this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`;
+      for (const sb of this.sidebarBtns) sb.el.style.display = 'none';
+      // Highlight active sub-button (skip cancelEl + constructLabel = 2 children)
+      const SUB_OFFSET = 2;
       const subBtns = this.constructSub.children;
       for (let i = 0; i < this.constructSubModes.length; i++) {
         const el = subBtns[i + SUB_OFFSET] as HTMLElement;
@@ -1406,8 +1586,24 @@ export class UIManager {
         if (hk) hk.style.color = isSubActive ? '#000' : AMBER;
         if (lbl) lbl.style.color = isSubActive ? '#000' : AMBER;
       }
+    } else if (isObjectMode) {
+      // Object menu: show zone list or object list in sidebar (Lua ObjectMenu/SelectObjectForZoneMenu)
+      this.constructSub.style.display = 'none';
+      for (const sb of this.sidebarBtns) sb.el.style.display = 'none';
+      if (this.objectMenuState === 'zones') {
+        this.objectMenuEl.style.display = 'block';
+        this.objectSubMenuEl.style.display = 'none';
+        this.sidebarEl.style.width = `${OBJECT_PICKER_W}px`; // 330px
+      } else {
+        this.objectMenuEl.style.display = 'none';
+        this.objectSubMenuEl.style.display = 'block';
+        this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`; // 430px
+      }
     } else {
       this.constructSub.style.display = 'none';
+      this.objectMenuEl.style.display = 'none';
+      this.objectSubMenuEl.style.display = 'none';
+      this.objectMenuState = 'zones'; // Reset for next time
     }
 
     // ── Mine sub-menu: replaces sidebar buttons (Lua MineMenu) ──
@@ -1444,11 +1640,13 @@ export class UIManager {
       this.beaconSub.style.display = 'none';
     }
 
-    // Restore sidebar buttons when no submenu is active
+    // Restore sidebar buttons and width when no submenu is active
     if (!isConstructActive && !isMineActive && !isBeaconActive) {
       for (const sb of this.sidebarBtns) {
         sb.el.style.display = 'flex';
       }
+      // Reset sidebar width to normal expanded/collapsed state
+      this.sidebarEl.style.width = this.sidebarExpanded ? `${SIDEBAR_W}px` : `${SIDEBAR_COLLAPSED_W}px`;
     }
 
     // ── Zone picker (disabled — zone assignment moved to room inspector Rezone tab) ───
@@ -1476,20 +1674,37 @@ export class UIManager {
       this.tooltipEl.style.display = 'none';
     }
 
-    // ── Alert log (Lua AlertLayout: amber notification cards) ──
+    // ── Alert log (Lua AlertLayout + HintPane: separate hint/alert colors) ──
     if (!this.alertMinimized) {
       const alerts = Base.getRecentAlerts(3);
       this.alertList.textContent = '';
-      for (const alert of alerts) {
+      // Lua AlertLayout: ALERTLOG_BG=#B57700, ALERTLOG_BG_ALT=#CA8400
+      // Lua HintPane: HINTLOG_BG=#5D807A, HINTLOG_BG_ALT=#709B93, HINTLOG_HIGHLIGHT=#BCFFFF
+      const ALERTLOG_BG_COLOR = '#B57700';
+      const ALERTLOG_BG_ALT_COLOR = '#CA8400';
+      let alertIdx = 0;
+      let hintIdx = 0;
+      for (let ai = 0; ai < alerts.length; ai++) {
+        const alert = alerts[ai];
+        const isHint = alert.type === 'hint';
+        let cardBg: string;
+        if (isHint) {
+          cardBg = hintIdx % 2 === 0 ? HINTLOG_BG : HINTLOG_BG_ALT;
+          hintIdx++;
+        } else {
+          cardBg = alertIdx % 2 === 0 ? ALERTLOG_BG_COLOR : ALERTLOG_BG_ALT_COLOR;
+          alertIdx++;
+        }
         const el = document.createElement('div');
         el.style.cssText = `
-          background:rgba(223,162,0,0.9);padding:8px 10px;display:flex;gap:8px;align-items:flex-start;
+          background:${cardBg};padding:8px 10px;display:flex;gap:8px;align-items:flex-start;
         `;
-        // "!" icon
+        // Icon: "!" for alerts, "?" for hints (Lua uses different icon styles)
         const icon = document.createElement('div');
-        icon.textContent = '!';
+        icon.textContent = isHint ? '?' : '!';
         icon.style.cssText = `
-          font-size:18px;font-weight:bold;color:#000;background:#dfa200;border:2px solid #000;
+          font-size:18px;font-weight:bold;color:#000;
+          background:${isHint ? HINTLOG_HIGHLIGHT : '#dfa200'};border:2px solid #000;
           width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
         `;
         // Content
@@ -1497,7 +1712,7 @@ export class UIManager {
         content.style.cssText = 'flex:1;';
         const msg = document.createElement('div');
         msg.textContent = alert.message;
-        msg.style.cssText = `font-size:13px;color:#000;font-family:'Dosis',sans-serif;font-weight:500;`;
+        msg.style.cssText = `font-size:13px;color:${isHint ? HINTLOG_HIGHLIGHT : '#000'};font-family:'Dosis',sans-serif;font-weight:500;`;
         // Lua: show relative time for recent alerts, absolute for older ones
         const elapsed = GameRules.simTime - alert.time;
         let timeLabel: string;
@@ -1508,7 +1723,7 @@ export class UIManager {
         else timeLabel = `${line('HUDHUD004TEXT')} ${GameRules.getFullStarDateString(alert.time)}`;
         const time = document.createElement('div');
         time.textContent = timeLabel;
-        time.style.cssText = `font-size:11px;color:#333;font-family:'Dosis',sans-serif;margin-top:2px;`;
+        time.style.cssText = `font-size:11px;color:${isHint ? '#a0d0cc' : '#333'};font-family:'Dosis',sans-serif;margin-top:2px;`;
         content.appendChild(msg);
         content.appendChild(time);
         el.appendChild(icon);

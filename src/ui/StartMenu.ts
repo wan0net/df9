@@ -8,7 +8,7 @@ import { SaveSlotPanel } from './SaveSlotPanel';
 import { playWarble, playWarbleFullscreen } from './WarbleEffect';
 
 const AMBER = '#dfa200';
-const BRIGHT_AMBER = '#ffcc44';
+const BRIGHT_AMBER = '#FFE696'; // Lua Gui.BRIGHT_AMBER = rgba(255,230,150,1)
 
 /**
  * Start menu rendered as HTML overlay.

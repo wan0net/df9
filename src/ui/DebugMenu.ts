@@ -2,7 +2,7 @@ import { SoundManager } from '../audio/SoundManager';
 import { line } from '../localization/Localization';
 
 const AMBER = '#dfa200';
-const BRIGHT_AMBER = '#ffcc44';
+const BRIGHT_AMBER = '#FFE696'; // Lua Gui.BRIGHT_AMBER = rgba(255,230,150,1)
 
 interface DebugCallbacks {
   onResearchOne: () => void;
