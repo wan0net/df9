@@ -8,10 +8,11 @@ import type { EnvObject } from '../envobjects/EnvObject';
 import { GameRules } from '../core/GameRules';
 import { Door, DOOR_STATE, DOOR_OPERATION } from '../envobjects/Door';
 import type { Room } from '../rooms/Room';
-import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL } from '../characters/CharacterConstants';
+import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL, UNEMPLOYED } from '../characters/CharacterConstants';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 
 import { line } from '../localization/Localization';
+import { getTopicName } from '../characters/Topics';
 
 const TEAM_ID_PLAYER = 1;
 
@@ -129,7 +130,18 @@ export class InspectorPanel {
 
   setEntity(entity: SelectedEntity) {
     this.entity = entity;
-    this.currentTab = 'duty';
+    // Lua CitizenInspector.setCitizen: smart tab defaults
+    // Unemployed → duty tab, employed → action tab
+    if (entity?.type === 'character') {
+      const char = entity.data;
+      if (char.tStats.nTeam === TEAM_ID_PLAYER) {
+        this.currentTab = char.getJob() === UNEMPLOYED ? 'duty' : 'actions';
+      } else {
+        this.currentTab = 'stats'; // hostiles default to stats
+      }
+    } else {
+      this.currentTab = 'duty';
+    }
     this.objectTab = 'action'; // Lua: default tab is ObjectActionTab
     this.roomTab = 'info';
     this.editingName = false;
@@ -481,25 +493,21 @@ export class InspectorPanel {
     const favHobby = char.getFavorite('Activities');
     const favFood = char.getFavorite('Foods');
     const favBand = char.getFavorite('Bands');
-    if (favHobby) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC117TEXT')} ${favHobby}</div>`;
-    if (favFood) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC049TEXT')} ${favFood}</div>`;
-    if (favBand) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC050TEXT')} ${favBand}</div>`;
-    // Friends (Lua INSPEC047TEXT — top 4 people with positive affinity)
+    if (favHobby) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC117TEXT')} ${getTopicName(favHobby)}</div>`;
+    if (favFood) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC049TEXT')} ${getTopicName(favFood)}</div>`;
+    if (favBand) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC050TEXT')} ${getTopicName(favBand)}</div>`;
+    // Friends (Lua INSPEC047TEXT — top 4 people with positive affinity, comma-separated names)
     const friends = char.getPeopleOfAffinity(5, true).sort((a, b) => b.nAffinity - a.nAffinity).slice(0, 4);
-    statsHtml += `<div style="margin-bottom:2px;color:${AMBER};">${line('INSPEC047TEXT')}</div>`;
-    if (friends.length > 0) {
-      for (const f of friends) statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${f.sID}</div>`;
-    } else {
-      statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${line('INSPEC082TEXT')}</div>`;
-    }
-    // Enemies (Lua INSPEC048TEXT — top 4 people with negative affinity)
+    const friendStr = friends.length > 0
+      ? friends.map(f => getTopicName(f.sID)).join(', ')
+      : line('INSPEC082TEXT');
+    statsHtml += `<div style="margin-bottom:2px;">${line('INSPEC047TEXT')} ${friendStr}</div>`;
+    // Enemies (Lua INSPEC048TEXT — top 4 people with negative affinity, comma-separated names)
     const enemies = char.getPeopleOfAffinity(-5, false).sort((a, b) => a.nAffinity - b.nAffinity).slice(0, 4);
-    statsHtml += `<div style="margin-bottom:2px;color:${AMBER};">${line('INSPEC048TEXT')}</div>`;
-    if (enemies.length > 0) {
-      for (const e of enemies) statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${e.sID}</div>`;
-    } else {
-      statsHtml += `<div style="margin-bottom:2px;padding-left:8px;">${line('INSPEC082TEXT')}</div>`;
-    }
+    const enemyStr = enemies.length > 0
+      ? enemies.map(e => getTopicName(e.sID)).join(', ')
+      : line('INSPEC082TEXT');
+    statsHtml += `<div style="margin-bottom:2px;">${line('INSPEC048TEXT')} ${enemyStr}</div>`;
     statsDiv.innerHTML = statsHtml;
     container.appendChild(statsDiv);
   }
