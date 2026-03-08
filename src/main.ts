@@ -1140,6 +1140,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Master tick
     GameRules.onTick(delta / 1000);
 
+    // Cull expired alerts (Lua Base.onTick auto-dismiss)
+    Base.cullExpiredAlerts();
+
     // Sync 3D prop models for pickups and held items
     syncProps();
 

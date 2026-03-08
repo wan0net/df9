@@ -171,7 +171,7 @@ export class UIManager {
   private alertMinimized = false;
 
   // Sidebar buttons for active tracking
-  private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; iconImg: HTMLImageElement | null; mode: BuildMode; btnLabel: string }[] = [];
+  private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; iconImg: HTMLImageElement | null; mode: BuildMode; btnLabel: string; action?: string }[] = [];
   /** Sidebar element for collapse/expand. */
   private sidebarEl!: HTMLDivElement;
   /** Whether sidebar is currently expanded (Lua: starts collapsed, expands on hover). */
@@ -430,7 +430,7 @@ export class UIManager {
     const speedKeys = ['speed0', 'speed1', 'speed2', 'speed3'];
     for (let i = 0; i < 4; i++) {
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position:relative;width:32px;height:32px;cursor:pointer;';
+      wrapper.style.cssText = 'position:relative;width:40px;height:40px;cursor:pointer;'; // Lua: 40x40 at scale 1.4
 
       const inactiveImg = document.createElement('img');
       inactiveImg.src = `assets/ui/hud/ui_hud_${speedKeys[i]}.png`;
@@ -712,6 +712,8 @@ export class UIManager {
       { label: line('HUDHUD007TEXT'), hotkey: 'C', mode: 'room', action: 'construct', iconImg: 'ui_iconIso_construct.png' },
       { label: line('HUDHUD008TEXT'), hotkey: 'M', mode: 'mine', iconImg: 'ui_iconIso_mine.png' },
       { label: line('HUDHUD025TEXT'), hotkey: 'B', mode: 'beacon', action: 'beacon', iconImg: 'ui_iconIso_beacon.png' },
+      // Lua: Disaster button (button 9), hidden until bDisasterMode=true, hotkey Z
+      { label: line('HUDHUD062TEXT'), hotkey: 'Z', mode: 'none', action: 'disaster' },
     ];
 
     for (const def of btnDefs) {
@@ -797,6 +799,10 @@ export class UIManager {
           this.inspectSubActive = true; // Show inspect submenu (screenshot 20.32.12)
           return;
         }
+        if (def.action === 'disaster') {
+          // Lua: opens disaster submenu — stub for now
+          return;
+        }
         // Standard toggle
         if (this.getBuildMode() === def.mode) {
           this.setBuildMode('none');
@@ -828,8 +834,12 @@ export class UIManager {
         hotkey.style.color = AMBER;
       });
 
+      // Lua: Disaster button hidden until bDisasterMode=true
+      if (def.action === 'disaster') {
+        btn.style.display = 'none';
+      }
       sidebar.appendChild(btn);
-      this.sidebarBtns.push({ el: btn, label, hotkey, icon, iconImg, mode: def.mode, btnLabel: def.label });
+      this.sidebarBtns.push({ el: btn, label, hotkey, icon, iconImg, mode: def.mode, btnLabel: def.label, action: def.action });
     }
 
     // ── Inspect sub-menu (screenshot 20.32.12: "Back" + ">> Inspect") ──
@@ -1755,10 +1765,15 @@ export class UIManager {
     const isConstructActive = constructModes.includes(buildMode);
 
     for (const sb of this.sidebarBtns) {
+      // Lua: Disaster button hidden until bDisasterMode=true
+      if (sb.action === 'disaster') {
+        sb.el.style.display = GameRules.bDisasterMode ? '' : 'none';
+        if (!GameRules.bDisasterMode) continue;
+      }
       let active = false;
-      if (sb.btnLabel === 'Construct') {
+      if (sb.action === 'construct') {
         active = isConstructActive;
-      } else if (sb.btnLabel === 'Inspect') {
+      } else if (sb.action === 'inspect') {
         active = buildMode === 'none';
       } else {
         active = buildMode === sb.mode && sb.mode !== 'none';

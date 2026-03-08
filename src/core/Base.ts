@@ -104,6 +104,10 @@ export interface BaseAlert {
   type: string;
   message: string;
   time: number;
+  /** Lua: nEndTime — auto-dismiss when elapsedTime > nEndTime. */
+  nEndTime: number;
+  /** Lua: nPriority — 0=normal, 1=high. */
+  nPriority: number;
 }
 
 export interface BaseStats {
@@ -381,14 +385,35 @@ class BaseClass implements TickableSystem {
   // ── Alert Log ──
 
   addAlert(type: string, message: string) {
+    const data = EVENT_DATA[type] ?? EVENT_DATA[BASE_EVENT.Default];
+    const duration = data.nLogVisibleTime;
+    const priority = data.nPriority;
+    const endTime = GameRules.elapsedTime + duration;
+
+    // Lua _getRelatedEvent: deduplicate — extend existing alert if same type
+    const existing = this.alerts.find(a => a.type === type);
+    if (existing) {
+      existing.message = message;
+      existing.nEndTime = Math.max(existing.nEndTime, endTime);
+      existing.time = GameRules.simTime;
+      return;
+    }
+
     this.alerts.unshift({
       type,
       message,
       time: GameRules.simTime,
+      nEndTime: endTime,
+      nPriority: priority,
     });
     if (this.alerts.length > this.maxAlerts) {
       this.alerts.pop();
     }
+  }
+
+  /** Cull expired alerts (Lua Base.onTick auto-dismiss by nEndTime). */
+  cullExpiredAlerts() {
+    this.alerts = this.alerts.filter(a => a.nEndTime > GameRules.elapsedTime);
   }
 
   getRecentAlerts(count = 5): BaseAlert[] {
