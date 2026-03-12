@@ -767,6 +767,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     createSeedPod(threeRenderer, worldResult.seedPodX, worldResult.seedPodY);
   }
 
+  // Lua GameRules._resetCamera: zoom=1.0, center on seed pod / first character
+  {
+    const spx = worldResult.seedPodX * TILE_W + TILE_HALF_W;
+    const spy = worldResult.seedPodY * TILE_HALF_H;
+    cameraController.zoom = 1.0;
+    cameraController.centerOnWorld(spx, spy);
+  }
+
   // ── Input system ──────────────────────────────────────────
   const inputManager = new InputManager(threeRenderer.getCanvas(), cameraController);
 

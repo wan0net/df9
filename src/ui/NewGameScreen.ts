@@ -619,9 +619,10 @@ export class NewGameScreenState implements SceneState {
   private onMapClick(e: MouseEvent) {
     if (this.state !== 'Initial') return;
     const rect = this.canvas.getBoundingClientRect();
+    const uiScale = this.getUIScale();
     const cellSize = this.mapSize / INFO_MAP_SIZE;
-    const gx = Math.floor((e.clientX - rect.left - this.mapX) / cellSize);
-    const gy = Math.floor((e.clientY - rect.top  - this.mapY) / cellSize);
+    const gx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellSize);
+    const gy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellSize);
     if (gx < 0 || gx >= INFO_MAP_SIZE || gy < 0 || gy >= INFO_MAP_SIZE) return;
 
     this.selectedZone = this.makeLandingZone(gx, gy);
@@ -644,9 +645,10 @@ export class NewGameScreenState implements SceneState {
   private onMouseMove(e: MouseEvent) {
     if (this.state !== 'Initial') return;
     const rect = this.canvas.getBoundingClientRect();
+    const uiScale = this.getUIScale();
     const cellSize = this.mapSize / INFO_MAP_SIZE;
-    this.hoverGx = Math.floor((e.clientX - rect.left - this.mapX) / cellSize);
-    this.hoverGy = Math.floor((e.clientY - rect.top  - this.mapY) / cellSize);
+    this.hoverGx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellSize);
+    this.hoverGy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellSize);
     if (this.hoverGx >= 0 && this.hoverGx < INFO_MAP_SIZE && this.hoverGy >= 0 && this.hoverGy < INFO_MAP_SIZE) {
       this.showInspector(this.makeLandingZone(this.hoverGx, this.hoverGy));
     } else {

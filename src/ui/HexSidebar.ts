@@ -601,15 +601,17 @@ export class HexSidebar {
   }
 
   private getModeIcon(mode: BuildMode): { icon: string; iconSrc?: string } {
+    // Lua Shared.lua icon names for each construct submenu mode
     const map: Record<string, { icon: string; iconSrc?: string }> = {
-      room: { icon: '□', iconSrc: 'assets/ui/icons/ui_iconIso_construct.png' },
-      wall: { icon: '▓' },
-      floor: { icon: '▢' },
-      object: { icon: '○', iconSrc: 'assets/ui/icons/ui_iconIso_inspect.png' },
-      demolish: { icon: '⚒', iconSrc: 'assets/ui/icons/ui_iconIso_mine.png' },
-      vaporize: { icon: '⚡' },
-      erase: { icon: '✕' },
+      room: { icon: '□', iconSrc: 'assets/ui/icons/ui_iconIso_room.png' },
+      wall: { icon: '▓', iconSrc: 'assets/ui/icons/ui_iconIso_Wall.png' },
+      floor: { icon: '▢', iconSrc: 'assets/ui/icons/ui_iconIso_floor.png' },
+      object: { icon: '○', iconSrc: 'assets/ui/icons/ui_iconIso_object.png' },
+      demolish: { icon: '⚒', iconSrc: 'assets/ui/icons/ui_iconIso_demolish.png' },
+      vaporize: { icon: '⚡', iconSrc: 'assets/ui/icons/ui_iconIso_demolish.png' },
+      erase: { icon: '✕', iconSrc: 'assets/ui/icons/ui_iconIso_erase.png' },
       mine: { icon: '⛏', iconSrc: 'assets/ui/icons/ui_iconIso_mine.png' },
+      door: { icon: '▯', iconSrc: 'assets/ui/icons/ui_iconIso_door.png' },
     };
     return map[mode] || { icon: '•' };
   }

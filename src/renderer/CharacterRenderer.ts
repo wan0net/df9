@@ -185,6 +185,14 @@ const MAT_DEFAULT_COLORS: Record<string, number> = {
   'Shamon_Head01': 0x99aa77,
 };
 
+const textureMaterials = new Map<THREE.Texture, Set<THREE.Material>>();
+
+function trackTextureUser(tex: THREE.Texture, mat: THREE.Material) {
+  let mats = textureMaterials.get(tex);
+  if (!mats) { mats = new Set(); textureMaterials.set(tex, mats); }
+  mats.add(mat);
+}
+
 function loadCharTexture(filename: string): THREE.Texture {
   const cached = charTexCache.get(filename);
   if (cached) return cached;
@@ -196,11 +204,12 @@ function loadCharTexture(filename: string): THREE.Texture {
       t.minFilter = THREE.NearestFilter;
       t.colorSpace = THREE.SRGBColorSpace;
       t.needsUpdate = true;
+      const mats = textureMaterials.get(t);
+      if (mats) { for (const m of mats) m.needsUpdate = true; }
     },
     undefined,
     () => { /* silently fail for missing textures */ }
   );
-  // Set filters immediately too (for the texture object before load)
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -243,8 +252,10 @@ function applyModelTextures(group: THREE.Group, charId: number) {
     let applied = false;
     for (const baseName of candidates) {
       if (CHAR_TEXTURES.has(baseName)) {
-        mat.map = loadCharTexture(`${baseName}.png`);
+        const tex = loadCharTexture(`${baseName}.png`);
+        mat.map = tex;
         mat.needsUpdate = true;
+        trackTextureUser(tex, mat);
         applied = true;
         break;
       }
