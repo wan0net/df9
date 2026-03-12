@@ -12,3 +12,12 @@ public/assets/models/*.json
 test-results/
 playwright-report/
 blob-report/
+.playwright-mcp/
+
+# Editor / AI tooling
+.claude/
+
+# Debug artifacts
+Screenshots/
+verify_*.png
+__pycache__/
