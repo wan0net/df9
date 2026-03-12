@@ -247,15 +247,15 @@ export class NewGameScreenState implements SceneState {
       : `transform-origin: top left; transform: scale(${uiScale}); width: ${100/uiScale}%; height: ${100/uiScale}%;`;
     this.overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;font-family:'Orbitron',monospace;overflow:hidden;${scaleStyles}`;
 
+    const w = Math.round(window.innerWidth / uiScale);
+    const h = Math.round(window.innerHeight / uiScale);
+
     this.canvas = document.createElement('canvas');
-    this.canvas.width  = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    this.canvas.width  = w;
+    this.canvas.height = h;
     this.canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
     this.canvasCtx = this.canvas.getContext('2d')!;
     this.overlay.appendChild(this.canvas);
-
-    const w = window.innerWidth;
-    const h = window.innerHeight;
     // Galaxy map fills available space between sidebars, with room for title/helptext
     const availW = w - LEFT_SIDEBAR_W - RIGHT_SIDEBAR_W - 20;
     const availH = h - 110; // 50px title + 60px help bar at bottom
@@ -329,7 +329,8 @@ export class NewGameScreenState implements SceneState {
   // ── Build UI elements ────────────────────────────────────────────────────────
 
   private buildSidebars() {
-    const h = window.innerHeight;
+    const uiScale = this.getUIScale();
+    const h = Math.round(window.innerHeight / uiScale);
 
     // ── Left sidebar ──────────────────────────────────────────────────
     // Lua: top piece at left edge, tiles repeat, bottom piece at -(H/2)+350.

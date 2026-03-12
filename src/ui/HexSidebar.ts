@@ -188,7 +188,7 @@ export class HexSidebar {
         id: 'disaster',
         label: line('HUDHUD062TEXT'),
         hotkey: 'Z',
-        iconSrc: 'assets/ui/icons/ui_iconIso_cancel.png',
+        iconSrc: 'assets/ui/icons/ui_iconIso_beacon.png',
         action: () => this.onDisaster(),
         hidden: !GameRules.bDisasterMode,
       },
@@ -415,11 +415,13 @@ export class HexSidebar {
     ];
 
     for (const m of modes) {
+      const modeIcon = this.getModeIcon(m.mode);
       this.createSubmenuButton({
         label: m.label,
         hotkey: m.hotkey,
         color: AMBER,
-        icon: this.getModeIcon(m.mode),
+        icon: modeIcon.icon,
+        iconSrc: modeIcon.iconSrc,
         action: () => this.callbacks.setBuildMode(m.mode),
       });
     }
@@ -503,6 +505,7 @@ export class HexSidebar {
     hotkey: string;
     color: string;
     icon: string;
+    iconSrc?: string;
     action: () => void;
   }) {
     const wrapper = document.createElement('div');
@@ -517,15 +520,25 @@ export class HexSidebar {
       transition: background 0.15s ease;
     `;
 
-    const iconEl = document.createElement('span');
-    iconEl.textContent = opts.icon;
-    iconEl.style.cssText = `
-      width: 48px;
-      text-align: center;
-      font-size: 24px;
-      color: ${opts.color};
-    `;
-    wrapper.appendChild(iconEl);
+    let iconNode: HTMLElement;
+    if (opts.iconSrc) {
+      const img = document.createElement('img');
+      img.src = opts.iconSrc;
+      img.style.cssText = `
+        width: 32px; height: 32px; object-fit: contain;
+        filter: sepia(1) saturate(3) hue-rotate(15deg) brightness(0.9);
+      `;
+      const iconWrap = document.createElement('div');
+      iconWrap.style.cssText = 'width:48px;text-align:center;display:flex;align-items:center;justify-content:center;';
+      iconWrap.appendChild(img);
+      iconNode = iconWrap;
+    } else {
+      const span = document.createElement('span');
+      span.textContent = opts.icon;
+      span.style.cssText = `width:48px;text-align:center;font-size:24px;color:${opts.color};`;
+      iconNode = span;
+    }
+    wrapper.appendChild(iconNode);
 
     const label = document.createElement('div');
     label.textContent = opts.label;
@@ -552,14 +565,24 @@ export class HexSidebar {
     wrapper.addEventListener('mouseenter', () => {
       SoundManager.playUI('UI_Hilight');
       wrapper.style.background = opts.color;
-      iconEl.style.color = '#000';
+      if (opts.iconSrc) {
+        const img = iconNode.querySelector('img');
+        if (img) img.style.filter = 'brightness(0)';
+      } else {
+        (iconNode as HTMLSpanElement).style.color = '#000';
+      }
       label.style.color = '#000';
       hotkey.style.color = '#000';
     });
 
     wrapper.addEventListener('mouseleave', () => {
       wrapper.style.background = 'transparent';
-      iconEl.style.color = opts.color;
+      if (opts.iconSrc) {
+        const img = iconNode.querySelector('img');
+        if (img) img.style.filter = 'sepia(1) saturate(3) hue-rotate(15deg) brightness(0.9)';
+      } else {
+        (iconNode as HTMLSpanElement).style.color = opts.color;
+      }
       label.style.color = opts.color;
       hotkey.style.color = AMBER;
     });
@@ -577,18 +600,18 @@ export class HexSidebar {
     this.submenuContainer.style.display = 'none';
   }
 
-  private getModeIcon(mode: BuildMode): string {
-    const icons: Record<string, string> = {
-      room: '□',
-      wall: '▓',
-      floor: '▢',
-      object: '○',
-      demolish: '⚒',
-      vaporize: '⚡',
-      erase: '✕',
-      mine: '⛏',
+  private getModeIcon(mode: BuildMode): { icon: string; iconSrc?: string } {
+    const map: Record<string, { icon: string; iconSrc?: string }> = {
+      room: { icon: '□', iconSrc: 'assets/ui/icons/ui_iconIso_construct.png' },
+      wall: { icon: '▓' },
+      floor: { icon: '▢' },
+      object: { icon: '○', iconSrc: 'assets/ui/icons/ui_iconIso_inspect.png' },
+      demolish: { icon: '⚒', iconSrc: 'assets/ui/icons/ui_iconIso_mine.png' },
+      vaporize: { icon: '⚡' },
+      erase: { icon: '✕' },
+      mine: { icon: '⛏', iconSrc: 'assets/ui/icons/ui_iconIso_mine.png' },
     };
-    return icons[mode] || '•';
+    return map[mode] || { icon: '•' };
   }
 
   enableDisasterMode() {

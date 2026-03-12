@@ -41,45 +41,29 @@ export class BuildSystem {
   }
 
   /**
-   * Build a room: the dragged rectangle IS the full room including walls.
-   * Perimeter tiles become WALL_PENDING, interior tiles become FLOOR_PENDING.
-   * Matches original Lua: drag area = room area, walls are not added outside.
+   * Build a room: all dragged tiles become FLOOR_PENDING, then WallAutoGen
+   * places WALL_PENDING at floor/space boundaries (iso-diamond adjacency).
+   * Lua: drag tiles → floor, walls auto-generated around the perimeter.
    */
   buildRoom(tiles: { x: number; y: number }[], availableMatter: number): number {
     if (tiles.length === 0) return 0;
 
-    // Find bounds to determine perimeter vs interior
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const t of tiles) {
-      if (t.x < minX) minX = t.x;
-      if (t.x > maxX) maxX = t.x;
-      if (t.y < minY) minY = t.y;
-      if (t.y > maxY) maxY = t.y;
-    }
-
-    // Build a set of all tiles in the drag for fast lookup
-    const tileSet = new Set<string>();
-    for (const t of tiles) tileSet.add(`${t.x},${t.y}`);
-
     let cost = 0;
+    const placed: { x: number; y: number }[] = [];
 
     for (const t of tiles) {
       const current = this.grid.get(t.x, t.y);
       if (current !== TileType.SPACE && current !== TileType.WALL && current !== TileType.WALL_DESTROYED) continue;
       if (cost + MAT_BUILD_FLOOR > availableMatter) break;
 
-      // A tile is perimeter if it's on the edge of the bounding box
-      // or if any of its neighbors in the drag rectangle are missing
-      const isPerimeter = t.x === minX || t.x === maxX || t.y === minY || t.y === maxY;
-
-      if (isPerimeter) {
-        this.grid.set(t.x, t.y, TileType.WALL_PENDING);
-        CommandQueue.addCommand('build_tile', t.x, t.y, 'wall');
-      } else {
-        this.grid.set(t.x, t.y, TileType.FLOOR_PENDING);
-        CommandQueue.addCommand('build_tile', t.x, t.y, 'floor');
-      }
+      this.grid.set(t.x, t.y, TileType.FLOOR_PENDING);
+      CommandQueue.addCommand('build_tile', t.x, t.y, 'floor');
       cost += MAT_BUILD_FLOOR;
+      placed.push(t);
+    }
+
+    if (placed.length > 0) {
+      this.wallAutoGen.updatePending(placed);
     }
 
     return cost;

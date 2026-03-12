@@ -4484,29 +4484,28 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
       // Matter should NOT be deducted yet (pending)
       const matterAfter = df9.getMatter();
-      // Check that tiles were placed as pending
       const centerType = grid.get(15, 15);
       const edgeType = grid.get(13, 13);
+      // WallAutoGen places WALL_PENDING on adjacent SPACE tiles outside the drag
+      // (12,13) is a cardinal neighbor of (13,13) that's outside the drag area
+      const wallType = grid.get(12, 13);
 
-      // Cancel: restore all tiles
-      // Since we didn't use the full flow (direct call), manually revert
-      for (const t of tiles) {
-        const tt = grid.get(t.x, t.y);
-        if (tt === 9 || tt === 10) { // FLOOR_PENDING or WALL_PENDING
-          grid.set(t.x, t.y, 1); // SPACE
+      // Cancel: restore all pending tiles (floor + auto-generated walls)
+      for (let cy = 10; cy <= 20; cy++) {
+        for (let cx = 10; cx <= 20; cx++) {
+          const tt = grid.get(cx, cy);
+          if (tt === 9 || tt === 10) grid.set(cx, cy, 1);
         }
       }
 
       const centerRestored = grid.get(15, 15);
-      return { cost, matterBefore, matterAfter, centerType, edgeType, centerRestored };
+      return { cost, matterBefore, matterAfter, centerType, edgeType, wallType, centerRestored };
     });
-    // Cost should be > 0
     expect(result.cost).toBeGreaterThan(0);
-    // Center tile should be FLOOR_PENDING (9) — interior
     expect(result.centerType).toBe(9);
-    // Edge tile should be WALL_PENDING (10) — perimeter
-    expect(result.edgeType).toBe(10);
-    // After cancel, center should be SPACE (1)
+    // All dragged tiles are FLOOR_PENDING; walls auto-generated outside
+    expect(result.edgeType).toBe(9);
+    expect(result.wallType).toBe(10);
     expect(result.centerRestored).toBe(1);
   });
 

@@ -219,8 +219,8 @@ function applyModelTextures(group: THREE.Group, charId: number) {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
     // Clone materials per character — Three.js clone() shares material references,
     // so modifying mat.map would affect ALL characters using the same cached model.
-    const origMat = child.material;
-    if (!(origMat instanceof THREE.MeshStandardMaterial) && !(origMat instanceof THREE.MeshBasicMaterial)) return;
+    const origMat = child.material as THREE.MeshStandardMaterial;
+    if (!origMat || !('map' in origMat)) return;
     const mat = origMat.clone();
     mat.name = origMat.name;
     child.material = mat;
