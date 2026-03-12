@@ -5011,4 +5011,78 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     });
     expect(result.spawned).toBe(true);
   });
+
+  test('localization: new SETMENU linecodes return text', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return {
+        settings: df9.getLine('SETMENU01TEXT'),
+        music: df9.getLine('SETMENU02TEXT'),
+        sfx: df9.getLine('SETMENU03TEXT'),
+      };
+    });
+    expect(result.settings).toBe('SETTINGS');
+    expect(result.music).toBe('MUSIC VOLUME');
+    expect(result.sfx).toBe('SFX VOLUME');
+  });
+
+  test('localization: derelict linecodes return text', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return {
+        discovery: df9.getLine('DERELICT_DISCOVERY'),
+        loot: df9.getLine('DERELICT_CHOICE_LOOT'),
+        leave: df9.getLine('DERELICT_CHOICE_LEAVE'),
+      };
+    });
+    expect(result.discovery).toBe('A derelict ship has been discovered nearby.');
+    expect(result.loot).toBe('Loot the wreck');
+    expect(result.leave).toBe('Leave it alone');
+  });
+
+  test('localization: docking linecodes return text', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      return {
+        immigration: df9.getLine('IMMIGRATION_SHUTTLE'),
+        raider: df9.getLine('RAIDER_SHIP'),
+        traderArrived: df9.getLine('ALERT_TRADER_ARRIVED'),
+      };
+    });
+    expect(result.immigration).toBe('Immigration Shuttle');
+    expect(result.raider).toBe('Raider Vessel');
+    expect(result.traderArrived).toBe('A trader has arrived!');
+  });
+
+  test('wall rendering: wall tiles have correct type after room build', async () => {
+    const walls = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const wallTiles = df9.getWallTiles();
+      // Check that wall tiles exist and have WALL type (4)
+      return wallTiles.slice(0, 5).map((w: any) => ({
+        x: w.x, y: w.y,
+        type: df9.getTileType(w.x, w.y),
+      }));
+    });
+    expect(walls.length).toBeGreaterThan(0);
+    for (const w of walls) {
+      expect(w.type).toBe(4); // TileType.WALL
+    }
+  });
+
+  test('cutaway mode: toggles without error', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const gr = df9._gameRules;
+      // Enable cutaway
+      gr.enableCutawayMode(true);
+      const enabled = gr.isCutawayModeEnabled();
+      // Disable cutaway
+      gr.enableCutawayMode(false);
+      const disabled = !gr.isCutawayModeEnabled();
+      return { enabled, disabled };
+    });
+    expect(result.enabled).toBe(true);
+    expect(result.disabled).toBe(true);
+  });
 });

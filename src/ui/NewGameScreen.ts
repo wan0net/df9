@@ -273,17 +273,17 @@ export class NewGameScreenState implements SceneState {
     // Flavor text — Lua: FlavorTextALabel (NEWBAS021TEXT) + FlavorTextBLabel (NEWBAS022TEXT)
     // Positioned at 314px from left edge (just right of left sidebar)
     const flavorA = this.el('div',
-      `position:absolute;top:14px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;` /* Lua dosissemibold26 */,
+      `position:absolute;top:14px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:6;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;` /* Lua dosissemibold26 */,
       line('NEWBAS021TEXT'));
     this.overlay.appendChild(flavorA);
     const flavorB = this.el('div',
-      `position:absolute;top:68px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:18px;z-index:5;font-family:'Dosis',sans-serif;font-style:italic;` /* Lua dosissemibold18 */,
+      `position:absolute;top:68px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:18px;z-index:6;font-family:'Dosis',sans-serif;font-style:italic;` /* Lua dosissemibold18 */,
       line('NEWBAS022TEXT'));
     this.overlay.appendChild(flavorB);
 
     // "Region Selection" header on left sidebar — Lua: NewBase.lua top label
     const regionSelHeader = this.el('div',
-      `position:absolute;top:16px;left:16px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:5;font-family:'Dosis',sans-serif;letter-spacing:1px;font-style:italic;` /* Lua dosissemibold26 */,
+      `position:absolute;top:16px;left:16px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:4;font-family:'Dosis',sans-serif;letter-spacing:1px;font-style:italic;` /* Lua dosissemibold26 */,
       'Region Selection');
     this.overlay.appendChild(regionSelHeader);
 
@@ -527,7 +527,7 @@ export class NewGameScreenState implements SceneState {
     this.launchActiveEl.appendChild(activeImg);
 
     // DEPLOY label centered over the red button area
-    const deployLabel = this.el('div', `position:absolute;top:55%;left:50%;transform:translate(-50%,-50%);color:white;font-size:35px;font-family:'Dosis',sans-serif;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, line('NEWBUI002TEXT')); /* Lua dosisregular35 */
+    const deployLabel = this.el('div', `position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);color:white;font-size:28px;font-family:'Dosis',sans-serif;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, line('NEWBUI002TEXT')); /* Lua dosisregular35 */
     this.launchActiveEl.appendChild(deployLabel);
 
     this.launchActiveEl.addEventListener('mouseenter', () => {
@@ -762,14 +762,11 @@ export class NewGameScreenState implements SceneState {
       this.infoPanel.style.opacity   = String(progress);
       this.infoPanel.style.transform = `translateX(${(1 - progress) * 30}px)`;
       // Lua NewBaseInspector.lua:180 — rZoomedMap:setRot(0, 0, DFMath.lerp(15, 0, t))
-      const rotAngle = 15 * (1 - t);
-      this.canvas.style.transform = `rotate(${rotAngle}deg)`;
       if (this.inspectorTimer >= TOTAL) {
         this.inspectorTimer  = 0;
         this.inspectorActive = false;
         this.infoPanel.style.opacity   = '1';
         this.infoPanel.style.transform = 'none';
-        this.canvas.style.transform = 'none';
       }
     }
     this.draw();
