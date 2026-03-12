@@ -165,6 +165,7 @@ export const HURT_THRESHOLD = 30;
 export const SCUFFED_UP_THRESHOLD = 80;
 export const HEAL_RATE = 0.05;
 export const SELF_HEAL_COOLDOWN = 15;
+export const FIRE_DAMAGE_RATE = 5;
 
 export const STATUS_HEALTHY = 1;
 export const STATUS_HURT = 2;
@@ -272,6 +273,7 @@ export const STATUS_RAMPAGE = 1;
 export const STATUS_RAMPAGE_NONVIOLENT = 2;
 export const STATUS_RAMPAGE_VIOLENT = 3;
 export const VIOLENT_RAMPAGE_CHANCE = 0.25;
+export const REPLICATOR_FOOD = 3;
 
 // ── Oxygen / Survival ───────────────────────────────────────────────────
 export const OXYGEN_PER_SECOND = 200;
@@ -279,6 +281,7 @@ export const OXYGEN_LOW = 400;
 export const OXYGEN_SUFFOCATING = 100;
 export const OXYGEN_SUFFOCATION_UNTIL_DEATH = 60;
 export const OXYGEN_AVERAGE_SAMPLE = 5;
+export const SIGHT_RADIUS = 18;
 export const SPACESUIT_MAX_OXYGEN = 480 * OXYGEN_PER_SECOND;
 export const SPACESUIT_OXYGEN_SUFFOCATING = OXYGEN_SUFFOCATION_UNTIL_DEATH * OXYGEN_PER_SECOND;
 export const UNNECESSARY_SPACESUIT_REMOVE = 10;
@@ -333,6 +336,8 @@ export const FAMILIARITY_TICK_RATE = 5;
 export const FAMILIARITY_TICK_INCREASE = 0.1;
 export const FAMILIARITY_CHAT = 4;
 export const FAMILIARITY_SERVE_MEAL = 0.5;
+export const PUB_CAPACITY = 3;
+export const PUB_CITIZENS_PER_BARTENDER = 3;
 
 // ── Personality Traits ──────────────────────────────────────────────────
 export const PERSONALITY_TRAITS = {
@@ -373,6 +378,7 @@ export const LOG_MORALE_NEEDS_RATE = 180;
 export const MORALE_EVENTS_LOG_MAX = 100;
 export const ROOM_MORALE_LOG_THRESHOLD = 0.8;
 export const INFESTATION_LOG_TIME = 300;
+export const INFESTATION_CHANCE = 0.025;
 export const GENERIC_LOG_FREQUENCY = 240;
 export const STUFF_NEED_LOG_FREQUENCY = 800;
 export const PATROL_LOG_FREQUENCY = 120;
@@ -409,3 +415,12 @@ export const MEMORY_STARTLED_RECENTLY_DURATION = 15;
 /** Chance to play startle animation when entering combat (Lua CharacterConstants.STARTLE_CHANCE = 0.75). */
 export const STARTLE_CHANCE = 0.75;
 export const MEMORY_SAW_TANTRUM_RECENTLY = 'tSawTantrum';
+export const WORKOUT_COOLDOWN = 120;
+export const GAMING_COOLDOWN = 120;
+export const CORPSE_DURATION = 600;
+export const SLEEP_DURATION = 270;
+
+export const XP_FIRE_EXTINGUISH = 15;
+export const XP_COMBAT_KILL = 15;
+export const XP_COMBAT_DAMAGE = 1;
+export const XP_BUILD_BASE = 2;

@@ -12,22 +12,23 @@ export interface RoomLightDef {
   nLightTileGapX: number;
   nLightTileGapY: number;
   nLightRadius: number;
+  tAmbientLightColor?: [number, number, number];
 }
 
 /** Per-zone room light definitions matching Zone.lua */
 const ZONE_ROOM_LIGHTS: Record<ZoneType, RoomLightDef> = {
-  [ZoneType.PLAIN]: { tLightColor: [0.5, 0.3, 0.15], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 },
-  [ZoneType.GARDEN]: { tLightColor: [0.5, 1.0, 0.8], nLightTileGapX: 3, nLightTileGapY: 3, nLightRadius: 3 },
-  [ZoneType.INFIRMARY]: { tLightColor: [0.25, 0.25, 0.25], nLightTileGapX: 5, nLightTileGapY: 5, nLightRadius: 4 },
-  [ZoneType.LIFESUPPORT]: { tLightColor: [0.5, 0.5, 0.8], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 4 },
-  [ZoneType.RESIDENCE]: { tLightColor: [1.0, 0.6, 0.3], nLightTileGapX: 4, nLightTileGapY: 5, nLightRadius: 3 },
-  [ZoneType.PUB]: { tLightColor: [0.4, 0.0, 1.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 },
-  [ZoneType.POWER]: { tLightColor: [1.0, 0.0, 0.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2.5 },
-  [ZoneType.AIRLOCK]: { tLightColor: [0.1, 0.5, 0.2], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 },
-  [ZoneType.REFINERY]: { tLightColor: [1.0, 0.7, 0.4], nLightTileGapX: 5, nLightTileGapY: 5, nLightRadius: 3 },
-  [ZoneType.FITNESS]: { tLightColor: [1.0, 1.0, 1.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 },
-  [ZoneType.RESEARCH]: { tLightColor: [0.2, 1.0, 0.4], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 },
-  [ZoneType.BRIG]: { tLightColor: [0.7, 0.5, 0.5], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 1 },
+  [ZoneType.PLAIN]: { tLightColor: [0.5, 0.3, 0.15], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2, tAmbientLightColor: [0.36, 0.33, 0.27] },
+  [ZoneType.GARDEN]: { tLightColor: [0.5, 1.0, 0.8], nLightTileGapX: 3, nLightTileGapY: 3, nLightRadius: 3, tAmbientLightColor: [0.5, 0.5, 0.5] },
+  [ZoneType.INFIRMARY]: { tLightColor: [0.25, 0.25, 0.25], nLightTileGapX: 5, nLightTileGapY: 5, nLightRadius: 4, tAmbientLightColor: [0.65, 0.65, 0.65] },
+  [ZoneType.LIFESUPPORT]: { tLightColor: [0.5, 0.5, 0.8], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 4, tAmbientLightColor: [0.2, 0.3, 0.6] },
+  [ZoneType.RESIDENCE]: { tLightColor: [1.0, 0.6, 0.3], nLightTileGapX: 4, nLightTileGapY: 5, nLightRadius: 3, tAmbientLightColor: [0.52, 0.485, 0.41] },
+  [ZoneType.PUB]: { tLightColor: [0.4, 0.0, 1.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2, tAmbientLightColor: [0.8, 0.5, 1.0] },
+  [ZoneType.POWER]: { tLightColor: [1.0, 0.0, 0.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2.5, tAmbientLightColor: [0.5, 0.2, 0.2] },
+  [ZoneType.AIRLOCK]: { tLightColor: [0.1, 0.5, 0.2], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2, tAmbientLightColor: [0.3, 0.5, 0.6] },
+  [ZoneType.REFINERY]: { tLightColor: [1.0, 0.7, 0.4], nLightTileGapX: 5, nLightTileGapY: 5, nLightRadius: 3, tAmbientLightColor: [0.235, 0.22, 0.265] },
+  [ZoneType.FITNESS]: { tLightColor: [1.0, 1.0, 1.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2, tAmbientLightColor: [0.6, 0.6, 0.6] },
+  [ZoneType.RESEARCH]: { tLightColor: [0.2, 1.0, 0.4], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3, tAmbientLightColor: [0.3, 0.5, 0.6] },
+  [ZoneType.BRIG]: { tLightColor: [0.7, 0.5, 0.5], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 1, tAmbientLightColor: [0.4, 0.45, 0.5] },
   [ZoneType.CONSTRUCTION]: { tLightColor: [0.8, 1.0, 0.2], nLightTileGapX: 3, nLightTileGapY: 3, nLightRadius: 3 },
   [ZoneType.EXTERIOR]: { tLightColor: [0.3, 0.3, 0.3], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 },
 };

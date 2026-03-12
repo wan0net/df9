@@ -731,7 +731,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   test('goal system tracks completed goals', async () => {
     const goals = await page.evaluate(() => (window as any).__df9?.getGoals());
     expect(goals).toBeTruthy();
-    expect(goals.totalGoals).toBe(16);
+    expect(goals.totalGoals).toBe(17);
     expect(typeof goals.completedCount).toBe('number');
     expect(Array.isArray(goals.completed)).toBe(true);
   });
@@ -4793,27 +4793,26 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   test('hint alerts use teal colors (Lua HINTLOG_BG)', async () => {
-    // Add a hint alert and verify it uses teal background instead of amber
+    // Clear existing alerts so the hint appears in the visible top-3
+    // (the hint system may have already fired a hint via dedup, which
+    //  stays in-place instead of moving to position 0)
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       if (!df9) return { hasHint: false };
-      // Add a hint alert via the exposed API
+      df9.clearAlerts();
       df9.addAlert('hint', 'Test hint message');
       return { hasHint: true };
     });
     expect(result.hasHint).toBe(true);
 
-    // Wait for UI to update
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(200);
 
-    // Check the alert panel for teal-colored hint card
     const colors = await page.evaluate(() => {
       const alertPanel = document.getElementById('alert-panel');
       if (!alertPanel) return { found: false };
       const cards = alertPanel.querySelectorAll('div[style*="background"]');
       for (const card of cards) {
         const style = (card as HTMLElement).style.cssText;
-        // Lua HINTLOG_BG = #5D807A
         if (style.includes('rgb(93, 128, 122)') || style.includes('#5D807A') || style.includes('#5d807a')) {
           return { found: true, bg: '#5D807A' };
         }
@@ -4933,5 +4932,84 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.initial).toBe(false);
     expect(result.afterOn).toBe(true);
     expect(result.afterOff).toBe(false);
+  });
+
+  test('derelict system: spawn derelict ship', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const initial = df9.getDerelicts().length;
+      const derelict = df9.spawnDerelict();
+      const after = df9.getDerelicts().length;
+      return { initial, after, derelictId: derelict?.id };
+    });
+    expect(result.after).toBe(result.initial + 1);
+    expect(result.derelictId).toBeTruthy();
+  });
+
+  test('docking system: spawn trader ship', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const initial = df9.getDockedShips().length;
+      const trader = df9.spawnTrader();
+      const after = df9.getDockedShips().length;
+      return { initial, after, traderType: trader?.type, hasCargo: !!trader?.cargo };
+    });
+    expect(result.after).toBe(result.initial + 1);
+    expect(result.traderType).toBe('trader');
+    expect(result.hasCargo).toBe(true);
+  });
+
+  test('docking system: spawn immigration ship', async () => {
+    const initialPop = await df9(page).population();
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const initial = df9.getDockedShips().length;
+      const ship = df9.spawnImmigration();
+      const after = df9.getDockedShips().length;
+      return { initial, after, shipType: ship?.type, immigrants: ship?.immigrants };
+    });
+    expect(result.after).toBe(result.initial + 1);
+    expect(result.shipType).toBe('immigration');
+    expect(result.immigrants).toBeGreaterThan(0);
+
+    // Immigration should increase population
+    await page.waitForTimeout(500);
+    const newPop = await df9(page).population();
+    expect(newPop).toBeGreaterThan(initialPop);
+  });
+
+  test('dialogue system: show speech bubble', async () => {
+    const chars = await df9(page).characters();
+    expect(chars.length).toBeGreaterThan(0);
+    const charId = chars[0].id;
+
+    const result = await page.evaluate((id) => {
+      const df9 = (window as any).__df9;
+      df9.showDialogue(id, 'Test dialogue!');
+      // Wait a frame
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({ done: true }), 50);
+      });
+    }, charId);
+
+    expect(result).toEqual({ done: true });
+  });
+
+  test('explosion system: spawn explosion effect', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.spawnExplosion(128, 128, 2);
+      return { spawned: true };
+    });
+    expect(result.spawned).toBe(true);
+  });
+
+  test('explosion system: spawn sparks effect', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.spawnSparksEffect(128, 128, 20);
+      return { spawned: true };
+    });
+    expect(result.spawned).toBe(true);
   });
 });

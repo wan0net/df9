@@ -60,5 +60,6 @@ export const GOAL_DEFS: GoalDef[] = [
   goal('HostilesAsphyxiated', 'GOALSS029TEXT', 'GOALSS030TEXT', 'hostilesAsphyxiated', TARGET_HOSTILES_ASPHYXIATED),
   goal('HostilesKilledByTurrets', 'GOALSS035TEXT', 'GOALSS036TEXT', 'hostilesKilledByTurrets', TARGET_HOSTILE_TURRET_KILLS),
   goal('BodiesRefined', 'GOALSS031TEXT', 'GOALSS032TEXT', 'bodiesRefined', TARGET_BODIES),
+  goal('HostilesFedToMonster', 'GOALSS033TEXT', 'GOALSS034TEXT', 'hostilesFedToMonster', TARGET_HOSTILE_MONSTER_KILLS),
   goal('FinalSiege', 'GOALSS037TEXT', 'GOALSS038TEXT', 'finalSiege', 1),
 ];

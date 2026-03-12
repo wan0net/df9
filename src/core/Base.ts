@@ -416,6 +416,10 @@ class BaseClass implements TickableSystem {
     this.alerts = this.alerts.filter(a => a.nEndTime > GameRules.elapsedTime);
   }
 
+  clearAlerts() {
+    this.alerts.length = 0;
+  }
+
   getRecentAlerts(count = 5): BaseAlert[] {
     return this.alerts.slice(0, count);
   }

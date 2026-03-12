@@ -94,10 +94,15 @@ export class StartMenuState implements SceneState {
 
     this.overlay = document.createElement('div');
     this.overlay.id = 'start-menu';
+    const uiScale = this.getUIScale();
+    const scaleStyles = uiScale === 1 
+      ? 'width: 100%; height: 100%;' 
+      : `transform-origin: top left; transform: scale(${uiScale}); width: ${100 / uiScale}%; height: ${100 / uiScale}%;`;
     this.overlay.style.cssText = `
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: #000; display: flex; flex-direction: column;
       align-items: stretch; z-index: 100; overflow: hidden;
+      ${scaleStyles}
     `;
 
     // Space background
@@ -365,6 +370,15 @@ export class StartMenuState implements SceneState {
   }
 
   update(_dt: number) {}
+
+  private getUIScale(): number {
+    const stored = localStorage.getItem('df9_ui_scale');
+    if (stored) {
+      const v = parseFloat(stored);
+      if (v > 0 && v <= 2) return v;
+    }
+    return Math.min(1, window.innerWidth / 1920);
+  }
 
   exit() {
     SoundManager.stopMusic();

@@ -1,10 +1,23 @@
 import { ZoneType } from '../world/ZoneType';
+import { TileType } from '../world/TileTypes';
 import type { ObjectTag } from '../core/ObjectList';
 import type { Zone } from '../zones/Zone';
 import { TEAM_ID_PLAYER, TEAM_ID_PLAYER_ABANDONED, OXYGEN_LOW, OXYGEN_SUFFOCATING } from '../characters/CharacterConstants';
 import { GameRules } from '../core/GameRules';
 import { SoundManager } from '../audio/SoundManager';
 import { SpatialAudio } from '../audio/SpatialAudio';
+import type { TileGrid } from '../world/TileGrid';
+
+type FloatAwayObject = { remove: () => void };
+type FloatAwayCharacter = { kill: (cause: number) => void };
+
+interface FloatAwayContext {
+  grid: TileGrid;
+  getObjectsAtTile?: (tx: number, ty: number) => FloatAwayObject[];
+  getCharactersAtTile?: (tx: number, ty: number) => FloatAwayCharacter[];
+  removeRoom?: (room: Room) => void;
+  deathCause?: number;
+}
 
 // ── Room constants — mirrors Room.lua:46-59 ─────────────────────────────────
 export const LIGHTING_SCHEME_OFF      = 0;
@@ -48,6 +61,10 @@ export class Room {
   tContiguousRooms: Room[] = [];
   /** Rooms adjacent through shared wall tiles (for power distribution). */
   tWallAdjacentRooms: Room[] = [];
+  /** Rooms adjacent through doors (populated in room detection). */
+  tAdjoining: Room[] = [];
+  /** Rooms reachable via open doors (populated in room detection). */
+  tAccessibleByDoor: Room[] = [];
 
   /** Power fields (populated in Phase 6). */
   nPowerOutput = 0;
@@ -55,7 +72,7 @@ export class Room {
   nPowerSupply = 0;
 
   /** Does this room have sufficient power? (Lua Room:hasPower) */
-  get hasPowerFlag(): boolean { return this.nPowerSupply >= 0 && this.nPowerOutput > 0; }
+  get hasPowerFlag(): boolean { return this.nPowerSupply >= this.nPowerDraw; }
 
   /** Room morale score: sum of object morale scores / room size. */
   nMoraleScore = 0;
@@ -93,6 +110,7 @@ export class Room {
   bBreach = false;
   /** Pending breach flag (set by BFS, resolved in tick). */
   bPendingBreach = false;
+  tPendingBreaches = new Map<string, number>();
   /** User-initiated oxygen lockdown. */
   bUserBlockOxygen = false;
   /** Team that owns this room (default: TEAM_ID_PLAYER). */
@@ -136,6 +154,32 @@ export class Room {
 
   constructor(id: number) {
     this.id = id;
+  }
+
+  setPendingBreach(
+    tx: number,
+    ty: number,
+    bBreach: boolean,
+    elapsedTime: number,
+    getRoomsOfTeam: (nTeam: number) => Room[]
+  ): void {
+    const tileKey = `${tx},${ty}`;
+    if (bBreach) {
+      this.tPendingBreaches.set(tileKey, elapsedTime);
+    } else {
+      this.tPendingBreaches.delete(tileKey);
+    }
+
+    const hasPendingBreaches = this.tPendingBreaches.size > 0;
+    if (!this.bPendingBreach && hasPendingBreaches) {
+      this.bPendingBreach = true;
+      this.bForceSim = true;
+      for (const room of getRoomsOfTeam(this.nTeam)) {
+        room.bForceSim = true;
+      }
+    } else if (!hasPendingBreaches) {
+      this.bPendingBreach = false;
+    }
   }
 
   addTile(x: number, y: number) {
@@ -247,8 +291,7 @@ export class Room {
   updateEmergency(): void {
     if (this.nLastVisibility === VISIBILITY_DIM) {
       this.setLightingScheme(LIGHTING_SCHEME_DIM);
-    } else if (this.nPowerOutput === 0) {
-      // No generator at all → vacuum/dark lighting (Lua: LIGHTING_SCHEME_VACUUM)
+    } else if (this.nPowerDraw > 0 && this.nPowerSupply === 0) {
       this.setLightingScheme(LIGHTING_SCHEME_VACUUM);
     } else if (this.bBurning || this.bEmergencyAlarmEnabled || this.bPendingBreach ||
                this.bBreach || this.getOxygenScore() < OXYGEN_SUFFOCATING) {
@@ -449,7 +492,7 @@ export class Room {
   // ── Float-away — mirrors Room.lua:1951-2017 ─────────────────────────────
 
   /** Tick float-away timer for hidden non-player rooms. */
-  tickFloatAway(): boolean {
+  tickFloatAway(context?: FloatAwayContext): boolean {
     if (this.nLastVisibility !== VISIBILITY_HIDDEN) {
       this.nFloatAwayTimerStart = null;
       return false;
@@ -462,7 +505,13 @@ export class Room {
     if (GameRules.elapsedTime - this.nFloatAwayTimerStart > FLOAT_AWAY_TIME) {
       if (this.nNextFloatAwayTest === null || this.nNextFloatAwayTest < GameRules.elapsedTime) {
         this.nNextFloatAwayTest = GameRules.elapsedTime + 30;
-        return this._canFloatAway();
+        if (!this._canFloatAway()) {
+          return false;
+        }
+        if (context) {
+          this._doFloatAway(context);
+        }
+        return true;
       }
     }
 
@@ -480,6 +529,34 @@ export class Room {
     }
 
     return true;
+  }
+
+  private _doFloatAway(context: FloatAwayContext): void {
+    const tilesToDestroy = new Map<string, { x: number; y: number }>();
+
+    for (const tile of this.tiles) {
+      tilesToDestroy.set(`${tile.x},${tile.y}`, tile);
+    }
+    for (const wall of this.tWalls.values()) {
+      tilesToDestroy.set(`${wall.x},${wall.y}`, wall);
+    }
+
+    const deathCause = context.deathCause ?? 7;
+    for (const tile of tilesToDestroy.values()) {
+      const objects = context.getObjectsAtTile?.(tile.x, tile.y) ?? [];
+      for (const obj of objects) {
+        obj.remove();
+      }
+
+      const characters = context.getCharactersAtTile?.(tile.x, tile.y) ?? [];
+      for (const char of characters) {
+        char.kill(deathCause);
+      }
+
+      context.grid.set(tile.x, tile.y, TileType.SPACE);
+    }
+
+    context.removeRoom?.(this);
   }
 
   /** Adjoining rooms (connected through doors). Set by RoomManager/PowerSystem contiguity. */

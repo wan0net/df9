@@ -6,6 +6,7 @@ import { TILE_HALF_W, TILE_HALF_H } from '../config';
 import { TileType } from '../world/TileTypes';
 import type { Character } from '../characters/Character';
 import type { TileGrid } from '../world/TileGrid';
+import { dialogueSystem } from '../characters/DialogueSystem';
 
 /**
  * Renders characters in the Three.js scene.
@@ -848,6 +849,9 @@ export class CharacterRenderer {
     // Thought bubble (Lua Task:showEmoticon — show for EMOTICON_INITIAL_DURATION on task change)
     this.updateThoughtBubble(handle, char);
 
+    // Speech bubble (dialogue system)
+    this.updateSpeechBubble(handle, char);
+
     // Need bars
     this.drawNeedBars(handle.needBarsEl, char);
   }
@@ -984,6 +988,22 @@ export class CharacterRenderer {
 
     // Hide for dead characters
     if (!char.isAlive()) {
+      handle.thoughtEl.style.display = 'none';
+    }
+  }
+
+  private updateSpeechBubble(handle: CharacterRenderHandle, char: Character) {
+    const bubbleText = dialogueSystem.getBubbleText(char.id);
+    
+    if (bubbleText && handle.thoughtEl.style.display === 'none') {
+      handle.thoughtEl.textContent = bubbleText;
+      handle.thoughtEl.style.display = '';
+      handle.thoughtEl.style.cssText =
+        'pointer-events:none;font-family:"Orbitron",monospace;font-size:11px;color:#000;' +
+        'background:rgba(255,255,255,0.9);border-radius:8px;padding:4px 8px;white-space:nowrap;' +
+        'text-align:center;display:block;border:1px solid rgba(0,0,0,0.3);' +
+        'box-shadow:0 2px 4px rgba(0,0,0,0.2);';
+    } else if (!bubbleText && handle.thoughtEl.textContent && !handle.lastTaskName) {
       handle.thoughtEl.style.display = 'none';
     }
   }

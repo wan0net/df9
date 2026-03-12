@@ -146,7 +146,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
   }),
   HeavyDoor: def({
     spriteName: 'door_heavy_closed', friendlyName: line('PROPSX064TEXT'), matterCost: 100,
-    door: true, bBlocksPathing: true, bBlocksOxygen: true,
+    door: true, bBlocksOxygen: true,
     customClass: 'HeavyDoor', noRoom: true, researchPrereq: 'DoorLevel2',
     sidebarIcon: 'icon_heavydoor', layer: 'worldWall',
     clickSound: 'spacedoor', placeSound: 'placedoor',
@@ -163,7 +163,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Power Generation ──────────────────────────────────────────
   Generator: def({
-    spriteName: 'ReactorGen', friendlyName: line('ZONEUI015TEXT'), matterCost: 200,
+    spriteName: 'generator', friendlyName: line('ZONEUI015TEXT'), matterCost: 200,
     width: 2, height: 2, margin: 2, nPowerOutput: 1000,
     decayPerSecond: 0.03, explodeOnFailure: true, bCanDeactivate: true,
     bBlocksPathing: true, nSabotageDuration: 30,
@@ -650,14 +650,14 @@ export const tMenus: Record<string, string[]> = {
   ALL: ['Door', 'Airlock', 'HeavyDoor', 'FirePanel', 'EmergencyAlarm', 'HappyBot', 'BulbousPlant', 'StrangePlant'],
   POWER: ['Generator', 'GeneratorLevel2', 'GeneratorLevel3', 'GeneratorLevel4'],
   LIFESUPPORT: ['AirScrubber', 'OxygenRecycler', 'OxygenRecyclerLevel2', 'OxygenRecyclerLevel3', 'OxygenRecyclerLevel4'],
-  RESIDENCE: ['Bed', 'Dresser', 'WallShelf', 'Rug1'],
-  GARDEN: ['space_tree', 'HydroPlant'],
-  PUB: ['Bar', 'Fridge', 'FridgeLvl2', 'Stove', 'StandingTable', 'BurgerSign', 'PizzaSign', 'FriesSign', 'Jukebox'],
-  AIRLOCK: ['AirlockLocker'],
+  RESIDENCE: [],
+  GARDEN: ['space_tree'],
+  PUB: ['Bar', 'Fridge', 'FridgeLvl2', 'Stove', 'StandingTable', 'BurgerSign', 'PizzaSign', 'FriesSign'],
+  AIRLOCK: [],
   REFINERY: ['refinery', 'refinery_level2'],
-  FITNESS: ['WeightBench'],
-  INFIRMARY: ['HospitalBed'],
-  RESEARCH: ['ResearchDesk'],
+  FITNESS: [],
+  INFIRMARY: [],
+  RESEARCH: [],
   BRIG: [],
 };
 

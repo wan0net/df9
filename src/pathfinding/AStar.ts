@@ -1,5 +1,7 @@
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
+import type { RoomManager } from '../rooms/RoomManager';
+import { DOOR_STATE, tDoorsByAddr } from '../envobjects/Door';
 
 interface Node {
   x: number;
@@ -7,7 +9,23 @@ interface Node {
   g: number;
   h: number;
   f: number;
+  bSuited: boolean;
   parent: Node | null;
+}
+
+export interface PathNode {
+  x: number;
+  y: number;
+  bSuited: boolean;
+}
+
+export interface FindPathOptions {
+  roomManager?: RoomManager;
+  startSuited?: boolean;
+  allowLockedDoors?: boolean;
+  softBlockPenalty?: number;
+  breachPenalty?: number;
+  cacheTtlMs?: number;
 }
 
 /** Chebyshev distance — correct heuristic for diagonal grid (Lua MiscUtil.isoDist). */
@@ -27,6 +45,22 @@ export const WALKABLE_DEFAULT: WalkableFilter = (t) =>
 export const WALKABLE_SPACEWALK: WalkableFilter = (t) =>
   t === TileType.FLOOR || t === TileType.DOOR || t === TileType.SPACE ||
   t === TileType.FLOOR_PENDING || t === TileType.WALL_PENDING;
+
+const DEFAULT_CACHE_TTL_MS = 1000;
+const DEFAULT_SOFT_BLOCK_PENALTY = 6;
+const DEFAULT_BREACH_PENALTY = 60;
+const AIRLOCK_TRAVERSAL_COST = 15;
+
+interface PathCacheEntry {
+  expiresAt: number;
+  path: PathNode[] | null;
+}
+
+const pathCache = new Map<string, PathCacheEntry>();
+const gridIds = new WeakMap<TileGrid, number>();
+const filterIds = new WeakMap<WalkableFilter, number>();
+let nextGridId = 1;
+let nextFilterId = 1;
 
 // ── Binary min-heap for O(log n) open list ───────────────────────────────
 
@@ -91,14 +125,47 @@ export function findPath(
   endY: number,
   maxNodes = 1000,
   walkableFilter: WalkableFilter = WALKABLE_DEFAULT,
-  bPathToNearest = false,
-): { x: number; y: number }[] | null {
+  bPathToNearestOrOptions: boolean | FindPathOptions = false,
+  softBlockedTiles?: Set<string>,
+  explicitOptions?: FindPathOptions,
+): PathNode[] | null {
+  const bPathToNearest = typeof bPathToNearestOrOptions === 'boolean' ? bPathToNearestOrOptions : false;
+  const options = typeof bPathToNearestOrOptions === 'boolean' ? (explicitOptions ?? {}) : bPathToNearestOrOptions;
+
+  const startType = grid.get(startX, startY);
+  const startSuited = options.startSuited ?? (
+    startType === TileType.SPACE || walkableFilter === WALKABLE_SPACEWALK
+  );
+
+  if (startType === TileType.SPACE && !startSuited) return null;
   if (startX === endX && startY === endY) return [];
 
   // If pathToNearest, allow non-walkable dest (we path to adjacent tile)
   if (!bPathToNearest) {
     const endType = grid.get(endX, endY);
     if (!walkableFilter(endType)) return null;
+  }
+
+  const cacheKey = getCacheKey(
+    grid,
+    startX,
+    startY,
+    endX,
+    endY,
+    maxNodes,
+    walkableFilter,
+    bPathToNearest,
+    softBlockedTiles,
+    options,
+    startSuited,
+  );
+  const cacheHit = pathCache.get(cacheKey);
+  if (cacheHit && cacheHit.expiresAt > Date.now()) {
+    return clonePath(cacheHit.path);
+  }
+
+  if (cacheHit && cacheHit.expiresAt <= Date.now()) {
+    pathCache.delete(cacheKey);
   }
 
   // Lua Pathfinder.lua:264-267 — bCharacterStartOnWallCheat:
@@ -117,6 +184,7 @@ export function findPath(
     g: 0,
     h: heuristic(startX, startY, endX, endY),
     f: 0,
+    bSuited: startSuited,
     parent: null,
   };
   startNode.f = startNode.g + startNode.h;
@@ -136,7 +204,10 @@ export function findPath(
 
     // Goal check
     if (current.x === endX && current.y === endY) {
-      return reconstructPath(current);
+      const result = reconstructPath(current);
+      setCachedPath(cacheKey, result, options.cacheTtlMs);
+      pruneExpiredCacheEntries();
+      return result;
     }
 
     // bPathToNearest: if we're adjacent to the target, we've arrived
@@ -144,7 +215,10 @@ export function findPath(
       const neighbors = grid.getDiagonalNeighbors(current.x, current.y);
       for (const n of neighbors) {
         if (n.x === endX && n.y === endY) {
-          return reconstructPath(current);
+          const result = reconstructPath(current);
+          setCachedPath(cacheKey, result, options.cacheTtlMs);
+          pruneExpiredCacheEntries();
+          return result;
         }
       }
     }
@@ -156,32 +230,247 @@ export function findPath(
       if (closed.has(nIdx)) continue;
 
       const nType = grid.get(n.x, n.y);
+      const curType = grid.get(current.x, current.y);
 
       // For bPathToNearest, treat the dest tile as unwalkable (route around it)
       if (bPathToNearest && n.x === endX && n.y === endY) continue;
 
       if (!walkableFilter(nType)) continue;
 
-      const g = current.g + 1;
+      const transition = resolveSuitAndDoorTransition(
+        grid,
+        current,
+        n.x,
+        n.y,
+        curType,
+        nType,
+        options,
+      );
+      if (!transition.allowed) continue;
+
+      const roomPenalty = getRoomTransitionPenalty(
+        options.roomManager,
+        current.x,
+        current.y,
+        n.x,
+        n.y,
+        transition.nextSuited,
+        options.breachPenalty ?? DEFAULT_BREACH_PENALTY,
+      );
+
+      const softPenalty = softBlockedTiles?.has(tileKey(n.x, n.y))
+        ? (options.softBlockPenalty ?? DEFAULT_SOFT_BLOCK_PENALTY)
+        : 0;
+
+      const g = current.g + 1 + transition.additionalCost + roomPenalty + softPenalty;
       const existingG = gScores.get(nIdx);
 
       if (existingG === undefined || g < existingG) {
         gScores.set(nIdx, g);
         const h = heuristic(n.x, n.y, endX, endY);
-        open.push({ x: n.x, y: n.y, g, h, f: g + h, parent: current });
+        open.push({
+          x: n.x,
+          y: n.y,
+          g,
+          h,
+          f: g + h,
+          bSuited: transition.nextSuited,
+          parent: current,
+        });
       }
     }
   }
 
+  setCachedPath(cacheKey, null, options.cacheTtlMs);
+  pruneExpiredCacheEntries();
   return null; // No path found
 }
 
-function reconstructPath(node: Node): { x: number; y: number }[] {
-  const path: { x: number; y: number }[] = [];
+function reconstructPath(node: Node): PathNode[] {
+  const path: PathNode[] = [];
   let n: Node | null = node;
   while (n) {
-    path.unshift({ x: n.x, y: n.y });
+    path.unshift({ x: n.x, y: n.y, bSuited: n.bSuited });
     n = n.parent;
   }
   return path;
+}
+
+function getRoomTransitionPenalty(
+  roomManager: RoomManager | undefined,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  bSuited: boolean,
+  breachPenalty: number,
+): number {
+  if (!roomManager) return 0;
+
+  const srcRoom = roomManager.getRoomAt(fromX, fromY);
+  const dstRoom = roomManager.getRoomAt(toX, toY);
+  if (!dstRoom) return 0;
+  if (dstRoom.sealed) return 0;
+
+  if (!bSuited) {
+    if (srcRoom?.sealed ?? false) return breachPenalty;
+    return Math.floor(breachPenalty / 2);
+  }
+
+  return 2;
+}
+
+function resolveSuitAndDoorTransition(
+  grid: TileGrid,
+  current: Node,
+  nextX: number,
+  nextY: number,
+  curType: number,
+  nextType: number,
+  options: FindPathOptions,
+): { allowed: boolean; nextSuited: boolean; additionalCost: number } {
+  let nextSuited = current.bSuited;
+  let additionalCost = 0;
+
+  const doorData = resolveDoorForTransition(current.x, current.y, nextX, nextY, curType, nextType);
+  if (doorData) {
+    const door = doorData.door;
+    if (door) {
+      const locked = door.state === DOOR_STATE.LOCKED || door.state === DOOR_STATE.BROKEN_CLOSED;
+      if (locked && !options.allowLockedDoors) {
+        return { allowed: false, nextSuited, additionalCost };
+      }
+
+      const isAirlockDoor = door.sName === 'Airlock';
+      if (isAirlockDoor && door.bTouchesVacuum) {
+        additionalCost += AIRLOCK_TRAVERSAL_COST;
+      }
+
+      const parentType = current.parent ? grid.get(current.parent.x, current.parent.y) : curType;
+
+      if (nextType === TileType.SPACE && curType !== TileType.SPACE) {
+        if (isAirlockDoor) {
+          nextSuited = true;
+        } else if (!current.bSuited) {
+          return { allowed: false, nextSuited, additionalCost };
+        }
+      }
+
+      if (curType === TileType.SPACE && nextType !== TileType.SPACE) {
+        if (isAirlockDoor) {
+          nextSuited = false;
+        }
+      } else if (curType === TileType.DOOR && nextType !== TileType.SPACE && isAirlockDoor && parentType === TileType.SPACE) {
+        nextSuited = false;
+      }
+    }
+  }
+
+  if (nextType === TileType.SPACE && !nextSuited) {
+    return { allowed: false, nextSuited, additionalCost };
+  }
+
+  return { allowed: true, nextSuited, additionalCost };
+}
+
+function resolveDoorForTransition(
+  curX: number,
+  curY: number,
+  nextX: number,
+  nextY: number,
+  curType: number,
+  nextType: number,
+): { door: (typeof tDoorsByAddr extends Map<string, infer T> ? T : never) | undefined } | null {
+  if (nextType === TileType.DOOR) {
+    return { door: tDoorsByAddr.get(tileKey(nextX, nextY)) };
+  }
+  if (curType === TileType.DOOR) {
+    return { door: tDoorsByAddr.get(tileKey(curX, curY)) };
+  }
+  return null;
+}
+
+function tileKey(x: number, y: number): string {
+  return `${x},${y}`;
+}
+
+function getCacheKey(
+  grid: TileGrid,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  maxNodes: number,
+  walkableFilter: WalkableFilter,
+  bPathToNearest: boolean,
+  softBlockedTiles: Set<string> | undefined,
+  options: FindPathOptions,
+  startSuited: boolean,
+): string {
+  const gridId = getGridId(grid);
+  const filterId = getFilterId(walkableFilter);
+  const softBlockedSig = getSoftBlockedSignature(softBlockedTiles);
+  const roomAware = options.roomManager ? 1 : 0;
+  const allowLocked = options.allowLockedDoors ? 1 : 0;
+  return [
+    gridId,
+    startX,
+    startY,
+    endX,
+    endY,
+    maxNodes,
+    filterId,
+    bPathToNearest ? 1 : 0,
+    startSuited ? 1 : 0,
+    roomAware,
+    allowLocked,
+    options.softBlockPenalty ?? DEFAULT_SOFT_BLOCK_PENALTY,
+    options.breachPenalty ?? DEFAULT_BREACH_PENALTY,
+    softBlockedSig,
+  ].join(':');
+}
+
+function getGridId(grid: TileGrid): number {
+  let id = gridIds.get(grid);
+  if (id !== undefined) return id;
+  id = nextGridId++;
+  gridIds.set(grid, id);
+  return id;
+}
+
+function getFilterId(filter: WalkableFilter): number {
+  let id = filterIds.get(filter);
+  if (id !== undefined) return id;
+  id = nextFilterId++;
+  filterIds.set(filter, id);
+  return id;
+}
+
+function getSoftBlockedSignature(softBlockedTiles?: Set<string>): string {
+  if (!softBlockedTiles || softBlockedTiles.size === 0) return '-';
+  if (softBlockedTiles.size > 128) return `large-${softBlockedTiles.size}`;
+  return Array.from(softBlockedTiles).sort().join('|');
+}
+
+function setCachedPath(key: string, path: PathNode[] | null, ttlMs?: number): void {
+  const ttl = Math.max(1, ttlMs ?? DEFAULT_CACHE_TTL_MS);
+  pathCache.set(key, {
+    expiresAt: Date.now() + ttl,
+    path: clonePath(path),
+  });
+}
+
+function clonePath(path: PathNode[] | null): PathNode[] | null {
+  if (!path) return null;
+  return path.map((node) => ({ x: node.x, y: node.y, bSuited: node.bSuited }));
+}
+
+function pruneExpiredCacheEntries(): void {
+  if (pathCache.size < 256) return;
+  const now = Date.now();
+  for (const [key, entry] of pathCache) {
+    if (entry.expiresAt <= now) {
+      pathCache.delete(key);
+    }
+  }
 }

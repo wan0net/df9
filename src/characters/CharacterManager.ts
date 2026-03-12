@@ -99,6 +99,7 @@ import type { CrewSpawnPoint } from '../world/WorldGen';
 import type { Pickup } from '../pickups/Pickup';
 import type { ProjectileManager } from '../hazards/Projectile';
 import type { DecalRenderer } from '../renderer/DecalRenderer';
+import type { VacuumSystem } from '../oxygen/VacuumSystem';
 
 /** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
 const UPDATES_PER_TICK = 10;
@@ -128,6 +129,9 @@ export class CharacterManager {
 
   /** Decal renderer for blood decals. */
   private decalRenderer: DecalRenderer | null = null;
+
+  /** Vacuum system for decompression vectors. */
+  private vacuumSystem: VacuumSystem | null = null;
 
   /** Malady contagion check timer. */
   private contagionTimer = 0;
@@ -172,6 +176,10 @@ export class CharacterManager {
 
   setDecalRenderer(dr: DecalRenderer) {
     this.decalRenderer = dr;
+  }
+
+  setVacuumSystem(vs: VacuumSystem) {
+    this.vacuumSystem = vs;
   }
 
   getCharacters(): Character[] {
@@ -1519,11 +1527,13 @@ export class CharacterManager {
 
     // ── VacuumPull: character in breaching room gets pulled toward space ───
     if (room && !room.sealed && room.oxygen < 50 && !character.bSpacesuit) {
-      // Find nearest space tile for vacuum pull direction
       const spaceTile = this.findNearestSpaceTile(character.tileX, character.tileY);
       if (spaceTile) {
+        const vec = this.vacuumSystem?.getVacuumVec(character.tileX, character.tileY);
+        const pull = new VacuumPull();
+        pull.vacuumMagnitude = vec?.magnitude ?? 0;
         options.push(new ActivityOption(
-          new VacuumPull(),
+          pull,
           spaceTile.x, spaceTile.y,
           500, // PUPPET level — overrides everything
           { priorityLevel: PRIORITY.PUPPET },

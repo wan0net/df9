@@ -7,11 +7,10 @@ import { GameRules, SAVEGAME_VERSION } from '../core/GameRules';
 import { Base, type BaseStats } from '../core/Base';
 import type { TileGrid } from '../world/TileGrid';
 import type { RoomManager } from '../rooms/RoomManager';
-import type { CharacterManager } from '../characters/CharacterManager';
-import type { EnvObjectManager as EnvObjMgrType } from '../envobjects/EnvObjectManager';
 import type { EventController } from '../events/EventController';
 import type { MaladyInstance } from '../malady/Malady';
 import type { LogEntry } from '../characters/Log';
+import { SoundManager } from '../audio/SoundManager';
 
 // ── Save data interfaces ────────────────────────────────────────
 
@@ -84,6 +83,12 @@ export interface SaveData {
   bHasHadEnclosedRooms?: boolean;
   bHasZoned?: boolean;
   bHasStartedResearch?: boolean;
+  cameraX?: number;
+  cameraY?: number;
+  cameraZoom?: number;
+  tutorialStage?: number;
+  bMuted?: boolean;
+  masterVolume?: number;
 }
 
 export class SaveLoadSystem {
@@ -99,6 +104,9 @@ export class SaveLoadSystem {
   getFireData: (() => { tTiles: Record<string, number>; tFlames: Record<string, number> }) | null = null;
   getCommandData: (() => { type: string; tileX: number; tileY: number; objectName?: string }[]) | null = null;
   getPickupData: (() => { sName: string; tileX: number; tileY: number }[]) | null = null;
+  getCameraData: (() => { cameraX: number; cameraY: number; cameraZoom: number }) | null = null;
+  getTutorialStage: (() => number) | null = null;
+  getAudioData: (() => { bMuted: boolean; masterVolume: number }) | null = null;
 
   loadCharacterData: ((data: CharSaveData[]) => void) | null = null;
   loadObjectData: ((data: ObjSaveData[]) => void) | null = null;
@@ -108,6 +116,9 @@ export class SaveLoadSystem {
   loadFireData: ((data: { tTiles: Record<string, number>; tFlames: Record<string, number> }) => void) | null = null;
   loadCommandData: ((data: { type: string; tileX: number; tileY: number; objectName?: string }[]) => void) | null = null;
   loadPickupData: ((data: { sName: string; tileX: number; tileY: number }[]) => void) | null = null;
+  loadCameraData: ((data: { cameraX: number; cameraY: number; cameraZoom: number }) => void) | null = null;
+  loadTutorialStage: ((stage: number) => void) | null = null;
+  loadAudioData: ((data: { bMuted: boolean; masterVolume: number }) => void) | null = null;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -130,6 +141,13 @@ export class SaveLoadSystem {
       zone: r.zone as string,
       oxygen: r.oxygen,
     }));
+
+    const cameraData = this.getCameraData?.();
+    const tutorialStage = this.getTutorialStage?.() ?? this.getTutorialStageFromDebugBridge();
+    const audioData = this.getAudioData?.() ?? {
+      bMuted: SoundManager.isMuted(),
+      masterVolume: SoundManager.getMasterVolume(),
+    };
 
     return {
       version: SAVEGAME_VERSION,
@@ -160,6 +178,12 @@ export class SaveLoadSystem {
       bHasHadEnclosedRooms: GameRules.bHasHadEnclosedRooms,
       bHasZoned: GameRules.bHasZoned,
       bHasStartedResearch: GameRules.bHasStartedResearch,
+      cameraX: cameraData?.cameraX,
+      cameraY: cameraData?.cameraY,
+      cameraZoom: cameraData?.cameraZoom,
+      tutorialStage,
+      bMuted: audioData.bMuted,
+      masterVolume: audioData.masterVolume,
     };
   }
 
@@ -277,10 +301,38 @@ export class SaveLoadSystem {
     if (data.events) this.loadEventData?.(data.events);
     if (data.topics) this.loadTopicsData?.(data.topics);
     if (data.fires) this.loadFireData?.(data.fires);
-    if ((data as any).commands) this.loadCommandData?.((data as any).commands);
+    if (data.commands) this.loadCommandData?.(data.commands);
     if (data.pickups) this.loadPickupData?.(data.pickups);
 
+    if (
+      data.cameraX !== undefined &&
+      data.cameraY !== undefined &&
+      data.cameraZoom !== undefined
+    ) {
+      this.loadCameraData?.({ cameraX: data.cameraX, cameraY: data.cameraY, cameraZoom: data.cameraZoom });
+    }
+
+    if (data.tutorialStage !== undefined) {
+      this.loadTutorialStage?.(data.tutorialStage);
+    }
+
+    const bMuted = data.bMuted ?? SoundManager.isMuted();
+    const masterVolume = data.masterVolume ?? SoundManager.getMasterVolume();
+    if (this.loadAudioData) {
+      this.loadAudioData({ bMuted, masterVolume });
+    } else {
+      SoundManager.setMasterVolume(masterVolume);
+      if (SoundManager.isMuted() !== bMuted) {
+        SoundManager.toggleMute();
+      }
+    }
+
     return true;
+  }
+
+  private getTutorialStageFromDebugBridge(): number | undefined {
+    const bridge = (globalThis as { __df9?: { getTutorialStage?: () => number } }).__df9;
+    return bridge?.getTutorialStage?.();
   }
 
   /** Check if a save exists. */

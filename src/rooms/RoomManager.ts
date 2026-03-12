@@ -10,6 +10,7 @@ import { Pub } from '../zones/Pub';
 import { HospitalZone } from '../zones/HospitalZone';
 import { ResearchZone } from '../zones/ResearchZone';
 import { FitnessZone } from '../zones/FitnessZone';
+import { GameRules } from '../core/GameRules';
 
 /** Create the proper Zone subclass for a given zone type. */
 function createZoneInstance(zoneType: ZoneType): Zone {
@@ -132,8 +133,6 @@ export class RoomManager {
         const queue: { x: number; y: number }[] = [{ x, y }];
         visited.add(key);
 
-        let isSealed = true;
-
         while (queue.length > 0) {
           const current = queue.shift()!;
           room.addTile(current.x, current.y);
@@ -141,14 +140,13 @@ export class RoomManager {
 
           // Check diagonal neighbors for flood fill
           const neighbors = this.grid.getDiagonalNeighbors(current.x, current.y);
+          let hasBreachAtTile = false;
           for (const n of neighbors) {
             const nKey = `${n.x},${n.y}`;
             const nType = this.grid.get(n.x, n.y);
 
             if (nType === TileType.SPACE) {
-              // Floor directly diagonal-adjacent to space = breached
-              // But pending walls count as boundaries (they will become walls)
-              isSealed = false;
+              hasBreachAtTile = true;
             } else if (nType === TileType.WALL_PENDING) {
               // Pending walls act as seal boundaries — skip (don't flood, don't breach)
               continue;
@@ -162,9 +160,17 @@ export class RoomManager {
             }
             // Walls, wall-pending, doors, and space are boundaries — don't flood through
           }
+
+          room.setPendingBreach(
+            current.x,
+            current.y,
+            hasBreachAtTile,
+            GameRules.elapsedTime,
+            (nTeam: number) => this.getRoomsOfTeam(nTeam)
+          );
         }
 
-        room.sealed = isSealed;
+        room.sealed = room.tPendingBreaches.size === 0;
 
         // ── Room identity preservation ─────────────────────────────────
         // Match new room to old room by maximum tile overlap

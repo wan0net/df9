@@ -28,7 +28,9 @@ import { WallAutoGen } from './world/WallAutoGen';
 import { BuildSystem, type BuildMode } from './building/BuildSystem';
 import { BuildCursor } from './building/BuildCursor';
 import { RoomManager } from './rooms/RoomManager';
+import type { Room } from './rooms/Room';
 import { OxygenSystem } from './oxygen/OxygenSystem';
+import { VacuumSystem } from './oxygen/VacuumSystem';
 import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
@@ -84,12 +86,20 @@ import { SquadList } from './combat/SquadList';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
 import { CAUSE_OF_DEATH, FACTION_BEHAVIOR } from './characters/CharacterConstants';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
+import { DerelictSystem } from './events/DerelictSystem';
+import { DockingSystem } from './docking/DockingSystem';
+import { dialogueSystem } from './characters/DialogueSystem';
+import { ExplosionSystem } from './renderer/ExplosionSystem';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
 
 class OxygenTickAdapter implements TickableSystem {
-  constructor(private system: OxygenSystem) {}
-  onTick(dt: number) { this.system.update(dt * 1000); }
+  constructor(private system: OxygenSystem, private vacuum: VacuumSystem) {}
+  onTick(dt: number) {
+    const ms = dt * 1000;
+    this.system.update(ms);
+    this.vacuum.update(ms);
+  }
 }
 
 class CharacterTickAdapter implements TickableSystem {
@@ -245,8 +255,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   tileRenderer.setRoomManager(roomManager);
   buildSystem.setRoomManager(roomManager);
   const oxygenSystem = new OxygenSystem(roomManager, grid);
+  const vacuumSystem = new VacuumSystem(grid);
   const characterManager = new CharacterManager(grid, roomManager);
   characterManager.setWallAutoGen(wallAutoGen);
+  characterManager.setVacuumSystem(vacuumSystem);
   const objectPlacement = new ObjectPlacement(grid, roomManager);
 
   // Character renderer
@@ -280,6 +292,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     'Pistol', 'Rifle', 'SpaceGun', 'Builder', 'Weldammer',
     'FireExtinguisher', 'Datapad', 'FoodTray', 'Mug01',
   ]);
+
+  const derelictSystem = new DerelictSystem(characterManager);
+  const dockingSystem = new DockingSystem(characterManager);
+  const explosionSystem = new ExplosionSystem(threeRenderer.scene);
 
   Malady.reset();
   // Wire air scrubber count for disease spread reduction
@@ -690,7 +706,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   };
 
   // Register subsystems
-  GameRules.registerSystem(2, new OxygenTickAdapter(oxygenSystem));
+  GameRules.registerSystem(2, new OxygenTickAdapter(oxygenSystem, vacuumSystem));
   GameRules.registerSystem(11, new CharacterTickAdapter(characterManager));
 
   // ── Create space background ───────────────────────────────
@@ -879,7 +895,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // ] / [ keys: speed up / slow down time (Lua GameScreen.lua:285-291)
   inputManager.onKeyPress('BracketRight', () => { GameRules.timeFaster(); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
   inputManager.onKeyPress('BracketLeft', () => { GameRules.timeSlower(); tutorialFlags.timeSpeed = true; });
-  // K key: toggle cutaway mode (Lua GameScreen.lua:216-218)
+  // K key: toggle cutaway mode (Lua GameScreen.lua)
   inputManager.onKeyPress('KeyK', () => {
     GameRules.cycleCutawayMode();
     tileRenderer.setCutaway(GameRules.isCutawayModeEnabled());
@@ -1151,8 +1167,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }
 
     // Room updates
+    const roomsBefore = roomManager.getRooms();
     roomManager.update();
     roomManager.tick(delta / 1000);
+
+    if (roomManager.getRooms() !== roomsBefore) {
+      for (const [, door] of tDoorsByAddr) {
+        const neighbors = grid.getDiagonalNeighbors(door.tileX, door.tileY);
+        const adjacentRooms = new Set<Room>();
+        for (const n of neighbors) {
+          const r = roomManager.getRoomAt(n.x, n.y);
+          if (r) adjacentRooms.add(r);
+        }
+        const rooms = Array.from(adjacentRooms);
+        const westRoom = rooms[0] ?? null;
+        const eastRoom = rooms.length > 1 ? rooms[1] : westRoom;
+        door.updateSpaceStatus(westRoom, eastRoom);
+      }
+    }
 
     // Power distribution
     powerSystem.update();
@@ -1198,14 +1230,33 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     Malady.updateElapsedTime(gameDt);
     goalSystem.update(gameDt);
     hintSystem.update(gameDt);
-    // Tutorial zoom/pan detection
+    try {
+      derelictSystem.onTick(gameDt);
+    } catch (e) {
+      console.error('DerelictSystem error:', e);
+    }
+    try {
+      dockingSystem.onTick(gameDt);
+    } catch (e) {
+      console.error('DockingSystem error:', e);
+    }
+    try {
+      dialogueSystem.onTick(gameDt);
+    } catch (e) {
+      console.error('DialogueSystem error:', e);
+    }
+    try {
+      explosionSystem.update(delta / 1000);
+    } catch (e) {
+      console.error('ExplosionSystem error:', e);
+    }
     if (isTutorialMode && tutorialSystem.isActive()) {
       if (cameraController.zoom !== 1) tutorialFlags.zoomed = true;
       if (cameraController.scrollX !== 0 || cameraController.scrollY !== 0) tutorialFlags.panned = true;
     }
     tutorialSystem.update(gameDt);
     autoSave.onTick(delta / 1000);
-    musicSystem.update(delta / 1000); // Music uses real time, not game time
+    musicSystem.update(delta / 1000);
 
     // Update audio listener position from camera
     SoundManager.setListenerPosition(cameraController.scrollX, cameraController.scrollY);
@@ -1803,6 +1854,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     },
     addAlert: (type: string, msg: string) => Base.addAlert(type, msg),
+    clearAlerts: () => Base.clearAlerts(),
     // ── Milestone 9: Combat & Events ─────────────────────────
     spawnHostiles: (count: number, hp?: number) => {
       characterManager.spawnHostiles(count, hp);
@@ -2389,6 +2441,21 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // ── P4: Settings ────────────────────────────────────────
     isAutosaveEnabled: () => activeAutoSave?.isEnabled() ?? true,
     setAutosaveEnabled: (v: boolean) => activeAutoSave?.setEnabled(v),
+    getDerelicts: () => derelictSystem.getDerelicts(),
+    spawnDerelict: () => derelictSystem.spawnDerelict(),
+    exploreDerelict: (shipId: string, charId: number) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return null;
+      return derelictSystem.exploreDerelict(shipId, char);
+    },
+    getDockedShips: () => dockingSystem.getDockedShips(),
+    spawnTrader: () => dockingSystem.spawnTrader(),
+    spawnImmigration: () => dockingSystem.spawnImmigrationShip(),
+    buyCargo: (shipId: string, item: string, qty: number) => dockingSystem.buyCargo(shipId, item as any, qty),
+    sellMatter: (shipId: string, amount: number) => dockingSystem.sellMatter(shipId, amount),
+    showDialogue: (charId: number, text: string) => dialogueSystem.showBubble(charId, text),
+    spawnExplosion: (x: number, y: number, intensity?: number) => explosionSystem.spawnExplosion(x, y, intensity ?? 1),
+    spawnSparksEffect: (x: number, y: number, count?: number) => explosionSystem.spawnSparks(x, y, count ?? 10),
   };
 
   requestAnimationFrame(gameLoop);

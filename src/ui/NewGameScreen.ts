@@ -241,7 +241,11 @@ export class NewGameScreenState implements SceneState {
 
     this.overlay = document.createElement('div');
     this.overlay.id = 'new-game';
-    this.overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;font-family:'Orbitron',monospace;overflow:hidden;`;
+    const uiScale = this.getUIScale();
+    const scaleStyles = uiScale === 1 
+      ? 'width: 100%; height: 100%;' 
+      : `transform-origin: top left; transform: scale(${uiScale}); width: ${100/uiScale}%; height: ${100/uiScale}%;`;
+    this.overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;font-family:'Orbitron',monospace;overflow:hidden;${scaleStyles}`;
 
     this.canvas = document.createElement('canvas');
     this.canvas.width  = window.innerWidth;
@@ -886,6 +890,15 @@ export class NewGameScreenState implements SceneState {
       ctx.fillRect(sx, sy, cellSize, cellSize);
       ctx.strokeRect(sx, sy, cellSize, cellSize);
     }
+  }
+
+  private getUIScale(): number {
+    const stored = localStorage.getItem('df9_ui_scale');
+    if (stored) {
+      const v = parseFloat(stored);
+      if (v > 0 && v <= 2) return v;
+    }
+    return Math.min(1, window.innerWidth / 1920);
   }
 
   exit() {

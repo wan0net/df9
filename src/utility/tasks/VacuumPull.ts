@@ -1,17 +1,12 @@
-/**
- * VacuumPull.ts — Character is being pulled toward space by decompression.
- * Mirrors Lua OptionData: Priority=PUPPET. Character is dragged toward
- * the nearest space tile by vacuum forces.
- */
-
 import { Task, type NeedAdvertisement } from '../Task';
 
-/** Duration of vacuum pull effect. */
 const VACUUM_PULL_DURATION = 3;
+const VACUUM_PULL_SPEED = 40;
 
 export class VacuumPull extends Task {
   readonly name = 'VacuumPull';
   nJobExperience = 0;
+  vacuumMagnitude = 0;
 
   getAdvertisedNeeds(): NeedAdvertisement[] {
     return [];
@@ -24,8 +19,12 @@ export class VacuumPull extends Task {
   protected onUpdate(dt: number) {
     if (!this.character) { this.fail(); return; }
 
-    // Vacuum pull: character slides toward target (space tile)
-    // The movement is handled by the character's pathfinding toward targetX/Y
+    if (this.vacuumMagnitude > 0) {
+      const scale = Math.min(1, this.vacuumMagnitude / 100) * VACUUM_PULL_SPEED;
+      this.character.screenX += (this.targetX - this.character.tileX) * scale * dt;
+      this.character.screenY += (this.targetY - this.character.tileY) * scale * dt;
+    }
+
     if (this.elapsedTime >= this.duration) {
       this.complete();
     }

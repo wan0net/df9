@@ -128,51 +128,75 @@ export class OxygenSystem {
     const grid = this.grid;
 
     for (const room of rooms) {
-      if (!room.sealed || room.bUserBlockOxygen) continue;
-      const airlock = room.zoneObj as any;
-      if (airlock?.disallowO2Propagation?.()) continue;
+      if (!room.sealed || room.bUserBlockOxygen || this._disallowO2Propagation(room)) continue;
 
-      // Compute room average O2 (tile scale)
-      const roomAvg = this._getRoomAvgO2(room);
-      if (roomAvg < MIN_O2_FOR_SHARING_TILE) continue;
+      const selfTiles = room.tiles.length;
+      if (selfTiles === 0) continue;
+
+      const averageO2Self = this._getRoomAvgO2(room);
+      if (averageO2Self < MIN_O2_FOR_SHARING_TILE) continue;
+
+      const totalO2Self = averageO2Self * selfTiles;
+      let totalRequest = 0;
+      let totalO2 = totalO2Self;
+      let totalTiles = selfTiles;
+      const roomRequests = new Map<number, number>();
 
       for (const adj of room.tContiguousRooms) {
-        if (!adj.sealed || adj.bUserBlockOxygen) continue;
-        const adjAirlock = adj.zoneObj as any;
-        if (adjAirlock?.disallowO2Propagation?.()) continue;
+        if (!adj.sealed || adj.bUserBlockOxygen || this._disallowO2Propagation(adj)) continue;
 
-        // Only process each pair once
-        if (adj.id <= room.id) continue;
+        const adjTiles = adj.tiles.length;
+        if (adjTiles === 0) continue;
 
-        const adjAvg = this._getRoomAvgO2(adj);
-        const diff = roomAvg - adjAvg;
-        if (Math.abs(diff) < MIN_O2_DIFF_TILE) continue;
+        const adjAverageO2 = this._getRoomAvgO2(adj);
+        const adjTotalO2 = adjAverageO2 * adjTiles;
+        const avg = (totalO2Self + adjTotalO2) / (selfTiles + adjTiles);
 
-        // Combined average
-        const totalO2 = roomAvg * room.tiles.length + adjAvg * adj.tiles.length;
-        const totalTiles = room.tiles.length + adj.tiles.length;
-        if (totalTiles === 0) continue;
-        const combinedAvg = totalO2 / totalTiles;
+        let request = (avg - adjAverageO2) * adjTiles;
+        const maxRequest = Math.min(selfTiles, adjTiles) * MAX_O2_GIVE_PER_TILE * dt;
+        if (request > maxRequest) request = maxRequest;
+        else if (request < -maxRequest) request = -maxRequest;
 
-        const sharedTiles = Math.min(room.tiles.length, adj.tiles.length);
-        const maxTransfer = sharedTiles * MAX_O2_GIVE_PER_TILE * dt;
+        roomRequests.set(adj.id, request);
+        totalRequest += request;
+        totalO2 += adjTotalO2;
+        totalTiles += adjTiles;
+      }
 
-        let transfer: number;
-        if (diff > 0) {
-          transfer = Math.min(maxTransfer, roomAvg - combinedAvg);
-          transfer = Math.max(0, transfer);
-        } else {
-          transfer = -Math.min(maxTransfer, adjAvg - combinedAvg);
-          transfer = Math.min(0, transfer);
+      if (roomRequests.size === 0 || totalTiles === 0) continue;
+
+      const targetAvg = totalO2 / totalTiles;
+      let inMult = 1;
+      let outMult = 1;
+      const isLuaFlawCase =
+        (totalRequest > 0 && averageO2Self < targetAvg) ||
+        (totalRequest < 0 && averageO2Self > targetAvg);
+
+      if (!isLuaFlawCase && totalRequest > 1 && (totalO2Self - totalRequest) < targetAvg * selfTiles) {
+        outMult = ((averageO2Self - targetAvg) * selfTiles) / totalRequest;
+      } else if (!isLuaFlawCase && totalRequest < -1 && (totalO2Self - totalRequest) > targetAvg * selfTiles) {
+        inMult = ((averageO2Self - targetAvg) * selfTiles) / totalRequest;
+      }
+
+      let netChange = 0;
+      for (const adj of room.tContiguousRooms) {
+        const baseRequest = roomRequests.get(adj.id);
+        if (baseRequest === undefined || Math.abs(baseRequest) <= MIN_O2_DIFF_TILE || adj.tiles.length === 0) continue;
+
+        const scaledRequest = baseRequest * (baseRequest > 0 ? outMult : inMult);
+        netChange -= scaledRequest;
+
+        const perAdjTile = scaledRequest / adj.tiles.length;
+        for (const t of adj.tiles) {
+          grid.addO2(t.x, t.y, perAdjTile);
         }
+      }
 
-        if (Math.abs(transfer) < 1) continue;
-
-        // Apply to per-tile: spread evenly across room tiles
-        const perTileRoom = Math.round(-transfer / room.tiles.length);
-        const perTileAdj = Math.round(transfer / adj.tiles.length);
-        for (const t of room.tiles) grid.addO2(t.x, t.y, perTileRoom);
-        for (const t of adj.tiles) grid.addO2(t.x, t.y, perTileAdj);
+      if (Math.abs(netChange) > MIN_O2_DIFF_TILE) {
+        const perSelfTile = netChange / selfTiles;
+        for (const t of room.tiles) {
+          grid.addO2(t.x, t.y, perSelfTile);
+        }
       }
     }
 
@@ -180,6 +204,18 @@ export class OxygenSystem {
     for (const room of rooms) {
       this._updateRoomOxygen(room);
     }
+  }
+
+  private _disallowO2Propagation(room: { zoneObj: unknown }): boolean {
+    const zoneObj = room.zoneObj;
+    if (!zoneObj || typeof zoneObj !== 'object' || !('disallowO2Propagation' in zoneObj)) {
+      return false;
+    }
+    const disallow = (zoneObj as { disallowO2Propagation: unknown }).disallowO2Propagation;
+    if (typeof disallow !== 'function') {
+      return false;
+    }
+    return disallow();
   }
 
   /** Get average O2 across room tiles (tile scale 0-65535). */

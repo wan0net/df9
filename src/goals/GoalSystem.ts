@@ -105,6 +105,8 @@ export class GoalSystem {
         return stats.nHostilesKilledByTurret >= goal.nThreshold;
       case 'bodiesRefined':
         return stats.nCorpsesRecycled >= goal.nThreshold;
+      case 'hostilesFedToMonster':
+        return stats.nHostilesKilledByParasite >= goal.nThreshold;
       case 'finalSiege':
         return this.providers.checkFinalSiege();
       default:
@@ -155,14 +157,8 @@ export class GoalSystem {
         return Math.min(1, this.providers.getHappyCitizenCount(TARGET_HAPPY_MORALE) / goal.nThreshold);
       case 'bodiesRefined':
         return Math.min(1, stats.nCorpsesRecycled / goal.nThreshold);
-      case 'hostilesAsphyxiated':
-        return Math.min(1, stats.nHostilesAsphyxiated / goal.nThreshold);
-      case 'raidersConverted':
-        return Math.min(1, stats.nRaidersConverted / goal.nThreshold);
-      case 'allPossessions': {
-        const { collected, total } = this.providers.getAllPossessionsCount();
-        return total > 0 ? Math.min(1, collected / total) : 0;
-      }
+      case 'hostilesFedToMonster':
+        return Math.min(1, stats.nHostilesKilledByParasite / goal.nThreshold);
       default:
         return 0;
     }
@@ -210,6 +206,8 @@ export class GoalSystem {
         nProgress = stats.nHostilesKilledByTurret; break;
       case 'bodiesRefined':
         nProgress = stats.nCorpsesRecycled; break;
+      case 'hostilesFedToMonster':
+        nProgress = stats.nHostilesKilledByParasite; break;
       case 'finalSiege':
         nProgress = this.providers.checkFinalSiege() ? 1 : 0; break;
     }

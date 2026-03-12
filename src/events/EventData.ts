@@ -99,8 +99,8 @@ export const EVENT_DEFS: Record<string, EventDef> = {
   Breaching: {
     name: 'Breaching',
     sEventType: 'breachingEvents',
-    nDefaultWeight: 10,
-    weight: 10,
+    nDefaultWeight: 5,
+    weight: 5,
     minPopulation: 9,
     maxPopulation: -1,
     minTime: 600,  // 10 minutes

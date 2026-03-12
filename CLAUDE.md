@@ -24,6 +24,11 @@ Web reimplementation of Spacebase DF-9 using TypeScript + Three.js. The original
 | `Data/Scripts/Oxygen.lua` | O2 thresholds, vacuum simulation |
 | `Data/Scripts/CharacterConstants.lua` | Character O2 drain, need thresholds |
 
+### Approved Deviations
+- **Disease roster**: The TS implementation uses 24 diseases from `NewMaladyData.lua` (the community-updated roster). This is intentional and approved — do NOT revert to the original 6-disease `MaladyData.lua`.
+- **TraderEvent**: Active in TS, commented out in Lua. Kept active intentionally.
+- **HostilesFedToMonster goal**: Active in TS, commented out in Lua. Kept active intentionally.
+
 ### Original Adjacency Convention
 The original uses `xLeft = -(y % 2)` for the staggered diamond grid. Our rendering shifts odd rows RIGHT (`screenX = tx*128 + (ty&1)*64`), and our adjacency matches this geometry:
 - Even rows: `xLeft = -1` (NW neighbor at `x-1`, NE at `x`)
@@ -107,6 +112,7 @@ Walls exist as tile type `WALL=4` in the grid for room boundary logic, but rende
 | I | Inspect mode (none) |
 | R | Toggle job roster |
 | O | Toggle O2 overlay |
+| K | Toggle cutaway mode |
 | 1/2/3 | Game speed 1x/2x/4x |
 | ESC | Cancel build mode / clear selection |
 | Arrow keys | Pan camera |
@@ -115,7 +121,7 @@ Walls exist as tile type `WALL=4` in the grid for room boundary logic, but rende
 | ` (backtick) | Toggle debug menu |
 | F | Flip object (in object placement mode) |
 | W | Toggle wall build mode |
-| V | Toggle vaporize/demolish mode |
+| V | Toggle vaporize mode |
 
 ## Testing
 

@@ -61,12 +61,10 @@ export class Lighting implements TickableSystem {
 
   /** Resolve the lighting scheme for a room — mirrors Room:updateEmergency(). */
   private computeScheme(room: Room): number {
-    // No power → vacuum darkness
-    if (room.nPowerOutput === 0 && room.nPowerDraw > 0) {
+    if (room.nPowerDraw > 0 && room.nPowerSupply === 0) {
       return LIGHTING_SCHEME_VACUUM;
     }
 
-    // Breach, fire, or suffocating O2 → emergency red
     const bBurning = this.roomHasFire(room);
     const bBreach = !room.sealed;
     const bSuffocating = room.oxygen < O2_SUFFOCATING_ROOM;
@@ -74,8 +72,7 @@ export class Lighting implements TickableSystem {
       return LIGHTING_SCHEME_FIRE;
     }
 
-    // Power deficit → dim yellow
-    if (room.nPowerSupply < 0) {
+    if (room.nPowerDraw > 0 && room.nPowerSupply < room.nPowerDraw) {
       return LIGHTING_SCHEME_LOWPOWER;
     }
 
