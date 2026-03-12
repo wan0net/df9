@@ -2,12 +2,15 @@ import { SoundManager } from '../audio/SoundManager';
 import { line } from '../localization/Localization';
 import { playWarble } from './WarbleEffect';
 import { GameRules } from '../core/GameRules';
-import { Base } from '../core/Base';
 import type { BuildMode } from '../building/BuildSystem';
+import { EmergencyBeacon, VIOLENCE_DEFAULT, VIOLENCE_LETHAL, VIOLENCE_NONLETHAL } from '../combat/EmergencyBeacon';
+import { SquadList } from '../combat/SquadList';
 
 const AMBER = '#dfa200';
 const GREEN = '#a5d318';
 const RED = '#ff3d00';
+const BEACON_RED = '#e60000';
+const BEACON_PURPLE = '#8a2be2';
 
 const HEX_CLIP_PATH = 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)';
 
@@ -22,6 +25,8 @@ interface SidebarCallbacks {
   toggleO2Overlay: () => void;
   toggleWalls: () => void;
   toggleCutaway: () => void;
+  onBeaconPlace?: (squadName: string, tx: number, ty: number) => void;
+  onBeaconRemove?: (squadName: string) => void;
 }
 
 interface SidebarButton {
@@ -40,6 +45,19 @@ export class HexSidebar {
   private buttons: Map<string, { el: HTMLElement; btn: SidebarButton }> = new Map();
   private callbacks: SidebarCallbacks;
   private currentSubmenu: 'none' | 'construct' | 'mine' | 'beacon' | 'disaster' = 'none';
+  private beaconPlacementSquad: string | null = null;
+  private beaconPlacementViolence = VIOLENCE_DEFAULT;
+  private beaconPreviousBuildMode: BuildMode | null = null;
+  private onWindowKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && this.beaconPlacementSquad) {
+      this.closeAllSubmenus();
+    }
+  };
+  private onWindowContextMenu = (event: MouseEvent) => {
+    if (!this.beaconPlacementSquad) return;
+    event.preventDefault();
+    this.closeAllSubmenus();
+  };
   
   private sidebarEl!: HTMLDivElement;
   private buttonsContainer!: HTMLDivElement;
@@ -49,6 +67,8 @@ export class HexSidebar {
     this.container = document.createElement('div');
     this.callbacks = callbacks;
     this.createSidebar();
+    window.addEventListener('keydown', this.onWindowKeyDown);
+    window.addEventListener('contextmenu', this.onWindowContextMenu);
     parent.appendChild(this.container);
   }
 
@@ -183,6 +203,7 @@ export class HexSidebar {
         hotkey: 'B',
         iconSrc: 'assets/ui/icons/ui_iconIso_beacon.png',
         action: () => this.onBeacon(),
+        checkActive: () => this.currentSubmenu === 'beacon',
       },
       {
         id: 'disaster',
@@ -354,8 +375,11 @@ export class HexSidebar {
   }
 
   private onBeacon() {
-    this.closeAllSubmenus();
-    Base.addAlert('system', 'Emergency Beacon: Coming Soon');
+    if (this.currentSubmenu === 'beacon') {
+      this.closeAllSubmenus();
+      return;
+    }
+    this.showBeaconSubmenu();
   }
 
   private onDisaster() {
@@ -469,6 +493,99 @@ export class HexSidebar {
       icon: '✖',
       action: () => this.callbacks.setBuildMode('erase'),
     });
+  }
+
+  private showBeaconSubmenu() {
+    this.currentSubmenu = 'beacon';
+    this.submenuContainer.innerHTML = '';
+    this.submenuContainer.style.display = 'flex';
+
+    this.createSubmenuButton({
+      label: line('HUDHUD035TEXT'),
+      hotkey: 'ESC',
+      color: GREEN,
+      icon: '✓',
+      action: () => this.closeAllSubmenus(),
+    });
+
+    const header = document.createElement('div');
+    header.textContent = '>> ' + line('HUDHUD025TEXT');
+    header.style.cssText = `
+      color: ${AMBER};
+      font-size: 22px;
+      font-family: 'Dosis', sans-serif;
+      padding: 10px 20px;
+      opacity: 0.7;
+    `;
+    this.submenuContainer.appendChild(header);
+
+    const squads = SquadList.getAllSquads();
+    const selectedSquadName = this.beaconPlacementSquad ?? squads[0]?.name ?? null;
+    const selectedLevel = selectedSquadName ? this.getSquadViolence(selectedSquadName) : VIOLENCE_DEFAULT;
+
+    this.createSubmenuButton({
+      label: `Violence: ${this.getViolenceLabel(selectedLevel)}`,
+      hotkey: 'V',
+      color: this.getViolenceColor(selectedLevel),
+      icon: '●',
+      action: () => {
+        if (!selectedSquadName) return;
+        const nextLevel = this.cycleViolence(selectedLevel);
+        this.beaconPlacementViolence = nextLevel;
+        if (EmergencyBeacon.hasBeacon(selectedSquadName)) {
+          EmergencyBeacon.setViolence(selectedSquadName, nextLevel);
+        }
+        this.showBeaconSubmenu();
+      },
+    });
+
+    if (squads.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No squads available';
+      empty.style.cssText = `
+        color: ${AMBER};
+        font-size: 20px;
+        font-family: 'Dosis', sans-serif;
+        padding: 20px;
+        opacity: 0.6;
+      `;
+      this.submenuContainer.appendChild(empty);
+      return;
+    }
+
+    for (const squad of squads) {
+      const isSelected = this.beaconPlacementSquad === squad.name;
+      const hasBeacon = EmergencyBeacon.hasBeacon(squad.name);
+      const level = this.getSquadViolence(squad.name);
+
+      this.createSubmenuButton({
+        label: `${squad.name} (${squad.getSize()})${isSelected ? ' [PLACE]' : ''}`,
+        hotkey: '',
+        color: this.getViolenceColor(level),
+        icon: '◆',
+        action: () => {
+          if (hasBeacon) {
+            this.removeBeacon(squad.name);
+            if (isSelected) {
+              this.exitBeaconPlacement(true);
+            }
+            this.showBeaconSubmenu();
+            return;
+          }
+
+          if (isSelected) {
+            this.exitBeaconPlacement(true);
+            this.showBeaconSubmenu();
+            return;
+          }
+
+          this.beaconPlacementSquad = squad.name;
+          this.beaconPlacementViolence = EmergencyBeacon.getViolence(squad.name);
+          this.enterBeaconPlacement();
+          this.showBeaconSubmenu();
+        },
+      });
+    }
   }
 
   private showDisasterSubmenu() {
@@ -598,6 +715,79 @@ export class HexSidebar {
   private closeAllSubmenus() {
     this.currentSubmenu = 'none';
     this.submenuContainer.style.display = 'none';
+    this.exitBeaconPlacement(true);
+  }
+
+  private enterBeaconPlacement() {
+    if (!this.beaconPlacementSquad) return;
+    const currentMode = this.callbacks.getBuildMode();
+    if (currentMode !== 'beacon') {
+      this.beaconPreviousBuildMode = currentMode;
+    }
+    this.callbacks.setBuildMode('beacon');
+  }
+
+  private exitBeaconPlacement(restoreMode: boolean) {
+    if (!this.beaconPlacementSquad) return;
+    if (restoreMode) {
+      this.callbacks.setBuildMode(this.beaconPreviousBuildMode ?? 'none');
+    }
+    this.beaconPlacementSquad = null;
+    this.beaconPlacementViolence = VIOLENCE_DEFAULT;
+    this.beaconPreviousBuildMode = null;
+  }
+
+  private removeBeacon(squadName: string) {
+    if (this.callbacks.onBeaconRemove) {
+      this.callbacks.onBeaconRemove(squadName);
+      return;
+    }
+    EmergencyBeacon.removeBeacon(squadName);
+  }
+
+  placeBeaconAt(tx: number, ty: number): boolean {
+    if (!this.beaconPlacementSquad) return false;
+    const squad = SquadList.getAllSquads().find((s) => s.name === this.beaconPlacementSquad);
+    if (!squad) return false;
+
+    if (this.callbacks.onBeaconPlace) {
+      this.callbacks.onBeaconPlace(this.beaconPlacementSquad, tx, ty);
+    } else {
+      EmergencyBeacon.placeAt(this.beaconPlacementSquad, tx, ty, squad.getSize());
+    }
+    EmergencyBeacon.setViolence(this.beaconPlacementSquad, this.beaconPlacementViolence);
+    return true;
+  }
+
+  private getSquadViolence(squadName: string): number {
+    if (this.beaconPlacementSquad === squadName) {
+      return this.beaconPlacementViolence;
+    }
+    return EmergencyBeacon.getViolence(squadName);
+  }
+
+  private getViolenceColor(level: number): string {
+    switch (level) {
+      case VIOLENCE_LETHAL:
+        return BEACON_RED;
+      case VIOLENCE_NONLETHAL:
+        return BEACON_PURPLE;
+      case VIOLENCE_DEFAULT:
+      default:
+        return AMBER;
+    }
+  }
+
+  private cycleViolence(level: number): number {
+    if (level === VIOLENCE_DEFAULT) return VIOLENCE_LETHAL;
+    if (level === VIOLENCE_LETHAL) return VIOLENCE_NONLETHAL;
+    return VIOLENCE_DEFAULT;
+  }
+
+  private getViolenceLabel(level: number): string {
+    if (level === VIOLENCE_LETHAL) return 'Lethal';
+    if (level === VIOLENCE_NONLETHAL) return 'Nonlethal';
+    return 'Default';
   }
 
   private getModeIcon(mode: BuildMode): { icon: string; iconSrc?: string } {
@@ -633,6 +823,8 @@ export class HexSidebar {
   }
 
   destroy() {
+    window.removeEventListener('keydown', this.onWindowKeyDown);
+    window.removeEventListener('contextmenu', this.onWindowContextMenu);
     this.container.remove();
   }
 }

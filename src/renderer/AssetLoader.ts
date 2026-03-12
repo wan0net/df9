@@ -260,7 +260,18 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   entries.push(['ui_power', 'assets/ui/misc/power.png']);
   entries.push(['ui_softwhitebox', 'assets/ui/misc/softwhitebox.png']);
 
-  // Environment object sprite sheets
+  // Hand-tuned multi-frame sprite sheets (UV sub-regions defined in SpriteAtlasData.ts)
+  entries.push(['sheet_ReactorGen3', 'assets/environments/ReactorGen3.png']);
+  entries.push(['sheet_ReactorGen4', 'assets/environments/ReactorGen4.png']);
+  entries.push(['sheet_O2Gen3', 'assets/environments/O2Gen3.png']);
+  entries.push(['sheet_O2Gen4', 'assets/environments/O2Gen4.png']);
+  entries.push(['sheet_happybot', 'assets/environments/happybot.png']);
+  entries.push(['sheet_Jukebox', 'assets/environments/Jukebox.png']);
+  entries.push(['sheet_space_tree', 'assets/environments/space_tree.png']);
+  entries.push(['sheet_BulbousPlant', 'assets/environments/BulbousPlant.png']);
+  entries.push(['sheet_strange_plant', 'assets/environments/strange_plant.png']);
+
+  // Environment object sprite sheets (auto-generated single-frame entries)
   for (const [key, url] of SPRITE_SHEET_ENTRIES) {
     entries.push([key, url]);
   }

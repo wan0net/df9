@@ -3,6 +3,7 @@ import { Base } from '../core/Base';
 import { line } from '../localization/Localization';
 import type { Character } from '../characters/Character';
 import type { CharacterManager } from '../characters/CharacterManager';
+import { TEAM_ID_PLAYER } from '../characters/CharacterConstants';
 
 export interface DerelictShip {
   id: string;
@@ -64,7 +65,7 @@ export class DerelictSystem {
 
   private shipTypes: DerelictShip['type'][] = ['research', 'cargo', 'military', 'mining', 'luxury'];
 
-  spawnDerelict(): DerelictShip {
+  spawnDerelict(forceHostile = false): DerelictShip {
     const id = `derelict_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const type = this.shipTypes[Math.floor(Math.random() * this.shipTypes.length)];
     const name = this.shipNames[Math.floor(Math.random() * this.shipNames.length)];
@@ -77,11 +78,11 @@ export class DerelictSystem {
       y: this.randomPosition(),
       explored: false,
       looted: false,
-      hasHostiles: Math.random() < this.getHostileChance(type),
+      hasHostiles: forceHostile || Math.random() < this.getHostileChance(type),
       condition: this.randomCondition(),
       resources: this.generateResources(type),
       crewRemaining: Math.floor(Math.random() * 5),
-      dangerLevel: this.calculateDanger(type),
+      dangerLevel: forceHostile ? Math.max(this.calculateDanger(type), 4) : this.calculateDanger(type),
     };
 
     this.derelicts.set(id, ship);
@@ -141,21 +142,23 @@ export class DerelictSystem {
     return dangers[type];
   }
 
-  exploreDerelict(shipId: string, explorer: Character): DerelictEvent {
+  exploreDerelict(shipId: string, explorer?: Character, forceHostileEncounter = false): DerelictEvent {
     const ship = this.derelicts.get(shipId);
     if (!ship) throw new Error(`Derelict ${shipId} not found`);
     
     ship.explored = true;
     this.exploredDerelicts++;
 
-    const eventType = this.determineEventType(ship);
-    const event = this.createEvent(eventType, ship, explorer);
+    const activeExplorer = explorer ?? this.pickExplorer();
+    const eventType = this.determineEventType(ship, forceHostileEncounter);
+    const event = this.createEvent(eventType, ship, activeExplorer);
     this.activeEvent = event;
     
     return event;
   }
 
-  private determineEventType(ship: DerelictShip): DerelictEventType {
+  private determineEventType(ship: DerelictShip, forceHostileEncounter = false): DerelictEventType {
+    if (forceHostileEncounter) return 'hostileEncounter';
     if (ship.hasHostiles && Math.random() < 0.6) return 'hostileEncounter';
     if (ship.crewRemaining > 0 && Math.random() < 0.4) return 'friendlySurvivors';
     if (ship.condition === 'derelict' && Math.random() < 0.3) return 'systemFailure';
@@ -163,6 +166,15 @@ export class DerelictSystem {
     if (Math.random() < 0.2) return 'trap';
     if (ship.resources.matter > 300) return 'valuableLoot';
     return 'discovery';
+  }
+
+  private pickExplorer(): Character {
+    const candidates = this.characterManager.getAllCharacters();
+    const player = candidates.find(c => c.isAlive() && c.tStats.nTeam === TEAM_ID_PLAYER);
+    if (player) return player;
+    const fallback = candidates.find(c => c.isAlive());
+    if (fallback) return fallback;
+    throw new Error('No available explorer for derelict event');
   }
 
   private createEvent(type: DerelictEventType, ship: DerelictShip, explorer: Character): DerelictEvent {

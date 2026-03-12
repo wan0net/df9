@@ -422,6 +422,79 @@ export class DialogSystem {
     this.showDialog(dialog, nChanceObey, callback);
   }
 
+  showDerelictChoiceDialog(
+    description: string,
+    choices: { id: string; label: string }[],
+    callback: (choiceId: string) => void,
+  ) {
+    this.close();
+
+    const el = document.createElement('div');
+    el.style.cssText = `
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(10, 15, 30, 0.95); border: 2px solid #4488ff;
+      padding: 24px; border-radius: 8px; z-index: 1000;
+      font-family: 'Dosis', sans-serif; color: #cceeff; text-align: center;
+      min-width: 400px; max-width: 550px; box-shadow: 0 0 30px rgba(68, 136, 255, 0.3);
+      overflow: hidden;
+    `;
+
+    const stripesTop = document.createElement('img');
+    stripesTop.src = 'assets/ui/dialog/ui_dialog_docking_stripesTop.png';
+    stripesTop.style.cssText =
+      'position:absolute;top:0;left:0;width:100%;height:auto;image-rendering:pixelated;display:block;pointer-events:none;';
+    el.appendChild(stripesTop);
+
+    const stripesBottom = document.createElement('img');
+    stripesBottom.src = 'assets/ui/dialog/ui_dialog_docking_stripesBottom.png';
+    stripesBottom.style.cssText =
+      'position:absolute;bottom:0;left:0;width:100%;height:auto;image-rendering:pixelated;display:block;pointer-events:none;';
+    el.appendChild(stripesBottom);
+
+    const title = document.createElement('div');
+    title.textContent = 'Derelict Ship';
+    title.style.cssText = 'font-size: 32px; font-weight: 500; color: #ffaa00; margin-bottom: 16px;';
+    el.appendChild(title);
+
+    const request = document.createElement('div');
+    request.textContent = description;
+    request.style.cssText = 'font-size: 26px; line-height: 1.5; margin-bottom: 20px;';
+    el.appendChild(request);
+
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;';
+
+    for (const choice of choices) {
+      const button = this.createButton(choice.label, '#4488ff');
+      button.addEventListener('click', () => {
+        this.close();
+        callback(choice.id);
+      });
+      btnContainer.appendChild(button);
+    }
+
+    el.appendChild(btnContainer);
+    this.container.appendChild(el);
+
+    this.activeDialog = {
+      dialog: {
+        title: '',
+        request: '',
+        acceptButton: '',
+        rejectButton: '',
+        acceptedResponse: '',
+        acceptedResponseButton: '',
+        rejectedResponse: '',
+        rejectedResponseButton: '',
+        screwYouResponse: '',
+        screwYouResponseButton: '',
+      },
+      callback: () => {},
+      element: el,
+      nChanceObey: 1,
+    };
+  }
+
   /** Is a dialog currently open? */
   isOpen(): boolean {
     return this.activeDialog !== null;

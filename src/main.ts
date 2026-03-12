@@ -440,7 +440,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const lighting = new Lighting(roomManager); // fire ref set below after Fire is constructed
   lighting.init();
   const eventController = new EventController();
-  eventController.init();
+  eventController.init(derelictSystem);
   eventController.dialogSystem = new DialogSystem(container);
 
   // Wire event room gates
@@ -506,6 +506,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Friendly docking — spawn immigrants
     for (let i = 0; i < count; i++) {
       characterManager.spawnCharacter();
+    }
+  };
+  eventController.onDerelictExplore = ({ ship, event, choiceId }) => {
+    if (event.type === 'hostileEncounter' && choiceId === 'fight') {
+      const count = Math.max(1, Math.min(4, Math.ceil(ship.dangerLevel / 2)));
+      characterManager.spawnHostiles(count, eventController.getScaledRaiderHP());
     }
   };
 

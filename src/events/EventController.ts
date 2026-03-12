@@ -15,6 +15,7 @@ import { HostileDockingEvent } from './HostileDockingEvent';
 import { CompoundEvent } from './CompoundEvent';
 import { TraderEvent } from './TraderEvent';
 import type { DialogSystem, DialogResult } from '../ui/DialogSystem';
+import { DerelictSystem, type DerelictEvent as DerelictExploreEvent, type DerelictShip } from './DerelictSystem';
 import { line } from '../localization/Localization';
 import {
   EVENT_DEFS, type EventDef,
@@ -40,6 +41,12 @@ export type SpawnHostileFn = (count: number, hp: number) => void;
 export type MeteorLandFn = () => void;
 export type BreachWallFn = () => void;
 export type DockingFn = (count: number) => void;
+export type DerelictExploreFn = (payload: {
+  ship: DerelictShip;
+  event: DerelictExploreEvent;
+  choiceId: string;
+  hostile: boolean;
+}) => void;
 
 /** A scheduled event in the forecast. */
 interface ForecastEntry {
@@ -91,11 +98,20 @@ export class EventController implements TickableSystem {
   onHostileSpawn: SpawnHostileFn | null = null;
   onBreachWall: BreachWallFn | null = null;
   onDocking: DockingFn | null = null;
+  onDerelictExplore: DerelictExploreFn | null = null;
   /** Dialog system for event accept/reject choices. */
   dialogSystem: DialogSystem | null = null;
+  private derelictSystem: DerelictSystem | null = null;
 
-  init() {
+  init(derelictSystem?: DerelictSystem) {
+    if (derelictSystem) {
+      this.derelictSystem = derelictSystem;
+    }
     GameRules.registerSystem(1, this);
+  }
+
+  setDerelictSystem(derelictSystem: DerelictSystem) {
+    this.derelictSystem = derelictSystem;
   }
 
   /** Set galaxy position values from landing zone. */
@@ -391,6 +407,44 @@ export class EventController implements TickableSystem {
     return result === 'accepted' || result === 'ignored';
   }
 
+  private createDerelictEvent(hostile: boolean): Event | null {
+    const derelictSystem = this.derelictSystem;
+    if (!derelictSystem) return null;
+
+    const derelictEvent = new DerelictEvent(() => {
+      const ship = derelictSystem.spawnDerelict(hostile);
+      const exploration = derelictSystem.exploreDerelict(ship.id, undefined, hostile);
+      const resolveChoice = (choiceId: string) => {
+        derelictSystem.resolveEvent(choiceId);
+        this.onDerelictExplore?.({
+          ship,
+          event: exploration,
+          choiceId,
+          hostile,
+        });
+        Base.addAlert(hostile ? 'hostile' : 'derelict', line(hostile ? 'ALERTS010TEXT' : 'ALERTS032TEXT'));
+        derelictEvent.resolve();
+      };
+
+      if (this.dialogSystem) {
+        this.dialogSystem.showDerelictChoiceDialog(
+          exploration.description,
+          exploration.choices.map(choice => ({ id: choice.id, label: choice.label })),
+          resolveChoice,
+        );
+      } else {
+        const fallbackChoice = exploration.choices[0];
+        if (fallbackChoice) {
+          resolveChoice(fallbackChoice.id);
+        } else {
+          derelictEvent.resolve();
+        }
+      }
+    });
+
+    return derelictEvent;
+  }
+
   private createEvent(def: EventDef): Event | null {
     switch (def.name) {
       case 'Immigration': {
@@ -462,20 +516,10 @@ export class EventController implements TickableSystem {
         return breachEvent;
       }
       case 'Derelict Ship': {
-        const derelictEvent = new DerelictEvent();
-        derelictEvent.onCompleteCallback = () => {
-          Base.addAlert('derelict', line('ALERTS032TEXT'));
-        };
-        return derelictEvent;
+        return this.createDerelictEvent(false);
       }
       case 'Hostile Derelict': {
-        const hostileDerelictEvent = new HostileImmigrationEvent(this.getScaledRaiderCount());
-        hostileDerelictEvent.onCompleteCallback = () => {
-          const count = hostileDerelictEvent.getRaiderCount();
-          this.onHostileSpawn?.(count, this.getScaledRaiderHP());
-          Base.addAlert('hostile', line('ALERTS010TEXT'));
-        };
-        return hostileDerelictEvent;
+        return this.createDerelictEvent(true);
       }
       case 'Docking': {
         // Lua: population cap check for friendly docking
