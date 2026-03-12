@@ -285,6 +285,73 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // Emergency beacon system
   EmergencyBeacon.init(roomManager);
 
+  interface BeaconVisual {
+    mesh: THREE.Mesh;
+    frameIndex: number;
+    elapsed: number;
+    frames: string[];
+  }
+  const beaconVisuals = new Map<string, BeaconVisual>();
+  const BEACON_FRAME_DURATION = 0.1;
+  const BEACON_DEPTH = 20000;
+
+  function createBeaconMesh(tx: number, ty: number, frames: string[]): THREE.Mesh | null {
+    const firstTex = getTexture(frames[0]);
+    if (!firstTex || !firstTex.image) return null;
+    const w = firstTex.image.width || 64;
+    const h = firstTex.image.height || 64;
+    const geo = new THREE.PlaneGeometry(w, h);
+    const mat = new THREE.MeshBasicMaterial({
+      map: firstTex,
+      transparent: true,
+      alphaTest: 0.01,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    const pos = tileToScreen(tx, ty);
+    mesh.position.set(pos.x + TILE_HALF_W, -(pos.y + TILE_HALF_H - h * 0.5), BEACON_DEPTH + pos.y);
+    return mesh;
+  }
+
+  function syncBeaconVisuals() {
+    const allBeacons = EmergencyBeacon.getAllBeacons();
+    const activeSquads = new Set(allBeacons.keys());
+
+    for (const [squadName, visual] of beaconVisuals) {
+      if (!activeSquads.has(squadName)) {
+        threeRenderer.scene.remove(visual.mesh);
+        beaconVisuals.delete(squadName);
+      }
+    }
+
+    for (const [squadName, beacon] of allBeacons) {
+      if (!beaconVisuals.has(squadName)) {
+        const frames: string[] = [];
+        for (let i = 1; i <= 6; i++) frames.push(`beacon_investigate${i}`);
+        const mesh = createBeaconMesh(beacon.tx, beacon.ty, frames);
+        if (mesh) {
+          threeRenderer.scene.add(mesh);
+          beaconVisuals.set(squadName, { mesh, frameIndex: 0, elapsed: 0, frames });
+        }
+      }
+    }
+  }
+
+  function updateBeaconAnimations(dtSec: number) {
+    for (const [, visual] of beaconVisuals) {
+      visual.elapsed += dtSec;
+      if (visual.elapsed >= BEACON_FRAME_DURATION) {
+        visual.elapsed -= BEACON_FRAME_DURATION;
+        visual.frameIndex = (visual.frameIndex + 1) % visual.frames.length;
+        const tex = getTexture(visual.frames[visual.frameIndex]);
+        if (tex) {
+          (visual.mesh.material as THREE.MeshBasicMaterial).map = tex;
+          (visual.mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
+        }
+      }
+    }
+  }
+
   // Effect particles (meteor trails, construction sparks)
   const effectParticles = new EffectParticles(threeRenderer.scene);
   propRenderer.preload([
@@ -1232,6 +1299,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
     // Emergency beacon tick
     EmergencyBeacon.onTick();
+    syncBeaconVisuals();
+    updateBeaconAnimations(delta / 1000);
 
     // Goal, hint, disease, and music systems
     const gameDt = (delta / 1000) * GameRules.playerTimeScale;

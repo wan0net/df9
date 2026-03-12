@@ -142,48 +142,149 @@ const charTexCache = new Map<string, THREE.Texture>();
 
 /** Known character texture base names (without .png). */
 const CHAR_TEXTURES = new Set([
+  // Citizen_Alien
+  'AC_LwBody01', 'AC_UpBody01', 'AC_UpBody02', 'AC_UpBody03',
+  'Alien_Body01', 'Alien_Body01_base_01', 'Alien_Body01_base_02',
+  'Alien_Body01_base_03', 'Alien_Body01_base_04', 'Alien_Body01_base_05',
+  'Alien_Head01', 'Alien_Head01_base_01', 'Alien_Head01_base_02',
+  'Alien_Head01_base_03', 'Alien_Head01_base_04', 'Alien_Head01_base_05',
+  'Bad_Alien01',
+
+  // Citizen_Base - Bird
   'Bird_Body_Female01_base_01', 'Bird_Body_Female01_base_02',
   'Bird_Body_Male01_base_01', 'Bird_Body_Male01_base_02',
   'Bird_Head_Female01_base_01', 'Bird_Head_Female01_base_02',
   'Bird_Head_Male01_base_01', 'Bird_Head_Male01_base_02',
+
+  // Citizen_Base - Cat
   'Cat_Body_Female01_base_01', 'Cat_Body_Female01_base_02',
   'Cat_Body_Male01_base_01', 'Cat_Body_Male01_base_02',
   'Cat_Head_Female01_base_01', 'Cat_Head_Female01_base_02',
   'Cat_Head_Male01_base_01', 'Cat_Head_Male01_base_02',
-  'Collar_base_01', 'Collar_base_02',
-  'Human_Body_Female01_base_01', 'Human_Body_Female01_base_02',
-  'Human_Body_Male01_base_01', 'Human_Body_Male01_base_02',
-  'Human_Head_Female01_base_01', 'Human_Head_Female01_base_02',
-  'Human_Head_Male01_base_01', 'Human_Head_Male01_base_02',
+
+  // Citizen_Base - Chicken
+  'Chicken_Body01', 'Chicken_Body01_base_01', 'Chicken_Body01_base_02',
+  'Chicken_Body01_base_03', 'Chicken_Body01_base_04',
+  'Chicken_Head01', 'Chicken_Head01_base_01', 'Chicken_Head01_base_02',
+  'Chicken_Head01_base_03', 'Chicken_Head01_base_04',
+  'Chicken_Head01_bottom_01', 'Chicken_Head01_bottom_02',
+  'Chicken_Head01_bottom_03', 'Chicken_Head01_bottom_04',
+  'Chicken_Head01_top_01', 'Chicken_Head01_top_02',
+  'Chicken_Head01_top_03', 'Chicken_Head01_top_04',
+
+  // Citizen_Base - Human
+  'Human_Body_Female01', 'Human_Body_Female01_base_01',
+  'Human_Body_Female01_base_02', 'Human_Body_Female01_base_03',
+  'Human_Body_Female01_base_04', 'Human_Body_Female01_base_05',
+  'Human_Body_Male01', 'Human_Body_Male01_base_01',
+  'Human_Body_Male01_base_02', 'Human_Body_Male01_base_03',
+  'Human_Body_Male01_base_04', 'Human_Body_Male01_base_05',
+  'Human_Body_Male01_bottom_01', 'Human_Body_Male01_bottom_02',
+  'Human_Body_Male01_bottom_03', 'Human_Body_Male01_bottom_04',
+  'Human_Body_Male01_bottom_05', 'Human_Body_Male01_bottom_06',
+  'Human_Body_Male01_bottom_07', 'Human_Body_Male01_bottom_08',
+  'Human_Body_Male01_bottom_10',
+  'Human_Body_Male01_top_01', 'Human_Body_Male01_top_02',
+  'Human_Body_Male01_top_03', 'Human_Body_Male01_top_04',
+  'Human_Body_Male01_top_05', 'Human_Body_Male01_top_06',
+  'Human_Body_Male01_top_07', 'Human_Body_Male01_top_08',
+  'Human_Head_Female01', 'Human_Head_Female01_base_01',
+  'Human_Head_Female01_base_02', 'Human_Head_Female01_base_03',
+  'Human_Head_Female01_base_04', 'Human_Head_Female01_base_05',
+  'Human_Head_Male01', 'Human_Head_Male01_base_01',
+  'Human_Head_Male01_base_02', 'Human_Head_Male01_base_03',
+  'Human_Head_Male01_base_04', 'Human_Head_Male01_base_05',
+  'Human_Head_Male01_bottom_01_Color_01',
+  'Human_Head_Male01_bottom_01_Color_02',
+  'Human_Head_Male01_bottom_01_Color_03',
+  'Human_Head_Male01_bottom_01_Color_04',
+  'Human_Head_Male01_bottom_01_Color_05',
+  'Human_Head_Male01_bottom_02_Color_01',
+  'Human_Head_Male01_bottom_02_Color_02',
+  'Human_Head_Male01_bottom_02_Color_03',
+  'Human_Head_Male01_bottom_02_Color_04',
+  'Human_Head_Male01_bottom_02_Color_05',
+  'Human_Head_Male01_bottom_03_Color_01',
+  'Human_Head_Male01_bottom_03_Color_02',
+  'Human_Head_Male01_bottom_03_Color_03',
+  'Human_Head_Male01_bottom_03_Color_04',
+  'Human_Head_Male01_bottom_03_Color_05',
+  'Human_Head_Male01_bottom_04_Color_01',
+  'Human_Head_Male01_bottom_04_Color_02',
+  'Human_Head_Male01_bottom_04_Color_03',
+  'Human_Head_Male01_bottom_04_Color_04',
+  'Human_Head_Male01_bottom_04_Color_05',
+  'Human_Head_Male01_bottom_05_Color_01',
+  'Human_Head_Male01_bottom_05_Color_02',
+  'Human_Head_Male01_bottom_05_Color_03',
+  'Human_Head_Male01_bottom_05_Color_04',
+  'Human_Head_Male01_bottom_05_Color_05',
+
+  // Citizen_Base - Jelly
   'Jelly_Body_Female01_base_01', 'Jelly_Body_Female01_base_02',
-  'Jelly_Head_Female01_base_01', 'Jelly_Head_Female01_base_02',
+  'Jelly_Body_Female01_base_03', 'Jelly_Body_Female01_base_04',
+  'Jelly_Head_Female01', 'Jelly_Head_Female01_base_01',
+  'Jelly_Head_Female01_base_02', 'Jelly_Head_Female01_base_03',
+  'Jelly_Head_Female01_base_04', 'Jelly_Head01',
+
+  // Citizen_Accessories
+  'Arm_Gauntlet', 'Collar_base_01', 'Collar_base_02', 'Collar_base_03',
+  'Collar_base_04', 'Collar01', 'Gray', 'straps_pouches', 'Visor01',
+
+  // Citizen_Hair
+  'Elephant01_Hair01', 'Elephant01_Hair01_base_01',
+  'Elephant01_Hair01_base_02', 'Elephant01_Hair01_base_03',
+  'Elephant01_Hair01_base_04', 'Elephant01_Hair01_base_05',
+  'Hair_Long01_Color_01', 'Hair_Long01_Color_02', 'Hair_Long01_Color_03',
+  'Hair_Long01_Color_04', 'Hair_Long01_Color_05', 'Hair_Long01_Color_06',
+  'Hair_Long01_Color_07',
+  'Hair_Short02_Color_01', 'Hair_Short02_Color_02',
+  'Hair_Short02_Color_03', 'Hair_Short02_Color_04',
+  'Hair_Short02_Color_07',
+  'Hair_Short03_Color_01', 'Hair_Short03_Color_02',
+  'Hair_Short03_Color_03', 'Hair_Short03_Color_04',
+  'Hair_Short03_Color_05', 'Hair_Short03_Color_06',
+  'Hair_Short03_Color_07',
+  'Hair01',
+  'Moustache01_Hair01', 'Moustache01_Hair01_base_01',
+  'Moustache01_Hair01_base_02', 'Moustache01_Hair01_base_03',
+  'Moustache01_Hair01_base_04', 'Moustache01_Hair01_base_05',
+
+  // Citizen_Jobs
+  'Builder01', 'Builder01_Base_bottom', 'Builder01_Base_top',
+  'Doctor_base', 'Doctor01',
+  'Emergency01', 'Emergency02', 'Emergency03',
+  'gardener_base',
+  'Miner01', 'Miner01_Base_bottom', 'Miner01_Base_top', 'Miner02',
+  'MinerAcc01',
+  'Scientist_base', 'Scientist01',
+  'Technician01', 'Technician01_Base_bottom', 'Technician01_Base_top',
+
+  // Citizen_Tourist
+  'Tourist_Shirt_Female_01', 'Tourist_Shirt_Female_02',
+  'Tourist_Shirt_Female_03', 'Tourist_Shirt_Female_04',
+  'Tourist_Shirt_Female_05',
+  'Tourist_Shirt_Male_01', 'Tourist_Shirt_Male_02',
+  'Tourist_Shirt_Male_03', 'Tourist_Shirt_Male_04',
+  'Tourist_Shorts_Female_01', 'Tourist_Shorts_Female_02',
+  'Tourist_Shorts_Male_01', 'Tourist_Shorts_Male_02',
+
+  // Hostiles
+  'Murder_Body01', 'Murder_Head01', 'MurderRobot01', 'MurderSlug01',
+  'Probe01',
+  'Raider01', 'Raider01_bottom', 'Raider01_top',
+  'Shamon_Body', 'Shamon_Head01',
+
+  // Props_Weapons
+  'AsteroidChunk01', 'Mug01', 'Rifle', 'Rifle01',
+
+  // Spacesuit
+  'SpaceDefault01', 'SpaceEmergency01', 'SpaceMiner01', 'SpaceRaider01',
+  'Spacesuit01', 'Spacesuit02',
 ]);
 
 /** Default colors for materials without textures (approximates original game). */
-const MAT_DEFAULT_COLORS: Record<string, number> = {
-  'Spacesuit01': 0xcccccc,
-  'Builder01': 0xd4a020,
-  'Emergency01': 0xcc3333,
-  'SpaceEmergency01': 0xcc3333,
-  'Miner01': 0xdd8833,
-  'MinerAcc01': 0xdd8833,
-  'AsteroidChunk01': 0x887755,
-  'Doctor01': 0xdddddd,
-  'Technician01': 0x4488cc,
-  'Raider01': 0x666666,
-  'Hair01': 0x553311,
-  'Straps_Pouches': 0x554433,
-  'Visor01': 0x88ccff,
-  'Collar01': 0x888888,
-  'Arm_Gauntlet': 0x777777,
-  'Tourist_Shorts_Male_01': 0x445566,
-  'Tourist_Shorts_Female_01': 0x445566,
-  'Tourist_Shirt_Male_01': 0x556677,
-  'Tourist_Shirt_Female_01': 0x667788,
-  'AC_UpBody01': 0x556677,
-  'AC_UpBody03': 0x556677,
-  'Shamon_Head01': 0x99aa77,
-};
+const MAT_DEFAULT_COLORS: Record<string, number> = {};
 
 const textureMaterials = new Map<THREE.Texture, Set<THREE.Material>>();
 
@@ -498,6 +599,8 @@ export interface CharacterRenderHandle {
   shadow: THREE.Mesh;
   /** Thought bubble DOM + CSS2DObject. */
   thoughtEl: HTMLDivElement;
+  thoughtTextSpan: HTMLSpanElement;
+  thoughtTail: HTMLImageElement;
   thoughtObj: CSS2DObject;
   /** Last shown task name (to detect task change). */
   lastTaskName: string;
@@ -569,8 +672,19 @@ export class CharacterRenderer {
     thoughtEl.className = 'thought-bubble';
     thoughtEl.style.cssText =
       'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
-      'background:rgba(0,0,0,0.75);border-radius:6px;padding:2px 5px;white-space:nowrap;' +
-      'text-align:center;display:none;border:1px solid rgba(255,255,255,0.3);';
+      'background-image:url(\'assets/ui/dialog/ui_dialog_thought_bubblebg.png\');' +
+      'background-size:100% 100%;background-repeat:no-repeat;' +
+      'image-rendering:pixelated;border:none;border-radius:0;' +
+      'padding:4px 8px;white-space:nowrap;text-align:center;display:none;' +
+      'position:relative;';
+    const thoughtTextSpan = document.createElement('span');
+    thoughtEl.appendChild(thoughtTextSpan);
+    const thoughtTail = document.createElement('img');
+    thoughtTail.src = 'assets/ui/dialog/ui_dialog_thought_bubbletail.png';
+    thoughtTail.style.cssText =
+      'position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);' +
+      'width:16px;height:10px;image-rendering:pixelated;display:block;';
+    thoughtEl.appendChild(thoughtTail);
     const thoughtObj = new CSS2DObject(thoughtEl);
     thoughtObj.position.set(char.screenX, -(char.screenY - 60), 20002 + char.screenY);
     this.overlayScene.add(thoughtObj);
@@ -584,6 +698,8 @@ export class CharacterRenderer {
       currentAnimState: '',
       shadow,
       thoughtEl,
+      thoughtTextSpan,
+      thoughtTail,
       thoughtObj,
       lastTaskName: '',
       thoughtShowTime: 0,
@@ -988,8 +1104,15 @@ export class CharacterRenderer {
       handle.thoughtShowTime = now;
       // Map internal task names to friendly display text
       const label = TASK_DISPLAY_NAMES[taskName] ?? taskName;
-      handle.thoughtEl.textContent = label;
-      handle.thoughtEl.style.display = '';
+      handle.thoughtTextSpan.textContent = label;
+      handle.thoughtEl.style.cssText =
+        'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
+        'background-image:url(\'assets/ui/dialog/ui_dialog_thought_bubblebg.png\');' +
+        'background-size:100% 100%;background-repeat:no-repeat;' +
+        'image-rendering:pixelated;border:none;border-radius:0;' +
+        'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
+        'position:relative;';
+      handle.thoughtTail.src = 'assets/ui/dialog/ui_dialog_thought_bubbletail.png';
     }
 
     // Dismiss after THOUGHT_DURATION
@@ -1007,14 +1130,16 @@ export class CharacterRenderer {
     const bubbleText = dialogueSystem.getBubbleText(char.id);
     
     if (bubbleText && handle.thoughtEl.style.display === 'none') {
-      handle.thoughtEl.textContent = bubbleText;
-      handle.thoughtEl.style.display = '';
+      handle.thoughtTextSpan.textContent = bubbleText;
       handle.thoughtEl.style.cssText =
         'pointer-events:none;font-family:"Orbitron",monospace;font-size:11px;color:#000;' +
-        'background:rgba(255,255,255,0.9);border-radius:8px;padding:4px 8px;white-space:nowrap;' +
-        'text-align:center;display:block;border:1px solid rgba(0,0,0,0.3);' +
-        'box-shadow:0 2px 4px rgba(0,0,0,0.2);';
-    } else if (!bubbleText && handle.thoughtEl.textContent && !handle.lastTaskName) {
+        'background-image:url(\'assets/ui/dialog/ui_dialog_dialog_bubblebg.png\');' +
+        'background-size:100% 100%;background-repeat:no-repeat;' +
+        'image-rendering:pixelated;border:none;border-radius:0;' +
+        'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
+        'position:relative;';
+      handle.thoughtTail.src = 'assets/ui/dialog/ui_dialog_dialog_bubbletail.png';
+    } else if (!bubbleText && handle.thoughtTextSpan.textContent && !handle.lastTaskName) {
       handle.thoughtEl.style.display = 'none';
     }
   }

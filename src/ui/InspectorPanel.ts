@@ -366,15 +366,40 @@ export class InspectorPanel {
           { label: line('INSPEC017TEXT'), tab: 'stats' },
           { label: 'Spaceface', tab: 'log' },
         ];
+    const charTabIcons: Record<string, string> = {
+      duty: 'assets/ui/inspector/ui_icon_duty.png',
+      stats: 'assets/ui/inspector/ui_icon_stats.png',
+      psych: 'assets/ui/inspector/ui_icon_psych.png',
+      log: 'assets/ui/inspector/ui_icon_spaceface.png',
+      actions: 'assets/ui/inspector/ui_icon_activity.png',
+    };
+    const charTabCount = tabs.length;
+    const charFolderActive = charTabCount >= 5
+      ? 'assets/ui/inspector/ui_inspector_folderActive_5wide.png'
+      : 'assets/ui/inspector/ui_inspector_folderActive.png';
+    const charFolderInactive = charTabCount >= 5
+      ? 'assets/ui/inspector/ui_inspector_folderInactive_5wide.png'
+      : 'assets/ui/inspector/ui_inspector_folderInactive.png';
     for (const t of tabs) {
       const btn = document.createElement('div');
-      btn.textContent = t.label;
       const isActive = this.currentTab === t.tab;
+      const iconSrc = charTabIcons[t.tab];
       btn.style.cssText = `
         flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px; /* Lua dosissemibold20 */
-        background:${isActive ? AMBER : 'transparent'};
+        display:flex;align-items:center;justify-content:center;
+        background-image:url('${isActive ? charFolderActive : charFolderInactive}');
+        background-size:100% 100%;background-repeat:no-repeat;
         color:${isActive ? '#000' : AMBER};
       `;
+      if (iconSrc) {
+        const img = document.createElement('img');
+        img.src = iconSrc;
+        img.style.cssText = 'width:20px;height:20px;margin-right:4px;vertical-align:middle;image-rendering:pixelated;';
+        btn.appendChild(img);
+      }
+      const span = document.createElement('span');
+      span.textContent = t.label;
+      btn.appendChild(span);
       btn.addEventListener('click', () => {
         this.currentTab = t.tab;
         this.update();
@@ -751,15 +776,31 @@ export class InspectorPanel {
       { key: 'action', label: line('INSPUI005TEXT') || 'Action' },
       { key: 'about', label: line('INSPUI004TEXT') || 'About' },
     ];
+    const objTabIcons: Record<string, string> = {
+      stats: 'assets/ui/inspector/ui_icon_stats.png',
+      action: 'assets/ui/inspector/ui_icon_activity.png',
+      about: 'assets/ui/inspector/ui_icon_about.png',
+    };
     for (const t of objTabs) {
       const btn = document.createElement('div');
-      btn.textContent = t.label;
       const isActive = this.objectTab === t.key;
+      const iconSrc = objTabIcons[t.key];
       btn.style.cssText = `
         flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px;
-        background:${isActive ? AMBER : 'transparent'};
+        display:flex;align-items:center;justify-content:center;
+        background-image:url('${isActive ? 'assets/ui/inspector/ui_inspector_folderActive.png' : 'assets/ui/inspector/ui_inspector_folderInactive.png'}');
+        background-size:100% 100%;background-repeat:no-repeat;
         color:${isActive ? '#000' : AMBER};
       `;
+      if (iconSrc) {
+        const img = document.createElement('img');
+        img.src = iconSrc;
+        img.style.cssText = 'width:20px;height:20px;margin-right:4px;vertical-align:middle;image-rendering:pixelated;';
+        btn.appendChild(img);
+      }
+      const span = document.createElement('span');
+      span.textContent = t.label;
+      btn.appendChild(span);
       btn.addEventListener('click', () => { this.objectTab = t.key; this.update(); });
       tabRow.appendChild(btn);
     }
@@ -892,16 +933,31 @@ export class InspectorPanel {
       { key: 'rezone', label: line('ZONEUI005TEXT').replace(':', '').trim() || 'Rezone' },
       { key: 'actions', label: line('INSPEC093TEXT').replace(':', '').trim() || 'Actions' },
     ];
+    const roomTabIcons: Record<string, string> = {
+      info: 'assets/ui/inspector/ui_icon_room_satisfaction.png',
+      rezone: 'assets/ui/inspector/ui_icon_zoning.png',
+      actions: 'assets/ui/inspector/ui_icon_activity.png',
+    };
     for (const tab of roomTabs) {
       const active = this.roomTab === tab.key;
       const tabEl = document.createElement('div');
-      tabEl.textContent = tab.label;
+      const iconSrc = roomTabIcons[tab.key];
       tabEl.style.cssText = `
         flex:1;text-align:center;padding:4px 0;cursor:pointer;font-size:20px; /* Lua dosissemibold20 */
-        background:${active ? 'rgba(223,162,0,0.3)' : 'rgba(30,30,30,0.8)'};
-        color:${active ? AMBER : '#888'};
-        border:1px solid ${active ? AMBER : '#444'};
+        display:flex;align-items:center;justify-content:center;
+        background-image:url('${active ? 'assets/ui/inspector/ui_inspector_folderActive.png' : 'assets/ui/inspector/ui_inspector_folderInactive.png'}');
+        background-size:100% 100%;background-repeat:no-repeat;
+        color:${active ? '#000' : AMBER};
       `;
+      if (iconSrc) {
+        const img = document.createElement('img');
+        img.src = iconSrc;
+        img.style.cssText = 'width:20px;height:20px;margin-right:4px;vertical-align:middle;image-rendering:pixelated;';
+        tabEl.appendChild(img);
+      }
+      const span = document.createElement('span');
+      span.textContent = tab.label;
+      tabEl.appendChild(span);
       tabEl.addEventListener('click', () => { this.roomTab = tab.key; this.update(); });
       tabBar.appendChild(tabEl);
     }

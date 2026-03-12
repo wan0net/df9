@@ -446,7 +446,20 @@ export class DialogSystem {
       padding: 24px; border-radius: 8px; z-index: 1000;
       font-family: 'Dosis', sans-serif; color: #cceeff; text-align: center;
       min-width: 400px; max-width: 550px; box-shadow: 0 0 30px rgba(68, 136, 255, 0.3);
+      overflow: hidden;
     `;
+
+    const stripesTop = document.createElement('img');
+    stripesTop.src = 'assets/ui/dialog/ui_dialog_docking_stripesTop.png';
+    stripesTop.style.cssText =
+      'position:absolute;top:0;left:0;width:100%;height:auto;image-rendering:pixelated;display:block;pointer-events:none;';
+    el.appendChild(stripesTop);
+
+    const stripesBottom = document.createElement('img');
+    stripesBottom.src = 'assets/ui/dialog/ui_dialog_docking_stripesBottom.png';
+    stripesBottom.style.cssText =
+      'position:absolute;bottom:0;left:0;width:100%;height:auto;image-rendering:pixelated;display:block;pointer-events:none;';
+    el.appendChild(stripesBottom);
 
     const title = document.createElement('div');
     title.textContent = dialog.title;

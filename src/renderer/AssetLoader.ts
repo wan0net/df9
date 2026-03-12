@@ -94,8 +94,54 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   entries.push(['brig02', 'assets/tiles/brig02.png']);
   entries.push(['brig03', 'assets/tiles/brig03.png']);
 
+  // Floor tiles — Pub zone bar variant
+  entries.push(['pub_bar', 'assets/tiles/Bar.png']);
+
+  // Floor tiles — Life Support additional variants
+  entries.push(['lifesupport03', 'assets/tiles/LifeSupport_Floor03.png']);
+
+  // Floor tiles — Residence alt (Residence.png distinct from residence_floor.png)
+  entries.push(['residence_floor_alt', 'assets/tiles/Residence.png']);
+
   // Space tile
   entries.push(['tile_space', 'assets/tiles/full_01.png']);
+
+  // Space tile variant 2
+  entries.push(['tile_space_2', 'assets/tiles/full_02.png']);
+
+  // Space edge tiles
+  entries.push(['space_corner_inner_BL', 'assets/tiles/corner_inner_BL.png']);
+  entries.push(['space_corner_inner_BR', 'assets/tiles/corner_inner_BR.png']);
+  entries.push(['space_corner_inner_TL', 'assets/tiles/corner_inner_TL.png']);
+  entries.push(['space_corner_inner_TR', 'assets/tiles/corner_inner_TR.png']);
+  entries.push(['space_corner_outer_BL', 'assets/tiles/corner_outer_BL.png']);
+  entries.push(['space_corner_outer_BR', 'assets/tiles/corner_outer_BR.png']);
+  entries.push(['space_corner_outer_TL', 'assets/tiles/corner_outer_TL.png']);
+  entries.push(['space_corner_outer_TR', 'assets/tiles/corner_outer_TR.png']);
+  entries.push(['space_h_bottom', 'assets/tiles/h_bottom.png']);
+  entries.push(['space_h_top', 'assets/tiles/h_top.png']);
+  entries.push(['space_v_left', 'assets/tiles/v_left.png']);
+  entries.push(['space_v_right', 'assets/tiles/v_right.png']);
+
+  // Asteroid mining states
+  entries.push(['asteroid_mined', 'assets/tiles/asteroid_mined.png']);
+  entries.push(['asteroid_unmined', 'assets/tiles/asteroid_unmined.png']);
+
+  // Mined space edge tiles
+  entries.push(['mined_corner_inner_BL', 'assets/tiles/mined_corner_inner_BL.png']);
+  entries.push(['mined_corner_inner_BR', 'assets/tiles/mined_corner_inner_BR.png']);
+  entries.push(['mined_corner_inner_TL', 'assets/tiles/mined_corner_inner_TL.png']);
+  entries.push(['mined_corner_inner_TR', 'assets/tiles/mined_corner_inner_TR.png']);
+  entries.push(['mined_corner_outer_BL', 'assets/tiles/mined_corner_outer_BL.png']);
+  entries.push(['mined_corner_outer_BR', 'assets/tiles/mined_corner_outer_BR.png']);
+  entries.push(['mined_corner_outer_TL', 'assets/tiles/mined_corner_outer_TL.png']);
+  entries.push(['mined_corner_outer_TR', 'assets/tiles/mined_corner_outer_TR.png']);
+  entries.push(['mined_full_01', 'assets/tiles/mined_full_01.png']);
+  entries.push(['mined_full_02', 'assets/tiles/mined_full_02.png']);
+  entries.push(['mined_h_bottom', 'assets/tiles/mined_h_bottom.png']);
+  entries.push(['mined_h_top', 'assets/tiles/mined_h_top.png']);
+  entries.push(['mined_v_left', 'assets/tiles/mined_v_left.png']);
+  entries.push(['mined_v_right', 'assets/tiles/mined_v_right.png']);
 
   // Door sprites — regular door
   entries.push(['tile_door_closed', 'assets/walls/door_closed.png']);
@@ -175,6 +221,13 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   entries.push(['Base_Straight03_top', 'assets/walls/Base_Straight03_top.png']);
   entries.push(['Base_Straight04_top', 'assets/walls/Base_Straight04_top.png']);
 
+  // Beacon animation sprites
+  for (let i = 1; i <= 6; i++) {
+    entries.push([`beacon_investigate${i}`, `assets/ui/beacon/beacon_investigate${i}.png`]);
+    entries.push([`beacon_investigatealt${i}`, `assets/ui/beacon/beacon_investigatealt${i}.png`]);
+    entries.push([`beacon_waypoint${i}`, `assets/ui/beacon/beacon_waypoint${i}.png`]);
+  }
+
   // Menu / New Game assets
   entries.push(['startmenu_atlas', 'assets/ui/StartMenu.png']);
   entries.push(['galaxy_map', 'assets/ui/GalaxyMap.png']);
@@ -190,6 +243,22 @@ export async function loadAllAssets(onProgress?: (loaded: number, total: number)
   entries.push(['ui_speed2_active', 'assets/ui/hud/ui_hud_speed2_active.png']);
   entries.push(['ui_speed3', 'assets/ui/hud/ui_hud_speed3.png']);
   entries.push(['ui_speed3_active', 'assets/ui/hud/ui_hud_speed3_active.png']);
+
+  // Airlock door meter animation frames
+  entries.push(['airlock_door_meter1', 'assets/walls/airlock_door_meter1.png']);
+  entries.push(['airlock_door_meter2', 'assets/walls/airlock_door_meter2.png']);
+  entries.push(['airlock_door_meter3', 'assets/walls/airlock_door_meter3.png']);
+  entries.push(['airlock_door_meter4', 'assets/walls/airlock_door_meter4.png']);
+
+  // UIMisc utility sprites
+  entries.push(['ui_blobshadow', 'assets/ui/misc/blobshadow.png']);
+  entries.push(['ui_build_door', 'assets/ui/misc/build_door.png']);
+  entries.push(['ui_character_selected', 'assets/ui/misc/character_selected.png']);
+  entries.push(['ui_claim_flag', 'assets/ui/misc/claim_flag.png']);
+  entries.push(['ui_meteor_highlight', 'assets/ui/misc/meteor_highlight.png']);
+  entries.push(['ui_no_power', 'assets/ui/misc/no_power.png']);
+  entries.push(['ui_power', 'assets/ui/misc/power.png']);
+  entries.push(['ui_softwhitebox', 'assets/ui/misc/softwhitebox.png']);
 
   // Environment object sprite sheets
   for (const [key, url] of SPRITE_SHEET_ENTRIES) {
