@@ -66,8 +66,8 @@
 |---|-----|-------|--------|
 | C-24 | ~~CRITICAL~~ FALSE POSITIVE | **`MORALE_DID_HOBBY = 0`** | Lua also has `MORALE_DID_HOBBY = 0` (CharacterConstants.lua:387). Hobby morale comes from need satisfaction, not direct grants. No fix needed. |
 | C-25 | MAJOR | **Raider conversion missing** | Lua converts raiders with `nTimeToConvert` into citizens. TS has no conversion mechanism. |
-| C-26 | MAJOR | **Spacesuit removal not wired** | `UNNECESSARY_SPACESUIT_REMOVE = 10` timer exists but behavior never fires. Characters never remove spacesuits in pressurized areas. |
-| C-27 | MAJOR | **Vacuum death animation dead code** | `nVacuumScale` defaults to 0 but trigger checks `>= 0`, causing potential false trigger on spawn. The shrink/spin animation is never properly initiated. |
+| C-26 | ~~MAJOR~~ DONE | **~~Spacesuit removal not wired~~** | Fixed: 10s timer in CharacterManager removes suit when in pressurized room with O2>200. |
+| C-27 | ~~MAJOR~~ FALSE POSITIVE | **Vacuum death animation** | `nVacuumScale` defaults to -1 (not 0). No false trigger. Animation triggers correctly on SUCKED_INTO_SPACE death. |
 | C-28 | MODERATE | **Prison duty drain missing** | Lua: while in prison, Duty trends toward 0. TS does not implement this. |
 | C-29 | MODERATE | **Brig anger reduction gated wrong** | TS applies enhanced anger reduction when `bCuffed`. Lua gates on `inPrison()` (actually in brig zone, not just cuffed). |
 | C-30 | MODERATE | **Need decay ignores malady modifiers** | `Needs.decay()` applies flat -1 per need per tick. Lua checks `getNeedsReduceRate()` for malady-based modifiers. |
