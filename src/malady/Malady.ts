@@ -66,6 +66,7 @@ export interface MaladyInstance {
   tSymptomStageStarts: number[];
   nNextSneeze: number;
   nNextLog: number;
+  nNextSpawnAttempt?: number;
 
   // Merged from def (may be overridden by stages)
   sType: MaladyType;
@@ -184,6 +185,9 @@ export const Malady = {
 
   /** Callback: count powered AirScrubbers within range of a tile. */
   getAirScrubberCount: null as ((tx: number, ty: number, range: number) => number) | null,
+
+  /** Callback: get room ID at a tile (for same-room sneeze spread check). */
+  getRoomIdAtTile: null as ((tx: number, ty: number) => number | null) | null,
 
   // ── State Management ───────────────────────────────────────
 
@@ -323,10 +327,11 @@ export const Malady = {
     return MALADY_DEFS[sMaladyName]?.sType === 'MinorInjury';
   },
 
-  /** Get friendly display name for a strain. */
+  /** Get friendly display name for a strain (Lua: tMaladyStrains[name].sFriendlyName). */
   getFriendlyName(sMaladyName: string): string {
+    // Research entry's sMaladyName field stores the friendly name (set in _createNewStrain)
     const entry = tS.tResearch[sMaladyName];
-    if (entry) return sMaladyName;
+    if (entry?.sMaladyName) return entry.sMaladyName;
     const def = MALADY_DEFS[sMaladyName];
     if (def?.sFriendlyName) return def.sFriendlyName;
     return sMaladyName;
@@ -668,13 +673,18 @@ export const Malady = {
   _handleSpecial(rChar: CharacterLike, tMalady: MaladyInstance): void {
     switch (tMalady.sSpecial) {
       case 'thing':
-        // ~10% chance every 15s (0.67% per second at 1 tick/s)
-        if (Math.random() < 0.0067) {
-          Malady.spawnThing(rChar);
+        // Lua: 15s cooldown timer, then ~10% random gate
+        if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
+          tMalady.nNextSpawnAttempt = nElapsedTime + 15;
+          if (Math.random() < 0.1) {
+            Malady.spawnThing(rChar);
+          }
         }
         break;
       case 'parasite':
-        if (Math.random() < 0.0067) {
+        // Lua: 15s cooldown timer, always spawns (no random gate)
+        if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
+          tMalady.nNextSpawnAttempt = nElapsedTime + 15;
           Malady.spawnMonster(rChar);
         }
         break;
@@ -682,14 +692,14 @@ export const Malady = {
         rChar.kill(CAUSE_OF_DEATH.DISEASE);
         break;
       case 'fire':
-        // 50% chance to catch fire on timer (60-300s intervals)
-        if (nElapsedTime >= tMalady.nNextSneeze) {
+        // Lua: 60-300s cooldown timer, 50% chance to catch fire
+        if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
+          tMalady.nNextSpawnAttempt = nElapsedTime + randRange(60, 300);
           if (Math.random() < 0.5) {
             // Fire integration: would start fire at rChar's tile
             // Stub: deal damage until Fire system is wired
             rChar.damage(5, CAUSE_OF_DEATH.FIRE);
           }
-          tMalady.nNextSneeze = nElapsedTime + randRange(60, 300);
         }
         break;
     }

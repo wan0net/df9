@@ -424,26 +424,23 @@ const STATE_CLIP_MAP: Record<string, string[]> = {
   spacewalk: ['Spacewalk_Idle', 'Spacewalk_Walk'],
 };
 
-function stripSkinning(group: THREE.Group) {
-  const toReplace: { skinned: THREE.SkinnedMesh; parent: THREE.Object3D }[] = [];
+/** Ensure all mesh materials are double-sided (works for both Mesh and SkinnedMesh). */
+function ensureDoubleSided(group: THREE.Group) {
   group.traverse((child) => {
-    if (child instanceof THREE.SkinnedMesh && child.parent) {
-      toReplace.push({ skinned: child, parent: child.parent });
-    }
-  });
-  for (const { skinned, parent } of toReplace) {
-    const mesh = new THREE.Mesh(skinned.geometry, skinned.material);
-    mesh.name = skinned.name;
-    mesh.visible = skinned.visible;
-    parent.add(mesh);
-    parent.remove(skinned);
-  }
-  group.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
+    if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
       const mat = child.material as THREE.Material;
       mat.side = THREE.DoubleSide;
     }
   });
+}
+
+/** Check if a loaded GLTF scene contains any SkinnedMesh (i.e. has a skeleton). */
+function detectSkeleton(group: THREE.Group): boolean {
+  let found = false;
+  group.traverse((child) => {
+    if (child instanceof THREE.SkinnedMesh) found = true;
+  });
+  return found;
 }
 
 function loadCitizenModel(): Promise<void> {
@@ -453,18 +450,9 @@ function loadCitizenModel(): Promise<void> {
     loader.load(MODEL_PATH, (gltf) => {
       cachedCitizen = gltf.scene;
       citizenAnimClips = gltf.animations || [];
-      // Always strip skinning — SkinnedMesh in bind pose renders as bones.
-      // Procedural animations provide walk/idle/work motion instead.
-      stripSkinning(cachedCitizen);
-      citizenHasSkeleton = false;
-
-      // Ensure double-sided materials
-      cachedCitizen.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.Material;
-          mat.side = THREE.DoubleSide;
-        }
-      });
+      // Keep SkinnedMesh intact so skeletal animation clips can drive the skeleton.
+      citizenHasSkeleton = detectSkeleton(cachedCitizen);
+      ensureDoubleSided(cachedCitizen);
 
       let mc = 0;
       cachedCitizen.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
@@ -486,16 +474,9 @@ function loadSpacesuitModel(): Promise<void> {
     loader.load(SPACESUIT_PATH, (gltf) => {
       cachedSpacesuit = gltf.scene;
       spacesuitAnimClips = gltf.animations || [];
-      // Always strip skinning — SkinnedMesh in bind pose renders as bones.
-      stripSkinning(cachedSpacesuit);
-      spacesuitHasSkeleton = false;
-
-      cachedSpacesuit.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.Material;
-          mat.side = THREE.DoubleSide;
-        }
-      });
+      // Keep SkinnedMesh intact so skeletal animation clips can drive the skeleton.
+      spacesuitHasSkeleton = detectSkeleton(cachedSpacesuit);
+      ensureDoubleSided(cachedSpacesuit);
 
       let mc = 0;
       cachedSpacesuit.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
@@ -757,6 +738,14 @@ export class CharacterRenderer {
 
       // Apply textures and default colors
       applyModelTextures(clone, char.id);
+      ensureDoubleSided(clone);
+
+      // Reset skeleton bind pose after clone so meshes render correctly
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) {
+          child.skeleton.pose();
+        }
+      });
 
       group.add(clone);
 
@@ -784,6 +773,14 @@ export class CharacterRenderer {
 
       // Apply textures and default colors
       applyModelTextures(clone, char.id);
+      ensureDoubleSided(clone);
+
+      // Reset skeleton bind pose after clone so meshes render correctly
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) {
+          child.skeleton.pose();
+        }
+      });
 
       group.add(clone);
 
@@ -962,6 +959,14 @@ export class CharacterRenderer {
         model.rotation.x = 30 * (Math.PI / 180);
         model.rotation.y = char.facingAngle + char.nVacuumRotation;
         model.rotation.z = char.nVacuumRotation;
+      } else if (!char.isAlive()) {
+        // Procedural death pose: tilt 90° on Z to lie flat on ground.
+        // Applied regardless of whether skeletal death clip is playing,
+        // giving immediate visual feedback for dead characters.
+        model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+        model.rotation.x = 30 * (Math.PI / 180);
+        model.rotation.y = char.facingAngle;
+        model.rotation.z = Math.PI / 2; // 90° — lying flat
       } else {
         // Normal: Lua setRot(30, dirAngle, 0) — 30° isometric tilt on X-axis
         model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
@@ -1055,6 +1060,9 @@ export class CharacterRenderer {
 
   /** Apply procedural walk bob / idle breathing / working animation. */
   private applyProceduralAnim(handle: CharacterRenderHandle, char: Character) {
+    // Dead characters: no procedural animation (death pose handled in updateCharacter rotation)
+    if (!char.isAlive()) return;
+
     const t = performance.now() / 1000;
     const phase = handle.animPhase;
 
@@ -1179,7 +1187,7 @@ export class CharacterRenderer {
 
     this.scene.remove(handle.object);
     handle.object.traverse((child) => {
-      if (child instanceof THREE.Mesh) child.geometry.dispose();
+      if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) child.geometry.dispose();
     });
     // Remove blob shadow
     this.scene.remove(handle.shadow);
