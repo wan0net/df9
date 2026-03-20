@@ -168,6 +168,9 @@ export class CharacterManager {
 
     // Create default security squad
     SquadList.createSquad('Alpha Squad');
+
+    // Wire ActivityOption.roomLookup for DestSafe/DestOwned tag enforcement (C-1)
+    ActivityOption.roomLookup = (tx: number, ty: number) => this.roomManager.getRoomAt(tx, ty);
   }
 
   setRenderer(renderer: CharacterRenderer) {
@@ -292,6 +295,14 @@ export class CharacterManager {
       // Update active task
       if (char.currentTask && char.currentTask.isActive()) {
         char.currentTask.update(dtSec);
+      }
+
+      // C-2: Immediate reassignment -- Lua checks needsNewTask() every frame.
+      // When a task completes or fails, queue for immediate AI instead of
+      // waiting for the next aiTickInterval.
+      if (char.isAlive() && !char.moving && char.path.length === 0 &&
+          (!char.currentTask || char.currentTask.isComplete() || char.currentTask.isFailed())) {
+        this.immediateAIQueue.add(char);
       }
 
       // Register character with room — add to current room's tCharacters
@@ -463,7 +474,34 @@ export class CharacterManager {
       this.tickFamiliarity();
     }
 
-    // AI tick
+    // C-3: Survival threat preemption (Lua Character:_testSurvivalThreats)
+    for (const char of this.characters) {
+      if (!char.isAlive()) continue;
+      if (char.tStats.nTeam !== TEAM_ID_PLAYER) continue;
+      if (char.survivalTimer === undefined) {
+        char.survivalTimer = 0.5 * SURVIVAL_TICK + Math.random() * SURVIVAL_TICK;
+      }
+      char.survivalTimer -= dtSec;
+      if (char.survivalTimer <= 0) {
+        char.survivalTimer = 0.5 * SURVIVAL_TICK + Math.random() * SURVIVAL_TICK;
+        this.testSurvivalThreats(char);
+      }
+    }
+
+    // C-2: Process immediate AI queue (characters whose tasks just completed
+    // or who were flagged by survival threat checks).
+    if (this.immediateAIQueue.size > 0) {
+      let processed = 0;
+      for (const char of this.immediateAIQueue) {
+        if (processed >= UPDATES_PER_TICK) break;
+        if (!char.isAlive()) continue;
+        this.runAIForCharacter(char);
+        processed++;
+      }
+      this.immediateAIQueue.clear();
+    }
+
+    // AI tick (periodic batch re-evaluation for idle characters)
     this.aiTickAccum += delta;
     if (this.aiTickAccum >= this.aiTickInterval) {
       this.aiTickAccum -= this.aiTickInterval;
@@ -834,6 +872,129 @@ export class CharacterManager {
     }
   }
 
+  /**
+   * C-3: Survival threat preemption for a single character.
+   * Mirrors Lua Character:_testSurvivalThreats().
+   */
+  private testSurvivalThreats(char: Character): void {
+    if (char.currentTask && (char.currentTask as any).priorityLevel === PRIORITY.PUPPET) return;
+    if (Malady.isIncapacitated(char)) return;
+
+    const room = this.roomManager.getRoomAt(char.tileX, char.tileY);
+    let nThreat: PriorityLevel = PRIORITY.NORMAL;
+
+    const tileType = this.grid.get(char.tileX, char.tileY);
+    if (tileType === TileType.SPACE && !char.bSpacesuit) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (char.bLowOxygen) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (room && (room.bBreach || room.bPendingBreach || room.getOxygenScore() < OXYGEN_LOW)) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (room && room.isEmergencyAlarmOn()) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (char.needs.hunger <= NEEDS_HUNGER_STARVATION) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else {
+      if (room && room.bHasHostiles) {
+        nThreat = PRIORITY.SURVIVAL_NORMAL;
+      }
+      if (nThreat < PRIORITY.SURVIVAL_NORMAL && room && (room.bBurning || room.nFireTiles > 0)) {
+        nThreat = PRIORITY.SURVIVAL_NORMAL;
+      }
+      if (nThreat < PRIORITY.SURVIVAL_LOW && char.bRampaging) {
+        nThreat = PRIORITY.SURVIVAL_LOW;
+      }
+    }
+
+    const currentPri = char.currentTask
+      ? ((char.currentTask as any).priorityLevel ?? PRIORITY.NORMAL)
+      : PRIORITY.NO_ACTIVITY;
+    if (nThreat > currentPri) {
+      if (char.currentTask) {
+        if (char.currentTask.rTargetObject) {
+          char.currentTask.rTargetObject.unreserve(char.id);
+        }
+        char.currentTask = null;
+        char.path = [];
+      }
+      this.immediateAIQueue.add(char);
+    }
+  }
+
+  /**
+   * C-2: Run AI decision for a single character (immediate reassignment).
+   */
+  private runAIForCharacter(char: Character): void {
+    if (!char.isAlive()) return;
+    if (char.moving || char.path.length > 0) return;
+    if (char.currentTask && !char.currentTask.isComplete() && !char.currentTask.isFailed()) return;
+
+    if (char.bSpacewalking) {
+      const outdoorOptions: ActivityOption[] = [];
+      for (const cmd of CommandQueue.getAvailable('build_tile')) {
+        outdoorOptions.push(new ActivityOption(
+          new BuildTile(cmd.id, this.grid, this.wallAutoGen ?? undefined),
+          cmd.tileX, cmd.tileY, 9,
+        ));
+      }
+      for (const cmd of CommandQueue.getAvailable('build_object')) {
+        const obj = EnvObjectManager.getObjects().find(
+          o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
+        );
+        if (obj) {
+          outdoorOptions.push(new ActivityOption(
+            new BuildEnvObject(obj, cmd.id, this.grid),
+            cmd.tileX, cmd.tileY, 8,
+          ));
+        }
+      }
+      for (const cmd of CommandQueue.getAvailable('mine')) {
+        outdoorOptions.push(new ActivityOption(
+          new Mine(cmd.id, this.grid),
+          cmd.tileX, cmd.tileY, 7,
+        ));
+      }
+      if (outdoorOptions.length > 0) {
+        const task = UtilityAI.selectTask(char, outdoorOptions);
+        if (task) { this.assignTask(char, task); return; }
+      }
+      this.seekNearestRoom(char);
+      return;
+    }
+
+    const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
+    if (!charRoom && this.grid.get(char.tileX, char.tileY) === TileType.SPACE) {
+      char.bSpacewalking = true;
+      this.seekNearestRoom(char);
+      return;
+    }
+
+    if (isHostile(TEAM_ID_PLAYER, char.tStats.nTeam)) {
+      this.runHostileAI(char);
+      return;
+    }
+
+    if (char.needs.oxygen < 0) {
+      this.seekOxygenatedRoom(char);
+      return;
+    }
+
+    if (Malady.isIncapacitated(char)) {
+      char.bIncapacitated = true;
+      return;
+    }
+    char.bIncapacitated = false;
+
+    const options = this.gatherOptions(char);
+    const task = UtilityAI.selectTask(char, options);
+    if (task) {
+      this.assignTask(char, task);
+    } else {
+      this.wander(char);
+    }
+    char.idleTimer = 0;
+  }
+
   /** Run hostile AI — attack nearest player character. */
   private runHostileAI(char: Character) {
     const target = this.combatSystem.findNearestHostile(char, this.characters);
@@ -857,17 +1018,19 @@ export class CharacterManager {
     const room = this.roomManager.getRoomAt(character.tileX, character.tileY);
     const job = character.getJob();
 
-    // Always available: wander
+    // Always available: wander (Lua: DestOwned=true)
     if (room && room.tiles.length >= 2) {
       const target = room.tiles[Math.floor(Math.random() * room.tiles.length)];
-      options.push(new ActivityOption(new WanderAround(), target.x, target.y, 1));
+      options.push(new ActivityOption(new WanderAround(), target.x, target.y, 1,
+        { tags: { DestOwned: true } }));
     }
 
-    // Sleep on floor (low priority, always available)
+    // Sleep on floor (Lua: DestOwned=true)
     options.push(new ActivityOption(
       new SleepOnFloor(),
       character.tileX, character.tileY,
       0.5,
+      { tags: { DestOwned: true } },
     ));
 
     // Chat (if other characters nearby in same room)
@@ -941,13 +1104,14 @@ export class CharacterManager {
       ));
     }
 
-    // ── Sleep in bed ─────────────────────────────────────────
+    // ── Sleep in bed (Lua: DestOwned+DestSafe) ──────────────
     for (const bed of EnvObjectManager.getObjectsByType('Bed')) {
       if (!bed.bBuilt || !bed.isFunctioning()) continue;
       options.push(new ActivityOption(
         new SleepInBed(),
         bed.tileX, bed.tileY,
         2,
+        { tags: { DestOwned: true, DestSafe: true } },
       ));
     }
 
@@ -973,6 +1137,7 @@ export class CharacterManager {
         new Eat(),
         food.tileX, food.tileY,
         2,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = food;
       options.push(opt);
@@ -986,6 +1151,7 @@ export class CharacterManager {
         new MaintainEnvObject(obj),
         obj.tileX, obj.tileY,
         priority,
+        { tags: { DestOwned: true } },
       );
       opt.targetObject = obj;
       options.push(opt);
@@ -1030,13 +1196,14 @@ export class CharacterManager {
           new ServeDrink(),
           bar.tileX, bar.tileY,
           6 + shiftBoost,
+          { tags: { DestSafe: true, Job: BARTENDER, WorkShift: true } },
         ));
-        // MaintainPub: bartender maintains the bar (Lua: OpenPub Duty=8, MaintainPub Duty=1)
+        // MaintainPub (Lua: DestOwned+DestSafe)
         const opt = new ActivityOption(
           new MaintainPub(),
           bar.tileX, bar.tileY,
           8 + shiftBoost,
-          { tags: { Job: BARTENDER, WorkShift: true } },
+          { tags: { Job: BARTENDER, WorkShift: true, DestOwned: true, DestSafe: true } },
         );
         opt.targetObject = bar;
         options.push(opt);
@@ -1053,6 +1220,7 @@ export class CharacterManager {
             new MaintainPlants(plant),
             plant.tileX, plant.tileY,
             7 + shiftBoost,
+            { tags: { DestOwned: true, DestSafe: true, Job: BOTANIST, WorkShift: true } },
           ));
         }
       }
@@ -1066,6 +1234,7 @@ export class CharacterManager {
           new ResearchInLab(),
           desk.tileX, desk.tileY,
           5 + shiftBoost,
+          { tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true } },
         ));
       }
     }
