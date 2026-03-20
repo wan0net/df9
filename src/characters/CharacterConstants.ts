@@ -129,7 +129,7 @@ export const JOB_NAMES: Record<number, string> = {
   [TECHNICIAN]: line('DUTIES005TEXT'),
   [MINER]: line('DUTIES007TEXT'),
   [EMERGENCY]: line('DUTIES009TEXT'),
-  [RAIDER]: line('DUTIES011TEXT'),
+  [RAIDER]: line('DUTIES012TEXT'), // C-35: Lua display-facing JOB_NAMES uses DUTIES012TEXT
   [BARTENDER]: line('DUTIES013TEXT'),
   [BOTANIST]: line('DUTIES016TEXT'),
   [SCIENTIST]: line('DUTIES018TEXT'),

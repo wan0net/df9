@@ -1,5 +1,6 @@
 import { ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, PAN_SPEED, GRID_W, GRID_H, TILE_W, TILE_HALF_H } from '../config';
 import type { ThreeRenderer } from './ThreeRenderer';
+import { GameRules } from '../core/GameRules';
 
 // Lua: GameRules.ZOOM_RATE = 0.005 (per-frame interpolation decrement)
 const ZOOM_RATE = 0.005;
@@ -135,9 +136,8 @@ export class CameraController3D {
       this.zoomBuffer = 0;
     }
 
-    // ── Camera shake (Lua Camera:tick) ──
-    const now = performance.now() / 1000;
-    if (this.shakeEndTime > now) {
+    // ── Camera shake (Lua Camera:tick, R-29: use game time) ──
+    if (this.shakeEndTime > GameRules.elapsedTime) {
       this.shakeOffsetX = (Math.random() - 0.5) * 2 * this.shakeMagnitude;
       this.shakeOffsetY = (Math.random() - 0.5) * 2 * this.shakeMagnitude;
     } else {
@@ -165,7 +165,8 @@ export class CameraController3D {
   /** Trigger camera shake (Lua Camera:shake). */
   shake(magnitude: number, duration: number) {
     this.shakeMagnitude = magnitude;
-    this.shakeEndTime = performance.now() / 1000 + duration;
+    // R-29: Use GameRules.elapsedTime instead of wall-clock so shake pauses when game pauses
+    this.shakeEndTime = GameRules.elapsedTime + duration;
   }
 
   private updateCamera() {

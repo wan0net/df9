@@ -75,7 +75,7 @@
 | C-32 | MINOR | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |
 | C-33 | ~~MINOR~~ DONE | **~~Starting competency cap wrong~~** | Fixed: changed cap from 3 to 2 matching Lua. |
 | C-34 | MINOR | **No `generateStartingStuff()`** | New immigrants get no starting inventory items based on affinities. |
-| C-35 | MINOR | **JOB_NAMES linecode for RAIDER** | Uses `DUTIES011TEXT` (caps version). Lua display-facing uses `DUTIES012TEXT`. |
+| C-35 | ~~MINOR~~ DONE | **~~JOB_NAMES linecode for RAIDER~~** | Fixed: changed to `DUTIES012TEXT`. |
 | C-36 | MINOR | **No job history tracking** | Lua tracks `tStats.tHistory['TotalTimeAs'..job]`. TS has none. |
 
 ### 1.4 Combat
@@ -87,7 +87,7 @@
 | C-39 | ~~MAJOR~~ DONE | **~~Melee 50% stun chance is invented~~** | Fixed: removed invented melee stun in `CombatSystem.ts`. |
 | C-40 | ~~MAJOR~~ DONE | **~~ArmorLevel2 dodge double-applied~~** | Fixed: removed separate dodge roll in `CombatSystem.ts`. |
 | C-41 | ~~MODERATE~~ DONE | **~~Stunner incapacitation wrong~~** | Fixed: stunner now infects with `KnockedOut` malady in addition to setting incapacitated. |
-| C-42 | MODERATE | **`LaserPistol` / `TurretLaser` invented** | Not in Lua WeaponData.lua. |
+| C-42 | MODERATE | **`LaserPistol` / `TurretLaser` invented** | TS-only additions not in Lua. Used as default weapons — removing would break combat. Accepted deviation. |
 | C-43 | MINOR | **Rey5w0rd/Sonicdirk range unused** | Both have `nRange: 3` but `ATTACK_TYPE.Grapple` skips range check, so range is ignored. |
 
 ---
@@ -437,7 +437,7 @@
 | R-4 | MAJOR | **No held-item rendering** | Lua renders weapons/tools in character hands. TS shows nothing. |
 | R-5 | MAJOR | **Hostile characters use citizen model** | Lua has `Bad_Alien.glb`, `Murder_Robot.glb` with separate textures. TS uses Citizen_Base for everyone. |
 | R-6 | MAJOR | **Dead characters show no death pose** | Skeletal animation disabled means no lying-down pose. Dead characters freeze in last procedural position. |
-| R-7 | MODERATE | **Thought bubbles use wrong font** | TS uses Orbitron (title font). Lua uses Dosis Regular (body font). |
+| R-7 | ~~MODERATE~~ DONE | **~~Thought bubbles use wrong font~~** | Fixed: changed to Dosis (body font). |
 | R-8 | MODERATE | **Thought bubbles show text, not icons** | Lua uses sprite emoticons (food, sleep, etc.). TS shows text labels. |
 
 ### 7.2 Object Rendering
@@ -479,7 +479,7 @@
 |---|-----|-------|--------|
 | R-27 | MODERATE | **No edge-scroll pan** | Lua pans camera when cursor near screen edge. TS only uses arrow keys and middle-mouse drag. |
 | R-28 | MODERATE | **No follow-character mode** | Lua supports continuous camera tracking of selected character. |
-| R-29 | MINOR | **Camera shake uses wall-clock time** | Lua uses `GameRules.elapsedTime`. Shake continues during pause in TS. |
+| R-29 | ~~MINOR~~ DONE | **~~Camera shake uses wall-clock time~~** | Fixed: uses `GameRules.elapsedTime`. |
 | R-30 | MINOR | **Camera shake rate 2x too fast** | Lua updates at 30Hz game tick. TS updates at 60Hz render frame. |
 
 ### 7.6 Background & PostFX

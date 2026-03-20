@@ -660,7 +660,7 @@ export class CharacterRenderer {
     const thoughtEl = document.createElement('div');
     thoughtEl.className = 'thought-bubble';
     thoughtEl.style.cssText =
-      'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
+      'pointer-events:none;font-family:"Dosis",sans-serif;font-size:9px;color:#fff;' +
       'background:rgba(0,0,0,0.7);border-radius:4px;' +
       'padding:4px 8px;white-space:nowrap;text-align:center;display:none;' +
       'width:fit-content;';
@@ -1120,7 +1120,7 @@ export class CharacterRenderer {
       const label = TASK_DISPLAY_NAMES[taskName] ?? taskName;
       handle.thoughtTextSpan.textContent = label;
       handle.thoughtEl.style.cssText =
-        'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
+        'pointer-events:none;font-family:"Dosis",sans-serif;font-size:9px;color:#fff;' +
         'background:rgba(0,0,0,0.7);border-radius:4px;' +
         'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
         'width:fit-content;';
