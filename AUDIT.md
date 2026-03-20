@@ -48,9 +48,9 @@
 | C-10 | MAJOR | `TearDownEnvObjectForResearch` | Scientist disassembles objects for research data |
 | C-11 | MAJOR | `DeliverResearchDatacube` | Scientist carries datacube to research station |
 | C-12 | MAJOR | `PutResearchDatacubeWherever` | Scientist places datacube when no station available |
-| C-13 | MAJOR | `MonsterPatrol` | Monster-specific patrol AI |
-| C-14 | MAJOR | `MonsterAttackEquipment` | Monsters attack objects (not just characters) |
-| C-15 | MAJOR | `MonsterWander` | Monster idle wandering |
+| C-13 | ~~MAJOR~~ DONE | `MonsterPatrol` | Implemented: runMonsterAI with room-wandering patrol. |
+| C-14 | ~~MAJOR~~ DONE | `MonsterAttackEquipment` | Implemented: monsters attack nearby objects. |
+| C-15 | ~~MAJOR~~ DONE | `MonsterWander` | Implemented: idle wandering between attacks. |
 | C-16 | MODERATE | `Starve` | Universal fallback for starving state |
 | C-17 | MODERATE | `VoluntarilyWalkToBrig` | Character self-surrender to brig |
 | C-18 | MODERATE | `VoluntarilyGetCuffed` | Surrender behavior |
