@@ -6,6 +6,7 @@
 import { EnvObjectDef, tObjects } from './EnvObjectData';
 import { ObjectList, OBJ_ENVOBJECT, type ObjectTag, type TaggableObject } from '../core/ObjectList';
 import { SpatialAudio } from '../audio/SpatialAudio';
+import { SoundManager } from '../audio/SoundManager';
 import type { Room } from '../rooms/Room';
 import type { Character } from '../characters/Character';
 import { researchSystem } from '../research/ResearchSystem';
@@ -306,7 +307,12 @@ export class EnvObject implements TaggableObject {
   markBuilt() {
     this.bBuilt = true;
     this._notifyRenderer();
-    SpatialAudio.playAtTile('BuildObject', this.tileX, this.tileY);
+    // Lua EnvObject.lua: play per-object placeSound on build, fallback to generic BuildObject
+    if (this.tData.placeSound) {
+      SoundManager.playSfx(this.tData.placeSound);
+    } else {
+      SpatialAudio.playAtTile('BuildObject', this.tileX, this.tileY);
+    }
   }
 
   /** Notify the renderer of visual state changes. */

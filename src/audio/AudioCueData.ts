@@ -52,6 +52,27 @@ export const AUDIO_CUES: Record<string, AudioCue> = {
   vaporize:         { path: 'sfx/Vaporize_1.wav',          volume: 0.8, loop: false, category: 'sfx', spatial: false },
   UI_DoorLock:      { path: 'ui/UI_InspectorDoorLock_PDown.wav', volume: 0.5, loop: false, category: 'ui', spatial: false },
 
+  // ── Object placement sounds (Lua EnvObjectData placeSound) ────
+  placeairlock:        { path: 'ui/PlaceAirlock2.wav',          volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placebar:            { path: 'ui/PlaceBar1.wav',              volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placebed:            { path: 'ui/PlaceBed1.wav',              volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placedoor:           { path: 'ui/PlaceDoor1.wav',             volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placedresser:        { path: 'ui/PlaceDresser2.wav',          volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placefoodreplicator: { path: 'ui/PlaceFoodReplicator_1.wav',  volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placefridge:         { path: 'ui/PlaceFridge_1.wav',          volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placehydroplant:     { path: 'ui/PlaceHydroPlant_1.wav',      volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placemonitor:        { path: 'ui/PlaceMonitor2.wav',          volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placeneon:           { path: 'ui/PlaceNeon_2.wav',            volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placeoxygenfilter:   { path: 'ui/PlaceOxygenFilter1.wav',     volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placeplant:          { path: 'ui/PlacePlant2.wav',            volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placereactor:        { path: 'ui/PlaceReactor1.wav',          volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placerecycler:       { path: 'ui/PlaceRecycler1.wav',         volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placerefinery:       { path: 'ui/PlaceRefinery1.wav',         volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placerug:            { path: 'ui/PlaceRug2.wav',              volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placespacesuitlocker:{ path: 'ui/PlaceSpaceSuitLocker2.wav',  volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placestove:          { path: 'ui/PlaceStove_1.wav',           volume: 0.7, loop: false, category: 'sfx', spatial: false },
+  placetable:          { path: 'ui/PlaceTable_1.wav',           volume: 0.7, loop: false, category: 'sfx', spatial: false },
+
   // ── Menu sounds ───────────────────────────────────────────────
   Intro_AcceptButton: { path: 'ui/Intro_AcceptButton.wav',         volume: 0.9, loop: false, category: 'ui', spatial: false },
   Intro_CancelButton: { path: 'ui/Intro_CancelButton.wav',         volume: 0.7, loop: false, category: 'ui', spatial: false },
