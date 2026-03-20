@@ -70,7 +70,7 @@
 | C-27 | ~~MAJOR~~ FALSE POSITIVE | **Vacuum death animation** | `nVacuumScale` defaults to -1 (not 0). No false trigger. Animation triggers correctly on SUCKED_INTO_SPACE death. |
 | C-28 | MODERATE | **Prison duty drain missing** | Lua: while in prison, Duty trends toward 0. TS does not implement this. |
 | C-29 | MODERATE | **Brig anger reduction gated wrong** | TS applies enhanced anger reduction when `bCuffed`. Lua gates on `inPrison()` (actually in brig zone, not just cuffed). |
-| C-30 | MODERATE | **Need decay ignores malady modifiers** | `Needs.decay()` applies flat -1 per need per tick. Lua checks `getNeedsReduceRate()` for malady-based modifiers. |
+| C-30 | ~~MODERATE~~ DONE | **~~Need decay ignores malady modifiers~~** | Fixed: M-1 already wired `getNeedsReduceMods()` into `Needs.decay()`. |
 | C-31 | MODERATE | **No drug system** | Lua calls `_applyDrugs(tx,ty)` on every morale tick. TS has no drug implementation. |
 | C-32 | MINOR | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |
 | C-33 | MINOR | **Starting competency cap wrong** | TS allows up to 3 points per job during immigration. Lua caps at `MAX_STARTING_COMPETENCY = 2`. |
