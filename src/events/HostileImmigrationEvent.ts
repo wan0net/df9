@@ -16,7 +16,8 @@ export class HostileImmigrationEvent extends Event {
 
   constructor(raiderCount?: number) {
     super();
-    this.raiderCount = raiderCount ?? (2 + Math.floor(Math.random() * 3)); // 2-4 raiders
+    // E-12: Lua defaults to 1 raider at low difficulty; EventController provides scaled count
+    this.raiderCount = raiderCount ?? 1;
   }
 
   getRaiderCount(): number {
