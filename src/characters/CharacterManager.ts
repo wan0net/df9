@@ -13,7 +13,7 @@ import {
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
   JOB_EXPERIENCE_RATE, UNNECESSARY_SPACESUIT_REMOVE,
   RACE_KILLBOT, RACE_MONSTER, CHAT_COOLDOWN,
-  ANGER_MAX,
+  ANGER_MAX, FACTION_BEHAVIOR,
 } from './CharacterConstants';
 import { SpatialAudio } from '../audio/SpatialAudio';
 import { TileGrid } from '../world/TileGrid';
@@ -362,6 +362,12 @@ export class CharacterManager {
         // Update room last-seen time when player-team character is present
         if (char.tStats.nTeam === TEAM_ID_PLAYER) {
           charRoom.nLastSeen = GameRules.elapsedTime;
+        }
+        // O-7: Auto-team assignment — Lua Room.lua:1868-1874
+        // Friendly-faction characters in fully-visible rooms become player citizens
+        if (charRoom.nLastVisibility === VISIBILITY_FULL &&
+            Base.getTeamFactionBehavior(char.tStats.nTeam) === FACTION_BEHAVIOR.Friendly) {
+          char.tStats.nTeam = TEAM_ID_PLAYER;
         }
         // Track hostiles in room
         if (char.tStats.nTeam !== TEAM_ID_PLAYER && isHostile(char.tStats.nTeam, TEAM_ID_PLAYER)) {
