@@ -1856,6 +1856,7 @@ export class UIManager {
       this.objectMenuEl.style.display = 'none';
       this.objectSubMenuEl.style.display = 'none';
       this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`;
+      this.sidebarEl.scrollTop = 0; // Ensure Cancel button is visible at top
       for (const sb of this.sidebarBtns) sb.el.style.display = 'none';
       // Highlight active sub-button (skip cancelEl + confirmEl + constructLabel = 3 children)
       const SUB_OFFSET = 2; // cancel + confirm (no header label)
