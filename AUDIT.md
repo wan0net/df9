@@ -190,8 +190,8 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | E-15 | ~~CRITICAL~~ DONE | **~~Meteor count formula wrong~~** | Fixed: `MeteorEvent.ts` rewritten with duration-based shower, intensity curve, per-tile damage, fire chance, camera shake. |
-| E-16 | MAJOR | **No per-tile damage** | Lua applies `TILE_STARTING_HIT_POINTS * nSize * 0.3` damage. TS fires a generic callback with no tile reference. |
-| E-17 | MAJOR | **No fire from meteor impact** | Lua: 25% chance of fire when `nSize > 0.5` and tile isn't space. TS: no fire. |
+| E-16 | ~~MAJOR~~ DONE | **~~No per-tile damage~~** | Fixed: MeteorEvent computes `TILE_STARTING_HIT_POINTS * nSize * 0.3` damage, applied via `grid.damageTile()`. |
+| E-17 | ~~MAJOR~~ DONE | **~~No fire from meteor impact~~** | Fixed: 25% fire chance for nSize>0.5, wired in main.ts onMeteorLand callback. |
 | E-18 | MAJOR | **No meteor approach animation** | Lua shows asteroid sprites flying in. TS has none. |
 | E-19 | MODERATE | **No target tile indicator** | Lua shows `meteor_highlight` sprite on target. TS has none. |
 
