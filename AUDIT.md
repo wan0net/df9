@@ -274,7 +274,7 @@
 | U-2 | MAJOR | **Object portraits absent** | Lua shows object sprite with tint overlay and offset. TS has none. |
 | U-3 | ~~MAJOR~~ FALSE POSITIVE | **CitizenLogTab (Spaceface)** | Already implemented — scrollable feed with timestamps from `tLog`. Log entries added for morale, death, join events. |
 | U-4 | ~~MAJOR~~ DONE | **~~CitizenActionTab incomplete~~** | Fixed: Execute now requires cuffed state (disabled when !bCuffed). |
-| U-5 | MAJOR | **Object action tab generic** | Lua shows object-specific actions (release prisoner, view inventory, lock/unlock door). TS shows only Demolish. |
+| U-5 | ~~MAJOR~~ DONE | **~~Object action tab generic~~** | Fixed: door Lock/Unlock/Normal, brig Release Prisoner, vaporize Cancel buttons added. |
 | U-6 | MODERATE | **No emergency status bar on objects** | Lua shows "On Fire" / "Unpowered" status with background. TS omits. |
 | U-7 | MODERATE | **Camera center is one-shot** | Lua sets continuous camera tracking. TS fires once. |
 | U-8 | MINOR | **Tab spacer not implemented** | Lua dynamically fills unused tab slots. |
@@ -374,9 +374,9 @@
 | # | Sev | Cue | When it should play |
 |---|-----|-----|---------------------|
 | A-9 | ~~MAJOR~~ DONE | `GunShot` | Wired to CombatSystem ranged attack. |
-| A-10 | MAJOR | `TurretFire` (10 variants unused) | Turret attacks |
+| A-10 | MODERATE | `TurretFire` (10 variants unused) | Turret system not fully implemented — sounds wired but turrets don't auto-attack yet. |
 | A-11 | ~~MAJOR~~ DONE | `PowerDown` / `PowerUp` | Wired to PowerSystem room state changes. |
-| A-12 | MAJOR | `MonsterAttack` / `BadAlien_Attack` (5 variants unused) / `Killbot_Attack` / `Killbot_Death` | Hostile creature combat |
+| A-12 | ~~MAJOR~~ DONE | `MonsterAttack`/`BadAlien_Attack`/`Killbot_Attack` | Wired to monster/hostile AI attack resolution. |
 | A-13 | ~~MODERATE~~ DONE | `Citizen_Drink` | Wired to Eat/GetDrink task completion |
 | A-14 | ~~MODERATE~~ DONE | `OutofBed` | Wired to SleepInBed task completion |
 | A-15 | ~~MODERATE~~ DONE | `DoctorScan` | Wired to FieldScanAndHeal start |

@@ -7,6 +7,7 @@ import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
 import { GameRules } from '../core/GameRules';
 import { Door, DOOR_STATE, DOOR_OPERATION } from '../envobjects/Door';
+import { BrigZone } from '../zones/BrigZone';
 import type { Room } from '../rooms/Room';
 import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL, UNEMPLOYED } from '../characters/CharacterConstants';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
@@ -845,20 +846,32 @@ export class InspectorPanel {
 
   /** Object Action tab — demolish, deactivate, door controls (Lua ObjectActionTab). */
   private renderObjectActionTab(container: HTMLDivElement, obj: EnvObject) {
-    // 1. Demolish button (Lua ObjectActionTab button 1: with matter refund)
+    // 1. Demolish / Cancel Demolish button (Lua ObjectActionTab button 1)
     if (obj.bBuilt) {
-      const refund = obj.getVaporizeMatterYield();
-      const demolishBtn = this.makeActionButton(
-        `${line('INSPUI016TEXT')} (+${refund} ${line('INSPUI017TEXT')})`,
-        false,
-        () => {
-          if (this.onDemolishObject) this.onDemolishObject(obj);
-          this.entity = null;
-          this.el.style.display = 'none';
-        },
-        '#f44',
-      );
-      container.appendChild(demolishBtn);
+      if (obj.bSlatedForVaporize) {
+        // Cancel Demolish — object is already slated for teardown
+        const cancelBtn = this.makeActionButton(
+          'Cancel Demolish',
+          false,
+          () => { obj.bSlatedForVaporize = false; },
+          AMBER,
+        );
+        container.appendChild(cancelBtn);
+      } else {
+        // Demolish with matter refund
+        const refund = obj.getVaporizeMatterYield();
+        const demolishBtn = this.makeActionButton(
+          `${line('INSPUI016TEXT')} (+${refund} ${line('INSPUI017TEXT')})`,
+          false,
+          () => {
+            if (this.onDemolishObject) this.onDemolishObject(obj);
+            this.entity = null;
+            this.el.style.display = 'none';
+          },
+          '#f44',
+        );
+        container.appendChild(demolishBtn);
+      }
     }
 
     // 2. Deactivate toggle (Lua ObjectActionTab button 3: INSPEC171/172)
@@ -871,25 +884,64 @@ export class InspectorPanel {
       container.appendChild(deactivateBtn);
     }
 
-    // 3. Door controls (Lua ObjectActionTab: DoorControls custom inspector)
+    // 3. Door controls — Lock / Unlock / Normal buttons (Lua DoorControls custom inspector)
     if (obj instanceof Door) {
+      const door = obj as Door;
       const doorSection = document.createElement('div');
       doorSection.style.cssText = `margin-top:6px;padding:6px 0;border-top:1px solid #333;`;
-      doorSection.innerHTML = `
-        <div style="margin-bottom:4px;color:${AMBER};font-size:20px;">${line('PROPSX058TEXT')}
-          <span style="cursor:pointer;color:${AMBER};border:1px solid ${AMBER};padding:2px 8px;margin-left:4px;"
-                id="inspector-door-cycle">${this.getDoorOperationLabel(obj)}</span>
-        </div>
-      `;
-      container.appendChild(doorSection);
 
-      // Wire door cycle button
-      const doorCycleBtn = doorSection.querySelector('#inspector-door-cycle') as HTMLElement;
-      if (doorCycleBtn) {
-        doorCycleBtn.addEventListener('click', () => {
-          (obj as Door).cycle();
-          this.update();
-        });
+      const label = document.createElement('div');
+      label.style.cssText = `margin-bottom:6px;color:${AMBER};font-size:20px;`;
+      label.textContent = line('PROPSX058TEXT') + ' ' + this.getDoorOperationLabel(door);
+      doorSection.appendChild(label);
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:6px;';
+
+      const lockBtn = this.makeActionButton(
+        'Lock',
+        door.operation === DOOR_OPERATION.LOCKED,
+        () => { door.setOperation(DOOR_OPERATION.LOCKED); },
+      );
+      btnRow.appendChild(lockBtn);
+
+      const unlockBtn = this.makeActionButton(
+        'Unlock',
+        door.operation === DOOR_OPERATION.FORCED_OPEN,
+        () => { door.setOperation(DOOR_OPERATION.FORCED_OPEN); },
+      );
+      btnRow.appendChild(unlockBtn);
+
+      const normalBtn = this.makeActionButton(
+        'Normal',
+        door.operation === DOOR_OPERATION.NORMAL,
+        () => { door.setOperation(DOOR_OPERATION.NORMAL); },
+      );
+      btnRow.appendChild(normalBtn);
+
+      doorSection.appendChild(btnRow);
+      container.appendChild(doorSection);
+    }
+
+    // 4. Brig bed — Release Prisoner button (Lua ObjectActionTab: brig bed controls)
+    if (obj.sName === 'Bed' && obj.rRoom && obj.rRoom.zone === ZoneType.BRIG) {
+      const brigZone = BrigZone.findBrigForRoom(obj.rRoom);
+      if (brigZone) {
+        const prisoners = brigZone.getPrisoners();
+        if (prisoners.length > 0) {
+          const brigSection = document.createElement('div');
+          brigSection.style.cssText = `margin-top:6px;padding:6px 0;border-top:1px solid #333;`;
+
+          for (const charId of prisoners) {
+            const releaseBtn = this.makeActionButton(
+              `Release Prisoner #${charId}`,
+              false,
+              () => { brigZone.unassignChar(charId); },
+            );
+            brigSection.appendChild(releaseBtn);
+          }
+          container.appendChild(brigSection);
+        }
       }
     }
   }
