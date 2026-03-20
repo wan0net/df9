@@ -3501,10 +3501,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     await page.waitForTimeout(300);
 
     const result = await page.evaluate(() => {
-      const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return null;
-      const text = sidebar.textContent || '';
-      // Check construct sub-items are visible (Lua ConstructMenu layout)
+      const gameUI = document.getElementById('game-ui');
+      if (!gameUI) return null;
+      const text = gameUI.textContent || '';
+      // Construct sub-items are now in uiRoot (not sidebar) as separate overlays
       const hasRoom = text.includes('Room');
       const hasFloor = text.includes('Floor');
       const hasWall = text.includes('Wall');
@@ -4079,9 +4079,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     // Press M to toggle mine mode — should show mine submenu
     await page.keyboard.press('m');
     const result = await page.evaluate(() => {
-      const sidebar = document.querySelector('#sidebar');
-      if (!sidebar) return null;
-      const allText = sidebar.textContent || '';
+      const gameUI = document.getElementById('game-ui');
+      if (!gameUI) return null;
+      const allText = gameUI.textContent || '';
       return {
         hasMine: allText.includes('Mine'),
         hasConfirm: allText.includes('Confirm'),
@@ -4752,9 +4752,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     await page.keyboard.press('c');
     await page.waitForTimeout(100);
     const result = await page.evaluate(() => {
-      const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return { labels: [] as string[], hotkeys: [] as string[] };
-      const spans = sidebar.querySelectorAll('span');
+      const gameUI = document.getElementById('game-ui');
+      if (!gameUI) return { labels: [] as string[], hotkeys: [] as string[] };
+      const spans = gameUI.querySelectorAll('span');
       const labels: string[] = [];
       const hotkeys: string[] = [];
       for (const span of spans) {
@@ -4829,9 +4829,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     await page.waitForTimeout(100);
 
     const result = await page.evaluate(() => {
-      const sidebar = document.getElementById('sidebar');
-      if (!sidebar) return { hasZones: false, zoneCount: 0 };
-      const spans = sidebar.querySelectorAll('span');
+      const gameUI = document.getElementById('game-ui');
+      if (!gameUI) return { hasZones: false, zoneCount: 0 };
+      const spans = gameUI.querySelectorAll('span');
       // Hotkeys are now lowercase without brackets (matching screenshots)
       const zoneHotkeys = ['z', 'a', 't', 'g', 's', 'b', 'f', 'r', 'n', 'h', 'i'];
       let foundCount = 0;
