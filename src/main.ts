@@ -85,7 +85,7 @@ import { SaveSlotPanel } from './ui/SaveSlotPanel';
 import { EmergencyBeacon } from './combat/EmergencyBeacon';
 import { SquadList } from './combat/SquadList';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
-import { CAUSE_OF_DEATH, FACTION_BEHAVIOR } from './characters/CharacterConstants';
+import { CAUSE_OF_DEATH, FACTION_BEHAVIOR, UNEMPLOYED } from './characters/CharacterConstants';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
 import { DerelictSystem } from './events/DerelictSystem';
 import { DockingSystem } from './docking/DockingSystem';
@@ -469,6 +469,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       // Lua ImmigrationEvent.lua:71-77: 15% chance of malady on each immigrant
       if (char && Math.floor(Math.random() * 100) < CHANCE_OF_MALADY) {
         Malady.infectWithRandom(char);
+      }
+    }
+  };
+  // E-31: Trader spawns as a distinct character type
+  eventController.onTraderSpawn = (count) => {
+    for (let i = 0; i < count; i++) {
+      const char = characterManager.spawnCharacter();
+      if (char) {
+        // Mark as trader — Lua uses FACTION_BEHAVIOR.Trader
+        // Traders are friendly but temporary visitors
+        char.tStats.nJob = UNEMPLOYED;
+        (char as any).bTrader = true;
       }
     }
   };

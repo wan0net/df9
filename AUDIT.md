@@ -225,7 +225,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-31 | MAJOR | **Spawns citizen instead of trader** | TS `onImmigration(1)` spawns a generic citizen. Lua spawns with `FACTION_BEHAVIOR.Trader`. No trader character type, no trading UI. |
+| E-31 | ~~MAJOR~~ DONE | **~~Spawns citizen instead of trader~~** | Fixed: onTraderSpawn callback spawns character with bTrader flag and UNEMPLOYED job. |
 
 ### 3.9 Brig System
 

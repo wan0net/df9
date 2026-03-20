@@ -97,6 +97,8 @@ export class EventController implements TickableSystem {
 
   // ── Callbacks ──────────────────────────────────────────────────
   onImmigration: SpawnCharacterFn | null = null;
+  /** E-31: Spawn a trader character (Lua FACTION_BEHAVIOR.Trader). */
+  onTraderSpawn: ((count: number) => void) | null = null;
   onMeteorLand: MeteorLandFn | null = null;
   /** Callback to read tile type at coords (MeteorEvent needs this for SPACE detection). */
   getTileType: GetTileTypeFn | null = null;
@@ -587,16 +589,17 @@ export class EventController implements TickableSystem {
           if (this.dialogSystem) {
             this.dialogSystem.showTraderDialog(def.nChanceObey, (result) => {
               if (this.shouldSpawn(result)) {
-                this.onImmigration?.(1);
+                // E-31: Spawn trader character (Lua FACTION_BEHAVIOR.Trader)
+                (this.onTraderSpawn ?? this.onImmigration)?.(1);
                 const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
-                Base.addAlert('immigration', line(alertLC));
+                Base.addAlert('trader', line(alertLC));
               } else {
-                Base.addAlert('immigration', line('ALERTS024TEXT'));
+                Base.addAlert('trader', line('ALERTS024TEXT'));
               }
             });
           } else {
-            this.onImmigration?.(1);
-            Base.addAlert('immigration', line('ALERTS041TEXT'));
+            (this.onTraderSpawn ?? this.onImmigration)?.(1);
+            Base.addAlert('trader', line('ALERTS041TEXT'));
           }
         };
         return traderEvent;
