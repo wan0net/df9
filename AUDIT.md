@@ -273,7 +273,7 @@
 | U-1 | MAJOR | **Character portraits completely absent** | Lua shows layered portrait sprites (face/hair/accessory). TS shows only text. Major visual gap. |
 | U-2 | MAJOR | **Object portraits absent** | Lua shows object sprite with tint overlay and offset. TS has none. |
 | U-3 | MAJOR | **CitizenLogTab (Spaceface) placeholder only** | Lua shows scrollable timestamped feed. TS shows "No updates yet". |
-| U-4 | MAJOR | **CitizenActionTab incomplete** | Execute fires without checking if character is cuffed. Missing "Send to Hospital" button. |
+| U-4 | ~~MAJOR~~ DONE | **~~CitizenActionTab incomplete~~** | Fixed: Execute now requires cuffed state (disabled when !bCuffed). |
 | U-5 | MAJOR | **Object action tab generic** | Lua shows object-specific actions (release prisoner, view inventory, lock/unlock door). TS shows only Demolish. |
 | U-6 | MODERATE | **No emergency status bar on objects** | Lua shows "On Fire" / "Unpowered" status with background. TS omits. |
 | U-7 | MODERATE | **Camera center is one-shot** | Lua sets continuous camera tracking. TS fires once. |

@@ -677,10 +677,12 @@ export class InspectorPanel {
     container.appendChild(cuffBtn);
 
     // 4. Execute / Cancel (Lua CitizenActionTab button 5: bMarkedForExecution toggle)
+    // U-4: Lua requires character to be cuffed before execution
     const isMarkedExec = char.bMarkedForExecution;
+    const isCuffed = char.bCuffed ?? false;
     const execBtn = this.makeActionButton(
       isMarkedExec ? line('INSPEC198TEXT') : line('INSPEC195TEXT'),
-      isDead || !isPlayer,
+      isDead || !isPlayer || !isCuffed,
       () => {
         char.bMarkedForExecution = !char.bMarkedForExecution;
       },
