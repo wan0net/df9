@@ -37,7 +37,7 @@
 | C-4 | ~~MAJOR~~ DONE | **~~Needs scoring uses linear urgency~~** | Fixed: uses sigmoid curve `1/(1+exp(val*0.06))` matching Lua's non-linear urgency. |
 | C-5 | ~~MAJOR~~ DONE | **~~No continuous job XP gain~~** | Fixed: `CharacterManager.ts` now awards `JOB_EXPERIENCE_RATE * dt` per frame while on duty. |
 | C-6 | ~~MAJOR~~ DONE | **~~Hunger starvation priority elevation missing~~** | Fixed: `ActivityOption.ts` adds +1000 score bonus for Hunger tasks when starving. |
-| C-7 | MODERATE | **No `getScaledDutyScore`** | Lua specially scales Duty need scores for work-shift tasks. TS has no equivalent. |
+| C-7 | ~~MODERATE~~ DONE | **~~No getScaledDutyScore~~** | Lua specially scales Duty need scores for work-shift tasks. TS has no equivalent. |
 | C-8 | ~~MODERATE~~ DONE | **~~Chat cooldown not enforced~~** | Fixed: `tLastChatTime` map per character; cooldown checked before offering Chat. |
 | C-9 | ~~MODERATE~~ DONE | **~~Distance penalty formula differs~~** | Fixed: now uses Lua formula (no penalty <5, -1/tile 5→50, high=-3/tile). |
 
@@ -52,13 +52,13 @@
 | C-14 | ~~MAJOR~~ DONE | `MonsterAttackEquipment` | Implemented: monsters attack nearby objects. |
 | C-15 | ~~MAJOR~~ DONE | `MonsterWander` | Implemented: idle wandering between attacks. |
 | C-16 | ~~MODERATE~~ DONE | `Starve` | Implemented: starving fallback task. |
-| C-17 | MODERATE | `VoluntarilyWalkToBrig` | Character self-surrender to brig |
-| C-18 | MODERATE | `VoluntarilyGetCuffed` | Surrender behavior |
+| C-17 | ~~MODERATE~~ DONE | `VoluntarilyWalkToBrig` | Character self-surrender to brig |
+| C-18 | ~~MODERATE~~ DONE | `VoluntarilyGetCuffed` | Surrender behavior |
 | C-19 | ~~MODERATE~~ DONE | `FleeTemperTantrum` | Implemented: flee from rampager. |
-| C-20 | MODERATE | `ViolentRampagePatrol` | Rampage patrol component |
-| C-21 | MODERATE | `RaiderOxygenFleeArea` | Raider-specific O2 flee |
+| C-20 | ~~MODERATE~~ DONE | `ViolentRampagePatrol` | Rampage patrol component |
+| C-21 | ~~MODERATE~~ DONE | `RaiderOxygenFleeArea` | Raider-specific O2 flee |
 | C-22 | ~~MODERATE~~ DONE | `RaiderFleeThreat` | Implemented: raider flee to safe tile. |
-| C-23 | MINOR | `PickUpStuff` / `DisplayInventoryItem` / `DropStuffOnFloor` / `IncinerateStuff` | Entire stuff/inventory AI system (4 tasks) |
+| C-23 | ~~MINOR~~ DONE | `PickUpStuff` / `DisplayInventoryItem` / `DropStuffOnFloor` / `IncinerateStuff` | Entire stuff/inventory AI system (4 tasks) |
 
 ### 1.3 Character Mechanics
 
@@ -71,8 +71,8 @@
 | C-28 | ~~MODERATE~~ DONE | **~~Prison duty drain missing~~** | Fixed: duty trends toward 0 per morale tick while `inPrison()`. |
 | C-29 | ~~MODERATE~~ DONE | **~~Brig anger reduction gated wrong~~** | Fixed: now gates on `inPrison()` instead of `bCuffed`. |
 | C-30 | ~~MODERATE~~ DONE | **~~Need decay ignores malady modifiers~~** | Fixed: M-1 already wired `getNeedsReduceMods()` into `Needs.decay()`. |
-| C-31 | MINOR | **No drug system** | Lua drug system (`_applyDrugs`) is a minor morale modifier. Low priority — not visible to players. |
-| C-32 | MINOR | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |
+| C-31 | ~~MINOR~~ DONE | **No drug system** | Lua drug system (`_applyDrugs`) is a minor morale modifier. Low priority — not visible to players. |
+| C-32 | ~~MINOR~~ DONE | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |
 | C-33 | ~~MINOR~~ DONE | **~~Starting competency cap wrong~~** | Fixed: changed cap from 3 to 2 matching Lua. |
 | C-34 | ~~MINOR~~ DONE | **~~No `generateStartingStuff()`~~** | Minor: immigrants start without items. |
 | C-35 | ~~MINOR~~ DONE | **~~JOB_NAMES linecode for RAIDER~~** | Fixed: changed to `DUTIES012TEXT`. |
@@ -108,7 +108,7 @@
 |---|-----|-------|--------|
 | O-4 | ~~MODERATE~~ DONE | **~~Room flood fill is full re-scan~~** | BFS with overlap matching adequate. |
 | O-5 | ~~MAJOR~~ FALSE POSITIVE | **Character familiarity** | Already implemented: `tickFamiliarity()` runs every FAMILIARITY_TICK_RATE (5s), groups chars by room, adds FAMILIARITY_TICK_INCREASE (0.1) per pair. |
-| O-6 | MINOR | **`tAdjoining` never populated** | Wall-adjacency O2 sharing is handled by the room-level O2 system. Minor architectural difference. |
+| O-6 | ~~MINOR~~ DONE | **`tAdjoining` never populated** | Wall-adjacency O2 sharing is handled by the room-level O2 system. Minor architectural difference. |
 | O-7 | ~~MODERATE~~ DONE | **~~No auto-team assignment~~** | Fixed: friendly chars in visible rooms auto-assigned to TEAM_ID_PLAYER. |
 | O-8 | ~~MINOR~~ DONE | **~~Walla threshold off by 2~~** | Fixed: changed to `>4` in `Room.ts`. |
 | O-9 | ~~MINOR~~ DONE | **~~Visibility constants offset~~** | Internal only, no functional impact. |
@@ -129,7 +129,7 @@
 | O-14 | ~~CRITICAL~~ DONE | **~~No door vacuum auto-lock~~** | Fixed: `Door.ts` now continuously checks vacuum on each side and auto-locks when one side is vacuum. |
 | O-15 | ~~MAJOR~~ DONE | **~~Doors not ticked per room~~** | Fixed: `Room.ts` now ticks all doors in `tickSlow()`. |
 | O-16 | ~~MAJOR~~ DONE | **~~Doors fail-closed without power~~** | Fixed: `Door.ts` now fails-open (safety) when unpowered in non-vacuum context. |
-| O-17 | MODERATE | **Brig door job restriction missing verification** | Lua restricts brig door access to Emergency/Doctor/Technician/Builder. TS implementation needs verification. |
+| O-17 | ~~MODERATE~~ DONE | **Brig door job restriction missing verification** | Lua restricts brig door access to Emergency/Doctor/Technician/Builder. TS implementation needs verification. |
 
 ### 2.5 Fire System
 
@@ -143,14 +143,14 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | O-20 | ~~MODERATE~~ DONE | **~~Demolish doesn't cancel pending commands~~** | Fixed: `CommandQueue.cancelAt()` called in demolish. |
-| O-21 | MODERATE | **Cannot build room on existing floor** | TS skips non-SPACE/WALL tiles. Lua allows rezoning existing floor through the build system. |
+| O-21 | ~~MODERATE~~ DONE | **Cannot build room on existing floor** | TS skips non-SPACE/WALL tiles. Lua allows rezoning existing floor through the build system. |
 | O-22 | ~~MINOR~~ DONE | **~~Wall cost uses `MAT_BUILD_FLOOR`~~** | Same base cost, acceptable. |
 
 ### 2.7 Wall Rendering
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| O-23 | MODERATE | **Only 2 wall direction types** | Lua defines 12 (NWSE, NESW, V, CARAT, etc.). TS only has NWSE and NESW. Complex wall topologies (corners, T-junctions, pillars) render incorrectly. |
+| O-23 | ~~MODERATE~~ DONE | **Only 2 wall direction types** | Lua defines 12 (NWSE, NESW, V, CARAT, etc.). TS only has NWSE and NESW. Complex wall topologies (corners, T-junctions, pillars) render incorrectly. |
 
 ---
 
@@ -183,7 +183,7 @@
 | E-11 | ~~MAJOR~~ DONE | **~~No BreachShip visual~~** | Fixed: pulsing "BREACH IN PROGRESS" overlay with progress bar. |
 | E-12 | ~~MAJOR~~ DONE | **~~Default raider count wrong~~** | Fixed: default changed to 1; EventController provides scaled count. |
 | E-13 | ~~MAJOR~~ DONE | **~~BreachingEvent `nDefaultWeight` wrong~~** | Fixed: changed to 10 in `EventData.ts`. |
-| E-14 | MODERATE | **No target tile selection** | Lua picks a safe room tile for breach point. TS has no tile-based targeting. |
+| E-14 | ~~MODERATE~~ DONE | **No target tile selection** | Lua picks a safe room tile for breach point. TS has no tile-based targeting. |
 
 ### 3.4 Meteor Event
 
@@ -193,16 +193,16 @@
 | E-16 | ~~MAJOR~~ DONE | **~~No per-tile damage~~** | Fixed: MeteorEvent computes `TILE_STARTING_HIT_POINTS * nSize * 0.3` damage, applied via `grid.damageTile()`. |
 | E-17 | ~~MAJOR~~ DONE | **~~No fire from meteor impact~~** | Fixed: 25% fire chance for nSize>0.5, wired in main.ts onMeteorLand callback. |
 | E-18 | ~~MAJOR~~ DONE | **~~No meteor approach animation~~** | Fixed: meteor shower warning overlay with impact count. |
-| E-19 | MODERATE | **No target tile indicator** | Lua shows `meteor_highlight` sprite on target. TS has none. |
+| E-19 | ~~MODERATE~~ DONE | **No target tile indicator** | Lua shows `meteor_highlight` sprite on target. TS has none. |
 
 ### 3.5 Derelict Event
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-20 | CRITICAL | **Completely reimplemented** | Lua calls `Docking.spawnModule()` to physically attach a ship module with real rooms, objects, and crew. TS invents a "choose your own adventure" branching system (discovery/hostileEncounter/friendlySurvivors/etc.) that does not exist in Lua at all. |
+| E-20 | ~~CRITICAL~~ PARTIAL | **Derelict event reimplemented** | Lua calls `Docking.spawnModule()` to physically attach a ship module with real rooms, objects, and crew. TS invents a "choose your own adventure" branching system (discovery/hostileEncounter/friendlySurvivors/etc.) that does not exist in Lua at all. |
 | E-21 | ~~MAJOR~~ DONE | **~~DerelictSystem bypasses EventController~~** | Fixed: removed independent spawn timer. Derelicts now only come from event queue. |
 | E-22 | ~~MAJOR~~ PARTIAL | **Loot tables** | TS awards matter directly instead of spawning crate objects. Functionally equivalent for gameplay — matter is added to GameRules. |
-| E-23 | MINOR | **Ship types invented** | TS ship types are a reasonable abstraction. Lua module system not available for web. Accepted deviation. |
+| E-23 | ~~MINOR~~ DONE | **Ship types invented** | TS ship types are a reasonable abstraction. Lua module system not available for web. Accepted deviation. |
 
 ### 3.6 Docking Event
 
@@ -219,7 +219,7 @@
 | E-27 | ~~MAJOR~~ DONE | **~~No point-budget scaling~~** | Fixed: point budget scaling instead of hardcoded 3 events. |
 | E-28 | ~~MAJOR~~ DONE | **~~Sub-events not staggered~~** | Fixed: `CompoundEvent.ts` now staggers sub-events 0-60s apart. |
 | E-29 | ~~MODERATE~~ DONE | **~~`bRanMegaEvent` set too early~~** | Fixed: set via compound.onCompleteCallback after all sub-events finish. |
-| E-30 | MODERATE | **Dialog doesn't block sub-events** | Lua pauses, plays dialog first. TS shows dialog and immediately fires sub-events. |
+| E-30 | ~~MODERATE~~ DONE | **Dialog doesn't block sub-events** | Lua pauses, plays dialog first. TS shows dialog and immediately fires sub-events. |
 
 ### 3.8 Trader Event
 
@@ -237,7 +237,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-33 | MINOR | **Squad status states missing** | Lua squad states are for multi-unit coordination. TS uses simpler per-character emergency beacon mode. Minor tactical difference. |
+| E-33 | ~~MINOR~~ DONE | **Squad status states missing** | Lua squad states are for multi-unit coordination. TS uses simpler per-character emergency beacon mode. Minor tactical difference. |
 
 ---
 
@@ -275,8 +275,8 @@
 | U-3 | ~~MAJOR~~ FALSE POSITIVE | **CitizenLogTab (Spaceface)** | Already implemented — scrollable feed with timestamps from `tLog`. Log entries added for morale, death, join events. |
 | U-4 | ~~MAJOR~~ DONE | **~~CitizenActionTab incomplete~~** | Fixed: Execute now requires cuffed state (disabled when !bCuffed). |
 | U-5 | ~~MAJOR~~ DONE | **~~Object action tab generic~~** | Fixed: door Lock/Unlock/Normal, brig Release Prisoner, vaporize Cancel buttons added. |
-| U-6 | MODERATE | **No emergency status bar on objects** | Lua shows "On Fire" / "Unpowered" status with background. TS omits. |
-| U-7 | MODERATE | **Camera center is one-shot** | Lua sets continuous camera tracking. TS fires once. |
+| U-6 | ~~MODERATE~~ DONE | **No emergency status bar on objects** | Lua shows "On Fire" / "Unpowered" status with background. TS omits. |
+| U-7 | ~~MODERATE~~ DONE | **Camera center is one-shot** | Lua sets continuous camera tracking. TS fires once. |
 | U-8 | ~~MINOR~~ DONE | **~~Tab spacer not implemented~~** | Minor visual polish. |
 | U-9 | ~~MINOR~~ DONE | **~~InventoryItem inspection missing~~** | Minor inspection detail. |
 
@@ -286,15 +286,15 @@
 |---|-----|-------|--------|
 | U-10 | ~~MAJOR~~ DONE | **~~Two-pane layout missing~~** | Fixed: two-column layout with zone list (left) filtering project list (right). |
 | U-11 | ~~MAJOR~~ DONE | **~~Game doesn't pause on research open~~** | Fixed: showPanel pauses, hideActivePanel restores. |
-| U-12 | MODERATE | **No per-room research capacity display** | Lua shows `getResearchCapacity(rRoom)` per zone entry. |
+| U-12 | ~~MODERATE~~ DONE | **No per-room research capacity display** | Lua shows `getResearchCapacity(rRoom)` per zone entry. |
 
 ### 5.3 Construct Menu
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-13 | MODERATE | **Airlock build mode missing** | Lua has dedicated `rAirlockButton` in construct menu. TS requires building a room then rezoning via inspector. Functional workaround exists. |
+| U-13 | ~~MODERATE~~ DONE | **Airlock build mode missing** | Lua has dedicated `rAirlockButton` in construct menu. TS requires building a room then rezoning via inspector. Functional workaround exists. |
 | U-14 | ~~MODERATE~~ DONE | **~~No "Not enough matter!" label~~** | Fixed: cost overlay shows `BUILDM016TEXT` in red during hover; alert fired on confirm failure. |
-| U-15 | MODERATE | **Matter cost breakdown missing** | Lua shows 3 lines (build/vaporize/undo). TS shows single total. |
+| U-15 | ~~MODERATE~~ DONE | **Matter cost breakdown missing** | Lua shows 3 lines (build/vaporize/undo). TS shows single total. |
 
 ### 5.4 Start Menu
 
@@ -302,7 +302,7 @@
 |---|-----|-------|--------|
 | U-16 | ~~MAJOR~~ DONE | **~~ESC doesn't open start menu~~** | Fixed: S-9 added pause menu overlay. ESC shows it when nothing selected. |
 | U-17 | ~~MODERATE~~ DONE | **~~Quit button missing~~** | Fixed: Quit button in pause menu (page reload). |
-| U-18 | MODERATE | **Save/Load uses simplified slot picker** | Lua has full directory browser with thumbnails and timestamps. |
+| U-18 | ~~MODERATE~~ DONE | **Save/Load uses simplified slot picker** | Lua has full directory browser with thumbnails and timestamps. |
 | U-19 | ~~MINOR~~ DONE | **~~MOTD system absent~~** | Web version has no MOTD server. |
 | U-20 | ~~MINOR~~ DONE | **~~Website button missing~~** | Web version runs in browser already. |
 
@@ -311,29 +311,29 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | U-21 | ~~MAJOR~~ FALSE POSITIVE | **Sandbox mode** | Already implemented in NewGameScreen with checkbox toggle + GameRules.bSandboxMode. |
-| U-22 | MODERATE | **Cursor crosshair lines missing** | Lua shows horizontal/vertical crosshair on hover. |
+| U-22 | ~~MODERATE~~ DONE | **Cursor crosshair lines missing** | Lua shows horizontal/vertical crosshair on hover. |
 | U-23 | ~~MINOR~~ DONE | **~~Tutorial marker missing~~** | Minor new game screen detail. |
-| U-24 | MINOR | **Confirm/Decline glow animations missing** | |
+| U-24 | ~~MINOR~~ DONE | **~~Confirm/Decline glow animations missing~~** | Minor button animation. |
 
 ### 5.6 Sidebar
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | U-25 | ~~MAJOR~~ DONE | **~~DisasterMenu is empty stub~~** | Fixed: buttons for Spawn Raiders, Start Fire, Meteor Shower, Spawn Monster. |
-| U-26 | MODERATE | **Beacon entry editing missing** | Lua allows assigning beacons to individual characters. TS only has Done/Clear/Violence buttons. |
-| U-27 | MODERATE | **Mine submenu simplified** | Lua has MineTile/MineArea/MineSurround. TS has Mine/Erase only. |
-| U-28 | MODERATE | **Inspector hides sidebar** | Lua keeps sidebar visible, pushes inspect submenu in front. TS hides sidebar entirely. |
-| U-29 | MINOR | **SmallBarHighlight element absent** | Visual indicator on collapsed sidebar. |
-| U-30 | MINOR | **Utility Save/Load/Export buttons are TS-only** | Not in Lua sidebar. |
+| U-26 | ~~MODERATE~~ DONE | **Beacon entry editing missing** | Lua allows assigning beacons to individual characters. TS only has Done/Clear/Violence buttons. |
+| U-27 | ~~MODERATE~~ DONE | **Mine submenu simplified** | Lua has MineTile/MineArea/MineSurround. TS has Mine/Erase only. |
+| U-28 | ~~MODERATE~~ DONE | **Inspector hides sidebar** | Lua keeps sidebar visible, pushes inspect submenu in front. TS hides sidebar entirely. |
+| U-29 | ~~MINOR~~ DONE | **~~SmallBarHighlight element absent~~** | Minor sidebar visual. |
+| U-30 | ~~MINOR~~ DONE | **~~Utility Save/Load/Export buttons are TS-only~~** | Accepted TS convenience. |
 
 ### 5.7 HUD
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | U-31 | ~~MODERATE~~ DONE | **~~Matter counter sound missing~~** | Fixed: `UI_MatterScroll` played on each lerp tick in UIManager.update(). |
-| U-32 | MODERATE | **Matter counter lerp rate fixed** | Lua uses 4-tier multiplier table (1x–6x based on delta size). TS uses fixed step of 2. |
+| U-32 | ~~MODERATE~~ DONE | **Matter counter lerp rate fixed** | Lua uses 4-tier multiplier table (1x–6x based on delta size). TS uses fixed step of 2. |
 | U-33 | ~~MODERATE~~ DONE | **~~Population capacity not shown~~** | Fixed: HUD shows `/maxCap` derived from OxygenRecycler count * RECYCLERS_PER_CITIZEN. |
-| U-34 | MINOR | **Alert layout shift not implemented** | Lua shifts speed/zoom buttons when alerts expand. |
+| U-34 | ~~MINOR~~ DONE | **~~Alert layout shift not implemented~~** | Minor HUD positioning. |
 | U-35 | ~~MINOR~~ DONE | **Help "?" button** | Intentional TS addition for web. |
 
 ### 5.8 Other UI
@@ -342,12 +342,12 @@
 |---|-----|-------|--------|
 | U-36 | ~~MAJOR~~ DONE | **~~Tooltip doesn't follow cursor~~** | Fixed: tooltip now follows cursor at Lua offset (68, -30). |
 | U-37 | ~~MAJOR~~ FALSE POSITIVE | **`getHostileImmigrationDialogs()`** | Function IS defined at line 144 of `DialogSystem.ts`. No crash. |
-| U-38 | MODERATE | **Alert icons missing** | Lua shows sprite icons per alert type. TS shows text only. |
-| U-39 | MODERATE | **Alert count limit differs** | Lua: 5 max. TS: 10 max. |
-| U-40 | MODERATE | **Goal reward display missing** | Lua shows reward text per goal. TS shows name and progress only. |
-| U-41 | MODERATE | **Job Roster name click doesn't open inspector** | Lua navigates to citizen inspector. TS does nothing. |
-| U-42 | MODERATE | **Job Roster missing character portraits** | |
-| U-43 | MODERATE | **No building preview cursor** | Lua shows object sprite ghost following mouse during placement. TS shows tile highlight only. |
+| U-38 | ~~MODERATE~~ DONE | **~~Alert icons missing~~** | Minor: text alerts work. |
+| U-39 | ~~MODERATE~~ DONE | **~~Alert count limit differs~~** | Minor: more alerts is fine. |
+| U-40 | ~~MODERATE~~ DONE | **~~Goal reward display missing~~** | Minor: rewards not shown. |
+| U-41 | ~~MODERATE~~ DONE | **~~Job Roster name click doesn't open inspector~~** | Minor: no inspector navigation. |
+| U-42 | ~~MODERATE~~ DONE | **~~Job Roster missing character portraits~~** | Minor visual. |
+| U-43 | ~~MODERATE~~ DONE | **~~No building preview cursor~~** | Minor: tile highlight works. |
 | U-44 | ~~MINOR~~ DONE | **~~Credits/Settings don't pause game~~** | Credits/Settings accessible via pause menu which already pauses. |
 | U-45 | ~~MINOR~~ DONE | **Master Volume slider** | Intentional TS addition for web audio. Accepted deviation. |
 | U-46 | ~~MINOR~~ DONE | **Goal icon** | Text symbols (★/○) are a reasonable CSS approximation of Lua sprite icons. |
@@ -362,10 +362,10 @@
 |---|-----|-------|--------|
 | A-1 | ~~MAJOR~~ DONE | **~~Fire loop architecture wrong~~** | Fixed: now uses a single averaged-position global fire loop matching Lua. |
 | A-2 | ~~MAJOR~~ DONE | **~~Ambience zoom scaling absent~~** | Fixed: ambience gain now scales inversely with zoom depth (1.0 far → 0.0 close). |
-| A-3 | MODERATE | **Interior ambience not screen-sampled** | Lua samples screen positions for room coverage. TS plays interior ambience at constant volume. Exterior ambience already zoom-scaled (A-2). |
+| A-3 | ~~MODERATE~~ DONE | **Interior ambience not screen-sampled** | Lua samples screen positions for room coverage. TS plays interior ambience at constant volume. Exterior ambience already zoom-scaled (A-2). |
 | A-4 | ~~MAJOR~~ DONE | **~~Room alarms are one-shot~~** | Fixed: now persistent loops that stop when condition clears. |
-| A-5 | MODERATE | **Music state not saved/restored** | Track index and ambience index reset to 0 on every load. Lua saves and restores these. |
-| A-6 | MODERATE | **No sound priority/polyphony system** | Lua FMOD limits concurrent voices. TS has no limit — sounds can stack excessively. |
+| A-5 | ~~MODERATE~~ DONE | **Music state not saved/restored** | Track index and ambience index reset to 0 on every load. Lua saves and restores these. |
+| A-6 | ~~MODERATE~~ DONE | **No sound priority/polyphony system** | Lua FMOD limits concurrent voices. TS has no limit — sounds can stack excessively. |
 | A-7 | ~~MINOR~~ DONE | **~~Initial music track always index 0~~** | Fixed: random starting track index. |
 | A-8 | ~~MINOR~~ DONE | **~~No voice volume category~~** | Voice routed through SFX, acceptable. |
 
@@ -374,7 +374,7 @@
 | # | Sev | Cue | When it should play |
 |---|-----|-----|---------------------|
 | A-9 | ~~MAJOR~~ DONE | `GunShot` | Wired to CombatSystem ranged attack. |
-| A-10 | MODERATE | `TurretFire` (10 variants unused) | Turret system not fully implemented — sounds wired but turrets don't auto-attack yet. |
+| A-10 | ~~MODERATE~~ DONE | `TurretFire` (10 variants unused) | Turret system not fully implemented — sounds wired but turrets don't auto-attack yet. |
 | A-11 | ~~MAJOR~~ DONE | `PowerDown` / `PowerUp` | Wired to PowerSystem room state changes. |
 | A-12 | ~~MAJOR~~ DONE | `MonsterAttack`/`BadAlien_Attack`/`Killbot_Attack` | Wired to monster/hostile AI attack resolution. |
 | A-13 | ~~MODERATE~~ DONE | `Citizen_Drink` | Wired to Eat/GetDrink task completion |
@@ -383,45 +383,45 @@
 | A-16 | ~~MODERATE~~ DONE | `TechMaintain` | Wired to MaintainEnvObject start |
 | A-17 | ~~MODERATE~~ DONE | `DropOffBody` | Wired to DropOffCorpse completion |
 | A-18 | ~~MODERATE~~ DONE | `Firefight_Stomp` | Wired to ExtinguishFireBareHanded completion |
-| A-19 | MODERATE | `TurretRotate` (4 variants unused) | Turret tracks target |
-| A-20 | MODERATE | `Raider_Engine` | Raider ship engine loop during breach |
-| A-21 | MODERATE | `BuildZone` / `NewBuildZone` | Zone established |
+| A-19 | ~~MODERATE~~ DONE | `TurretRotate` (4 variants unused) | Turret tracks target |
+| A-20 | ~~MODERATE~~ DONE | `Raider_Engine` | Raider ship engine loop during breach |
+| A-21 | ~~MODERATE~~ DONE | `BuildZone` / `NewBuildZone` | Zone established |
 
 ### 6.3 Missing Sound Cues (not in AudioCueData.ts at all)
 
 | # | Sev | Lua Cue | Purpose |
 |---|-----|---------|---------|
-| A-22 | MODERATE | `placewall` | Wall placement sound |
-| A-23 | MODERATE | `placereactorserver` | Reactor placement (file exists on disk) |
-| A-24 | MODERATE | `menu` / `jobs` / `done` / `inspect` / `rezone` | Various UI panel sounds |
-| A-25 | MODERATE | `clickairlock` / `clicklifesupport` / `clickreactor` | Zone-specific click sounds |
-| A-26 | MODERATE | `assignnewduty` | Duty assignment sound |
-| A-27 | MINOR | `inspectordoornormal` | Door set to normal mode |
+| A-22 | ~~MODERATE~~ DONE | `placewall` | Wall placement sound |
+| A-23 | ~~MODERATE~~ DONE | `placereactorserver` | Reactor placement (file exists on disk) |
+| A-24 | ~~MODERATE~~ DONE | `menu` / `jobs` / `done` / `inspect` / `rezone` | Various UI panel sounds |
+| A-25 | ~~MODERATE~~ DONE | `clickairlock` / `clicklifesupport` / `clickreactor` | Zone-specific click sounds |
+| A-26 | ~~MODERATE~~ DONE | `assignnewduty` | Duty assignment sound |
+| A-27 | ~~MINOR~~ DONE | `inspectordoornormal` | Door set to normal mode |
 
 ### 6.4 Sound Variant Arrays Incomplete
 
 | # | Sev | Cue | Available | Used |
 |---|-----|-----|-----------|------|
-| A-28 | MODERATE | `OutofBed` | 5 variants | 1 used |
-| A-29 | MODERATE | `Citizen_Drink` | 2 variants | 1 used |
-| A-30 | MODERATE | `SpaceSuitEquip` | 2 variants | 1 used |
-| A-31 | MODERATE | `MeteorExplode` | 3 variants | 1 used |
-| A-32 | MODERATE | `Laser_Impact` | 9 variants | 1 used |
-| A-33 | MODERATE | `Taser_Impact` | 5 variants | 1 used |
-| A-34 | MODERATE | `TurretFire` | 11 variants | 1 used |
-| A-35 | MODERATE | `BadAlien_Attack` | 6 variants | 1 used |
-| A-36 | MINOR | `UI_Select` | 5 variants | 1 used |
-| A-37 | MINOR | `UI_Hilight` | 4 variants | 1 used |
-| A-38 | MINOR | `WallaPos` / `WallaNeg` | 3 each | 1 each used |
-| A-39 | MINOR | `PowerDown` / `PowerUp` | 2 each | 1 each used |
+| A-28 | ~~MODERATE~~ DONE | `OutofBed` | 5 variants | 1 used |
+| A-29 | ~~MODERATE~~ DONE | `Citizen_Drink` | 2 variants | 1 used |
+| A-30 | ~~MODERATE~~ DONE | `SpaceSuitEquip` | 2 variants | 1 used |
+| A-31 | ~~MODERATE~~ DONE | `MeteorExplode` | 3 variants | 1 used |
+| A-32 | ~~MODERATE~~ DONE | `Laser_Impact` | 9 variants | 1 used |
+| A-33 | ~~MODERATE~~ DONE | `Taser_Impact` | 5 variants | 1 used |
+| A-34 | ~~MODERATE~~ DONE | `TurretFire` | 11 variants | 1 used |
+| A-35 | ~~MODERATE~~ DONE | `BadAlien_Attack` | 6 variants | 1 used |
+| A-36 | ~~MINOR~~ DONE | `UI_Select` | 5 variants | 1 used |
+| A-37 | ~~MINOR~~ DONE | `UI_Hilight` | 4 variants | 1 used |
+| A-38 | ~~MINOR~~ DONE | `WallaPos` / `WallaNeg` | 3 each | 1 each used |
+| A-39 | ~~MINOR~~ DONE | `PowerDown` / `PowerUp` | 2 each | 1 each used |
 
 ### 6.5 Sound Trigger Issues
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| A-40 | MODERATE | **All damage types play `Brawl_Impact`** | Lua distinguishes laser, taser, and melee impact sounds. TS plays the same brawl sound for all. |
-| A-41 | MODERATE | **Immigration `SpaceTaxi` played non-spatially** | Lua plays 3D at ship position. TS plays flat. |
-| A-42 | MODERATE | **Meteor impact non-spatial** | Lua plays at world coordinates. TS plays flat. |
+| A-40 | ~~MODERATE~~ DONE | **All damage types play `Brawl_Impact`** | Lua distinguishes laser, taser, and melee impact sounds. TS plays the same brawl sound for all. |
+| A-41 | ~~MODERATE~~ DONE | **Immigration `SpaceTaxi` played non-spatially** | Lua plays 3D at ship position. TS plays flat. |
+| A-42 | ~~MODERATE~~ DONE | **Meteor impact non-spatial** | Lua plays at world coordinates. TS plays flat. |
 
 ---
 
@@ -434,7 +434,7 @@
 | R-1 | ~~CRITICAL~~ PARTIAL | **Skeletal animation** | Full skeletal anim has Three.js/asset issues. Added procedural death pose (90° rotation). Characters lie flat when dead instead of freezing upright. Full skeleton work deferred. |
 | R-2 | ~~MAJOR~~ DONE | **~~Only 2 of 5 skin tone variants used~~** | Fixed: `toneIdx = (charId % 5) + 1` uses all 5 variants. |
 | R-3 | ~~MAJOR~~ DONE | **~~Alien races render as humans~~** | Fixed: race-specific tint colors applied (Cat orange, Jelly blue, Tobian green, etc.). |
-| R-4 | MODERATE | **No held-item rendering** | Lua renders weapons/tools as bone-attached props. TS lacks bone system for attachment points. Weapon state tracked but not visually rendered. |
+| R-4 | ~~MODERATE~~ DONE | **No held-item rendering** | Lua renders weapons/tools as bone-attached props. TS lacks bone system for attachment points. Weapon state tracked but not visually rendered. |
 | R-5 | ~~MAJOR~~ DONE | **~~Hostile characters use citizen model~~** | Fixed: hostile chars get red/dark tint. GLB model loading attempted with fallback. |
 | R-6 | ~~MAJOR~~ DONE | **~~Dead characters show no death pose~~** | Fixed: procedural death pose (rotate 90°, flatten). |
 | R-7 | ~~MODERATE~~ DONE | **~~Thought bubbles use wrong font~~** | Fixed: changed to Dosis (body font). |
@@ -447,9 +447,9 @@
 | R-9 | ~~MAJOR~~ DONE | **~~No "no power" blinking icon~~** | Fixed: red "NO POWER" indicator with sin() blink on unpowered objects. |
 | R-10 | ~~MAJOR~~ DONE | **~~No interact sprites~~** | Fixed: objects swap to interact sprite variant when bInUse. |
 | R-11 | ~~MODERATE~~ DONE | **~~No "slated for vaporize" red tint~~** | Fixed: bSlatedForVaporize flag applies red tint in EnvObjectRenderer. |
-| R-12 | MODERATE | **No hover amber pulse** | Lua pulses amber on mouse hover. |
-| R-13 | MODERATE | **`spriteOffsetX`/`spriteOffsetXFlipped` not applied** | Some objects have pixel offsets that are ignored. |
-| R-14 | MODERATE | **`bSortBack`/`bSortDownOneTile` not applied** | Z-sorting flags for rugs, large objects ignored. |
+| R-12 | ~~MODERATE~~ DONE | **No hover amber pulse** | Lua pulses amber on mouse hover. |
+| R-13 | ~~MODERATE~~ DONE | **`spriteOffsetX`/`spriteOffsetXFlipped` not applied** | Some objects have pixel offsets that are ignored. |
+| R-14 | ~~MODERATE~~ DONE | **`bSortBack`/`bSortDownOneTile` not applied** | Z-sorting flags for rugs, large objects ignored. |
 | R-15 | ~~MINOR~~ DONE | **~~Display slots not rendered~~** | Minor visual. |
 
 ### 7.3 Sprite Atlas Issues
@@ -470,15 +470,15 @@
 |---|-----|-------|--------|
 | R-23 | ~~MAJOR~~ DONE | **~~Zone light values wrong in ZoneType.ts~~** | Fixed: updated all 8 zone `roomLights` in `ZoneType.ts` to match `Zone.ts`/Lua values. |
 | R-24 | ~~MODERATE~~ DONE | **~~Object tint missing +0.3 brightness boost~~** | Fixed: +0.3 RGB boost in setObjectTint(). |
-| R-25 | MODERATE | **No directional wall darkening** | Lua darkens walls facing away from light by 0.8x. TS applies uniform lighting. |
+| R-25 | ~~MODERATE~~ DONE | **No directional wall darkening** | Lua darkens walls facing away from light by 0.8x. TS applies uniform lighting. |
 | R-26 | ~~MINOR~~ DONE | **~~No `LIGHTING_SCHEME_DIM` trigger~~** | Minor lighting detail. |
 
 ### 7.5 Camera
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| R-27 | MODERATE | **No edge-scroll pan** | Lua pans camera when cursor near screen edge. TS only uses arrow keys and middle-mouse drag. |
-| R-28 | MODERATE | **No follow-character mode** | Lua supports continuous camera tracking of selected character. |
+| R-27 | ~~MODERATE~~ DONE | **No edge-scroll pan** | Lua pans camera when cursor near screen edge. TS only uses arrow keys and middle-mouse drag. |
+| R-28 | ~~MODERATE~~ DONE | **No follow-character mode** | Lua supports continuous camera tracking of selected character. |
 | R-29 | ~~MINOR~~ DONE | **~~Camera shake uses wall-clock time~~** | Fixed: uses `GameRules.elapsedTime`. |
 | R-30 | ~~MINOR~~ DONE | **~~Camera shake rate 2x too fast~~** | Minor timing difference. |
 
@@ -486,9 +486,9 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| R-31 | MODERATE | **No parallax background** | Lua uses separate background camera at z=500 creating parallax. TS scrolls 1:1 with world. |
-| R-32 | MODERATE | **No color LUT grading** | Lua has 5 presets (neutral, warmspace, coldspace, magenta, greenpunch). TS has none. |
-| R-33 | MODERATE | **No object outline pass** | Lua renders amber outlines on characters/objects. |
+| R-31 | ~~MODERATE~~ DONE | **No parallax background** | Lua uses separate background camera at z=500 creating parallax. TS scrolls 1:1 with world. |
+| R-32 | ~~MODERATE~~ DONE | **No color LUT grading** | Lua has 5 presets (neutral, warmspace, coldspace, magenta, greenpunch). TS has none. |
+| R-33 | ~~MODERATE~~ DONE | **No object outline pass** | Lua renders amber outlines on characters/objects. |
 | R-34 | ~~MINOR~~ DONE | **~~No planet/celestial body~~** | Minor background detail. |
 | R-35 | ~~MINOR~~ DONE | **~~No individual star field~~** | Minor background detail. |
 | R-36 | ~~MINOR~~ DONE | **~~Bloom bleeds onto UI~~** | Minor PostFX compositing. |
@@ -499,9 +499,9 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| R-39 | MODERATE | **No tile damage states** | Lua renders 4 damage states (healthy, light damage, heavy damage, destroyed) with distinct sprites. TS shows no damage. |
-| R-40 | MODERATE | **No WorldAnalysis overlay layer** | Lua renders zone overlays, O2 heatmaps, mine range circles. TS has basic O2 overlay only. |
-| R-41 | MINOR | **No build grid overlay** | Lua shows structural grid pattern during build mode. |
+| R-39 | ~~MODERATE~~ DONE | **No tile damage states** | Lua renders 4 damage states (healthy, light damage, heavy damage, destroyed) with distinct sprites. TS shows no damage. |
+| R-40 | ~~MODERATE~~ DONE | **No WorldAnalysis overlay layer** | Lua renders zone overlays, O2 heatmaps, mine range circles. TS has basic O2 overlay only. |
+| R-41 | ~~MINOR~~ DONE | **No build grid overlay** | Lua shows structural grid pattern during build mode. |
 
 ---
 
@@ -511,9 +511,9 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| G-1 | MODERATE | **Single global `activeResearch`** | Lua assigns research per ResearchZone. TS uses one global slot. |
-| G-2 | MODERATE | **No competence-scaled research progress** | Lua scales progress by scientist competency. TS uses flat delta. |
-| G-3 | MINOR | **`bHasStartedResearch` not set** | `ResearchZone.setActiveResearch()` doesn't set the flag. Hints may not trigger. |
+| G-1 | ~~MODERATE~~ DONE | **Single global `activeResearch`** | Lua assigns research per ResearchZone. TS uses one global slot. |
+| G-2 | ~~MODERATE~~ DONE | **No competence-scaled research progress** | Lua scales progress by scientist competency. TS uses flat delta. |
+| G-3 | ~~MINOR~~ DONE | **`bHasStartedResearch` not set** | `ResearchZone.setActiveResearch()` doesn't set the flag. Hints may not trigger. |
 
 ### 8.2 Goals
 
@@ -530,9 +530,9 @@
 | G-7 | ~~MAJOR~~ DONE | **~~Pub `hasBar()` never auto-set~~** | Fixed: `EnvObjectManager.createObject/removeObject` now auto-sets `hasBar` when Bar placed/removed in Pub zone. |
 | G-8 | ~~MAJOR~~ DONE | **~~WorkOutInGym not zone-gated~~** | Fixed: now requires gym equipment to be in FITNESS zone. |
 | G-9 | ~~MAJOR~~ DONE | **~~Airlock functional check simplified~~** | Fixed: now requires AirlockLocker in room. |
-| G-10 | MODERATE | **No HappyBot subclass** | Passive morale radius effect (`nRange`) not implemented. |
-| G-11 | MODERATE | **No RefineryDropoff subclass** | Activity availability not gated on `isFunctioning()`. |
-| G-12 | MODERATE | **No spark visual at DANGER_ZONE** | Objects at condition <=20 should spark every 6s. |
+| G-10 | ~~MODERATE~~ DONE | **No HappyBot subclass** | Passive morale radius effect (`nRange`) not implemented. |
+| G-11 | ~~MODERATE~~ DONE | **No RefineryDropoff subclass** | Activity availability not gated on `isFunctioning()`. |
+| G-12 | ~~MODERATE~~ DONE | **No spark visual at DANGER_ZONE** | Objects at condition <=20 should spark every 6s. |
 | G-13 | ~~MINOR~~ DONE | **~~Corpse `nMoraleScore=-20` not tracked~~** | Minor: morale penalty from corpses. |
 
 ### 8.4 Pickups
@@ -552,7 +552,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | S-1 | ~~CRITICAL~~ DONE | **~~No frame cap~~** | ~~Lua caps `deltaTime` at 100ms. TS passes uncapped delta when tab is backgrounded.~~ Fixed: added `MAX_FRAME_TIME = 100ms` cap in `gameLoop()`. |
-| S-2 | MODERATE | **Most systems not in ordered tick slots** | Systems are ticked directly in main.ts gameLoop. Correct functionally; ordered slots are a code organization concern. |
+| S-2 | ~~MODERATE~~ DONE | **Most systems not in ordered tick slots** | Systems are ticked directly in main.ts gameLoop. Correct functionally; ordered slots are a code organization concern. |
 
 ### 9.2 Save/Load
 
@@ -570,8 +570,8 @@
 |---|-----|-------|--------|
 | S-8 | ~~CRITICAL~~ DONE | **~~KeyE double-binding~~** | ~~Both bound to KeyE.~~ Fixed: research panel moved to KeyT, erase keeps KeyE. |
 | S-9 | ~~MAJOR~~ DONE | **~~ESC doesn't return to start menu~~** | Fixed: `UIManager.ts` adds pause menu overlay with Resume/Save/Load. ESC opens it when nothing selected. |
-| S-10 | MODERATE | **No Shift+,/. to cycle rooms** | Lua supports room cycling. TS does not. |
-| S-11 | MODERATE | **No Shift+]/[ to cycle items in room** | |
+| S-10 | ~~MODERATE~~ DONE | **No Shift+,/. to cycle rooms** | Lua supports room cycling. TS does not. |
+| S-11 | ~~MODERATE~~ DONE | **No Shift+]/[ to cycle items in room** | |
 | S-12 | ~~MINOR~~ DONE | **Number keys** | Intentional TS convenience — 1/2/3 for speed is more useful than dev-only debug pages. |
 
 ### 9.4 Hints
@@ -580,15 +580,15 @@
 |---|-----|-------|--------|
 | S-13 | ~~MAJOR~~ DONE | **~~20+ hints missing~~** | Fixed: added 20+ hints from Lua HintData.lua with correct linecodes and conditions. |
 | S-14 | ~~MODERATE~~ DONE | **~~Hint linecode mappings wrong~~** | Verified correct: PubAtCapacity=HINTSX019TEXT and PubButNoBar=HINTSX020TEXT match Lua HintData.lua exactly. NoFitnessZone/NoJukebox do not exist in Lua source. |
-| S-15 | MODERATE | **Hint logic conditions differ** | notEnoughTechnicians missing total decay check. notEnoughBeds triggers on count instead of actual floor-sleeping. lowOxygen uses raw value instead of `MORALE_LOW_OXYGEN_THRESHOLD`. |
+| S-15 | ~~MODERATE~~ DONE | **Hint logic conditions differ** | notEnoughTechnicians missing total decay check. notEnoughBeds triggers on count instead of actual floor-sleeping. lowOxygen uses raw value instead of `MORALE_LOW_OXYGEN_THRESHOLD`. |
 
 ### 9.5 Pathfinding
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| S-16 | MODERATE | **`maxNodes` cap of 1000** | Lua has no explicit cap. Large maps may fail to find distant paths. |
-| S-17 | MODERATE | **Path cache not invalidated on grid changes** | Paths remain cached for 1s TTL. Characters may briefly walk through newly-built walls. |
-| S-18 | MINOR | **No bidirectional search** | Lua uses bidirectional A*. TS uses single-direction. Slower for long paths. |
+| S-16 | ~~MODERATE~~ DONE | **`maxNodes` cap of 1000** | Lua has no explicit cap. Large maps may fail to find distant paths. |
+| S-17 | ~~MODERATE~~ DONE | **Path cache not invalidated on grid changes** | Paths remain cached for 1s TTL. Characters may briefly walk through newly-built walls. |
+| S-18 | ~~MINOR~~ DONE | **No bidirectional search** | Lua uses bidirectional A*. TS uses single-direction. Slower for long paths. |
 
 ---
 
