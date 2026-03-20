@@ -32,7 +32,8 @@ import {
 } from './EventData';
 
 /** Time between event checks. */
-const EVENT_CHECK_INTERVAL = 5;
+// E-2: Lua checks every frame. Use 1s for reasonable performance without 5s delay.
+const EVENT_CHECK_INTERVAL = 1;
 /** Default max setup failures before skipping event (Lua: 30). */
 const DEFAULT_ALLOWED_FAILURES = 30;
 

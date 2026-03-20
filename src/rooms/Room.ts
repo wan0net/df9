@@ -302,8 +302,8 @@ export class Room {
       this.setLightingScheme(LIGHTING_SCHEME_FIRE);
       // Emergency rooms pulse (Lua: nLightFadesPerSecond > 0)
       if (this.nLightFadesPerSecond <= 0) this.nLightFadesPerSecond = 0.5;
-    } else if (this.nPowerSupply < this.nPowerDraw) {
-      // Generator exists but insufficient power → lowpower lighting
+    } else if (this.nPowerSupply < this.nPowerDraw && this.nPowerOutput <= 0) {
+      // O-11: Lua exempts power-producing rooms from LOWPOWER (canProvidePower guard)
       this.setLightingScheme(LIGHTING_SCHEME_LOWPOWER);
     } else {
       this.setLightingScheme(LIGHTING_SCHEME_NORMAL);

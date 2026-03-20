@@ -118,7 +118,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | O-10 | ~~MAJOR~~ DONE | **~~`Room.hasPower()` returns full-power-only~~** | Fixed: `hasPowerFlag` now returns true if ANY power OR produces power. Added `hasFullPower`. |
-| O-11 | MODERATE | **`canProvidePower()` guard missing** | `updateEmergency` shows LOWPOWER for power-producing rooms that can't fully self-supply. Lua exempts them. |
+| O-11 | ~~MODERATE~~ DONE | **~~`canProvidePower()` guard missing~~** | Fixed: LOWPOWER check now exempts rooms with nPowerOutput>0. |
 | O-12 | MODERATE | **No `g_PowerHoliday` in EnvObject** | Global power override for tutorials/debug not implemented. |
 | O-13 | MINOR | **No sabotage timer** | `nTempPowerLossEnd` not implemented. Sabotage power loss is permanent until manually repaired. |
 
@@ -161,7 +161,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | E-1 | ~~MODERATE~~ DONE | **~~Consecutive event check off-by-one~~** | Fixed: changed `>=` to `>` in `EventController.ts`. |
-| E-2 | MODERATE | **`EVENT_CHECK_INTERVAL = 5s` polling** | Lua checks every frame. Events can fire up to 5s late. |
+| E-2 | ~~MODERATE~~ DONE | **~~`EVENT_CHECK_INTERVAL = 5s` polling~~** | Fixed: reduced to 1s (max 1s late instead of 5s). |
 | E-3 | MINOR | **No `preAlertSetup` support** | Lua events can abort alerts (e.g. immigration at pop-cap). TS shows alerts unconditionally. |
 | E-4 | MINOR | **Population estimate incomplete** | Forecast uses static `nPopulationDelta` instead of pre-rolled spawn counts. |
 
