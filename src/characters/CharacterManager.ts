@@ -12,7 +12,7 @@ import {
   OXYGEN_LOW, OXYGEN_SUFFOCATING,
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
   JOB_EXPERIENCE_RATE, UNNECESSARY_SPACESUIT_REMOVE,
-  RACE_KILLBOT, CHAT_COOLDOWN,
+  RACE_KILLBOT, RACE_MONSTER, CHAT_COOLDOWN,
   ANGER_MAX,
 } from './CharacterConstants';
 import { SpatialAudio } from '../audio/SpatialAudio';
@@ -71,6 +71,8 @@ import { ExtinguishFireWithTool } from '../utility/tasks/ExtinguishFireWithTool'
 import { ExtinguishFireBareHanded } from '../utility/tasks/ExtinguishFireBareHanded';
 import { DropEverything } from '../utility/tasks/DropEverything';
 import { DestroyEnvObject } from '../utility/tasks/DestroyEnvObject';
+import { MonsterPatrol } from '../utility/tasks/MonsterPatrol';
+import { MonsterAttackEquipment } from '../utility/tasks/MonsterAttackEquipment';
 import { ChatPartner } from '../utility/tasks/ChatPartner';
 import { MaintainPub } from '../utility/tasks/MaintainPub';
 import { EatAtFoodReplicator } from '../utility/tasks/EatAtFoodReplicator';
@@ -85,6 +87,7 @@ import { PRIORITY, type PriorityLevel } from '../utility/ActivityOption';
 import { EmergencyBeacon } from '../combat/EmergencyBeacon';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
+import type { EnvObject } from '../envobjects/EnvObject';
 import { tDoorsByAddr, Door } from '../envobjects/Door';
 import { Base } from '../core/Base';
 import { Corpse, CORPSE_TYPE_FRIENDLY, CORPSE_TYPE_RAIDER, CORPSE_TYPE_MONSTER } from '../pickups/Corpse';
@@ -937,9 +940,14 @@ export class CharacterManager {
         continue;
       }
 
-      // Hostile AI: attack nearest player character
+      // Hostile AI: monsters have distinct behavior (C-13/C-14/C-15), raiders use generic
       if (isHostile(TEAM_ID_PLAYER, char.tStats.nTeam)) {
-        this.runHostileAI(char);
+        const race = char.tStats.nRace;
+        if (race === RACE_MONSTER || race === RACE_KILLBOT) {
+          this.runMonsterAI(char);
+        } else {
+          this.runHostileAI(char);
+        }
         processed++;
         continue;
       }
@@ -1117,6 +1125,80 @@ export class CharacterManager {
       // No targets — wander
       this.wander(char);
     }
+  }
+
+  /**
+   * Run monster AI — distinct from raiders (C-13/C-14/C-15).
+   * Lua OptionData: MonsterPatrol (BaseScore=1), MonsterAttackEquipment (BaseScore=2),
+   * MonsterWander (BaseScore=0.1). Priorities: attack characters > attack objects > wander.
+   */
+  private runMonsterAI(char: Character) {
+    // ── Priority 1: Attack nearby player character (within 10 tiles) ──
+    const MONSTER_AGGRO_RANGE = 10;
+    let nearestChar: Character | null = null;
+    let nearestCharDist = Infinity;
+    for (const other of this.characters) {
+      if (other === char || !other.isAlive()) continue;
+      if (!isHostile(char.tStats.nTeam, other.tStats.nTeam)) continue;
+      const dist = Math.max(
+        Math.abs(char.tileX - other.tileX),
+        Math.abs(char.tileY - other.tileY),
+      );
+      if (dist <= MONSTER_AGGRO_RANGE && dist < nearestCharDist) {
+        nearestCharDist = dist;
+        nearestChar = other;
+      }
+    }
+
+    if (nearestChar) {
+      const task = new AttackEnemy(nearestChar.id);
+      task.targetX = nearestChar.tileX;
+      task.targetY = nearestChar.tileY;
+      this.assignTask(char, task);
+      this.combatSystem.engage(char, nearestChar);
+      return;
+    }
+
+    // ── Priority 2: 50% chance to attack a nearby environment object ──
+    if (Math.random() < 0.5) {
+      const allObjects = EnvObjectManager.getObjects();
+      let nearestObj: EnvObject | null = null;
+      let nearestObjDist = Infinity;
+      for (const obj of allObjects) {
+        if (!obj.bBuilt || obj.nCondition <= 0) continue;
+        const dist = Math.max(
+          Math.abs(char.tileX - obj.tileX),
+          Math.abs(char.tileY - obj.tileY),
+        );
+        if (dist < nearestObjDist) {
+          nearestObjDist = dist;
+          nearestObj = obj;
+        }
+      }
+      if (nearestObj) {
+        const task = new MonsterAttackEquipment(nearestObj);
+        this.assignTask(char, task);
+        return;
+      }
+    }
+
+    // ── Priority 3: Monster wander / patrol to a random room ──
+    const rooms = this.roomManager.getRooms();
+    if (rooms.length > 0 && Math.random() < 0.5) {
+      // MonsterPatrol: walk to a random room
+      const room = rooms[Math.floor(Math.random() * rooms.length)];
+      if (room.tiles.length > 0) {
+        const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+        const task = new MonsterPatrol();
+        task.targetX = tile.x;
+        task.targetY = tile.y;
+        this.assignTask(char, task);
+        return;
+      }
+    }
+
+    // MonsterWander: fallback idle wander
+    this.wander(char);
   }
 
   /** Gather all available activity options for a character. */
