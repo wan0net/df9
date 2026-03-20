@@ -337,7 +337,7 @@ export const FAMILIARITY_TICK_INCREASE = 0.1;
 export const FAMILIARITY_CHAT = 4;
 export const FAMILIARITY_SERVE_MEAL = 0.5;
 export const PUB_CAPACITY = 3;
-export const PUB_CITIZENS_PER_BARTENDER = 3;
+export const PUB_CITIZENS_PER_BARTENDER = 5; // Lua CharacterConstants.lua:455
 
 // ── Personality Traits ──────────────────────────────────────────────────
 export const PERSONALITY_TRAITS = {
