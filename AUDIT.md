@@ -377,12 +377,12 @@
 | A-10 | MAJOR | `TurretFire` (10 variants unused) | Turret attacks |
 | A-11 | MAJOR | `PowerDown` / `PowerUp` | Power grid gained/lost |
 | A-12 | MAJOR | `MonsterAttack` / `BadAlien_Attack` (5 variants unused) / `Killbot_Attack` / `Killbot_Death` | Hostile creature combat |
-| A-13 | MODERATE | `Citizen_Drink` (1 of 2 variants) | Character eats/drinks |
-| A-14 | MODERATE | `OutofBed` (1 of 5 variants) | Character gets out of bed |
-| A-15 | MODERATE | `DoctorScan` | Doctor scans patient |
-| A-16 | MODERATE | `TechMaintain` | Technician maintains object |
-| A-17 | MODERATE | `DropOffBody` | Corpse delivered |
-| A-18 | MODERATE | `Firefight_Stomp` | Fire stomped out |
+| A-13 | ~~MODERATE~~ DONE | `Citizen_Drink` | Wired to Eat/GetDrink task completion |
+| A-14 | ~~MODERATE~~ DONE | `OutofBed` | Wired to SleepInBed task completion |
+| A-15 | ~~MODERATE~~ DONE | `DoctorScan` | Wired to FieldScanAndHeal start |
+| A-16 | ~~MODERATE~~ DONE | `TechMaintain` | Wired to MaintainEnvObject start |
+| A-17 | ~~MODERATE~~ DONE | `DropOffBody` | Wired to DropOffCorpse completion |
+| A-18 | ~~MODERATE~~ DONE | `Firefight_Stomp` | Wired to ExtinguishFireBareHanded completion |
 | A-19 | MODERATE | `TurretRotate` (4 variants unused) | Turret tracks target |
 | A-20 | MODERATE | `Raider_Engine` | Raider ship engine loop during breach |
 | A-21 | MODERATE | `BuildZone` / `NewBuildZone` | Zone established |
