@@ -171,6 +171,8 @@ export class UIManager {
   private alertContainer!: HTMLDivElement;
   private alertList!: HTMLDivElement;
   private alertMinimized = false;
+  private baseNameHeader!: HTMLDivElement;
+  private crewEmoticons!: HTMLSpanElement;
 
   // Sidebar buttons for active tracking
   private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; iconImg: HTMLImageElement | null; mode: BuildMode; btnLabel: string; action?: string }[] = [];
@@ -1531,6 +1533,21 @@ export class UIManager {
       pointer-events:auto;font-size:22px; /* Lua dosissemibold22 */
     `;
 
+    // Base name header with crew emoticons (Lua community mod: StatusBar title)
+    this.baseNameHeader = document.createElement('div');
+    this.baseNameHeader.style.cssText = `
+      display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:6px;
+      font-family:'Dosis',sans-serif;
+    `;
+    const baseName = document.createElement('span');
+    baseName.textContent = 'Spacebase DF-9.0';
+    baseName.style.cssText = `font-size:28px;font-weight:600;color:${AMBER};`;
+    this.baseNameHeader.appendChild(baseName);
+    this.crewEmoticons = document.createElement('span');
+    this.crewEmoticons.style.cssText = `display:flex;gap:2px;`;
+    this.baseNameHeader.appendChild(this.crewEmoticons);
+    this.alertContainer.appendChild(this.baseNameHeader);
+
     // Alert list (shows newest alert as a notification card)
     this.alertList = document.createElement('div');
     this.alertList.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
@@ -1776,6 +1793,23 @@ export class UIManager {
     // ── Corpses (Lua: updateDeadBodies — shows raw count, always displays) ──
     const corpseCount = this.getCorpseCount?.() ?? 0;
     this.corpseText.textContent = String(corpseCount);
+
+    // ── Crew emoticons in base name header (screenshot: small colored faces per crew member) ──
+    if (this.crewEmoticons) {
+      while (this.crewEmoticons.firstChild) this.crewEmoticons.removeChild(this.crewEmoticons.firstChild);
+      for (const c of aliveChars) {
+        const face = document.createElement('img');
+        let iconName: string;
+        if (c.nMorale <= 10) iconName = 'ui_dialogicon_bigfrown';
+        else if (c.nMorale <= 50) iconName = 'ui_dialogicon_frown';
+        else if (c.nMorale <= 70) iconName = 'ui_dialogicon_meh';
+        else if (c.nMorale <= 90) iconName = 'ui_dialogicon_smile';
+        else iconName = 'ui_dialogicon_bigsmile';
+        face.src = `assets/ui/hud/${iconName}.png`;
+        face.style.cssText = 'width:20px;height:20px;filter:sepia(1) saturate(5) hue-rotate(5deg);';
+        this.crewEmoticons.appendChild(face);
+      }
+    }
 
     // ── Inspector replaces sidebar (Lua: inspector takes over left panel) ──
     const inspectorActive = this.inspectorPanel.hasEntity();
