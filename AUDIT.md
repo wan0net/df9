@@ -86,7 +86,7 @@
 | C-38 | ~~MAJOR~~ DONE | **~~SPACE tiles block line of sight~~** | Fixed: removed SPACE tile LoS block in `CombatSystem.ts`. |
 | C-39 | ~~MAJOR~~ DONE | **~~Melee 50% stun chance is invented~~** | Fixed: removed invented melee stun in `CombatSystem.ts`. |
 | C-40 | ~~MAJOR~~ DONE | **~~ArmorLevel2 dodge double-applied~~** | Fixed: removed separate dodge roll in `CombatSystem.ts`. |
-| C-41 | MODERATE | **Stunner incapacitation wrong** | TS sets HP=10 and `bIncapacitated`. Lua creates a `KnockedOut` malady instance. Different recovery mechanics. |
+| C-41 | ~~MODERATE~~ DONE | **~~Stunner incapacitation wrong~~** | Fixed: stunner now infects with `KnockedOut` malady in addition to setting incapacitated. |
 | C-42 | MODERATE | **`LaserPistol` / `TurretLaser` invented** | Not in Lua WeaponData.lua. |
 | C-43 | MINOR | **Rey5w0rd/Sonicdirk range unused** | Both have `nRange: 3` but `ATTACK_TYPE.Grapple` skips range check, so range is ignored. |
 

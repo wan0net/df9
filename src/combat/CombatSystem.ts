@@ -4,6 +4,7 @@
  */
 
 import { Character } from '../characters/Character';
+import { Malady } from '../malady/Malady';
 import {
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, TEAM_ID_PLAYER_ABANDONED,
   HUMAN_MELEE_DAMAGE, MELEE_RANGE, EMERGENCY,
@@ -426,10 +427,11 @@ export class CombatSystem {
     // C-40: Removed separate ArmorLevel2 dodge — Lua only uses damage reduction (0.5)
     defender.takeDamage(effectiveDamage, damageType);
     if (!defender.isAlive()) {
-      // Stunner damage type → incapacitate instead of kill (Lua Character.lua:5592-5617)
+      // C-41: Stunner → apply KnockedOut malady (Lua creates malady, not just flag)
       if (damageType === DAMAGE_TYPE.Stunner) {
         defender.setHP(10);
         defender.bIncapacitated = true;
+        Malady.infectCharacter(defender, 'KnockedOut');
         return false;
       }
       // C-39: Removed invented 50% melee stun — not in Lua
