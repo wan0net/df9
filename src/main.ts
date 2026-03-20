@@ -44,6 +44,7 @@ import { Lighting } from './lighting/Lighting';
 import { line as locLine, getLanguage, getAvailableLanguages } from './localization/Localization';
 import { DialogSystem } from './ui/DialogSystem';
 import { EventController } from './events/EventController';
+import { MeteorEvent } from './events/MeteorEvent';
 import { Fire } from './hazards/Fire';
 import { ProjectileManager } from './hazards/Projectile';
 import { SaveLoadSystem } from './save/SaveLoad';
@@ -85,7 +86,7 @@ import { SaveSlotPanel } from './ui/SaveSlotPanel';
 import { EmergencyBeacon } from './combat/EmergencyBeacon';
 import { SquadList } from './combat/SquadList';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
-import { CAUSE_OF_DEATH, FACTION_BEHAVIOR, UNEMPLOYED } from './characters/CharacterConstants';
+import { CAUSE_OF_DEATH, FACTION_BEHAVIOR, UNEMPLOYED, TEAM_ID_DEBUG_MONSTER, RACE_MONSTER } from './characters/CharacterConstants';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
 import { DerelictSystem } from './events/DerelictSystem';
 import { DockingSystem } from './docking/DockingSystem';
@@ -1273,6 +1274,48 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           eventController.dialogSystem.bringToFront();
         }
       }
+    },
+    onSpawnRaiders: () => {
+      const count = eventController.getScaledRaiderCount();
+      const hp = eventController.getScaledRaiderHP();
+      characterManager.spawnHostiles(count, hp);
+      Base.addAlert('hostile', `Disaster: ${count} raiders spawned!`);
+    },
+    onStartFire: () => {
+      const rooms = roomManager.getRooms();
+      if (rooms.length === 0) { Base.addAlert('system', 'No rooms to start fire in'); return; }
+      const room = rooms[Math.floor(Math.random() * rooms.length)];
+      if (room.tiles.length === 0) return;
+      const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      fire.startFire(tile.x, tile.y);
+      Base.addAlert('fire', `Disaster: Fire started at (${tile.x}, ${tile.y})!`);
+    },
+    onMeteorShower: () => {
+      const meteorEvent = new MeteorEvent(
+        eventController.getDifficulty(),
+        undefined,
+        undefined,
+        (tx: number, ty: number) => grid.get(tx, ty),
+      );
+      meteorEvent.onMeteorImpact = (tx: number, ty: number, nSize: number, nDamage: number) => {
+        eventController.onMeteorLand?.(tx, ty, nSize, nDamage);
+      };
+      eventController.injectEvent(meteorEvent);
+      Base.addAlert('meteor', 'Disaster: Meteor shower incoming!');
+    },
+    onSpawnMonster: () => {
+      const rooms = roomManager.getRooms();
+      if (rooms.length === 0) { Base.addAlert('system', 'No rooms to spawn monster in'); return; }
+      const room = rooms[Math.floor(Math.random() * rooms.length)];
+      if (room.tiles.length === 0) return;
+      const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      const char = characterManager.spawnCharacterAt(tile.x, tile.y);
+      char.tStats.nTeam = TEAM_ID_DEBUG_MONSTER;
+      char.tStats.nRace = RACE_MONSTER;
+      char.tStats.sName = 'Monster';
+      char.tStats.nHP = 200;
+      char.tStats.nMaxHP = 200;
+      Base.addAlert('hostile', `Disaster: Monster spawned at (${tile.x}, ${tile.y})!`);
     },
   });
 

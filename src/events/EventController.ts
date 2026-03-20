@@ -194,6 +194,12 @@ export class EventController implements TickableSystem {
     }
   }
 
+  /** Inject an event directly (used by disaster menu). Replaces current event. */
+  injectEvent(event: Event) {
+    this.currentEvent = event;
+    this.currentEventEntry = null;
+  }
+
   /** Called when the current event finishes. Regenerates forecast and pops next. */
   private _eventCompleted() {
     const entry = this.currentEventEntry;
