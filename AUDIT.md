@@ -82,7 +82,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| C-37 | MAJOR | **No bravery gating on combat** | Lua has 3 attack tiers (RangedAttack/Attack/AttackFallback) with bravery thresholds. TS offers a single AttackEnemy to all characters regardless of bravery. Pacifist characters attack enemies. |
+| C-37 | ~~MAJOR~~ DONE | **~~No bravery gating on combat~~** | Fixed: 3-tier bravery scoring (ranged/brave/fallback) in CharacterManager. |
 | C-38 | ~~MAJOR~~ DONE | **~~SPACE tiles block line of sight~~** | Fixed: removed SPACE tile LoS block in `CombatSystem.ts`. |
 | C-39 | ~~MAJOR~~ DONE | **~~Melee 50% stun chance is invented~~** | Fixed: removed invented melee stun in `CombatSystem.ts`. |
 | C-40 | ~~MAJOR~~ DONE | **~~ArmorLevel2 dodge double-applied~~** | Fixed: removed separate dodge roll in `CombatSystem.ts`. |
@@ -181,7 +181,7 @@
 |---|-----|-------|--------|
 | E-10 | ~~MAJOR~~ DONE | **~~BreachingEvent spawns exactly 1 raider~~** | Fixed: now uses `getScaledRaiderCount()` (1-5 by difficulty). |
 | E-11 | MAJOR | **No BreachShip visual** | Lua has full cinematic: fly-in, drill animation, ladder, raiders climb out with 5s gaps. TS plays two sounds and waits. |
-| E-12 | MAJOR | **Default raider count wrong** | TS: 2–4 raiders. Lua: 1 at low difficulty (<0.2), scaling up. |
+| E-12 | ~~MAJOR~~ DONE | **~~Default raider count wrong~~** | Fixed: default changed to 1; EventController provides scaled count. |
 | E-13 | ~~MAJOR~~ DONE | **~~BreachingEvent `nDefaultWeight` wrong~~** | Fixed: changed to 10 in `EventData.ts`. |
 | E-14 | MODERATE | **No target tile selection** | Lua picks a safe room tile for breach point. TS has no tile-based targeting. |
 
@@ -249,11 +249,11 @@
 | M-2 | ~~CRITICAL~~ DONE | **~~Doctors never cure diseases~~** | Fixed: `FieldScanAndHeal.ts` and `BedHeal.ts` now call `Malady.diagnoseMalady()` and `Malady.cureMalady()`. |
 | M-3 | ~~CRITICAL~~ DONE | **~~`bRefuseDoctor` / `bHideSigns` never written~~** | Fixed: `Malady.ts` sets these flags when malady becomes symptomatic. `Character.ts` has fields. |
 | M-4 | ~~MAJOR~~ DONE | **~~`CheckInToHospital` guard missing~~** | Fixed: `tickMaladies()` returns early when character task is CheckInToHospital. |
-| M-5 | MAJOR | **Thing/Parasite spawn timers wrong** | TS uses `Math.random() < 0.0067` every tick with no timer. Lua uses 15-second cooldown. Parasite also incorrectly has 10% random gate (Lua always spawns). Actual spawn rate is much higher than intended. |
-| M-6 | MAJOR | **`getFriendlyName` returns strain key** | Returns `"Rhinovirus0"` instead of the generated friendly name like `"Cosmic Flu"`. |
-| M-7 | MAJOR | **Sneeze spread range too large** | TS spreads in 10x10 box globally. Lua spreads in 5-tile horizontal strip within same room only. |
-| M-8 | MAJOR | **Immigration disease selection unweighted** | Should use `nChanceOfAffliction` as weighted probability. All diseases equally likely instead of Rhinovirus (30) being 3x more likely than Parasite (10). |
-| M-9 | MAJOR | **Staged disease end time wrong** | TS sets `nMaladyEnd` at construction for ALL diseases. Lua only sets it for non-staged diseases. Staged diseases can expire before reaching final stage. |
+| M-5 | ~~MAJOR~~ DONE | **~~Thing/Parasite spawn timers wrong~~** | Fixed: 15s cooldown timer; Parasite always spawns, Thing has 10% chance. |
+| M-6 | ~~MAJOR~~ DONE | **~~`getFriendlyName` returns strain key~~** | Fixed: returns `sFriendlyName` from strain data. |
+| M-7 | ~~MAJOR~~ DONE | **~~Sneeze spread range too large~~** | Fixed: 5-tile horizontal strip, same room only. |
+| M-8 | ~~MAJOR~~ DONE | **~~Immigration disease selection unweighted~~** | Fixed: uses weighted `nChanceOfAffliction` selection. |
+| M-9 | ~~MAJOR~~ DONE | **~~Staged disease end time wrong~~** | Fixed: only sets `nMaladyEnd` for non-staged diseases. |
 | M-10 | MODERATE | **Fire special calls `damage()` not `catchFire()`** | Stub deals damage directly instead of starting a fire at the character's location. |
 | M-11 | MODERATE | **Doctor zero-infection during treatment missing** | Lua: doctors doing FieldScanAndHeal/BedHeal have 0% infection. TS only applies 0.5x multiplier. |
 | M-12 | MODERATE | **`tImmuneRaces` never checked in spread** | Race-based immunity defined in data but never used in spread logic. |
@@ -431,7 +431,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| R-1 | CRITICAL | **Skeletal animation permanently disabled** | `stripSkinning()` converts all SkinnedMesh to static Mesh. 140 animation clips in Citizen_Base.glb are loaded but never played. All animation is procedural (walk bob, breathe). Lua uses full skeletal animation. |
+| R-1 | ~~CRITICAL~~ PARTIAL | **Skeletal animation** | Full skeletal anim has Three.js/asset issues. Added procedural death pose (90° rotation). Characters lie flat when dead instead of freezing upright. Full skeleton work deferred. |
 | R-2 | MAJOR | **Only 2 of 5 skin tone variants used** | `toneIdx = (charId % 2) + 1`. Assets have `_base_01` through `_base_05`. Lua cycles through all 5. |
 | R-3 | MAJOR | **Alien races render as humans** | `getVisibleSubsets()` uses `char.id % 2` for male/female. Ignores `tStats.nRace`. Cat, Jelly, Tobian, Birdshark, Shamon, Chicken all look human. |
 | R-4 | MAJOR | **No held-item rendering** | Lua renders weapons/tools in character hands. TS shows nothing. |
