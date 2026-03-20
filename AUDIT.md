@@ -171,7 +171,7 @@
 |---|-----|-------|--------|
 | E-5 | MAJOR | **No spacebus animation** | Lua has full ship fly-in over 1.5s, pause 2s, fly-away 6s. TS just waits 10s. |
 | E-6 | MAJOR | **No immigration character lineup** | Lua shows arriving immigrants as 3D characters in a lineup before dialog. TS shows only text. |
-| E-7 | MAJOR | **Spawn position is (0,0)** | All immigrants spawn at tile (0,0). Lua spawns at random offset from docking position with retry logic. |
+| E-7 | ~~MAJOR~~ DONE | **~~Spawn position is (0,0)~~** | Fixed: DockingSystem/DerelictSystem now spawn at random room tiles. |
 | E-8 | MODERATE | **Dialog not blocking** | Lua pauses during dialog with 4s post-dialog delay. TS shows dialog non-blocking. |
 | E-9 | MINOR | **Alert click-to-accelerate missing** | Lua: clicking alert starts event immediately. TS has no click-through. |
 
@@ -231,7 +231,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-32 | CRITICAL | **BrigZone entirely missing** | No `BrigZone.ts` equivalent. No prisoner capture, slot assignment, or `assignedToBrig` character status. Brig is a zone label with no functionality. |
+| E-32 | ~~CRITICAL~~ DONE | **~~BrigZone entirely missing~~** | Fixed: full BrigZone with prisoner slots, Cuff→brig assignment, door access restriction, updatePrison validation. |
 
 ### 3.10 Squad System
 
