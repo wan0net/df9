@@ -147,6 +147,9 @@ const SPRITE_ALIASES: Record<string, string> = {
   // Special
   SpaceshipEngine: 'ShipEngine',
   BaseSeed: 'seedpod01',
+  // R-22: Lua uses 'SpaceTree_Healthy.png' with .png suffix
+  'SpaceTree_Healthy.png': 'space_tree',
+  SpaceTree_Healthy: 'space_tree',
 };
 
 /** Look up a sprite frame by name. Returns undefined if not found.

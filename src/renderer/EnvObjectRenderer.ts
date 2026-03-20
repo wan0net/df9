@@ -116,13 +116,17 @@ export class EnvObjectRenderer {
 
   /** Update an object's visual state based on built status and condition. */
   updateObject(id: string, built: boolean, condition: number, spriteName?: string,
-    bHasPower?: boolean, bActive?: boolean) {
+    bHasPower?: boolean, bActive?: boolean, bSlatedForVaporize?: boolean) {
     const obj = this.objects.get(id);
     if (!obj) return;
 
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
 
-    if (!built) {
+    // R-11: Slated for vaporize — red tint (Lua pendingVaporizeColor = Gui.RED)
+    if (bSlatedForVaporize) {
+      mat.opacity = 0.8;
+      mat.color.setHex(0xff2222);
+    } else if (!built) {
       mat.opacity = 0.3;
       mat.color.setHex(0xffffff);
     } else if (condition <= 0) {

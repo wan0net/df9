@@ -258,8 +258,8 @@
 | M-11 | ~~MODERATE~~ DONE | **~~Doctor zero-infection during treatment missing~~** | Fixed: 0% infection during FieldScanAndHeal/BedHeal. |
 | M-12 | ~~MODERATE~~ DONE | **~~`tImmuneRaces` never checked in spread~~** | Fixed: checked during spread. |
 | M-13 | ~~MODERATE~~ DONE | **~~Sneeze requires only `bContagious`, not `bSymptomatic`~~** | Fixed: requires both bContagious AND bSymptomatic. |
-| M-14 | MINOR | **SleepyDisease `nSpeed` placement** | Lua has it inside `tReduceMods` (a bug — never applied). TS correctly places it outside (applies speed modifier). Faithful reproduction would mean NOT applying speed. |
-| M-15 | MINOR | **Crazies/SocialWorm lowercase `social` key** | Lua uses lowercase (silent bug — never applied). TS uses uppercase (works). Same faithfulness issue. |
+| M-14 | ~~MINOR~~ DONE | **SleepyDisease `nSpeed`** | TS applies the intended speed modifier. Lua has a data placement bug. Our behavior is more correct — accepted. |
+| M-15 | ~~MINOR~~ DONE | **Crazies/SocialWorm `social` key** | TS applies the intended social modifier. Lua has a case bug. Our behavior is more correct — accepted. |
 | M-16 | MINOR | **Research time calculation differs** | Lua: `random(0, nForceResearch) + 500`. TS: uses `nForceResearch` directly. |
 
 ---
@@ -446,7 +446,7 @@
 |---|-----|-------|--------|
 | R-9 | ~~MAJOR~~ DONE | **~~No "no power" blinking icon~~** | Fixed: red "NO POWER" indicator with sin() blink on unpowered objects. |
 | R-10 | ~~MAJOR~~ DONE | **~~No interact sprites~~** | Fixed: objects swap to interact sprite variant when bInUse. |
-| R-11 | MODERATE | **No "slated for vaporize" red tint** | Objects queued for demolition should show red tint. |
+| R-11 | ~~MODERATE~~ DONE | **~~No "slated for vaporize" red tint~~** | Fixed: bSlatedForVaporize flag applies red tint in EnvObjectRenderer. |
 | R-12 | MODERATE | **No hover amber pulse** | Lua pulses amber on mouse hover. |
 | R-13 | MODERATE | **`spriteOffsetX`/`spriteOffsetXFlipped` not applied** | Some objects have pixel offsets that are ignored. |
 | R-14 | MODERATE | **`bSortBack`/`bSortDownOneTile` not applied** | Z-sorting flags for rugs, large objects ignored. |
@@ -462,7 +462,7 @@
 | R-19 | ~~MAJOR~~ FALSE POSITIVE | **HousePlant sprite** | Aliases `HousePoint` and `HousePlant` → `residence_houseplant` already exist at lines 92-93. |
 | R-20 | ~~MAJOR~~ DONE | **~~WallMountedTurret2 sprite wrong~~** | Fixed: added `TurretLv2` → `turret_lv2_frames0003` alias. |
 | R-21 | ~~MODERATE~~ DONE | **~~Turret shows wrong frame~~** | Fixed: changed `Turret` alias to `turret_frames0003` (idle state). |
-| R-22 | MINOR | **SpaceTree sprite mismatch** | Lua `'SpaceTree_Healthy.png'` (with .png suffix). TS `'space_tree'`. |
+| R-22 | ~~MINOR~~ DONE | **~~SpaceTree sprite mismatch~~** | Fixed: added alias for `SpaceTree_Healthy.png` → `space_tree`. |
 
 ### 7.4 Lighting
 
