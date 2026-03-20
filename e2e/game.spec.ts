@@ -4978,14 +4978,16 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.shipType).toBe('immigration');
     expect(result.immigrants).toBeGreaterThan(0);
 
-    // Immigration should increase population (needs game to be running)
+    // Immigration should increase population
+    // Use poll to handle timing — the character spawns async via docking system
     await page.evaluate(() => {
       const gr = (window as any).__df9?._gameRules;
       if (gr) { gr.bRunning = true; gr.playerTimeScale = 1; }
     });
-    await page.waitForTimeout(1000);
-    const newPop = await df9(page).population();
-    expect(newPop).toBeGreaterThan(initialPop);
+    await expect.poll(async () => {
+      return await df9(page).population();
+    }, { timeout: 5000, message: 'Expected population to increase after immigration' })
+      .toBeGreaterThan(initialPop);
   });
 
   test('dialogue system: show speech bubble', async () => {
