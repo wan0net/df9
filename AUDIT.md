@@ -35,7 +35,7 @@
 | C-2 | ~~CRITICAL~~ DONE | **~~Task reassignment 1s delay~~** | Fixed: `CharacterManager.ts` immediately reassigns on task completion via `immediateAIQueue`. |
 | C-3 | ~~CRITICAL~~ DONE | **~~No survival threat preemption~~** | Fixed: `CharacterManager.ts` adds `survivalTimer` per character (0.5–1.5s) that interrupts tasks for emergencies. |
 | C-4 | MAJOR | **Needs scoring uses linear urgency** | Lua uses sigmoid curve functions (`Needs.scoreFn`) for utility scoring. TS uses linear `(100 - currentValue) / 200 * amount`. Edge-case decisions (partial need satisfaction) will differ. |
-| C-5 | MAJOR | **No continuous job XP gain** | Lua awards `JOB_EXPERIENCE_RATE * dt` every frame while performing work-shift tasks. TS never calls this — characters never improve at their jobs through work. |
+| C-5 | ~~MAJOR~~ DONE | **~~No continuous job XP gain~~** | Fixed: `CharacterManager.ts` now awards `JOB_EXPERIENCE_RATE * dt` per frame while on duty. |
 | C-6 | MAJOR | **Hunger starvation priority elevation missing** | Lua elevates eating tasks to `SURVIVAL_NORMAL` priority when character is starving. TS does not — starving characters may choose other tasks over eating. |
 | C-7 | MODERATE | **No `getScaledDutyScore`** | Lua specially scales Duty need scores for work-shift tasks. TS has no equivalent. |
 | C-8 | MODERATE | **Chat cooldown not enforced** | `CHAT_COOLDOWN = 10` exists but is never checked before offering Chat task. Characters can chat with the same person repeatedly. |
@@ -117,7 +117,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| O-10 | MAJOR | **`Room.hasPower()` returns full-power-only** | Lua `hasPower()` returns true if ANY power supplied OR room can provide power. TS returns true only at full power. Rooms with partial power show as unpowered. |
+| O-10 | ~~MAJOR~~ DONE | **~~`Room.hasPower()` returns full-power-only~~** | Fixed: `hasPowerFlag` now returns true if ANY power OR produces power. Added `hasFullPower`. |
 | O-11 | MODERATE | **`canProvidePower()` guard missing** | `updateEmergency` shows LOWPOWER for power-producing rooms that can't fully self-supply. Lua exempts them. |
 | O-12 | MODERATE | **No `g_PowerHoliday` in EnvObject** | Global power override for tutorials/debug not implemented. |
 | O-13 | MINOR | **No sabotage timer** | `nTempPowerLossEnd` not implemented. Sabotage power loss is permanent until manually repaired. |
@@ -247,8 +247,8 @@
 |---|-----|-------|--------|
 | M-1 | ~~CRITICAL~~ DONE | **~~Disease need modifiers never applied~~** | Fixed: `Needs.ts` now calls `Malady.getNeedsReduceMods()` and applies modifiers to decay rates. |
 | M-2 | ~~CRITICAL~~ DONE | **~~Doctors never cure diseases~~** | Fixed: `FieldScanAndHeal.ts` and `BedHeal.ts` now call `Malady.diagnoseMalady()` and `Malady.cureMalady()`. |
-| M-3 | CRITICAL | **`bRefuseDoctor` / `bHideSigns` never written** | Thing and SocialWorm carriers accept doctor treatment and show disease in UI, breaking intended "Things refuse healing" mechanic. |
-| M-4 | MAJOR | **`CheckInToHospital` guard missing** | Lua freezes malady progression during hospitalization. TS ticks diseases during hospital stays. |
+| M-3 | ~~CRITICAL~~ DONE | **~~`bRefuseDoctor` / `bHideSigns` never written~~** | Fixed: `Malady.ts` sets these flags when malady becomes symptomatic. `Character.ts` has fields. |
+| M-4 | ~~MAJOR~~ DONE | **~~`CheckInToHospital` guard missing~~** | Fixed: `tickMaladies()` returns early when character task is CheckInToHospital. |
 | M-5 | MAJOR | **Thing/Parasite spawn timers wrong** | TS uses `Math.random() < 0.0067` every tick with no timer. Lua uses 15-second cooldown. Parasite also incorrectly has 10% random gate (Lua always spawns). Actual spawn rate is much higher than intended. |
 | M-6 | MAJOR | **`getFriendlyName` returns strain key** | Returns `"Rhinovirus0"` instead of the generated friendly name like `"Cosmic Flu"`. |
 | M-7 | MAJOR | **Sneeze spread range too large** | TS spreads in 10x10 box globally. Lua spreads in 5-tile horizontal strip within same room only. |
