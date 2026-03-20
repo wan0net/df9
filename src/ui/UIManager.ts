@@ -4,7 +4,7 @@
  * Integrates InspectorPanel and JobRoster.
  */
 
-import { GameRules } from '../core/GameRules';
+import { GameRules, RECYCLERS_PER_CITIZEN } from '../core/GameRules';
 import { Base } from '../core/Base';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 import { tObjects, getMenuForZone } from '../envobjects/EnvObjectData';
@@ -1739,10 +1739,17 @@ export class UIManager {
       this.wallsBtnInactive, this.wallsBtnActive, GameRules.isCutawayModeEnabled(),
     );
 
-    // ── Capacity (pop / bed count) ────────────────────────
+    // ── Capacity (Lua GameRules:getCapacity — OxygenRecycler count) ──
     const pop = this.getPopulation();
-    const bedCount = envObjects.filter(o => o.sName === 'Bed' && o.bBuilt).length;
-    const maxCap = bedCount > 0 ? bedCount : Math.max(pop * 3, 1);
+    // Lua: capacity = sum of recyclers * RECYCLERS_PER_CITIZEN * level
+    let maxCap = 0;
+    for (const o of envObjects) {
+      if (!o.bBuilt) continue;
+      if (o.sName === 'OxygenRecycler') maxCap += RECYCLERS_PER_CITIZEN;
+      else if (o.sName === 'OxygenRecyclerLevel2') maxCap += RECYCLERS_PER_CITIZEN * 2;
+      else if (o.sName === 'OxygenRecyclerLevel3') maxCap += RECYCLERS_PER_CITIZEN * 3;
+      else if (o.sName === 'OxygenRecyclerLevel4') maxCap += RECYCLERS_PER_CITIZEN * 4;
+    }
     this.popText.textContent = String(pop);
     this.capacityText.textContent = `/${maxCap}`;
     if (pop > maxCap) {
