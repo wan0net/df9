@@ -270,6 +270,10 @@ export class UIManager {
     onCancelBuild?: () => void;
     hasPendingBuild?: () => boolean;
     onAlertClick?: (alertType: string) => void;
+    onSpawnRaiders?: () => void;
+    onStartFire?: () => void;
+    onMeteorShower?: () => void;
+    onSpawnMonster?: () => void;
   }) {
     this.container = container;
     this.getBuildMode = callbacks.getBuildMode;
@@ -300,6 +304,10 @@ export class UIManager {
     this.onCancelBuild = callbacks.onCancelBuild ?? null;
     this.hasPendingBuild = callbacks.hasPendingBuild ?? null;
     this.onAlertClick = callbacks.onAlertClick ?? null;
+    this.onSpawnRaiders = callbacks.onSpawnRaiders ?? null;
+    this.onStartFire = callbacks.onStartFire ?? null;
+    this.onMeteorShower = callbacks.onMeteorShower ?? null;
+    this.onSpawnMonster = callbacks.onSpawnMonster ?? null;
 
     this.createUI(callbacks.onSetJob, callbacks);
   }
@@ -822,7 +830,10 @@ export class UIManager {
           return;
         }
         if (def.action === 'disaster') {
-          // Lua: opens disaster submenu — stub for now
+          this.disasterSubActive = !this.disasterSubActive;
+          if (this.disasterSubActive) {
+            this.setBuildMode('none');
+          }
           return;
         }
         // Standard toggle

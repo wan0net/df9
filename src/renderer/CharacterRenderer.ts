@@ -707,6 +707,16 @@ export class CharacterRenderer {
       object = this.createBoxPlaceholder(char);
       this.pendingUpgrade.push(char);
       loadSpacesuitModel().then(() => this.upgradePending());
+    } else if (char.tStats.nRace === RACE_MONSTER && !cachedBadAlien && !badAlienLoadFailed) {
+      // R-5: Monster model not loaded yet — placeholder until ready
+      object = this.createBoxPlaceholder(char);
+      this.pendingUpgrade.push(char);
+      loadBadAlienModel().then(() => this.upgradePending());
+    } else if (char.tStats.nRace === RACE_KILLBOT && !cachedMurderRobot && !murderRobotLoadFailed) {
+      // R-5: Killbot model not loaded yet — placeholder until ready
+      object = this.createBoxPlaceholder(char);
+      this.pendingUpgrade.push(char);
+      loadMurderRobotModel().then(() => this.upgradePending());
     } else if (cachedCitizen && !citizenLoadFailed) {
       const result = this.createModel(char, char.bSpacewalking);
       modelGroup = result.group;
@@ -1073,6 +1083,16 @@ export class CharacterRenderer {
         remaining.push(char);
         continue;
       }
+      // R-5: If monster model not loaded yet, keep waiting
+      if (char.tStats.nRace === RACE_MONSTER && !cachedBadAlien && !badAlienLoadFailed) {
+        remaining.push(char);
+        continue;
+      }
+      // R-5: If killbot model not loaded yet, keep waiting
+      if (char.tStats.nRace === RACE_KILLBOT && !cachedMurderRobot && !murderRobotLoadFailed) {
+        remaining.push(char);
+        continue;
+      }
       // If citizen model not loaded yet, keep waiting
       if (!char.bSpacewalking && (!cachedCitizen || citizenLoadFailed)) {
         remaining.push(char);
@@ -1138,25 +1158,29 @@ export class CharacterRenderer {
     // Rotate model to face movement direction (Lua: 30° X-tilt, Y = facing angle)
     if (handle.is3D && handle.modelGroup.children.length > 0) {
       const model = handle.modelGroup.children[0];
+      // R-5: Per-race model scale (Bad_Alien is 1.3× larger in Lua)
+      const baseScale = char.tStats.nRace === RACE_MONSTER ? BAD_ALIEN_SCALE
+        : char.tStats.nRace === RACE_KILLBOT ? MURDER_ROBOT_SCALE
+        : MODEL_SCALE;
 
       // Vacuum death animation: shrink + spin (Lua Character:_vacuumDisappear)
       if (char.nVacuumScale >= 0) {
-        const s = Math.max(0, char.nVacuumScale) * MODEL_SCALE;
+        const s = Math.max(0, char.nVacuumScale) * baseScale;
         model.scale.set(s, s, s);
         model.rotation.x = 30 * (Math.PI / 180);
         model.rotation.y = char.facingAngle + char.nVacuumRotation;
         model.rotation.z = char.nVacuumRotation;
       } else if (!char.isAlive()) {
-        // Procedural death pose: tilt 90° on Z to lie flat on ground.
-        // Applied regardless of whether skeletal death clip is playing,
-        // giving immediate visual feedback for dead characters.
-        model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
-        model.rotation.x = 30 * (Math.PI / 180);
+        // R-6: Procedural death pose — rotate 90° on X to lie flat + flatten Y.
+        // Combined with the isometric 30° tilt, this makes the character appear
+        // to be lying on the ground, clearly dead.
+        model.scale.set(baseScale, baseScale * 0.3, baseScale);
+        model.rotation.x = 30 * (Math.PI / 180) + Math.PI / 2; // 30° iso + 90° lie flat
         model.rotation.y = char.facingAngle;
-        model.rotation.z = Math.PI / 2; // 90° — lying flat
+        model.rotation.z = 0;
       } else {
         // Normal: Lua setRot(30, dirAngle, 0) — 30° isometric tilt on X-axis
-        model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+        model.scale.set(baseScale, baseScale, baseScale);
         model.rotation.x = 30 * (Math.PI / 180); // 30° = 0.5236 rad
         model.rotation.y = char.facingAngle;
         model.rotation.z = 0;
@@ -1200,9 +1224,14 @@ export class CharacterRenderer {
   }
 
   /** Find the best matching animation clip for a state. */
-  private findClip(state: string, spacesuit: boolean): THREE.AnimationClip | null {
+  private findClip(state: string, spacesuit: boolean, race?: number): THREE.AnimationClip | null {
     const candidates = STATE_CLIP_MAP[state] || [];
-    const clips = spacesuit ? spacesuitAnimClips : citizenAnimClips;
+    // R-5: Select clip pool based on model type
+    let clips: THREE.AnimationClip[];
+    if (race === RACE_MONSTER) clips = badAlienAnimClips;
+    else if (race === RACE_KILLBOT) clips = murderRobotAnimClips;
+    else if (spacesuit) clips = spacesuitAnimClips;
+    else clips = citizenAnimClips;
 
     for (const name of candidates) {
       const clip = clips.find(c => c.name === name);
@@ -1224,7 +1253,7 @@ export class CharacterRenderer {
     if (state !== handle.currentAnimState) {
       handle.currentAnimState = state;
 
-      const clip = this.findClip(state, handle.showingSpacesuit);
+      const clip = this.findClip(state, handle.showingSpacesuit, char.tStats.nRace);
       if (clip && handle.mixer) {
         if (handle.currentAction) {
           handle.currentAction.fadeOut(0.2);
