@@ -2684,6 +2684,8 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   test('Room: no-generator uses VACUUM lighting, insufficient uses LOWPOWER', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
+      // Ensure we have a room
+      const tiles = df9.buildSealedRoom(150, 150, 2);
       const rooms = df9._roomMgr?.getRooms() ?? [];
       if (rooms.length === 0) return null;
       const room = rooms[0];
@@ -2697,8 +2699,8 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       room.nPowerSupply = 0;
       room.updateEmergency();
       const vacuumScheme = room.nLightingScheme; // should be 3 (VACUUM)
-      // Insufficient power
-      room.nPowerOutput = 5;
+      // Insufficient power (room does NOT produce power — nPowerOutput=0)
+      room.nPowerOutput = 0;
       room.nPowerDraw = 10;
       room.nPowerSupply = 5;
       room.updateEmergency();
