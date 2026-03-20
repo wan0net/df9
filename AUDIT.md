@@ -528,7 +528,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | G-7 | ~~MAJOR~~ DONE | **~~Pub `hasBar()` never auto-set~~** | Fixed: `EnvObjectManager.createObject/removeObject` now auto-sets `hasBar` when Bar placed/removed in Pub zone. |
-| G-8 | MAJOR | **WorkOutInGym not zone-gated** | Lua only offers via FitnessZone. TS offers unconditionally in any room. |
+| G-8 | ~~MAJOR~~ DONE | **~~WorkOutInGym not zone-gated~~** | Fixed: now requires gym equipment to be in FITNESS zone. |
 | G-9 | MAJOR | **Airlock functional check simplified** | Only checks `room.sealed`. Missing: AirlockLocker present, all doors are Airlock type, space-access validation. |
 | G-10 | MODERATE | **No HappyBot subclass** | Passive morale radius effect (`nRange`) not implemented. |
 | G-11 | MODERATE | **No RefineryDropoff subclass** | Activity availability not gated on `isFunctioning()`. |

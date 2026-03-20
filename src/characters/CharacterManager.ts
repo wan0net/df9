@@ -1452,9 +1452,11 @@ export class CharacterManager {
       ));
     }
 
-    // ── Hobby: Work out in gym (with gym equipment) ──────────
+    // ── Hobby: Work out in gym (with gym equipment in FITNESS zone — G-8) ──
     for (const gym of EnvObjectManager.getObjectsByType('GymEquipment')) {
       if (!gym.bBuilt || !gym.isFunctioning()) continue;
+      // G-8: Lua only offers WorkOutInGym via FitnessZone — require FITNESS zone
+      if (!gym.rRoom || gym.rRoom.zone !== ZoneType.FITNESS) continue;
       const opt = new ActivityOption(
         new WorkOutInGym(),
         gym.tileX, gym.tileY,
