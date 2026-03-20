@@ -131,6 +131,10 @@ export class Character {
   tAssignedToBrig: number | null = null;
   /** Currently imprisoned in a brig room ID (Lua tStatus.tImprisonedIn). null = not imprisoned. */
   tImprisonedIn: number | null = null;
+  /** Conversion countdown for imprisoned raiders (Lua tStats.nTimeToConvert).
+   *  Decremented once per survival tick while in prison with full visibility and low anger.
+   *  null = not a convertible raider. */
+  nTimeToConvert: number | null = null;
   /** Base founder (original 3 crew, Lua tStatus.bBaseFounder). */
   bBaseFounder = false;
   /** Immune to parasite (Lua tStatus.bImmuneToParasite). */

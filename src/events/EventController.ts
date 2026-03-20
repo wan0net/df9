@@ -609,34 +609,83 @@ export class EventController implements TickableSystem {
     }
   }
 
-  /** Fire the compound event (final siege). */
+  /** Fire the compound event (final siege).
+   *  Lua CompoundEvent.selectEvents: point budget = difficulty * 40 * (.7 + .3 * random).
+   *  Raiders cost 1-4 points (by challenge level), breach costs 1, meteor costs 4.
+   *  Events selected until points exhausted. Mega events get 100 points. */
   private fireCompoundEvent() {
     const doFireCompound = () => {
       const compound = new CompoundEvent();
+      const diff = this.getDifficulty();
+      const bMega = !this.bRanMegaEvent;
+      let nPoints = bMega ? 100 : diff * 40 * (0.7 + 0.3 * Math.random());
+      let bMeteorStrike = false;
 
-      const raiderEvent = new HostileImmigrationEvent(this.getScaledRaiderCount() + 2);
-      raiderEvent.onCompleteCallback = () => {
-        this.onHostileSpawn?.(raiderEvent.getRaiderCount(), this.getScaledRaiderHP());
+      // Weighted choices: meteor=1, breach=4, hostileImmigration=5
+      const choices: Record<string, number> = {
+        meteorEvents: 1,
+        breachingEvents: 4,
+        hostileImmigrationEvents: 5,
       };
 
-      const breachEvent = new BreachingEvent();
-      breachEvent.onCompleteCallback = () => {
-        this.onBreachWall?.();
-      };
+      while (nPoints > 0 || (!bMeteorStrike && bMega)) {
+        // Pick event type (weighted random, or force meteor if mega and low points)
+        let sChoice: string;
+        if (!bMeteorStrike && bMega && nPoints <= 4) {
+          sChoice = 'meteorEvents';
+        } else {
+          // Weighted random from choices
+          let totalW = 0;
+          for (const w of Object.values(choices)) totalW += w;
+          let roll = Math.random() * totalW;
+          sChoice = 'hostileImmigrationEvents'; // fallback
+          for (const [key, w] of Object.entries(choices)) {
+            roll -= w;
+            if (roll <= 0) { sChoice = key; break; }
+          }
+        }
 
-      const meteorEvent = new MeteorEvent(
-        this.getDifficulty(),
-        undefined,
-        undefined,
-        this.getTileType ?? undefined,
-      );
-      meteorEvent.onMeteorImpact = (tx, ty, nSize, nDamage) => {
-        this.onMeteorLand?.(tx, ty, nSize, nDamage);
-      };
+        if (sChoice === 'meteorEvents') {
+          bMeteorStrike = true;
+          nPoints -= 4;
+          delete choices['meteorEvents']; // only one meteor per compound
 
-      compound.addSubEvent(raiderEvent);
-      compound.addSubEvent(breachEvent);
-      compound.addSubEvent(meteorEvent);
+          const meteorEvent = new MeteorEvent(
+            diff, undefined, undefined,
+            this.getTileType ?? undefined,
+          );
+          meteorEvent.onMeteorImpact = (tx, ty, nSize, nDamage) => {
+            this.onMeteorLand?.(tx, ty, nSize, nDamage);
+          };
+          compound.addSubEvent(meteorEvent);
+        } else if (sChoice === 'breachingEvents') {
+          nPoints -= 1;
+
+          const breachEvent = new BreachingEvent();
+          breachEvent.onCompleteCallback = () => {
+            this.onBreachWall?.();
+          };
+          compound.addSubEvent(breachEvent);
+        } else {
+          // hostileImmigrationEvents — raiders cost 1-4 points based on challenge level
+          const challengeLevel = getChallengeLevel(diff);
+          let raiderCost: number;
+          if (challengeLevel > 0.6) {
+            raiderCost = 3;
+          } else if (challengeLevel > 0.2) {
+            raiderCost = 2;
+          } else {
+            raiderCost = 1;
+          }
+          nPoints -= raiderCost;
+
+          const raiderEvent = new HostileImmigrationEvent(this.getScaledRaiderCount());
+          raiderEvent.onCompleteCallback = () => {
+            this.onHostileSpawn?.(raiderEvent.getRaiderCount(), this.getScaledRaiderHP());
+          };
+          compound.addSubEvent(raiderEvent);
+        }
+      }
 
       compound.start(GameRules.simTime);
       this.currentEvent = compound;

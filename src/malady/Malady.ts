@@ -19,7 +19,7 @@ export interface CharacterLike {
   id: number;
   tileX: number;
   tileY: number;
-  tStats: { nTeam: number; nStatus: number; nHP: number; nJob: number };
+  tStats: { nTeam: number; nStatus: number; nHP: number; nJob: number; nRace: number };
   bSpacewalking: boolean;
   bSpacesuit: boolean;
   bRefuseDoctor: boolean;
@@ -27,6 +27,7 @@ export interface CharacterLike {
   maladies: MaladyInstance[];
   damage(amount: number, cause: number): void;
   kill(cause: number): void;
+  catchFire(): void;
   currentTask: { name?: string } | null;
 }
 
@@ -704,9 +705,7 @@ export const Malady = {
         if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
           tMalady.nNextSpawnAttempt = nElapsedTime + randRange(60, 300);
           if (Math.random() < 0.5) {
-            // Fire integration: would start fire at rChar's tile
-            // Stub: deal damage until Fire system is wired
-            rChar.damage(5, CAUSE_OF_DEATH.FIRE);
+            rChar.catchFire();
           }
         }
         break;
@@ -715,10 +714,11 @@ export const Malady = {
 
   // ── Contagion / Spread ──────────────────────────────────────
 
-  /** Get sneeze animation name if it's time to sneeze. */
+  /** Get sneeze animation name if it's time to sneeze.
+   *  Lua: requires bSymptomatic AND bSpreadSneeze (Malady.lua:681). */
   getSymptomAnim(rChar: CharacterLike): string | null {
     for (const m of rChar.maladies) {
-      if (m.bContagious && m.bSpreadSneeze && nElapsedTime >= m.nNextSneeze) {
+      if (m.bSymptomatic && m.bSpreadSneeze && nElapsedTime >= m.nNextSneeze) {
         return 'sneeze';
       }
     }
@@ -772,7 +772,10 @@ export const Malady = {
     }
   },
 
-  /** Core spread logic — matches Lua _testSpread. */
+  /** Core spread logic — matches Lua _testSpread.
+   *  Lua Malady.lua:756-796: gates by type (Disease vs WormParisite),
+   *  checks isImmuneTo (immune races + per-character immunity + already infected),
+   *  doctor half-chance + zero during treatment, environment scrubber mod. */
   _testSpread(
     tMalady: MaladyInstance,
     _rSource: CharacterLike,
@@ -783,6 +786,15 @@ export const Malady = {
 
     // Spacesuit blocks
     if (rTarget.bSpacesuit) return;
+
+    // M-12: tImmuneRaces check — if target's race is in the disease's immune list, skip
+    const def = MALADY_DEFS[tMalady.sMaladyType];
+    if (def?.tImmuneRaces && def.tImmuneRaces.length > 0) {
+      if (def.tImmuneRaces.includes(rTarget.tStats.nRace)) return;
+    }
+
+    // Already infected with the same disease type (different strain)
+    if (rTarget.maladies.some(m => m.sMaladyType === tMalady.sMaladyType)) return;
 
     // Immunity check
     if (Math.random() < tMalady.nImmuneChance) return;
@@ -798,6 +810,10 @@ export const Malady = {
       // Doctors get 50% reduced chance (for Disease type)
       if (rTarget.tStats.nJob === DOCTOR) {
         chance *= 0.5;
+        // M-11: Zero infection chance if doctor is performing treatment (Lua Malady.lua:767-768)
+        if (rTarget.currentTask?.name === 'FieldScanAndHeal' || rTarget.currentTask?.name === 'BedHeal') {
+          chance = 0;
+        }
       }
     }
 

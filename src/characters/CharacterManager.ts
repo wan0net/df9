@@ -13,12 +13,13 @@ import {
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
   JOB_EXPERIENCE_RATE, UNNECESSARY_SPACESUIT_REMOVE,
   RACE_KILLBOT,
+  ANGER_MAX,
 } from './CharacterConstants';
 import { SpatialAudio } from '../audio/SpatialAudio';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { RoomManager } from '../rooms/RoomManager';
-import { Room } from '../rooms/Room';
+import { Room, VISIBILITY_FULL } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
 import { findPath, WALKABLE_DEFAULT, WALKABLE_SPACEWALK } from '../pathfinding/AStar';
 import { INITIAL_CREW } from '../config';
@@ -606,6 +607,9 @@ export class CharacterManager {
       char.tStats.nMaxHP = hp;
       char.tStats.sName = `Raider ${i + 1}`;
       char.weapon = 'LaserPistol';
+      // Lua: nTimeToConvert = (1 - nAuthoritarian) * 600 (Character.lua:5344)
+      const auth = char.tStats.personality.nAuthoritarian ?? 0.5;
+      char.nTimeToConvert = (1 - auth) * 600;
 
       this.characterRenderer?.createCharacter(char);
       this.characters.push(char);
