@@ -209,6 +209,8 @@ export class UIManager {
 
   // Object placement cursor label (U-43)
   private objectCursorLabel!: HTMLDivElement;
+  private _lastMouseX = 0;
+  private _lastMouseY = 0;
 
   // Inspect sub-menu (screenshot: "Back" + ">> Inspect" replaces sidebar)
   private inspectSub!: HTMLDivElement;
@@ -1209,6 +1211,83 @@ export class UIManager {
     }
     this.uiRoot.appendChild(this.beaconSub);
 
+    // Disaster sub-menu — debug menu for triggering emergency scenarios
+    this.disasterSub = document.createElement('div');
+    this.disasterSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:5;background:rgba(0,0,0,0.95);pointer-events:auto;`;
+
+    // Cancel button
+    const disasterCancelEl = document.createElement('div');
+    disasterCancelEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+    const disasterCancelIcon = document.createElement('span');
+    disasterCancelIcon.textContent = '\u2716';
+    disasterCancelIcon.style.cssText = `font-size:24px;color:#f44;`;
+    const disasterCancelLbl = document.createElement('span');
+    disasterCancelLbl.textContent = line('HUDHUD019TEXT'); // "Done"
+    disasterCancelLbl.style.cssText = `font-size:40px;color:#f44;font-family:'Dosis',sans-serif;font-weight:600;`;
+    const disasterCancelHk = document.createElement('span');
+    disasterCancelHk.textContent = 'ESC';
+    disasterCancelHk.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;margin-left:auto;opacity:0.6;`;
+    disasterCancelEl.append(disasterCancelIcon, disasterCancelLbl, disasterCancelHk);
+    disasterCancelEl.addEventListener('click', () => {
+      SoundManager.playUI('UI_Select');
+      this.disasterSubActive = false;
+    });
+    disasterCancelEl.addEventListener('mouseenter', () => { disasterCancelEl.style.background = '#f44'; disasterCancelIcon.style.color = '#000'; disasterCancelLbl.style.color = '#000'; });
+    disasterCancelEl.addEventListener('mouseleave', () => { disasterCancelEl.style.background = 'transparent'; disasterCancelIcon.style.color = '#f44'; disasterCancelLbl.style.color = '#f44'; });
+    this.disasterSub.appendChild(disasterCancelEl);
+
+    // ">> Disasters" label
+    const disasterLabel = document.createElement('div');
+    disasterLabel.textContent = '>> ' + line('HUDHUD062TEXT');
+    disasterLabel.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`;
+    this.disasterSub.appendChild(disasterLabel);
+
+    // Disaster action buttons
+    const disasterBtns: { label: string; icon: string; action: () => void }[] = [
+      { label: 'Spawn Raiders', icon: '\u2694', action: () => { this.onSpawnRaiders?.(); } },
+      { label: 'Start Fire', icon: '\uD83D\uDD25', action: () => { this.onStartFire?.(); } },
+      { label: 'Meteor Shower', icon: '\u2604', action: () => { this.onMeteorShower?.(); } },
+      { label: 'Spawn Monster', icon: '\uD83D\uDC7E', action: () => { this.onSpawnMonster?.(); } },
+    ];
+    for (const db of disasterBtns) {
+      const el = document.createElement('div');
+      el.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
+      const iconEl = document.createElement('span');
+      iconEl.textContent = db.icon;
+      iconEl.style.cssText = `font-size:24px;color:${AMBER};width:48px;text-align:center;flex-shrink:0;`;
+      const lbl = document.createElement('span');
+      lbl.textContent = db.label;
+      lbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:400;flex:1;`;
+      el.append(iconEl, lbl);
+      el.addEventListener('click', () => {
+        SoundManager.playUI('UI_Select');
+        db.action();
+      });
+      el.addEventListener('mouseenter', () => {
+        SoundManager.playUI('UI_Hilight');
+        el.style.background = AMBER;
+        iconEl.style.color = '#000';
+        lbl.style.color = '#000';
+      });
+      el.addEventListener('mouseleave', () => {
+        el.style.background = 'transparent';
+        iconEl.style.color = AMBER;
+        lbl.style.color = AMBER;
+      });
+      this.disasterSub.appendChild(el);
+    }
+    this.uiRoot.appendChild(this.disasterSub);
+
+    // Object placement cursor label (U-43) — follows mouse in object mode
+    this.objectCursorLabel = document.createElement('div');
+    this.objectCursorLabel.style.cssText = `
+      position:absolute;display:none;pointer-events:none;z-index:20;
+      background:rgba(0,0,0,0.85);border:1px solid ${AMBER};color:${AMBER};
+      font-family:'Dosis',sans-serif;font-weight:600;font-size:18px;
+      padding:4px 10px;white-space:nowrap;
+    `;
+    this.uiRoot.appendChild(this.objectCursorLabel);
+
     // Endcap — Lua: ui_hud_anglebottom positioned at bottom of button column
     this.sidebarEndcap = document.createElement('img');
     this.sidebarEndcap.src = 'assets/ui/hud/ui_hud_anglebottom.png';
@@ -1544,11 +1623,15 @@ export class UIManager {
       display:none;pointer-events:none;
     `;
     // U-36: Tooltip follows cursor (Lua WorldToolTip nOffsetX=68, nOffsetY=-30)
+    // Also update object placement cursor label position (U-43)
     document.addEventListener('mousemove', (e) => {
       if (this.tooltipEl.style.display !== 'none') {
         this.tooltipEl.style.left = (e.clientX + 68) + 'px';
         this.tooltipEl.style.top = (e.clientY - 30) + 'px';
       }
+      // U-43: Track mouse for object cursor label
+      this._lastMouseX = e.clientX;
+      this._lastMouseY = e.clientY;
     });
     document.body.appendChild(this.tooltipEl);
   }
@@ -1953,6 +2036,18 @@ export class UIManager {
       this.flipBtnEl.style.display = 'none';
     }
 
+    // ── Object placement cursor label (U-43): show object name near cursor ──
+    if (isObjectMode && this.selectedObjectName) {
+      const objData = tObjects[this.selectedObjectName];
+      const displayName = objData?.friendlyName ?? this.selectedObjectName;
+      this.objectCursorLabel.textContent = displayName;
+      this.objectCursorLabel.style.display = 'block';
+      this.objectCursorLabel.style.left = (this._lastMouseX + 20) + 'px';
+      this.objectCursorLabel.style.top = (this._lastMouseY + 20) + 'px';
+    } else {
+      this.objectCursorLabel.style.display = 'none';
+    }
+
     // ── Mine sub-menu: replaces sidebar buttons (Lua MineMenu) ──
     const isMineActive = buildMode === 'mine';
     if (isMineActive) {
@@ -1989,8 +2084,23 @@ export class UIManager {
       this.beaconSub.style.display = 'none';
     }
 
+    // ── Disaster sub-menu: replaces sidebar buttons ──
+    if (this.disasterSubActive && !isConstructActive && !isMineActive && !isBeaconActive) {
+      this.disasterSub.style.display = 'block';
+      for (const sb of this.sidebarBtns) {
+        sb.el.style.display = 'none';
+      }
+      this.sidebarEndcap.style.display = 'none';
+      this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`;
+    } else {
+      this.disasterSub.style.display = 'none';
+      if (isConstructActive || isMineActive || isBeaconActive) {
+        this.disasterSubActive = false;
+      }
+    }
+
     // ── Inspect sub-menu: replaces sidebar buttons (screenshot 20.32.12) ──
-    if (this.inspectSubActive && !isConstructActive && !isMineActive && !isBeaconActive) {
+    if (this.inspectSubActive && !isConstructActive && !isMineActive && !isBeaconActive && !this.disasterSubActive) {
       this.inspectSub.style.display = 'block';
       for (const sb of this.sidebarBtns) {
         sb.el.style.display = 'none';
@@ -1999,13 +2109,13 @@ export class UIManager {
     } else {
       this.inspectSub.style.display = 'none';
       // Clear inspect sub when entering another mode
-      if (isConstructActive || isMineActive || isBeaconActive) {
+      if (isConstructActive || isMineActive || isBeaconActive || this.disasterSubActive) {
         this.inspectSubActive = false;
       }
     }
 
     // Restore sidebar buttons and width when no submenu is active
-    if (!isConstructActive && !isMineActive && !isBeaconActive && !this.inspectSubActive) {
+    if (!isConstructActive && !isMineActive && !isBeaconActive && !this.inspectSubActive && !this.disasterSubActive) {
       for (const sb of this.sidebarBtns) {
         sb.el.style.display = 'flex';
       }

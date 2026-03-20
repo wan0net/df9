@@ -9,7 +9,6 @@ import { dialogueSystem } from '../characters/DialogueSystem';
 import {
   RACE_HUMAN, RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK,
   RACE_CHICKEN, RACE_SHAMON, RACE_MONSTER, RACE_MURDERFACE, RACE_KILLBOT,
-  RACE_TYPE,
 } from '../characters/CharacterConstants';
 
 /**
