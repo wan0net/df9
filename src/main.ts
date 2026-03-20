@@ -416,7 +416,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     if (obj.tData.door && obj.bBuilt) {
       envObjRenderer.removeObject(String(id));
     } else {
-      envObjRenderer.updateObject(String(id), obj.bBuilt, obj.nCondition, obj.getSpriteKey());
+      envObjRenderer.updateObject(String(id), obj.bBuilt, obj.nCondition, obj.getSpriteKey(),
+        obj.bHasPower, obj.bActive);
     }
     // Re-render door tiles when door state changes (open/close/lock)
     if (obj.sName === 'Door' || obj.sName === 'HeavyDoor' || obj.sName === 'Airlock') {
@@ -1427,6 +1428,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // End-of-frame input state
     inputManager.endFrame();
     uiManager.uiClickConsumed = false;
+
+    // Update "no power" blinking icons (Lua EnvObject.lua:1186-1201)
+    envObjRenderer.updatePowerIcons(GameRules.elapsedTime);
 
     // Render
     threeRenderer.render();

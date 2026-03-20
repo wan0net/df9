@@ -12,9 +12,22 @@ import { tObjects } from '../envobjects/EnvObjectData';
  * Supports ghost (unbuilt) objects at 30% opacity and condition-based variants.
  */
 
+/** Lua EnvObject.DEFAULT_ICON_OFFSET = {0, 100} — vertical offset for power icon above object. */
+const POWER_ICON_OFFSET_Y = 100;
+/** Size of the no-power icon sprite in world units. */
+const POWER_ICON_SIZE = 32;
+
 interface RenderedObject {
   mesh: THREE.Mesh;
   spriteName: string;
+  /** "No power" blinking icon mesh, if this object has nPowerDraw > 0. */
+  powerIcon: THREE.Mesh | null;
+  /** Cached power state for blink logic. */
+  bHasPower: boolean;
+  /** Cached active state — deactivated objects show icon permanently. */
+  bActive: boolean;
+  /** Whether this object requires power (nPowerDraw > 0). */
+  bNeedsPower: boolean;
 }
 
 export class EnvObjectRenderer {
@@ -80,11 +93,30 @@ export class EnvObjectRenderer {
     }
 
     this.scene.add(mesh);
-    this.objects.set(id, { mesh, spriteName });
+
+    // Create "no power" icon for objects that draw power (Lua EnvObject.lua:507-519)
+    const bNeedsPower = (objDef?.nPowerDraw ?? 0) > 0;
+    let powerIcon: THREE.Mesh | null = null;
+    if (bNeedsPower) {
+      powerIcon = this.createPowerIcon();
+      if (powerIcon) {
+        // Position above the object (Lua DEFAULT_ICON_OFFSET = {0, 100})
+        powerIcon.position.set(
+          mesh.position.x,
+          mesh.position.y + POWER_ICON_OFFSET_Y,
+          mesh.position.z + 1, // slightly in front
+        );
+        powerIcon.visible = false;
+        this.scene.add(powerIcon);
+      }
+    }
+
+    this.objects.set(id, { mesh, spriteName, powerIcon, bHasPower: true, bActive: true, bNeedsPower });
   }
 
   /** Update an object's visual state based on built status and condition. */
-  updateObject(id: string, built: boolean, condition: number, spriteName?: string) {
+  updateObject(id: string, built: boolean, condition: number, spriteName?: string,
+    bHasPower?: boolean, bActive?: boolean) {
     const obj = this.objects.get(id);
     if (!obj) return;
 
@@ -104,7 +136,7 @@ export class EnvObjectRenderer {
       mat.color.setHex(0xffffff);
     }
 
-    // If sprite name changed (condition variant), try swapping the texture frame
+    // If sprite name changed (condition variant or interact sprite), swap the texture frame
     if (spriteName && spriteName !== obj.spriteName) {
       const frame = getSpriteFrame(spriteName);
       if (frame) {
@@ -115,6 +147,35 @@ export class EnvObjectRenderer {
           mat.needsUpdate = true;
           obj.spriteName = spriteName;
         }
+      }
+    }
+
+    // Update cached power state for blink logic
+    if (bHasPower !== undefined) obj.bHasPower = bHasPower;
+    if (bActive !== undefined) obj.bActive = bActive;
+  }
+
+  /**
+   * Per-frame update for "no power" blinking icons.
+   * Lua: math.abs(math.sin(GameRules.elapsedTime * 200)) > 0.5
+   * Called from the game loop each frame.
+   */
+  updatePowerIcons(elapsedTime: number): void {
+    const nBlink = Math.abs(Math.sin(elapsedTime * 200));
+    const blinkOn = nBlink > 0.5;
+
+    for (const obj of this.objects.values()) {
+      if (!obj.powerIcon || !obj.bNeedsPower) continue;
+
+      if (!obj.bActive) {
+        // Deactivated objects show icon permanently (Lua EnvObject.lua:1189-1190)
+        obj.powerIcon.visible = true;
+      } else if (!obj.bHasPower) {
+        // No power — blink (Lua EnvObject.lua:1193-1198)
+        obj.powerIcon.visible = blinkOn;
+      } else {
+        // Has power — hide
+        obj.powerIcon.visible = false;
       }
     }
   }
@@ -136,11 +197,45 @@ export class EnvObjectRenderer {
       this.scene.remove(obj.mesh);
       obj.mesh.geometry.dispose();
       (obj.mesh.material as THREE.Material).dispose();
+      // Clean up power icon
+      if (obj.powerIcon) {
+        this.scene.remove(obj.powerIcon);
+        obj.powerIcon.geometry.dispose();
+        (obj.powerIcon.material as THREE.Material).dispose();
+      }
       this.objects.delete(id);
     }
   }
 
   // ── Private helpers ──────────────────────────────────────────
+
+  /** Create the "no power" icon mesh using the ui_no_power texture (Lua UIMisc/no_power sprite). */
+  private createPowerIcon(): THREE.Mesh | null {
+    const tex = getTexture('ui_no_power');
+    if (!tex) {
+      // Fallback: plain red square
+      const geo = new THREE.PlaneGeometry(POWER_ICON_SIZE, POWER_ICON_SIZE);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      });
+      return new THREE.Mesh(geo, mat);
+    }
+
+    const cloned = tex.clone();
+    cloned.needsUpdate = true;
+    const geo = new THREE.PlaneGeometry(POWER_ICON_SIZE, POWER_ICON_SIZE);
+    const mat = new THREE.MeshBasicMaterial({
+      map: cloned,
+      color: 0xff3333, // Lua: setColor(unpack(Gui.RED))
+      transparent: true,
+      alphaTest: 0.01,
+      depthWrite: false,
+    });
+    return new THREE.Mesh(geo, mat);
+  }
 
   private createSpriteMesh(
     spriteName: string,
