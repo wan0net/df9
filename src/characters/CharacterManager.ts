@@ -1250,6 +1250,7 @@ export class CharacterManager {
             new FieldScanAndHeal(other),
             other.tileX, other.tileY,
             10 + shiftBoost,
+            { tags: { DestOwned: true, DestSafe: true, Job: DOCTOR, WorkShift: true } },
           ));
         }
       }
@@ -1263,6 +1264,7 @@ export class CharacterManager {
           new Patrol(),
           target.x, target.y,
           3 + shiftBoost,
+          { tags: { DestOwned: true, Job: EMERGENCY, WorkShift: true } },
         ));
       }
 
@@ -1309,7 +1311,7 @@ export class CharacterManager {
           new DropOffCorpse(),
           ref.tileX, ref.tileY,
           9 + shiftBoost,
-          { tags: { Job: JANITOR } },
+          { tags: { Job: JANITOR, DestOwned: true, WorkShift: true } },
         ));
       }
     }
@@ -1339,6 +1341,7 @@ export class CharacterManager {
         new ListenToJukebox(),
         jukebox.tileX, jukebox.tileY,
         2,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = jukebox;
       options.push(opt);
@@ -1351,6 +1354,7 @@ export class CharacterManager {
         new LiftAtWeightBench(),
         bench.tileX, bench.tileY,
         2,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = bench;
       options.push(opt);
@@ -1362,6 +1366,7 @@ export class CharacterManager {
         new WorkOut(),
         character.tileX, character.tileY,
         0.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       ));
     }
 
@@ -1372,6 +1377,7 @@ export class CharacterManager {
         new WorkOutInGym(),
         gym.tileX, gym.tileY,
         1.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = gym;
       options.push(opt);
@@ -1384,6 +1390,7 @@ export class CharacterManager {
         new PlayGameSystem(),
         game.tileX, game.tileY,
         1.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = game;
       options.push(opt);
@@ -1398,6 +1405,7 @@ export class CharacterManager {
           new EatPlant(),
           plant.tileX, plant.tileY,
           2,
+          { tags: { DestOwned: true, DestSafe: true } },
         );
         opt.targetObject = plant;
         options.push(opt);
@@ -1412,6 +1420,7 @@ export class CharacterManager {
         new EatAtFoodReplicator(),
         rep.tileX, rep.tileY,
         1.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = rep;
       options.push(opt);
@@ -1461,9 +1470,10 @@ export class CharacterManager {
             priorityLevel: PRIORITY.SURVIVAL_NORMAL,
             personalityGates: { nBravery: [0.05, 1] },
             prerequisites: { EmptyHands: true },
+            tags: { DestOwned: true },
           },
         ));
-        // Extinguish bare-handed (BaseScore=6, requires more bravery)
+        // Extinguish bare-handed (BaseScore=6, Lua: DestOwned)
         options.push(new ActivityOption(
           new ExtinguishFireBareHanded(this.fire),
           fireTile.x, fireTile.y,
@@ -1472,6 +1482,7 @@ export class CharacterManager {
             priorityLevel: PRIORITY.SURVIVAL_NORMAL,
             personalityGates: { nBravery: [0.15, 1] },
             prerequisites: { EmptyHands: true },
+            tags: { DestOwned: true },
           },
         ));
       }
@@ -1606,7 +1617,7 @@ export class CharacterManager {
               new BedHeal(other),
               bed.tileX, bed.tileY,
               16 + shiftBoost,
-              { tags: { Job: DOCTOR, WorkShift: true } },
+              { tags: { Job: DOCTOR, WorkShift: true, DestOwned: true, DestSafe: true } },
             ));
             break;
           }
@@ -1625,7 +1636,7 @@ export class CharacterManager {
               new HarvestAndDeliverFood(),
               plant.tileX, plant.tileY,
               7 + shiftBoost,
-              { tags: { Job: BOTANIST, WorkShift: true } },
+              { tags: { Job: BOTANIST, WorkShift: true, DestOwned: true, DestSafe: true } },
             ));
             break;
           }
@@ -1641,7 +1652,7 @@ export class CharacterManager {
           new ServeFoodAtTable(),
           table.tileX, table.tileY,
           6 + shiftBoost,
-          { tags: { Job: BARTENDER, WorkShift: true } },
+          { tags: { Job: BARTENDER, WorkShift: true, DestSafe: true } },
         );
         opt.targetObject = table;
         options.push(opt);
@@ -1655,6 +1666,7 @@ export class CharacterManager {
         new EatAtTable(),
         table.tileX, table.tileY,
         3,
+        { tags: { DestSafe: true } },
       ));
     }
 
