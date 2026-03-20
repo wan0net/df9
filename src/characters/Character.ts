@@ -169,6 +169,8 @@ export class Character {
 
   // Morale tick accumulator
   private moraleTickAccum = 0;
+  /** Room morale sample accumulator (Lua ROOM_MORALE_TICK = 3s) */
+  private roomMoraleTickAccum = 0;
   /** Rolling room morale buffer (Lua tRoomScores, 5 samples averaged). */
   private tRoomScores: number[] = [];
 
@@ -540,6 +542,14 @@ export class Character {
 
   /** Update morale and anger per tick. dt in seconds (game-scaled). */
   updateMorale(dt: number, roomMoraleScore = 0, roomZoneName?: string) {
+    // Room morale sampling every ROOM_MORALE_TICK (3s) — Lua has 5 samples per morale tick
+    this.roomMoraleTickAccum += dt;
+    if (this.roomMoraleTickAccum >= ROOM_MORALE_TICK) {
+      this.roomMoraleTickAccum -= ROOM_MORALE_TICK;
+      this.tRoomScores.push(roomMoraleScore);
+      if (this.tRoomScores.length > 5) this.tRoomScores.shift();
+    }
+
     this.moraleTickAccum += dt;
     if (this.moraleTickAccum >= MORALE_TICK) {
       this.moraleTickAccum -= MORALE_TICK;
@@ -635,11 +645,11 @@ export class Character {
         this.addMorale(this.getJobMoraleModifier());
       }
 
-      // Room morale drift — rolling 5-sample average (Lua tRoomScores buffer)
+      // Room morale drift — rolling 5-sample average (sampled every 3s above)
       // Diminishing returns: no room morale bonus above morale 60 (Lua ROOM_MORALE_FALLOFF_END)
-      this.tRoomScores.push(roomMoraleScore);
-      if (this.tRoomScores.length > 5) this.tRoomScores.shift();
-      const avgRoomMorale = this.tRoomScores.reduce((a, b) => a + b, 0) / this.tRoomScores.length;
+      const avgRoomMorale = this.tRoomScores.length > 0
+        ? this.tRoomScores.reduce((a, b) => a + b, 0) / this.tRoomScores.length
+        : 0;
       if (avgRoomMorale !== 0) {
         const drift = Math.min(MAX_ROOM_MORALE_BOOST, Math.abs(avgRoomMorale) * 0.1);
         if (avgRoomMorale > 0) {
