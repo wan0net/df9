@@ -2298,13 +2298,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         roomManager.markDirty(tiles);
         roomManager.update();
       }
-      // Set all detected rooms covering these tiles as sealed with full O2
+      // Set all detected rooms covering these tiles as sealed with full O2 + player owned
       const seen = new Set<number>();
       for (const t of tiles) {
         const room = roomManager.getRoomAt(t.x, t.y);
         if (room && !seen.has(room.id)) {
           seen.add(room.id);
           room.sealed = true;
+          room.nTeam = 1; // TEAM_ID_PLAYER — needed for DestOwned tag enforcement
           oxygenSystem.setRoomO2(room, 255);
         }
       }
