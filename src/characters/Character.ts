@@ -235,7 +235,7 @@ export class Character {
         // Last job gets all remaining points (up to max starting competency)
         pts = Math.min(nPoints, Math.round(MAX_COMPETENCY * 0.2)); // ~2 points max
       } else {
-        pts = Math.floor(Math.random() * Math.min(nPoints, 3)) + 1;
+        pts = Math.floor(Math.random() * Math.min(nPoints, 2)) + 1; // C-33: Lua MAX_STARTING_COMPETENCY = 2
       }
       this.tStats.tCompetency[job] = Math.min(1, pts / MAX_COMPETENCY);
       nPoints -= pts;

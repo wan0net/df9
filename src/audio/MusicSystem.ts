@@ -55,7 +55,8 @@ export class MusicSystem {
   startGame() {
     this.inMenu = false;
     this.playing = true;
-    this.currentTrackIndex = 0;
+    // A-7: Lua picks random starting track (SoundManager.lua line 252)
+    this.currentTrackIndex = Math.floor(Math.random() * GAME_TRACKS.length);
     this.musicTimer = 0;
     this.bBetweenTracks = false;
 

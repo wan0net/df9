@@ -545,7 +545,7 @@ export class EventController implements TickableSystem {
             this.dialogSystem.showDockingDialog(false, def.nChanceObey, (result) => {
               if (this.shouldSpawn(result)) {
                 this.onDocking?.(count);
-                const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
+                const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS029TEXT'; // E-26: Lua uses ALERTS029TEXT
                 Base.addAlert('docking', line(alertLC));
               } else {
                 Base.addAlert('docking', line('ALERTS024TEXT'));

@@ -73,7 +73,7 @@
 | C-30 | ~~MODERATE~~ DONE | **~~Need decay ignores malady modifiers~~** | Fixed: M-1 already wired `getNeedsReduceMods()` into `Needs.decay()`. |
 | C-31 | MODERATE | **No drug system** | Lua calls `_applyDrugs(tx,ty)` on every morale tick. TS has no drug implementation. |
 | C-32 | MINOR | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |
-| C-33 | MINOR | **Starting competency cap wrong** | TS allows up to 3 points per job during immigration. Lua caps at `MAX_STARTING_COMPETENCY = 2`. |
+| C-33 | ~~MINOR~~ DONE | **~~Starting competency cap wrong~~** | Fixed: changed cap from 3 to 2 matching Lua. |
 | C-34 | MINOR | **No `generateStartingStuff()`** | New immigrants get no starting inventory items based on affinities. |
 | C-35 | MINOR | **JOB_NAMES linecode for RAIDER** | Uses `DUTIES011TEXT` (caps version). Lua display-facing uses `DUTIES012TEXT`. |
 | C-36 | MINOR | **No job history tracking** | Lua tracks `tStats.tHistory['TotalTimeAs'..job]`. TS has none. |
@@ -210,7 +210,7 @@
 |---|-----|-------|--------|
 | E-24 | MAJOR | **No module spawning** | Lua physically attaches a ship module to the station. TS spawns characters at (0,0). |
 | E-25 | MODERATE | **`nMinUndiscoveredRooms = 2` gate missing** | Lua only fires when >=2 undiscovered rooms. TS has no gate. |
-| E-26 | MINOR | **Wrong accepted alert code** | TS uses `ALERTS030TEXT`. Lua uses `ALERTS029TEXT`. |
+| E-26 | ~~MINOR~~ DONE | **~~Wrong accepted alert code~~** | Fixed: Docking event uses `ALERTS029TEXT`. |
 
 ### 3.7 Compound Event
 
@@ -366,7 +366,7 @@
 | A-4 | ~~MAJOR~~ DONE | **~~Room alarms are one-shot~~** | Fixed: now persistent loops that stop when condition clears. |
 | A-5 | MODERATE | **Music state not saved/restored** | Track index and ambience index reset to 0 on every load. Lua saves and restores these. |
 | A-6 | MODERATE | **No sound priority/polyphony system** | Lua FMOD limits concurrent voices. TS has no limit — sounds can stack excessively. |
-| A-7 | MINOR | **Initial music track always index 0** | Lua picks random starting track. |
+| A-7 | ~~MINOR~~ DONE | **~~Initial music track always index 0~~** | Fixed: random starting track index. |
 | A-8 | MINOR | **No voice volume category** | Lua has separate voice gain. TS routes voice through sfx. |
 
 ### 6.2 Sound Cues Never Triggered (defined in AudioCueData.ts but never played)
