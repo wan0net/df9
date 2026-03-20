@@ -210,6 +210,9 @@ export class BuildSystem {
       const current = this.grid.get(t.x, t.y);
       let bDemolished = false;
 
+      // O-20: Cancel any pending build commands at this tile (Lua _demolishTile checks CommandObject)
+      CommandQueue.cancelAt(t.x, t.y);
+
       // Lua _demolishTile: obj→remove() gives NO matter refund (only vaporize does)
       const obj = EnvObjectManager.getObjectAt(t.x, t.y);
       if (obj) {

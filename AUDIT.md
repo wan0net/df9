@@ -142,7 +142,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| O-20 | MODERATE | **Demolish doesn't cancel pending commands** | Lua cancels pending build commands at demolished tiles. TS only cancels in erase mode. |
+| O-20 | ~~MODERATE~~ DONE | **~~Demolish doesn't cancel pending commands~~** | Fixed: `CommandQueue.cancelAt()` called in demolish. |
 | O-21 | MODERATE | **Cannot build room on existing floor** | TS skips non-SPACE/WALL tiles. Lua allows rezoning existing floor through the build system. |
 | O-22 | MINOR | **Wall cost uses `MAT_BUILD_FLOOR`** | Should use a dedicated wall cost constant. |
 
