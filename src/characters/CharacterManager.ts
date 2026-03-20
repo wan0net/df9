@@ -12,7 +12,7 @@ import {
   OXYGEN_LOW, OXYGEN_SUFFOCATING,
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
   JOB_EXPERIENCE_RATE, UNNECESSARY_SPACESUIT_REMOVE,
-  RACE_KILLBOT,
+  RACE_KILLBOT, CHAT_COOLDOWN,
   ANGER_MAX,
 } from './CharacterConstants';
 import { SpatialAudio } from '../audio/SpatialAudio';
@@ -540,6 +540,39 @@ export class CharacterManager {
       if (char.survivalTimer <= 0) {
         char.survivalTimer = 0.5 * SURVIVAL_TICK + Math.random() * SURVIVAL_TICK;
         this.testSurvivalThreats(char);
+      }
+    }
+
+    // C-25: Raider conversion (Lua Character.lua:2337-2341)
+    // Raiders with nTimeToConvert count down while imprisoned in a visible room with low anger.
+    // When nTimeToConvert reaches 0, they become citizens.
+    for (const char of this.characters) {
+      if (!char.isAlive()) continue;
+      if (char.nTimeToConvert === null) continue;
+      if (!char.inPrison()) continue;
+      const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
+      if (!charRoom || charRoom.nLastVisibility !== VISIBILITY_FULL) continue;
+      if (char.nAnger >= 0.7 * ANGER_MAX) continue;
+
+      // Decrement once per survival tick interval (~1s)
+      // Lua decrements by 1 per survival tick; we approximate by decrementing each frame scaled by dt
+      char.nTimeToConvert -= dtSec;
+      if (char.nTimeToConvert < 0) {
+        // Convert raider to citizen (Lua Character:_convert)
+        char.nTimeToConvert = null;
+        char.tStats.nTeam = TEAM_ID_PLAYER;
+        char.tStats.nJob = UNEMPLOYED;
+        char.tStats.sName = `Citizen ${char.id}`;
+        // Release from brig
+        if (char.tImprisonedIn !== null) {
+          char.tImprisonedIn = null;
+        }
+        if (char.tAssignedToBrig !== null) {
+          char.tAssignedToBrig = null;
+        }
+        Base.incrementStat('nRaidersConverted');
+        Base.addAlert('immigration', `${char.tStats.sName} has been converted to a citizen.`);
+        addLog('JOINED', char);
       }
     }
 
@@ -1114,6 +1147,9 @@ export class CharacterManager {
         if (other === character) continue;
         if (!other.isAlive()) continue;
         if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue; // Don't chat with hostiles
+        // C-8: Chat cooldown — skip if chatted with this person recently
+        const lastChat = character.tLastChatTime.get(other.id);
+        if (lastChat !== undefined && GameRules.elapsedTime - lastChat < CHAT_COOLDOWN) continue;
         const otherRoom = this.roomManager.getRoomAt(other.tileX, other.tileY);
         if (otherRoom === room) {
           // nGregariousness scales priority — gregarious chars chat more
@@ -1910,6 +1946,17 @@ export class CharacterManager {
       task.rTargetObject.reserve(char.id);
     }
     task.start(char);
+
+    // C-8: Record chat cooldown
+    if (task.name === 'Chat' && task.targetX >= 0 && task.targetY >= 0) {
+      // Find the character at the target position
+      for (const other of this.characters) {
+        if (other !== char && other.tileX === task.targetX && other.tileY === task.targetY) {
+          char.tLastChatTime.set(other.id, GameRules.elapsedTime);
+          break;
+        }
+      }
+    }
 
     // Path to task target if not already there
     if (task.targetX >= 0 && (task.targetX !== char.tileX || task.targetY !== char.tileY)) {

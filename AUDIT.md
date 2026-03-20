@@ -38,7 +38,7 @@
 | C-5 | ~~MAJOR~~ DONE | **~~No continuous job XP gain~~** | Fixed: `CharacterManager.ts` now awards `JOB_EXPERIENCE_RATE * dt` per frame while on duty. |
 | C-6 | ~~MAJOR~~ DONE | **~~Hunger starvation priority elevation missing~~** | Fixed: `ActivityOption.ts` adds +1000 score bonus for Hunger tasks when starving. |
 | C-7 | MODERATE | **No `getScaledDutyScore`** | Lua specially scales Duty need scores for work-shift tasks. TS has no equivalent. |
-| C-8 | MODERATE | **Chat cooldown not enforced** | `CHAT_COOLDOWN = 10` exists but is never checked before offering Chat task. Characters can chat with the same person repeatedly. |
+| C-8 | ~~MODERATE~~ DONE | **~~Chat cooldown not enforced~~** | Fixed: `tLastChatTime` map per character; cooldown checked before offering Chat. |
 | C-9 | MODERATE | **Distance penalty formula differs** | Lua: no penalty <5 tiles, then -1/tile up to 50. TS: `DISTANCE_PENALTY_FACTOR = 0.05` on squared isometric distance. Different weighting of distant tasks. |
 
 ### 1.2 Missing Tasks (14 total)

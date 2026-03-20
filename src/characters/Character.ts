@@ -184,6 +184,8 @@ export class Character {
   currentTask: Task | null = null;
   /** C-3: Per-character survival threat timer (Lua: survivalTimer, 0.5-1.5s). */
   survivalTimer: number | undefined;
+  /** C-8: Chat cooldown — maps partner ID to last chat game time. */
+  tLastChatTime: Map<number, number> = new Map();
 
   // Morale tick accumulator
   private moraleTickAccum = 0;
