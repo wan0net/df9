@@ -36,7 +36,7 @@
 | C-3 | ~~CRITICAL~~ DONE | **~~No survival threat preemption~~** | Fixed: `CharacterManager.ts` adds `survivalTimer` per character (0.5–1.5s) that interrupts tasks for emergencies. |
 | C-4 | MAJOR | **Needs scoring uses linear urgency** | Lua uses sigmoid curve functions (`Needs.scoreFn`) for utility scoring. TS uses linear `(100 - currentValue) / 200 * amount`. Edge-case decisions (partial need satisfaction) will differ. |
 | C-5 | ~~MAJOR~~ DONE | **~~No continuous job XP gain~~** | Fixed: `CharacterManager.ts` now awards `JOB_EXPERIENCE_RATE * dt` per frame while on duty. |
-| C-6 | MAJOR | **Hunger starvation priority elevation missing** | Lua elevates eating tasks to `SURVIVAL_NORMAL` priority when character is starving. TS does not — starving characters may choose other tasks over eating. |
+| C-6 | ~~MAJOR~~ DONE | **~~Hunger starvation priority elevation missing~~** | Fixed: `ActivityOption.ts` adds +1000 score bonus for Hunger tasks when starving. |
 | C-7 | MODERATE | **No `getScaledDutyScore`** | Lua specially scales Duty need scores for work-shift tasks. TS has no equivalent. |
 | C-8 | MODERATE | **Chat cooldown not enforced** | `CHAT_COOLDOWN = 10` exists but is never checked before offering Chat task. Characters can chat with the same person repeatedly. |
 | C-9 | MODERATE | **Distance penalty formula differs** | Lua: no penalty <5 tiles, then -1/tile up to 50. TS: `DISTANCE_PENALTY_FACTOR = 0.05` on squared isometric distance. Different weighting of distant tasks. |

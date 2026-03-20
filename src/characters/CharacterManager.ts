@@ -11,8 +11,10 @@ import {
   OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH, SPACESUIT_MAX_OXYGEN,
   OXYGEN_LOW, OXYGEN_SUFFOCATING,
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
-  JOB_EXPERIENCE_RATE,
+  JOB_EXPERIENCE_RATE, UNNECESSARY_SPACESUIT_REMOVE,
+  RACE_KILLBOT,
 } from './CharacterConstants';
+import { SpatialAudio } from '../audio/SpatialAudio';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { RoomManager } from '../rooms/RoomManager';
@@ -405,6 +407,18 @@ export class CharacterManager {
         char.kill(CAUSE_OF_DEATH.SUFFOCATION);
       }
 
+      // C-26: Remove unnecessary spacesuit after 10s in pressurized room
+      // Lua: UNNECESSARY_SPACESUIT_REMOVE = 10 seconds
+      if (char.bSpacesuit && !char.bSpacewalking && charRoom && charRoom.sealed && charRoom.oxygen > 200) {
+        (char as any).nUnnecessarySpacesuit += dtSec;
+        if ((char as any).nUnnecessarySpacesuit >= UNNECESSARY_SPACESUIT_REMOVE) {
+          char.bSpacesuit = false;
+          (char as any).nUnnecessarySpacesuit = -1;
+        }
+      } else if (char.bSpacesuit) {
+        (char as any).nUnnecessarySpacesuit = 0;
+      }
+
       // Update renderer
       this.characterRenderer?.updateCharacter(char);
     }
@@ -525,6 +539,17 @@ export class CharacterManager {
     }
   }
 
+  /** Get a random tile from an existing room (for spawn placement). */
+  getRandomRoomTile(): { x: number; y: number } | null {
+    const rooms = this.roomManager.getRooms();
+    for (const room of rooms) {
+      if (room.tiles.length > 0) {
+        return room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      }
+    }
+    return null;
+  }
+
   /** Spawn a single character on a random floor tile in any available room */
   spawnCharacter(): Character | null {
     const rooms = this.roomManager.getRooms();
@@ -619,6 +644,11 @@ export class CharacterManager {
 
         // Disengage from combat
         this.combatSystem.disengage(char.id);
+
+        // A-12: Killbot death sound
+        if (char.tStats.nRace === RACE_KILLBOT) {
+          SpatialAudio.playAtTile('Killbot_Death', char.tileX, char.tileY);
+        }
 
         // Log death alert — per-cause linecodes (Lua CharacterManager:_alertOnDeath)
         const deathAlertLC = (() => {
