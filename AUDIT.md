@@ -200,7 +200,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | E-20 | CRITICAL | **Completely reimplemented** | Lua calls `Docking.spawnModule()` to physically attach a ship module with real rooms, objects, and crew. TS invents a "choose your own adventure" branching system (discovery/hostileEncounter/friendlySurvivors/etc.) that does not exist in Lua at all. |
-| E-21 | MAJOR | **DerelictSystem bypasses EventController** | TS `DerelictSystem.onTick()` spawns derelicts independently (`Math.random() < dt / 300`). Lua derelicts only come from the event queue. |
+| E-21 | ~~MAJOR~~ DONE | **~~DerelictSystem bypasses EventController~~** | Fixed: removed independent spawn timer. Derelicts now only come from event queue. |
 | E-22 | MAJOR | **Loot tables invented** | TS generates matter/food/research numbers. Lua spawns actual physical objects (crates, datacubes). |
 | E-23 | MODERATE | **Ship types invented** | TS has 5 ship types with probability tables. Lua uses pre-built module data. |
 
@@ -310,7 +310,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-21 | MAJOR | **Sandbox mode button missing** | Lua has `ButtonSandboxActive` toggling `GameRules.sandbox`. TS has no sandbox option. |
+| U-21 | ~~MAJOR~~ FALSE POSITIVE | **Sandbox mode** | Already implemented in NewGameScreen with checkbox toggle + GameRules.bSandboxMode. |
 | U-22 | MODERATE | **Cursor crosshair lines missing** | Lua shows horizontal/vertical crosshair on hover. |
 | U-23 | MINOR | **Tutorial marker missing** | Lua shows tutorial marker at grid position (12,34). |
 | U-24 | MINOR | **Confirm/Decline glow animations missing** | |
@@ -373,9 +373,9 @@
 
 | # | Sev | Cue | When it should play |
 |---|-----|-----|---------------------|
-| A-9 | MAJOR | `GunShot` (4 variants) | Ranged weapon fire |
+| A-9 | ~~MAJOR~~ DONE | `GunShot` | Wired to CombatSystem ranged attack. |
 | A-10 | MAJOR | `TurretFire` (10 variants unused) | Turret attacks |
-| A-11 | MAJOR | `PowerDown` / `PowerUp` | Power grid gained/lost |
+| A-11 | ~~MAJOR~~ DONE | `PowerDown` / `PowerUp` | Wired to PowerSystem room state changes. |
 | A-12 | MAJOR | `MonsterAttack` / `BadAlien_Attack` (5 variants unused) / `Killbot_Attack` / `Killbot_Death` | Hostile creature combat |
 | A-13 | ~~MODERATE~~ DONE | `Citizen_Drink` | Wired to Eat/GetDrink task completion |
 | A-14 | ~~MODERATE~~ DONE | `OutofBed` | Wired to SleepInBed task completion |

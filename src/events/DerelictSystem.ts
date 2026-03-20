@@ -424,10 +424,10 @@ export class DerelictSystem {
     return this.exploredDerelicts;
   }
 
-  onTick(dt: number) {
-    if (Math.random() < dt / 300 && this.derelicts.size < 9) {
-      this.spawnDerelict();
-    }
+  onTick(_dt: number) {
+    // E-21: Removed independent spawn that bypassed EventController.
+    // Lua derelicts only come from the event queue, not from a random timer.
+    // DerelictEvent in EventController calls spawnDerelict() when triggered.
   }
 
   clear() {
