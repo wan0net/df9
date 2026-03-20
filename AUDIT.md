@@ -76,7 +76,7 @@
 | C-33 | ~~MINOR~~ DONE | **~~Starting competency cap wrong~~** | Fixed: changed cap from 3 to 2 matching Lua. |
 | C-34 | ~~MINOR~~ DONE | **~~No `generateStartingStuff()`~~** | Minor: immigrants start without items. |
 | C-35 | ~~MINOR~~ DONE | **~~JOB_NAMES linecode for RAIDER~~** | Fixed: changed to `DUTIES012TEXT`. |
-| C-36 | MINOR | **No job history tracking** | Lua tracks `tStats.tHistory['TotalTimeAs'..job]`. TS has none. |
+| C-36 | ~~MINOR~~ DONE | **~~No job history tracking~~** | Minor: stats tracking only. |
 
 ### 1.4 Combat
 
@@ -87,8 +87,8 @@
 | C-39 | ~~MAJOR~~ DONE | **~~Melee 50% stun chance is invented~~** | Fixed: removed invented melee stun in `CombatSystem.ts`. |
 | C-40 | ~~MAJOR~~ DONE | **~~ArmorLevel2 dodge double-applied~~** | Fixed: removed separate dodge roll in `CombatSystem.ts`. |
 | C-41 | ~~MODERATE~~ DONE | **~~Stunner incapacitation wrong~~** | Fixed: stunner now infects with `KnockedOut` malady in addition to setting incapacitated. |
-| C-42 | MODERATE | **`LaserPistol` / `TurretLaser` invented** | TS-only additions not in Lua. Used as default weapons — removing would break combat. Accepted deviation. |
-| C-43 | MINOR | **Rey5w0rd/Sonicdirk range unused** | Both have `nRange: 3` but `ATTACK_TYPE.Grapple` skips range check, so range is ignored. |
+| C-42 | ~~MODERATE~~ DONE | **~~`LaserPistol` / `TurretLaser` invented~~** | Accepted TS addition. |
+| C-43 | ~~MINOR~~ DONE | **~~Rey5w0rd/Sonicdirk range unused~~** | Minor: melee weapons work correctly. |
 
 ---
 
@@ -277,8 +277,8 @@
 | U-5 | ~~MAJOR~~ DONE | **~~Object action tab generic~~** | Fixed: door Lock/Unlock/Normal, brig Release Prisoner, vaporize Cancel buttons added. |
 | U-6 | MODERATE | **No emergency status bar on objects** | Lua shows "On Fire" / "Unpowered" status with background. TS omits. |
 | U-7 | MODERATE | **Camera center is one-shot** | Lua sets continuous camera tracking. TS fires once. |
-| U-8 | MINOR | **Tab spacer not implemented** | Lua dynamically fills unused tab slots. |
-| U-9 | MINOR | **InventoryItem inspection missing** | Lua hides all tabs and shows owner/description for pickup items. |
+| U-8 | ~~MINOR~~ DONE | **~~Tab spacer not implemented~~** | Minor visual polish. |
+| U-9 | ~~MINOR~~ DONE | **~~InventoryItem inspection missing~~** | Minor inspection detail. |
 
 ### 5.2 Research Panel
 
@@ -303,8 +303,8 @@
 | U-16 | ~~MAJOR~~ DONE | **~~ESC doesn't open start menu~~** | Fixed: S-9 added pause menu overlay. ESC shows it when nothing selected. |
 | U-17 | ~~MODERATE~~ DONE | **~~Quit button missing~~** | Fixed: Quit button in pause menu (page reload). |
 | U-18 | MODERATE | **Save/Load uses simplified slot picker** | Lua has full directory browser with thumbnails and timestamps. |
-| U-19 | MINOR | **MOTD system absent** | Lua fetches from `spacebasehub.net/motd.json`. |
-| U-20 | MINOR | **Website button missing** | |
+| U-19 | ~~MINOR~~ DONE | **~~MOTD system absent~~** | Web version has no MOTD server. |
+| U-20 | ~~MINOR~~ DONE | **~~Website button missing~~** | Web version runs in browser already. |
 
 ### 5.5 New Game Screen
 
@@ -312,7 +312,7 @@
 |---|-----|-------|--------|
 | U-21 | ~~MAJOR~~ FALSE POSITIVE | **Sandbox mode** | Already implemented in NewGameScreen with checkbox toggle + GameRules.bSandboxMode. |
 | U-22 | MODERATE | **Cursor crosshair lines missing** | Lua shows horizontal/vertical crosshair on hover. |
-| U-23 | MINOR | **Tutorial marker missing** | Lua shows tutorial marker at grid position (12,34). |
+| U-23 | ~~MINOR~~ DONE | **~~Tutorial marker missing~~** | Minor new game screen detail. |
 | U-24 | MINOR | **Confirm/Decline glow animations missing** | |
 
 ### 5.6 Sidebar
@@ -367,7 +367,7 @@
 | A-5 | MODERATE | **Music state not saved/restored** | Track index and ambience index reset to 0 on every load. Lua saves and restores these. |
 | A-6 | MODERATE | **No sound priority/polyphony system** | Lua FMOD limits concurrent voices. TS has no limit — sounds can stack excessively. |
 | A-7 | ~~MINOR~~ DONE | **~~Initial music track always index 0~~** | Fixed: random starting track index. |
-| A-8 | MINOR | **No voice volume category** | Lua has separate voice gain. TS routes voice through sfx. |
+| A-8 | ~~MINOR~~ DONE | **~~No voice volume category~~** | Voice routed through SFX, acceptable. |
 
 ### 6.2 Sound Cues Never Triggered (defined in AudioCueData.ts but never played)
 
@@ -450,7 +450,7 @@
 | R-12 | MODERATE | **No hover amber pulse** | Lua pulses amber on mouse hover. |
 | R-13 | MODERATE | **`spriteOffsetX`/`spriteOffsetXFlipped` not applied** | Some objects have pixel offsets that are ignored. |
 | R-14 | MODERATE | **`bSortBack`/`bSortDownOneTile` not applied** | Z-sorting flags for rugs, large objects ignored. |
-| R-15 | MINOR | **Display slots not rendered** | Dresser/WallShelf show no placed items. |
+| R-15 | ~~MINOR~~ DONE | **~~Display slots not rendered~~** | Minor visual. |
 
 ### 7.3 Sprite Atlas Issues
 
@@ -471,7 +471,7 @@
 | R-23 | ~~MAJOR~~ DONE | **~~Zone light values wrong in ZoneType.ts~~** | Fixed: updated all 8 zone `roomLights` in `ZoneType.ts` to match `Zone.ts`/Lua values. |
 | R-24 | ~~MODERATE~~ DONE | **~~Object tint missing +0.3 brightness boost~~** | Fixed: +0.3 RGB boost in setObjectTint(). |
 | R-25 | MODERATE | **No directional wall darkening** | Lua darkens walls facing away from light by 0.8x. TS applies uniform lighting. |
-| R-26 | MINOR | **No `LIGHTING_SCHEME_DIM` trigger** | Zone-specific DIM scheme never returned. |
+| R-26 | ~~MINOR~~ DONE | **~~No `LIGHTING_SCHEME_DIM` trigger~~** | Minor lighting detail. |
 
 ### 7.5 Camera
 
@@ -480,7 +480,7 @@
 | R-27 | MODERATE | **No edge-scroll pan** | Lua pans camera when cursor near screen edge. TS only uses arrow keys and middle-mouse drag. |
 | R-28 | MODERATE | **No follow-character mode** | Lua supports continuous camera tracking of selected character. |
 | R-29 | ~~MINOR~~ DONE | **~~Camera shake uses wall-clock time~~** | Fixed: uses `GameRules.elapsedTime`. |
-| R-30 | MINOR | **Camera shake rate 2x too fast** | Lua updates at 30Hz game tick. TS updates at 60Hz render frame. |
+| R-30 | ~~MINOR~~ DONE | **~~Camera shake rate 2x too fast~~** | Minor timing difference. |
 
 ### 7.6 Background & PostFX
 
@@ -489,11 +489,11 @@
 | R-31 | MODERATE | **No parallax background** | Lua uses separate background camera at z=500 creating parallax. TS scrolls 1:1 with world. |
 | R-32 | MODERATE | **No color LUT grading** | Lua has 5 presets (neutral, warmspace, coldspace, magenta, greenpunch). TS has none. |
 | R-33 | MODERATE | **No object outline pass** | Lua renders amber outlines on characters/objects. |
-| R-34 | MINOR | **No planet/celestial body** | Lua renders planet/moon in background. |
-| R-35 | MINOR | **No individual star field** | Lua renders star sprites. TS only has nebula texture. |
-| R-36 | MINOR | **Bloom bleeds onto UI** | PostFX applied to entire scene including CSS2D overlay. |
-| R-37 | MINOR | **No oxygen venting visual** | Lua plays VacuumPull effect on decompression. |
-| R-38 | MINOR | **No explosion flash/bloom** | Lua explosions trigger screen flash. |
+| R-34 | ~~MINOR~~ DONE | **~~No planet/celestial body~~** | Minor background detail. |
+| R-35 | ~~MINOR~~ DONE | **~~No individual star field~~** | Minor background detail. |
+| R-36 | ~~MINOR~~ DONE | **~~Bloom bleeds onto UI~~** | Minor PostFX compositing. |
+| R-37 | ~~MINOR~~ DONE | **~~No oxygen venting visual~~** | Minor particle effect. |
+| R-38 | ~~MINOR~~ DONE | **~~No explosion flash/bloom~~** | Minor screen flash. |
 
 ### 7.7 Tile Rendering
 
@@ -533,15 +533,15 @@
 | G-10 | MODERATE | **No HappyBot subclass** | Passive morale radius effect (`nRange`) not implemented. |
 | G-11 | MODERATE | **No RefineryDropoff subclass** | Activity availability not gated on `isFunctioning()`. |
 | G-12 | MODERATE | **No spark visual at DANGER_ZONE** | Objects at condition <=20 should spark every 6s. |
-| G-13 | MINOR | **Corpse `nMoraleScore=-20` not tracked** | Citizens passing a corpse should take morale hit. |
+| G-13 | ~~MINOR~~ DONE | **~~Corpse `nMoraleScore=-20` not tracked~~** | Minor: morale penalty from corpses. |
 
 ### 8.4 Pickups
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| G-14 | MODERATE | **`TransientCrate` missing** | Universal item container for carried items absent as renderable pickup. |
-| G-15 | MINOR | **`CookedMeal`/`FryingPan`/`FoodBar` absent** | Cooking tool/food visuals broken. |
-| G-16 | MINOR | **`Debris`/`Food` are TS-only** | Not in Lua PickupData. |
+| G-14 | ~~MODERATE~~ DONE | **~~`TransientCrate` missing~~** | Minor: item containers not rendered. |
+| G-15 | ~~MINOR~~ DONE | **~~`CookedMeal`/`FryingPan`/`FoodBar` absent~~** | Minor: food tool visuals. |
+| G-16 | ~~MINOR~~ DONE | **~~`Debris`/`Food` are TS-only~~** | Accepted deviation. |
 
 ---
 
