@@ -62,6 +62,8 @@ export class EnvObject implements TaggableObject {
   // Power
   bActive = true;
   bHasPower = false;
+  /** O-13: Sabotage timer — game time when power loss ends. -1 = no sabotage. */
+  nTempPowerLossEnd = -1;
 
   // Room assignment
   rRoom: Room | null = null;
@@ -219,6 +221,8 @@ export class EnvObject implements TaggableObject {
     if (this.tData.nPowerDraw <= 0 && this.tData.nPowerOutput <= 0) return true;
     // O-12: Lua g_PowerHoliday bypasses all power checks
     if (GameRules.bPowerHoliday) return true;
+    // O-13: Sabotage temporarily disables power
+    if (this.nTempPowerLossEnd > 0 && GameRules.elapsedTime < this.nTempPowerLossEnd) return false;
     return this.bHasPower;
   }
 
@@ -234,6 +238,11 @@ export class EnvObject implements TaggableObject {
 
   isFunctioning(): boolean {
     return this.bBuilt && this.hasPower() && this.nCondition > 0;
+  }
+
+  /** O-13: Temporarily disable power for duration seconds (Lua sabotagePowerLoss). */
+  sabotagePowerLoss(duration = 30) {
+    this.nTempPowerLossEnd = GameRules.elapsedTime + duration;
   }
 
   // ── Oxygen generation ────────────────────────────────────────
