@@ -51,13 +51,13 @@
 | C-13 | ~~MAJOR~~ DONE | `MonsterPatrol` | Implemented: runMonsterAI with room-wandering patrol. |
 | C-14 | ~~MAJOR~~ DONE | `MonsterAttackEquipment` | Implemented: monsters attack nearby objects. |
 | C-15 | ~~MAJOR~~ DONE | `MonsterWander` | Implemented: idle wandering between attacks. |
-| C-16 | MODERATE | `Starve` | Universal fallback for starving state |
+| C-16 | ~~MODERATE~~ DONE | `Starve` | Implemented: starving fallback task. |
 | C-17 | MODERATE | `VoluntarilyWalkToBrig` | Character self-surrender to brig |
 | C-18 | MODERATE | `VoluntarilyGetCuffed` | Surrender behavior |
-| C-19 | MODERATE | `FleeTemperTantrum` | Flee from rampaging character |
+| C-19 | ~~MODERATE~~ DONE | `FleeTemperTantrum` | Implemented: flee from rampager. |
 | C-20 | MODERATE | `ViolentRampagePatrol` | Rampage patrol component |
 | C-21 | MODERATE | `RaiderOxygenFleeArea` | Raider-specific O2 flee |
-| C-22 | MODERATE | `RaiderFleeThreat` | Raider-specific threat flee |
+| C-22 | ~~MODERATE~~ DONE | `RaiderFleeThreat` | Implemented: raider flee to safe tile. |
 | C-23 | MINOR | `PickUpStuff` / `DisplayInventoryItem` / `DropStuffOnFloor` / `IncinerateStuff` | Entire stuff/inventory AI system (4 tasks) |
 
 ### 1.3 Character Mechanics
@@ -120,7 +120,7 @@
 | O-10 | ~~MAJOR~~ DONE | **~~`Room.hasPower()` returns full-power-only~~** | Fixed: `hasPowerFlag` now returns true if ANY power OR produces power. Added `hasFullPower`. |
 | O-11 | ~~MODERATE~~ DONE | **~~`canProvidePower()` guard missing~~** | Fixed: LOWPOWER check now exempts rooms with nPowerOutput>0. |
 | O-12 | ~~MODERATE~~ DONE | **~~No `g_PowerHoliday` in EnvObject~~** | Fixed: `hasPower()` checks `GameRules.bPowerHoliday`. |
-| O-13 | MINOR | **No sabotage timer** | `nTempPowerLossEnd` not implemented. Sabotage power loss is permanent until manually repaired. |
+| O-13 | ~~MINOR~~ DONE | **~~No sabotage timer~~** | Fixed: `nTempPowerLossEnd` + `sabotagePowerLoss()` method. |
 
 ### 2.4 Door System
 
@@ -260,7 +260,7 @@
 | M-13 | ~~MODERATE~~ DONE | **~~Sneeze requires only `bContagious`, not `bSymptomatic`~~** | Fixed: requires both bContagious AND bSymptomatic. |
 | M-14 | ~~MINOR~~ DONE | **SleepyDisease `nSpeed`** | TS applies the intended speed modifier. Lua has a data placement bug. Our behavior is more correct — accepted. |
 | M-15 | ~~MINOR~~ DONE | **Crazies/SocialWorm `social` key** | TS applies the intended social modifier. Lua has a case bug. Our behavior is more correct — accepted. |
-| M-16 | MINOR | **Research time calculation differs** | Lua: `random(0, nForceResearch) + 500`. TS: uses `nForceResearch` directly. |
+| M-16 | ~~MINOR~~ DONE | **~~Research time calculation differs~~** | Fixed: uses `random(0, nForceResearch) + 500` matching Lua. |
 
 ---
 
@@ -301,7 +301,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | U-16 | ~~MAJOR~~ DONE | **~~ESC doesn't open start menu~~** | Fixed: S-9 added pause menu overlay. ESC shows it when nothing selected. |
-| U-17 | MODERATE | **Quit button missing** | Lua has Quit → SaveYesNo dialog. |
+| U-17 | ~~MODERATE~~ DONE | **~~Quit button missing~~** | Fixed: Quit button in pause menu (page reload). |
 | U-18 | MODERATE | **Save/Load uses simplified slot picker** | Lua has full directory browser with thumbnails and timestamps. |
 | U-19 | MINOR | **MOTD system absent** | Lua fetches from `spacebasehub.net/motd.json`. |
 | U-20 | MINOR | **Website button missing** | |
@@ -438,7 +438,7 @@
 | R-5 | ~~MAJOR~~ DONE | **~~Hostile characters use citizen model~~** | Fixed: hostile chars get red/dark tint. GLB model loading attempted with fallback. |
 | R-6 | ~~MAJOR~~ DONE | **~~Dead characters show no death pose~~** | Fixed: procedural death pose (rotate 90°, flatten). |
 | R-7 | ~~MODERATE~~ DONE | **~~Thought bubbles use wrong font~~** | Fixed: changed to Dosis (body font). |
-| R-8 | MODERATE | **Thought bubbles show text, not icons** | Lua uses sprite emoticons (food, sleep, etc.). TS shows text labels. |
+| R-8 | ~~MODERATE~~ DONE | **~~Thought bubbles show text, not icons~~** | Fixed: Unicode emoji icons per task type (🍔 eat, 💤 sleep, 🔧 build, etc.). |
 
 ### 7.2 Object Rendering
 
@@ -469,7 +469,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | R-23 | ~~MAJOR~~ DONE | **~~Zone light values wrong in ZoneType.ts~~** | Fixed: updated all 8 zone `roomLights` in `ZoneType.ts` to match `Zone.ts`/Lua values. |
-| R-24 | MODERATE | **Object tint missing +0.3 brightness boost** | Lua boosts object color by +0.3 over ambient. TS uses ambient directly. Objects appear darker. |
+| R-24 | ~~MODERATE~~ DONE | **~~Object tint missing +0.3 brightness boost~~** | Fixed: +0.3 RGB boost in setObjectTint(). |
 | R-25 | MODERATE | **No directional wall darkening** | Lua darkens walls facing away from light by 0.8x. TS applies uniform lighting. |
 | R-26 | MINOR | **No `LIGHTING_SCHEME_DIM` trigger** | Zone-specific DIM scheme never returned. |
 
