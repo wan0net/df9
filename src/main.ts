@@ -66,6 +66,7 @@ import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
 import { tileToScreen, getDiamondFootprint } from './world/IsometricUtils';
 import { TileType } from './world/TileTypes';
+import { CHANCE_OF_MALADY } from './events/EventData';
 import { Pickup } from './pickups/Pickup';
 import { Corpse } from './pickups/Corpse';
 import { isAsteroid } from './world/Asteroid';
@@ -454,7 +455,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // Wire event callbacks
   eventController.onImmigration = (count) => {
     for (let i = 0; i < count; i++) {
-      characterManager.spawnCharacter();
+      const char = characterManager.spawnCharacter();
+      // Lua ImmigrationEvent.lua:71-77: 15% chance of malady on each immigrant
+      if (char && Math.floor(Math.random() * 100) < CHANCE_OF_MALADY) {
+        Malady.infectWithRandom(char);
+      }
     }
   };
   eventController.onMeteorLand = () => {

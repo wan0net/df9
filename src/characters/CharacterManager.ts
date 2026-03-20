@@ -465,7 +465,7 @@ export class CharacterManager {
   }
 
   /** Spawn a single character on a random floor tile in any available room */
-  spawnCharacter() {
+  spawnCharacter(): Character | null {
     const rooms = this.roomManager.getRooms();
     for (const room of rooms) {
       if (room.tiles.length > 0) {
@@ -473,9 +473,10 @@ export class CharacterManager {
         const char = new Character(this.nextId++, tile.x, tile.y);
         this.characterRenderer?.createCharacter(char);
         this.characters.push(char);
-        return;
+        return char;
       }
     }
+    return null;
   }
 
   /** Spawn hostile raiders in a random room. */
