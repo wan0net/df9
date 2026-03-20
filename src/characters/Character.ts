@@ -151,6 +151,8 @@ export class Character {
   private nUnnecessarySpacesuit = -1; // -1 = not tracking
   /** Time this character joined (immigration timestamp). */
   nJoinTime = 0;
+  /** Starvation accumulator (Lua tStatus.nStarveTime). Accumulates while hunger < NEEDS_HUNGER_STARVATION. */
+  nStarveTime = 0;
 
   // Movement
   path: { x: number; y: number }[] = [];

@@ -10,6 +10,7 @@ import {
   STATUS_DEAD,
   OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH, SPACESUIT_MAX_OXYGEN,
   OXYGEN_LOW, OXYGEN_SUFFOCATING,
+  NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -266,6 +267,17 @@ export class CharacterManager {
         }
       }
       char.needs.decay(dtSec, promisedNeeds);
+
+      // Starvation check (Lua Character.lua:2430-2443)
+      if (char.needs.hunger <= NEEDS_HUNGER_STARVATION) {
+        char.nStarveTime += dtSec;
+        if (char.nStarveTime >= TIME_BEFORE_STARVATION) {
+          char.kill(CAUSE_OF_DEATH.STARVATION);
+        }
+      } else if (char.nStarveTime > 0) {
+        char.nStarveTime = 0;
+      }
+
       // Pass room morale score to character morale update
       const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
       char.updateMorale(dtSec, charRoom?.nMoraleScore ?? 0, charRoom ? ZoneType[charRoom.zone] : undefined);
