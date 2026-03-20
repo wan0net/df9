@@ -99,8 +99,8 @@ export const EVENT_DEFS: Record<string, EventDef> = {
   Breaching: {
     name: 'Breaching',
     sEventType: 'breachingEvents',
-    nDefaultWeight: 5,
-    weight: 5,
+    nDefaultWeight: 10, // E-13: Lua uses 10 (forecast) or 16 (no exterior rooms)
+    weight: 10,
     minPopulation: 9,
     maxPopulation: -1,
     minTime: 600,  // 10 minutes

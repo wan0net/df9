@@ -518,9 +518,11 @@ export class EventController implements TickableSystem {
       }
       case 'Breaching': {
         const breachEvent = new BreachingEvent();
+        // E-10/E-12: Lua rollRandomRaiders gives 1-3 raiders based on difficulty
+        const breachRaiderCount = this.getScaledRaiderCount();
         breachEvent.onCompleteCallback = () => {
           this.onBreachWall?.();
-          this.onHostileSpawn?.(1, this.getScaledRaiderHP());
+          this.onHostileSpawn?.(breachRaiderCount, this.getScaledRaiderHP());
           Base.incrementStat('nBreachShipsDestroyed');
           Base.addAlert('breach', line('ALERTS009TEXT'));
         };

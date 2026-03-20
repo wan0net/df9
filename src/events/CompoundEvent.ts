@@ -17,8 +17,11 @@ export class CompoundEvent extends Event {
 
   start(simTime: number) {
     super.start(simTime);
-    for (const event of this.subEvents) {
-      event.start(simTime);
+    // E-28: Lua staggers sub-events 0-60s apart (CompoundEvent.lua:68-70)
+    let offset = 0;
+    for (let i = 0; i < this.subEvents.length; i++) {
+      this.subEvents[i].start(simTime + offset);
+      if (i > 0) offset += Math.random() * 60;
     }
   }
 
