@@ -455,14 +455,16 @@ export class EventController implements TickableSystem {
         immEvent.onCompleteCallback = () => {
           const count = immEvent.getImmigrantCount();
           if (this.dialogSystem) {
+            // Lua ImmigrationEvent.lua:170-173: pause game during dialog
+            const wasPaused = !GameRules.bRunning;
+            GameRules.bRunning = false;
             this.dialogSystem.showImmigrationDialog(def.nChanceObey, (result) => {
+              if (!wasPaused) GameRules.bRunning = true; // restore
               if (this.shouldSpawn(result)) {
                 this.onImmigration?.(count);
-                // Lua: sAcceptedSuccessAlert (ALERTS030) or sRejectionFailAlert (ALERTS025)
                 const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
                 Base.addAlert('immigration', line(alertLC));
               } else {
-                // Lua: sRejectionSuccessAlert (ALERTS024)
                 Base.addAlert('immigration', line('ALERTS024TEXT'));
               }
             });
