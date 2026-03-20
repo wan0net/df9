@@ -224,7 +224,6 @@ export class Fire implements TickableSystem {
     if (this.timeUntilNextUpdate > 0) return;
     this.timeUntilNextUpdate = TIME_BETWEEN_UPDATES;
 
-    const toRemove: string[] = [];
     const toSpread: { x: number; y: number }[] = [];
 
     for (const [key, fire] of this.fires) {
@@ -280,13 +279,6 @@ export class Fire implements TickableSystem {
       if (Math.random() < probDamage) {
         fire.nHeat += 0.4;
       }
-    }
-
-    // Remove extinguished fires
-    for (const key of toRemove) {
-      const parts = key.split(',');
-      this.fires.delete(key);
-      this.onFireEnd?.(parseInt(parts[0]), parseInt(parts[1]));
     }
 
     // Spread fires (Lua: only spread 1 fire per tick via early return)
