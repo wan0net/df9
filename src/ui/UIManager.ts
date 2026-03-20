@@ -178,6 +178,8 @@ export class UIManager {
   private sidebarBtns: { el: HTMLDivElement; label: HTMLDivElement; hotkey: HTMLDivElement; icon: HTMLDivElement; iconImg: HTMLImageElement | null; mode: BuildMode; btnLabel: string; action?: string }[] = [];
   /** Sidebar element for collapse/expand. */
   private sidebarEl!: HTMLDivElement;
+  /** Sidebar endcap image — hidden when submenus are shown. */
+  private sidebarEndcap!: HTMLImageElement;
   /** Whether sidebar is currently expanded (Lua: starts collapsed, expands on hover). */
   private sidebarExpanded = false;
 
@@ -1185,10 +1187,10 @@ export class UIManager {
     this.uiRoot.appendChild(this.beaconSub);
 
     // Endcap — Lua: ui_hud_anglebottom positioned at bottom of button column
-    const endcap = document.createElement('img');
-    endcap.src = 'assets/ui/hud/ui_hud_anglebottom.png';
-    endcap.style.cssText = `width:100%;height:auto;display:block;pointer-events:none;`;
-    sidebar.appendChild(endcap);
+    this.sidebarEndcap = document.createElement('img');
+    this.sidebarEndcap.src = 'assets/ui/hud/ui_hud_anglebottom.png';
+    this.sidebarEndcap.style.cssText = `width:100%;height:auto;display:block;pointer-events:none;`;
+    sidebar.appendChild(this.sidebarEndcap);
 
     // Utility buttons — Lua puts Save/Load in StartMenu, but we keep small links at sidebar bottom for convenience
     const utilContainer = document.createElement('div');
@@ -1858,6 +1860,7 @@ export class UIManager {
       this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`;
       this.sidebarEl.scrollTop = 0; // Ensure Cancel button is visible at top
       for (const sb of this.sidebarBtns) sb.el.style.display = 'none';
+      this.sidebarEndcap.style.display = 'none'; // Hide endcap so it doesn't cover submenu
       // Highlight active sub-button (skip cancelEl + confirmEl + constructLabel = 3 children)
       const SUB_OFFSET = 2; // cancel + confirm (no header label)
       const subBtns = this.constructSub.children;
@@ -1881,6 +1884,7 @@ export class UIManager {
       // Object menu: show zone list or object list in sidebar (Lua ObjectMenu/SelectObjectForZoneMenu)
       this.constructSub.style.display = 'none';
       for (const sb of this.sidebarBtns) sb.el.style.display = 'none';
+      this.sidebarEndcap.style.display = 'none';
       if (this.objectMenuState === 'zones') {
         this.objectMenuEl.style.display = 'block';
         this.objectSubMenuEl.style.display = 'none';
@@ -1895,6 +1899,7 @@ export class UIManager {
       this.objectMenuEl.style.display = 'none';
       this.objectSubMenuEl.style.display = 'none';
       this.objectMenuState = 'zones'; // Reset for next time
+      this.sidebarEndcap.style.display = 'block'; // Restore endcap
     }
 
     // ── Flip button: show in object placement mode (Lua StatusBar.showFlipZone) ──
@@ -1915,6 +1920,7 @@ export class UIManager {
       for (const sb of this.sidebarBtns) {
         sb.el.style.display = 'none';
       }
+      this.sidebarEndcap.style.display = 'none';
     } else {
       this.mineSub.style.display = 'none';
     }
