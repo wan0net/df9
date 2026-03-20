@@ -157,29 +157,16 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(motdBg);
 
-    // Game title — original Lua has logo sprite commented out and shows the 3D world behind.
-    // We use styled Orbitron text matching the game's visual language.
-    const titleTop = document.createElement('div');
-    titleTop.textContent = 'SPACEBASE';
-    titleTop.style.cssText = `
-      position:absolute;top:40px;left:40px;
-      font-family:'Orbitron',monospace;
-      font-size:42px;font-weight:700;color:${AMBER};
-      letter-spacing:4px;
-      text-shadow:0 0 30px rgba(223,162,0,0.4), 0 0 60px rgba(223,162,0,0.2);
-    `;
-    this.overlay.appendChild(titleTop);
-
-    const titleBottom = document.createElement('div');
-    titleBottom.textContent = 'DF-9';
-    titleBottom.style.cssText = `
-      position:absolute;top:105px;left:40px;
-      font-family:'Orbitron',monospace;
-      font-size:74px;font-weight:700;color:${AMBER};
-      letter-spacing:8px;
-      text-shadow:0 0 30px rgba(223,162,0,0.5), 0 0 80px rgba(223,162,0,0.3);
-    `;
-    this.overlay.appendChild(titleBottom);
+    // Game logo — Lua StartMenuLayout: 'logo' from 'UI/StartMenu' spritesheet at scale 1.5
+    // Extracted logo is 1280x386; Lua pos={-960, 626} from center, scale 1.5
+    const logoImg = document.createElement('img');
+    logoImg.src = 'assets/ui/startmenu_logo.png';
+    logoImg.style.cssText = `
+      position:absolute;top:20px;left:0px;
+      width:${1280 * 0.75}px;height:auto;
+      pointer-events:none;
+    `; // ~960px wide (Lua scale 1.5 on half-res = 0.75 effective)
+    this.overlay.appendChild(logoImg);
 
     // Subtitle — Lua WebsiteText: UIMISC016TEXT, dosismedium32, center-justified
     const subtitle = document.createElement('div');
