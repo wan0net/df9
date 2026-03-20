@@ -444,8 +444,8 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| R-9 | MAJOR | **No "no power" blinking icon** | Lua renders red `no_power` sprite above unpowered objects with sin() blink. TS has nothing. |
-| R-10 | MAJOR | **No interact sprites** | Lua swaps to interaction sprite (fridge_open, bed_occupied, weightbench_inuse). TS always shows default sprite. |
+| R-9 | ~~MAJOR~~ DONE | **~~No "no power" blinking icon~~** | Fixed: red "NO POWER" indicator with sin() blink on unpowered objects. |
+| R-10 | ~~MAJOR~~ DONE | **~~No interact sprites~~** | Fixed: objects swap to interact sprite variant when bInUse. |
 | R-11 | MODERATE | **No "slated for vaporize" red tint** | Objects queued for demolition should show red tint. |
 | R-12 | MODERATE | **No hover amber pulse** | Lua pulses amber on mouse hover. |
 | R-13 | MODERATE | **`spriteOffsetX`/`spriteOffsetXFlipped` not applied** | Some objects have pixel offsets that are ignored. |
