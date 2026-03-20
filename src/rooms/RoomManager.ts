@@ -232,6 +232,7 @@ export class RoomManager {
 
     const oldRoomClaimed = new Set<number>();
     const newRoomMatch: (Room | null)[] = new Array(this.rooms.length).fill(null);
+    const newRoomMatchOi: number[] = new Array(this.rooms.length).fill(-1);
     const newRoomOverlap: number[] = new Array(this.rooms.length).fill(0);
 
     // First pass — iterate old rooms. Each old room is assigned to the new
@@ -254,9 +255,11 @@ export class RoomManager {
         const existingScore = oldRoomScore(existing, newRoomOverlap[bestNewIdx]);
         const candidateScore = oldRoomScore(oldRooms[oi], bestOverlap);
         if (candidateScore <= existingScore) continue;
-        // Candidate wins — release old claim (it may get picked up in pass 2)
+        // Candidate wins — unclaim the displaced old room so pass 2 can use it
+        oldRoomClaimed.delete(newRoomMatchOi[bestNewIdx]);
       }
       newRoomMatch[bestNewIdx] = oldRooms[oi];
+      newRoomMatchOi[bestNewIdx] = oi;
       newRoomOverlap[bestNewIdx] = bestOverlap;
       oldRoomClaimed.add(oi);
     }
