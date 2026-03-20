@@ -1155,7 +1155,10 @@ export class CharacterManager {
       task.targetX = nearestChar.tileX;
       task.targetY = nearestChar.tileY;
       this.assignTask(char, task);
-      this.combatSystem.engage(char, nearestChar);
+      // A-12: MonsterScream on first engagement (engage returns false if already engaged)
+      if (this.combatSystem.engage(char, nearestChar)) {
+        SpatialAudio.playAtTile('MonsterScream', char.tileX, char.tileY);
+      }
       return;
     }
 
