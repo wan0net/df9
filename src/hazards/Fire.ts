@@ -5,6 +5,7 @@
  */
 
 import { GameRules, type TickableSystem } from '../core/GameRules';
+import { SpatialAudio } from '../audio/SpatialAudio';
 
 // ── Lua-exact constants ──────────────────────────────────────────────
 
@@ -146,6 +147,9 @@ export class Fire implements TickableSystem {
 
     this.fires.set(key, { x, y, nHeat: 1, nIntensity: nIntensity });
 
+    // One-shot fire start SFX at tile (Lua: Fire._addToTile plays start sound)
+    SpatialAudio.fireStartSfx(x, y);
+
     // Notify room and env objects (Lua Fire._addToTile: prop:onFire(), rRoom:onFire())
     this.onFireStart?.(x, y);
   }
@@ -286,6 +290,13 @@ export class Fire implements TickableSystem {
       const pos = toSpread[0]; // Lua returns after first successful spread
       this.startFire(pos.x, pos.y, INTENSITY_DEFAULT);
     }
+
+    // Update the single global fire loop position (Lua: ONE loop at average of all fires)
+    const allFires: { x: number; y: number }[] = [];
+    for (const fire of this.fires.values()) {
+      allFires.push({ x: fire.x, y: fire.y });
+    }
+    SpatialAudio.updateFireLoop(allFires);
   }
 
   // ── Save/Load (mirrors Lua Fire.getSaveTable / fromSaveTable) ────
@@ -319,5 +330,7 @@ export class Fire implements TickableSystem {
   /** Clear all fires (for new game / load). */
   clearAll() {
     this.fires.clear();
+    // Stop the global fire loop immediately
+    SpatialAudio.updateFireLoop([]);
   }
 }

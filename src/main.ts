@@ -562,13 +562,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     }
   };
-  // Wire fire sounds
-  fire.onFireStart = (x, y) => {
-    SpatialAudio.fireStart(x, y);
-  };
-  fire.onFireEnd = (x, y) => {
-    SpatialAudio.fireEnd(x, y);
-  };
+  // A-1: Fire loop audio is handled inside Fire.onTick via SpatialAudio.updateFireLoop
+  // (single global loop at averaged position of all burning tiles).
+  // One-shot fire start SFX is played by Fire.startFire directly.
   const projectileManager = new ProjectileManager();
   projectileManager.init();
   characterManager.setProjectileManager(projectileManager);
@@ -1397,6 +1393,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     const activeFires = fire.getActiveFires();
     fireParticles.setFireTiles(activeFires);
     fireParticles.update(delta / 1000);
+    // A-1: Update global fire loop with averaged position of all burning tiles
+    SpatialAudio.updateFireLoop(activeFires.map(f => ({ x: f.x, y: f.y })));
 
     // Projectile visuals
     projectileRenderer.update(projectileManager.getActiveProjectiles());

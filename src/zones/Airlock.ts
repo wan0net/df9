@@ -7,6 +7,7 @@ import { Zone } from './Zone';
 import { ZoneType } from '../world/ZoneType';
 import { O2_MAX } from '../config';
 import { LIGHTING_SCHEME_VACUUM } from '../rooms/Room';
+import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 
 /** Stage constants — mirrors Airlock.lua:21-27 */
 export const AIRLOCK_STAGE = {
@@ -173,11 +174,18 @@ export class Airlock extends Zone {
   onTick(dt: number) {
     this.updateDoorMonitor();
 
-    // ── Functional check (idle state) ────────────────────────────────────────
-    // Mirrors Airlock:onTick() functional validation. We simplify: functional
-    // if room is sealed and not breached. Full door/locker validation deferred.
+    // ── Functional check (idle state) ──────────────────────────────────────
+    // G-9: Lua Airlock.lua requires: sealed, not breached, AirlockLocker present,
+    // at least one airlock door with space access, no broken-open doors
     if (!this.bRunning) {
-      this.bFunctional = (this.room?.sealed ?? false);
+      let functional = this.room?.sealed ?? false;
+      if (functional && this.room) {
+        // Check for AirlockLocker object in room
+        const hasLocker = EnvObjectManager.getObjectsByType('AirlockLocker')
+          .some(o => o.bBuilt && o.rRoom === this.room);
+        if (!hasLocker) functional = false;
+      }
+      this.bFunctional = functional;
     }
 
     if (!this.bRunning) return;

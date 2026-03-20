@@ -4,7 +4,6 @@ import type { ObjectTag } from '../core/ObjectList';
 import type { Zone } from '../zones/Zone';
 import { TEAM_ID_PLAYER, TEAM_ID_PLAYER_ABANDONED, OXYGEN_LOW, OXYGEN_SUFFOCATING } from '../characters/CharacterConstants';
 import { GameRules } from '../core/GameRules';
-import { SoundManager } from '../audio/SoundManager';
 import { SpatialAudio } from '../audio/SpatialAudio';
 import type { TileGrid } from '../world/TileGrid';
 
@@ -87,6 +86,8 @@ export class Room {
   nLightFadeTimer = 0;
   /** Oscillation speed in cycles/second (Room.lua: nLightFadesPerSecond = 0.5). */
   nLightFadesPerSecond = 0.5;
+  /** Whether this room has an active alarm spatial loop. */
+  private alarmLoopActive = false;
 
   // ── Danger / visibility timers — mirrors Room.lua ─────────────────────────
   /** Seconds this room has been in a dangerous state (hostile/fire/vacuum). */
@@ -312,22 +313,54 @@ export class Room {
   /** Set lighting scheme (Lua Room:setLightingScheme). */
   setLightingScheme(nNewScheme: number): void {
     if (this.nLightingScheme !== nNewScheme) {
-      const oldScheme = this.nLightingScheme;
       this.nLightingScheme = nNewScheme;
       this.nLightFadeTimer = 0;
       this.nLightFadesPerSecond = 0.5;
 
-      // Room alarm sounds on emergency scheme transitions
-      if (nNewScheme === LIGHTING_SCHEME_FIRE && oldScheme !== LIGHTING_SCHEME_FIRE) {
-        if (this.bBurning) {
-          SoundManager.playSfx('Alarm_Fire');
-        } else if (this.bBreach || this.bPendingBreach) {
-          SoundManager.playSfx('Alarm_Breach');
-        } else if (this.getOxygenScore() < OXYGEN_SUFFOCATING) {
-          SoundManager.playSfx('Alarm_LowOxygen');
-        } else {
-          SoundManager.playSfx('Alarm_Alert');
-        }
+      // A-4: Persistent alarm loops — start on emergency, stop when cleared
+      this._updateAlarmLoop(nNewScheme);
+    }
+  }
+
+  /** Start or stop the persistent alarm spatial loop based on current scheme.
+   *  Lua plays alarm as a looping 3D positional sound at room center. */
+  private _updateAlarmLoop(scheme: number): void {
+    const alarmKey = `alarm_room_${this.id}`;
+
+    if (scheme === LIGHTING_SCHEME_FIRE || scheme === LIGHTING_SCHEME_VACUUM) {
+      // Determine which alarm cue to use
+      let cue: string;
+      if (this.bBurning) {
+        cue = 'Alarm_Fire';
+      } else if (this.bBreach || this.bPendingBreach) {
+        cue = 'Alarm_Breach';
+      } else if (this.getOxygenScore() < OXYGEN_SUFFOCATING) {
+        cue = 'Alarm_LowOxygen';
+      } else {
+        cue = 'Alarm_Alert';
+      }
+
+      // If alarm already active with a different cue, stop first
+      if (this.alarmLoopActive) {
+        SpatialAudio.stopLoop(alarmKey);
+      }
+
+      const center = this._getRoomCenter();
+      SpatialAudio.startLoop(alarmKey, cue, center.x, center.y);
+      this.alarmLoopActive = true;
+    } else if (scheme === LIGHTING_SCHEME_LOWPOWER) {
+      // Low power uses a distinct alarm
+      if (this.alarmLoopActive) {
+        SpatialAudio.stopLoop(alarmKey);
+      }
+      const center = this._getRoomCenter();
+      SpatialAudio.startLoop(alarmKey, 'Alarm_LowOxygen', center.x, center.y);
+      this.alarmLoopActive = true;
+    } else {
+      // Normal/Off/Dim — stop any active alarm loop
+      if (this.alarmLoopActive) {
+        SpatialAudio.stopLoop(alarmKey);
+        this.alarmLoopActive = false;
       }
     }
   }
