@@ -21,3 +21,4 @@ blob-report/
 Screenshots/
 verify_*.png
 __pycache__/
+*.png
