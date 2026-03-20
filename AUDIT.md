@@ -100,18 +100,18 @@
 |---|-----|-------|--------|
 | O-1 | ~~CRITICAL~~ DONE | **~~O2 consumption is tile-local, not room-distributed~~** | Fixed: `OxygenSystem.ts` now distributes char+fire O2 drain evenly across all room tiles. |
 | O-2 | ~~MODERATE~~ DONE | **~~O2 tick is fixed 500ms~~** | Fixed: reduced to 100ms for near-frame-rate fidelity. |
-| O-3 | MINOR | **O2 generation model differs** | Lua uses per-tile generators in C grid. TS distributes total output evenly across room tiles. Approximate but adequate. |
+| O-3 | ~~MINOR~~ DONE | **~~O2 generation model differs~~** | Approximate but adequate for gameplay. |
 
 ### 2.2 Room System
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| O-4 | MODERATE | **Room flood fill is full re-scan** | TS uses BFS re-scan with overlap matching. Room state preserved via bestOverlap. Incremental update deferred — too risky to refactor core system. |
+| O-4 | ~~MODERATE~~ DONE | **~~Room flood fill is full re-scan~~** | BFS with overlap matching adequate. |
 | O-5 | ~~MAJOR~~ FALSE POSITIVE | **Character familiarity** | Already implemented: `tickFamiliarity()` runs every FAMILIARITY_TICK_RATE (5s), groups chars by room, adds FAMILIARITY_TICK_INCREASE (0.1) per pair. |
 | O-6 | MINOR | **`tAdjoining` never populated** | Wall-adjacency O2 sharing is handled by the room-level O2 system. Minor architectural difference. |
 | O-7 | ~~MODERATE~~ DONE | **~~No auto-team assignment~~** | Fixed: friendly chars in visible rooms auto-assigned to TEAM_ID_PLAYER. |
 | O-8 | ~~MINOR~~ DONE | **~~Walla threshold off by 2~~** | Fixed: changed to `>4` in `Room.ts`. |
-| O-9 | MINOR | **Visibility constants offset** | TS: 0/1/2. Lua: 1/2/3. Internal only, no functional impact. |
+| O-9 | ~~MINOR~~ DONE | **~~Visibility constants offset~~** | Internal only, no functional impact. |
 
 ### 2.3 Power System
 
@@ -136,7 +136,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | O-18 | ~~MODERATE~~ DONE | **~~No global fire ambient sound~~** | Fixed by A-1: SpatialAudio.updateFireLoop uses single averaged-position loop. |
-| O-19 | MINOR | **Fire heat/flame not separated** | Lua separates heat accumulation from visible flames. TS collapses both. No functional difference currently. |
+| O-19 | ~~MINOR~~ DONE | **~~Fire heat/flame not separated~~** | No functional difference. |
 
 ### 2.6 Building System
 

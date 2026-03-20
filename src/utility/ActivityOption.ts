@@ -249,6 +249,16 @@ export class ActivityOption {
       score += urgency * adv.amount;
     }
 
+    // C-7: Scale duty score for work-shift tasks (Lua getScaledDutyScore)
+    // On-duty characters get a 2x boost to Duty need satisfaction from work tasks
+    if (this.tags.WorkShift && character.onDuty?.()) {
+      const dutyAdv = advertisedNeeds.find(a => a.need === 'duty');
+      if (dutyAdv) {
+        const dutyUrgency = 1 / (1 + Math.exp(character.needs.duty * 0.06));
+        score += dutyUrgency * dutyAdv.amount; // Double the duty contribution
+      }
+    }
+
     // C-6: Elevate priority to SURVIVAL_NORMAL when starving and option satisfies Hunger
     // Matches Lua: starving characters urgently seek food
     if (character.needs.hunger <= NEEDS_HUNGER_STARVATION) {
