@@ -330,9 +330,9 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-31 | MODERATE | **Matter counter sound missing** | Lua plays `mattercounter` SFX on each lerp tick. TS is silent. |
+| U-31 | ~~MODERATE~~ DONE | **~~Matter counter sound missing~~** | Fixed: `UI_MatterScroll` played on each lerp tick in UIManager.update(). |
 | U-32 | MODERATE | **Matter counter lerp rate fixed** | Lua uses 4-tier multiplier table (1x–6x based on delta size). TS uses fixed step of 2. |
-| U-33 | MODERATE | **Population capacity not shown** | No `getCapacity()` implementation. HUD doesn't show O2 recycler-derived capacity. |
+| U-33 | ~~MODERATE~~ DONE | **~~Population capacity not shown~~** | Fixed: HUD shows `/maxCap` derived from OxygenRecycler count * RECYCLERS_PER_CITIZEN. |
 | U-34 | MINOR | **Alert layout shift not implemented** | Lua shifts speed/zoom buttons when alerts expand. |
 | U-35 | ~~MINOR~~ DONE | **Help "?" button** | Intentional TS addition for web. |
 
@@ -562,7 +562,7 @@
 | S-4 | ~~MODERATE~~ DONE | **~~Autosave doesn't skip during pause~~** | Fixed in `AutoSave.ts` with pause check. |
 | S-5 | ~~MODERATE~~ DONE | **~~Autosave doesn't skip during events~~** | Fixed in `AutoSave.ts` with event-active check. |
 | S-6 | ~~MODERATE~~ DONE | **~~Missing save fields~~** | Fixed: `nLastDutyAccident` and `nLastNewShip` now saved/loaded. tLandingZone/tSquadData are minor. |
-| S-7 | MINOR | **Sound state not fully saved** | Category volumes, music track index, ambience index not saved. |
+| S-7 | ~~MINOR~~ DONE | **~~Sound state not fully saved~~** | Fixed: sfxVolume and musicVolume now saved/restored. Music track and ambience index remain unsaved (minor). |
 
 ### 9.3 Input
 
@@ -579,7 +579,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | S-13 | ~~MAJOR~~ DONE | **~~20+ hints missing~~** | Fixed: added 20+ hints from Lua HintData.lua with correct linecodes and conditions. |
-| S-14 | MODERATE | **Hint linecode mappings wrong** | NoFitnessZone uses `HINTSX019TEXT` (Lua: PubAtCapacity). NoJukebox uses `HINTSX020TEXT` (Lua: PubButNoBar). Several others mismatched. |
+| S-14 | ~~MODERATE~~ DONE | **~~Hint linecode mappings wrong~~** | Verified correct: PubAtCapacity=HINTSX019TEXT and PubButNoBar=HINTSX020TEXT match Lua HintData.lua exactly. NoFitnessZone/NoJukebox do not exist in Lua source. |
 | S-15 | MODERATE | **Hint logic conditions differ** | notEnoughTechnicians missing total decay check. notEnoughBeds triggers on count instead of actual floor-sleeping. lowOxygen uses raw value instead of `MORALE_LOW_OXYGEN_THRESHOLD`. |
 
 ### 9.5 Pathfinding

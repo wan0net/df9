@@ -332,10 +332,14 @@ export class SaveLoadSystem {
 
     const bMuted = data.bMuted ?? SoundManager.isMuted();
     const masterVolume = data.masterVolume ?? SoundManager.getMasterVolume();
+    const sfxVolume = data.sfxVolume ?? SoundManager.getSfxVolume();
+    const musicVolume = data.musicVolume ?? SoundManager.getMusicVolume();
     if (this.loadAudioData) {
-      this.loadAudioData({ bMuted, masterVolume });
+      this.loadAudioData({ bMuted, masterVolume, sfxVolume, musicVolume });
     } else {
       SoundManager.setMasterVolume(masterVolume);
+      SoundManager.setSfxVolume(sfxVolume);
+      SoundManager.setMusicVolume(musicVolume);
       if (SoundManager.isMuted() !== bMuted) {
         SoundManager.toggleMute();
       }
