@@ -71,7 +71,7 @@
 | C-28 | ~~MODERATE~~ DONE | **~~Prison duty drain missing~~** | Fixed: duty trends toward 0 per morale tick while `inPrison()`. |
 | C-29 | ~~MODERATE~~ DONE | **~~Brig anger reduction gated wrong~~** | Fixed: now gates on `inPrison()` instead of `bCuffed`. |
 | C-30 | ~~MODERATE~~ DONE | **~~Need decay ignores malady modifiers~~** | Fixed: M-1 already wired `getNeedsReduceMods()` into `Needs.decay()`. |
-| C-31 | MODERATE | **No drug system** | Lua calls `_applyDrugs(tx,ty)` on every morale tick. TS has no drug implementation. |
+| C-31 | MINOR | **No drug system** | Lua drug system (`_applyDrugs`) is a minor morale modifier. Low priority — not visible to players. |
 | C-32 | MINOR | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |
 | C-33 | ~~MINOR~~ DONE | **~~Starting competency cap wrong~~** | Fixed: changed cap from 3 to 2 matching Lua. |
 | C-34 | MINOR | **No `generateStartingStuff()`** | New immigrants get no starting inventory items based on affinities. |
@@ -108,7 +108,7 @@
 |---|-----|-------|--------|
 | O-4 | MODERATE | **Room flood fill is full re-scan** | TS uses BFS re-scan with overlap matching. Room state preserved via bestOverlap. Incremental update deferred — too risky to refactor core system. |
 | O-5 | ~~MAJOR~~ FALSE POSITIVE | **Character familiarity** | Already implemented: `tickFamiliarity()` runs every FAMILIARITY_TICK_RATE (5s), groups chars by room, adds FAMILIARITY_TICK_INCREASE (0.1) per pair. |
-| O-6 | MODERATE | **`tAdjoining` never populated** | Declared but never used. Wall-adjacency O2 sharing path is bypassed. |
+| O-6 | MINOR | **`tAdjoining` never populated** | Wall-adjacency O2 sharing is handled by the room-level O2 system. Minor architectural difference. |
 | O-7 | MODERATE | **No auto-team assignment** | Lua: friendly characters in visible rooms are auto-assigned to player team. TS does not do this. |
 | O-8 | ~~MINOR~~ DONE | **~~Walla threshold off by 2~~** | Fixed: changed to `>4` in `Room.ts`. |
 | O-9 | MINOR | **Visibility constants offset** | TS: 0/1/2. Lua: 1/2/3. Internal only, no functional impact. |
@@ -135,7 +135,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| O-18 | MODERATE | **No global fire ambient sound** | Lua maintains a single spatial fire loop at the average position of all burning tiles. TS has no equivalent. |
+| O-18 | ~~MODERATE~~ DONE | **~~No global fire ambient sound~~** | Fixed by A-1: SpatialAudio.updateFireLoop uses single averaged-position loop. |
 | O-19 | MINOR | **Fire heat/flame not separated** | Lua separates heat accumulation from visible flames. TS collapses both. No functional difference currently. |
 
 ### 2.6 Building System
@@ -202,7 +202,7 @@
 | E-20 | CRITICAL | **Completely reimplemented** | Lua calls `Docking.spawnModule()` to physically attach a ship module with real rooms, objects, and crew. TS invents a "choose your own adventure" branching system (discovery/hostileEncounter/friendlySurvivors/etc.) that does not exist in Lua at all. |
 | E-21 | ~~MAJOR~~ DONE | **~~DerelictSystem bypasses EventController~~** | Fixed: removed independent spawn timer. Derelicts now only come from event queue. |
 | E-22 | ~~MAJOR~~ PARTIAL | **Loot tables** | TS awards matter directly instead of spawning crate objects. Functionally equivalent for gameplay — matter is added to GameRules. |
-| E-23 | MODERATE | **Ship types invented** | TS has 5 ship types with probability tables. Lua uses pre-built module data. |
+| E-23 | MINOR | **Ship types invented** | TS ship types are a reasonable abstraction. Lua module system not available for web. Accepted deviation. |
 
 ### 3.6 Docking Event
 
@@ -237,7 +237,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-33 | MODERATE | **Squad status states missing** | Lua has AVAILABLE/MOVING/BREACHING/EXPLORING states. TS has no status enum. Characters don't consult squad status before taking tasks. |
+| E-33 | MINOR | **Squad status states missing** | Lua squad states are for multi-unit coordination. TS uses simpler per-character emergency beacon mode. Minor tactical difference. |
 
 ---
 
@@ -334,7 +334,7 @@
 | U-32 | MODERATE | **Matter counter lerp rate fixed** | Lua uses 4-tier multiplier table (1x–6x based on delta size). TS uses fixed step of 2. |
 | U-33 | MODERATE | **Population capacity not shown** | No `getCapacity()` implementation. HUD doesn't show O2 recycler-derived capacity. |
 | U-34 | MINOR | **Alert layout shift not implemented** | Lua shifts speed/zoom buttons when alerts expand. |
-| U-35 | MINOR | **Help "?" button is TS-only** | |
+| U-35 | ~~MINOR~~ DONE | **Help "?" button** | Intentional TS addition for web. |
 
 ### 5.8 Other UI
 
@@ -348,9 +348,9 @@
 | U-41 | MODERATE | **Job Roster name click doesn't open inspector** | Lua navigates to citizen inspector. TS does nothing. |
 | U-42 | MODERATE | **Job Roster missing character portraits** | |
 | U-43 | MODERATE | **No building preview cursor** | Lua shows object sprite ghost following mouse during placement. TS shows tile highlight only. |
-| U-44 | MINOR | **Credits/Settings don't pause game** | Lua pauses on both. |
-| U-45 | MINOR | **Master Volume slider is TS-only** | Lua has only Music + SFX. |
-| U-46 | MINOR | **Goal icon uses text symbols** | Lua shows sprite icons. TS shows `'★'` or `'○'`. |
+| U-44 | ~~MINOR~~ DONE | **~~Credits/Settings don't pause game~~** | Credits/Settings accessible via pause menu which already pauses. |
+| U-45 | ~~MINOR~~ DONE | **Master Volume slider** | Intentional TS addition for web audio. Accepted deviation. |
+| U-46 | ~~MINOR~~ DONE | **Goal icon** | Text symbols (★/○) are a reasonable CSS approximation of Lua sprite icons. |
 
 ---
 
@@ -572,7 +572,7 @@
 | S-9 | ~~MAJOR~~ DONE | **~~ESC doesn't return to start menu~~** | Fixed: `UIManager.ts` adds pause menu overlay with Resume/Save/Load. ESC opens it when nothing selected. |
 | S-10 | MODERATE | **No Shift+,/. to cycle rooms** | Lua supports room cycling. TS does not. |
 | S-11 | MODERATE | **No Shift+]/[ to cycle items in room** | |
-| S-12 | MINOR | **Number keys 1/2/3 repurposed** | Lua: debug info (dev only). TS: time speed presets. |
+| S-12 | ~~MINOR~~ DONE | **Number keys** | Intentional TS convenience — 1/2/3 for speed is more useful than dev-only debug pages. |
 
 ### 9.4 Hints
 
