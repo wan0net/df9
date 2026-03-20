@@ -355,8 +355,10 @@ export const Malady = {
   diseaseEncountered(tMalady: MaladyInstance, nTeam: number): void {
     const key = tMalady.sMaladyName;
     if (!tS.tResearch[key]) {
+      // M-16: Lua uses random(0, nForceResearch) + 500 for forced research diseases
       const researchTime = tMalady.nForceResearch
-        ?? Math.max(200, tMalady.nSeverity * 1000);
+        ? Math.floor(Math.random() * tMalady.nForceResearch) + 500
+        : Math.max(200, tMalady.nSeverity * 1000);
       tS.tResearch[key] = {
         sMaladyName: key,
         sMaladyType: tMalady.sMaladyType,

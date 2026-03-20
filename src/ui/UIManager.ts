@@ -513,6 +513,19 @@ export class UIManager {
     helpBtn.addEventListener('mouseleave', () => { helpBtn.style.background = 'transparent'; helpBtn.style.color = AMBER; });
     row2.appendChild(helpBtn);
 
+    // U-17: Quit button — reloads page to return to start menu
+    const quitBtn = document.createElement('div');
+    quitBtn.style.cssText = `
+      padding:4px 10px;border:2px solid ${AMBER};border-radius:4px;
+      cursor:pointer;font-size:16px;font-weight:bold;color:${AMBER};
+      margin-left:6px;font-family:'Dosis',sans-serif;
+    `;
+    quitBtn.textContent = 'QUIT';
+    quitBtn.addEventListener('click', () => { window.location.reload(); });
+    quitBtn.addEventListener('mouseenter', () => { quitBtn.style.background = AMBER; quitBtn.style.color = '#000'; });
+    quitBtn.addEventListener('mouseleave', () => { quitBtn.style.background = 'transparent'; quitBtn.style.color = AMBER; });
+    row2.appendChild(quitBtn);
+
     hudTop.appendChild(row2);
     this.uiRoot.appendChild(hudTop);
 

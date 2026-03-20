@@ -189,9 +189,10 @@ export class EnvObjectRenderer {
     const obj = this.objects.get(id);
     if (!obj) return;
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
-    const r = ((tint >> 16) & 0xFF) / 255;
-    const g = ((tint >> 8) & 0xFF) / 255;
-    const b = (tint & 0xFF) / 255;
+    // R-24: Lua boosts object color by +0.3 over ambient (Lighting.setRoomTileLightInfo)
+    const r = Math.min(1, ((tint >> 16) & 0xFF) / 255 + 0.3);
+    const g = Math.min(1, ((tint >> 8) & 0xFF) / 255 + 0.3);
+    const b = Math.min(1, (tint & 0xFF) / 255 + 0.3);
     mat.color.setRGB(r, g, b);
   }
 

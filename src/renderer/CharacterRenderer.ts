@@ -578,6 +578,22 @@ loadMurderRobotModel();
 /** Duration to show thought bubble text (Lua EMOTICON_INITIAL_DURATION=5). */
 const THOUGHT_DURATION = 5;
 
+/** R-8: Emoji icons for common task types (prepended to thought bubble text). */
+const TASK_EMOJI: Record<string, string> = {
+  Eat: '\u{1F354}',
+  EatAtTable: '\u{1F354}',
+  EatAtFoodReplicator: '\u{1F354}',
+  EatPlant: '\u{1F354}',
+  SleepInBed: '\u{1F4A4}',
+  SleepOnFloor: '\u{1F4A4}',
+  BuildTile: '\u{1F527}',
+  BuildEnvObject: '\u{1F527}',
+  MaintainEnvObject: '\u{1F527}',
+  AttackEnemy: '\u2694\uFE0F',
+  Brawl: '\u2694\uFE0F',
+  ResearchInLab: '\u{1F52C}',
+};
+
 /** Friendly display names for internal task names (Lua OptionData.UIText). */
 const TASK_DISPLAY_NAMES: Record<string, string> = {
   Idle: 'Idle',
@@ -644,6 +660,9 @@ const TASK_DISPLAY_NAMES: Record<string, string> = {
   IncapacitatedOnFloor: 'Injured',
   FieldScanAndHeal: 'Treating',
   ResearchInLab: 'Researching',
+  Starve: 'Starving!',
+  FleeTemperTantrum: 'Fleeing!',
+  RaiderFleeThreat: 'Fleeing!',
 };
 
 export interface CharacterRenderHandle {
@@ -1330,9 +1349,10 @@ export class CharacterRenderer {
     if (taskName && taskName !== handle.lastTaskName) {
       handle.lastTaskName = taskName;
       handle.thoughtShowTime = now;
-      // Map internal task names to friendly display text
+      // Map internal task names to friendly display text, with emoji prefix (R-8)
       const label = TASK_DISPLAY_NAMES[taskName] ?? taskName;
-      handle.thoughtTextSpan.textContent = label;
+      const emoji = TASK_EMOJI[taskName] ?? '';
+      handle.thoughtTextSpan.textContent = emoji ? `${emoji} ${label}` : label;
       handle.thoughtEl.style.cssText =
         'pointer-events:none;font-family:"Dosis",sans-serif;font-size:9px;color:#fff;' +
         'background:rgba(0,0,0,0.7);border-radius:4px;' +
