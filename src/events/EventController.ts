@@ -181,7 +181,7 @@ export class EventController implements TickableSystem {
     }
 
     // Check for compound event (final siege at 6 hours)
-    if (!this.compoundEventFired && GameRules.elapsedTime >= COMPOUND_EVENT_TIME && this.population >= 8) {
+    if (!this.compoundEventFired && GameRules.elapsedTime >= COMPOUND_EVENT_TIME && this.population >= 25) { // Lua CompoundEvent.lua:31 nMinPopulation=25
       this.fireCompoundEvent();
       this.compoundEventFired = true;
     }

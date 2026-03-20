@@ -848,6 +848,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     cameraController.centerOnWorld(spx, spy);
   }
 
+  // Lua GameRules.lua:686 — new game starts paused
+  if (!isLoadSave) {
+    GameRules.bRunning = false;
+  }
+
   // ── Input system ──────────────────────────────────────────
   const inputManager = new InputManager(threeRenderer.getCanvas(), cameraController);
 
