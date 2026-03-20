@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { TILE_HALF_W, TILE_HALF_H } from '../config';
 import { TileType } from '../world/TileTypes';
 import type { Character } from '../characters/Character';
 import type { TileGrid } from '../world/TileGrid';
@@ -309,7 +308,21 @@ function loadCharTexture(filename: string): THREE.Texture {
       if (mats) { for (const m of mats) m.needsUpdate = true; }
     },
     undefined,
-    () => { /* silently fail for missing textures */ }
+    () => {
+      const mats = textureMaterials.get(tex);
+      if (mats) {
+        for (const m of mats) {
+          if (m instanceof THREE.MeshStandardMaterial || m instanceof THREE.MeshBasicMaterial) {
+            if (m.map === tex) {
+              m.map = null;
+              m.alphaTest = 0;
+              m.transparent = false;
+              m.needsUpdate = true;
+            }
+          }
+        }
+      }
+    }
   );
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
@@ -355,6 +368,9 @@ function applyModelTextures(group: THREE.Group, charId: number) {
       if (CHAR_TEXTURES.has(baseName)) {
         const tex = loadCharTexture(`${baseName}.png`);
         mat.map = tex;
+        mat.transparent = true;
+        mat.alphaTest = 0.01;
+        mat.depthWrite = false;
         mat.needsUpdate = true;
         trackTextureUser(tex, mat);
         applied = true;
@@ -428,14 +444,6 @@ function stripSkinning(group: THREE.Group) {
       mat.side = THREE.DoubleSide;
     }
   });
-}
-
-function hasSkinning(group: THREE.Group): boolean {
-  let found = false;
-  group.traverse((child) => {
-    if (child instanceof THREE.SkinnedMesh) found = true;
-  });
-  return found;
 }
 
 function loadCitizenModel(): Promise<void> {
@@ -600,7 +608,7 @@ export interface CharacterRenderHandle {
   /** Thought bubble DOM + CSS2DObject. */
   thoughtEl: HTMLDivElement;
   thoughtTextSpan: HTMLSpanElement;
-  thoughtTail: HTMLImageElement;
+  thoughtTail: HTMLElement;
   thoughtObj: CSS2DObject;
   /** Last shown task name (to detect task change). */
   lastTaskName: string;
@@ -613,7 +621,6 @@ export class CharacterRenderer {
   private overlayScene: THREE.Scene;
   private handles = new Map<number, CharacterRenderHandle>();
   private pendingUpgrade: Character[] = [];
-  private elapsedTime = 0;
   private lastFrameTime = 0;
   private frameDt = 1 / 60;
   private grid: TileGrid | null = null;
@@ -672,18 +679,16 @@ export class CharacterRenderer {
     thoughtEl.className = 'thought-bubble';
     thoughtEl.style.cssText =
       'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
-      'background-image:url(\'assets/ui/dialog/ui_dialog_thought_bubblebg.png\');' +
-      'background-size:100% 100%;background-repeat:no-repeat;' +
-      'image-rendering:pixelated;border:none;border-radius:0;' +
+      'background:rgba(0,0,0,0.7);border-radius:4px;' +
       'padding:4px 8px;white-space:nowrap;text-align:center;display:none;' +
-      'position:relative;';
+      'width:fit-content;';
     const thoughtTextSpan = document.createElement('span');
     thoughtEl.appendChild(thoughtTextSpan);
-    const thoughtTail = document.createElement('img');
-    thoughtTail.src = 'assets/ui/dialog/ui_dialog_thought_bubbletail.png';
+    const thoughtTail = document.createElement('div');
     thoughtTail.style.cssText =
-      'position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);' +
-      'width:16px;height:10px;image-rendering:pixelated;display:block;';
+      'position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);' +
+      'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;' +
+      'border-top:6px solid rgba(0,0,0,0.7);';
     thoughtEl.appendChild(thoughtTail);
     const thoughtObj = new CSS2DObject(thoughtEl);
     thoughtObj.position.set(char.screenX, -(char.screenY - 60), 20002 + char.screenY);
@@ -1107,12 +1112,10 @@ export class CharacterRenderer {
       handle.thoughtTextSpan.textContent = label;
       handle.thoughtEl.style.cssText =
         'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
-        'background-image:url(\'assets/ui/dialog/ui_dialog_thought_bubblebg.png\');' +
-        'background-size:100% 100%;background-repeat:no-repeat;' +
-        'image-rendering:pixelated;border:none;border-radius:0;' +
+        'background:rgba(0,0,0,0.7);border-radius:4px;' +
         'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
-        'position:relative;';
-      handle.thoughtTail.src = 'assets/ui/dialog/ui_dialog_thought_bubbletail.png';
+        'width:fit-content;';
+      handle.thoughtTail.style.borderTopColor = 'rgba(0,0,0,0.7)';
     }
 
     // Dismiss after THOUGHT_DURATION
@@ -1133,12 +1136,10 @@ export class CharacterRenderer {
       handle.thoughtTextSpan.textContent = bubbleText;
       handle.thoughtEl.style.cssText =
         'pointer-events:none;font-family:"Orbitron",monospace;font-size:11px;color:#000;' +
-        'background-image:url(\'assets/ui/dialog/ui_dialog_dialog_bubblebg.png\');' +
-        'background-size:100% 100%;background-repeat:no-repeat;' +
-        'image-rendering:pixelated;border:none;border-radius:0;' +
+        'background:rgba(255,255,255,0.85);border-radius:4px;' +
         'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
-        'position:relative;';
-      handle.thoughtTail.src = 'assets/ui/dialog/ui_dialog_dialog_bubbletail.png';
+        'width:fit-content;';
+      handle.thoughtTail.style.borderTopColor = 'rgba(255,255,255,0.85)';
     } else if (!bubbleText && handle.thoughtTextSpan.textContent && !handle.lastTaskName) {
       handle.thoughtEl.style.display = 'none';
     }

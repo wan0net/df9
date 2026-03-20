@@ -916,11 +916,15 @@ export class InspectorPanel {
   private renderRoom(room: Room) {
     const zoneName = ZONE_SPRITES[room.zone]?.name ?? 'Unknown';
 
-    // Room header — zone name + room ID
+    // Room header — custom name if set, else zone name + room ID (Lua: uniqueZoneName)
+    const displayName = room.uniqueZoneName
+      ? room.uniqueZoneName
+      : `${zoneName} Room #${room.id}`;
     const header = this.makeSection();
     header.innerHTML = `
       <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
-        ${zoneName} <span style="color:#888;">Room #${room.id}</span>
+        ${displayName}
+        ${room.uniqueZoneName ? `<span style="color:#888;font-size:20px;"> (${zoneName} #${room.id})</span>` : ''}
       </div>
     `;
     this.contentEl.appendChild(header);
@@ -975,9 +979,13 @@ export class InspectorPanel {
   /** Room Info tab — stats display (Lua ZoneInspector main view). */
   private renderRoomInfo(room: Room) {
     const objCount = this.getObjectsInRoom ? this.getObjectsInRoom(room).length : 0;
+    const charCount = room.tCharacters.size;
+    const citizenLabel = charCount === 1 ? line('INSPEC063TEXT') : line('INSPEC061TEXT');
+    const moraleScore = room.nMoraleScore;
     const section = this.makeSection();
-    section.innerHTML = `
+    let html = `
       <div style="margin-bottom:4px;">${line('INSPEC055TEXT')} ${room.size} ${line('INSPEC057TEXT')}</div>
+      <div style="margin-bottom:4px;">${line('INSPEC060TEXT')} <span style="color:#fff;">${charCount}</span> ${citizenLabel}</div>
       <div style="margin-bottom:6px;">
         ${this.bar(line('INSPEC062TEXT'), room.oxygen, 255, room.oxygen < 50 ? '#f44' : '#48f')}
       </div>
@@ -988,7 +996,12 @@ export class InspectorPanel {
         ${line('INSPEC167TEXT')} <span style="color:#4f4;">+${room.nPowerOutput}</span> / ${line('INSPEC163TEXT')} <span style="color:#f44;">-${room.nPowerDraw}</span>
       </div>
       <div style="margin-bottom:4px;">${line('INSPEC056TEXT')} ${objCount}</div>
+      <div style="margin-bottom:4px;">${line('INSPEC012TEXT')} <span style="color:${moraleScore > 0 ? '#4f4' : moraleScore < 0 ? '#f44' : '#aaa'};">${moraleScore > 0 ? '+' : ''}${moraleScore}</span></div>
     `;
+    if (room.bBurning) {
+      html += `<div style="margin-bottom:4px;color:#f84;">${line('INSPEC078TEXT')} (${room.nFireTiles})</div>`;
+    }
+    section.innerHTML = html;
     this.contentEl.appendChild(section);
   }
 

@@ -38,7 +38,7 @@ export class EnvObjectRenderer {
     // Ghost (unbuilt) doors still need a visible sprite so the player can see the placement.
     if (objDef?.door && built) return;
     const spriteName = objDef?.spriteName ?? objectType;
-    const spriteKey = built ? spriteName : spriteName; // ghost uses same sprite
+    const spriteKey = built ? spriteName : `tile_${spriteName}`; // ghost uses tile-prefixed sprite
 
     const mesh = this.createSpriteMesh(spriteKey, objDef?.width ?? 1, objDef?.height ?? 1, built);
     if (!mesh) return;

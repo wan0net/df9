@@ -1202,6 +1202,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       roomManager.persistZone(room);
       tileRenderer.rerenderRoom(room);
     },
+    onAlertClick: (alertType: string) => {
+      if (eventController.dialogSystem) {
+        if (eventController.dialogSystem.isOpen()) {
+          eventController.dialogSystem.bringToFront();
+        }
+      }
+    },
   });
 
   // Keyboard bindings for panels (must come after uiManager creation)

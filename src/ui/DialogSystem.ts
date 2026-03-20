@@ -500,6 +500,13 @@ export class DialogSystem {
     return this.activeDialog !== null;
   }
 
+  /** Re-append the active dialog to the container so it appears on top. */
+  bringToFront() {
+    if (this.activeDialog) {
+      this.container.appendChild(this.activeDialog.element);
+    }
+  }
+
   /** Close any active dialog. */
   close() {
     if (this.activeDialog) {

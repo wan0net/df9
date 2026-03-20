@@ -197,7 +197,9 @@ export class NewGameScreenState implements SceneState {
 
   // Sprite buttons — Lua layout elements
   private confirmBtnEl!: HTMLDivElement;
+  private confirmImg!: HTMLImageElement;
   private declineBtnEl!: HTMLDivElement;
+  private declineImg!: HTMLImageElement;
   private launchCoverEl!: HTMLImageElement;
   private launchActiveEl!: HTMLDivElement;
   private cancelBtnEl!: HTMLDivElement;
@@ -273,42 +275,34 @@ export class NewGameScreenState implements SceneState {
     // Flavor text — Lua: FlavorTextALabel (NEWBAS021TEXT) + FlavorTextBLabel (NEWBAS022TEXT)
     // Positioned at 314px from left edge (just right of left sidebar)
     const flavorA = this.el('div',
-      `position:absolute;top:14px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:6;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;` /* Lua dosissemibold26 */,
+      `position:absolute;top:26px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:6;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;` /* Lua dosissemibold26 */,
       line('NEWBAS021TEXT'));
     this.overlay.appendChild(flavorA);
     const flavorB = this.el('div',
-      `position:absolute;top:68px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:18px;z-index:6;font-family:'Dosis',sans-serif;font-style:italic;` /* Lua dosissemibold18 */,
+      `position:absolute;top:126px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:18px;z-index:6;font-family:'Dosis',sans-serif;font-style:italic;` /* Lua dosissemibold18 */,
       line('NEWBAS022TEXT'));
     this.overlay.appendChild(flavorB);
 
-    // "Region Selection" header on left sidebar — Lua: NewBase.lua top label
-    const regionSelHeader = this.el('div',
-      `position:absolute;top:16px;left:16px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:4;font-family:'Dosis',sans-serif;letter-spacing:1px;font-style:italic;` /* Lua dosissemibold26 */,
-      'Region Selection');
-    this.overlay.appendChild(regionSelHeader);
-
-    // Sandbox mode toggle — Lua: ButtonSandboxActive (50×50 checkbox at 170px from left, 605px from bottom)
-    // Label: "SANDBOX" (dosisregular35), checkbox toggles sandbox mode
-    const sandboxRow = document.createElement('div');
-    sandboxRow.style.cssText = `position:absolute;bottom:90px;left:30px;display:flex;align-items:center;gap:12px;z-index:5;cursor:pointer;`;
+    // Lua: ButtonSandboxActive {-W/2+170, -(H/2)+605} 50×50; LabelSandbox {-W/2+30, H/2-550} dosisregular35
     const sandboxCheck = document.createElement('div');
-    sandboxCheck.style.cssText = `width:50px;height:50px;border:2px solid ${AMBER_HEX};display:flex;align-items:center;justify-content:center;font-size:32px;color:${AMBER_HEX};`;
+    sandboxCheck.style.cssText = `position:absolute;left:170px;bottom:605px;width:50px;height:50px;border:2px solid ${AMBER_HEX};display:flex;align-items:center;justify-content:center;font-size:32px;color:${AMBER_HEX};z-index:5;cursor:pointer;`;
     sandboxCheck.textContent = '';
-    const sandboxLabel = this.el('div', `color:${AMBER_HEX};font-size:35px;font-family:'Dosis',sans-serif;font-weight:400;letter-spacing:1px;`, 'SANDBOX'); /* Lua dosisregular35, LabelSandbox */
-    sandboxRow.appendChild(sandboxCheck);
-    sandboxRow.appendChild(sandboxLabel);
+    const sandboxLabel = this.el('div', `position:absolute;left:30px;top:550px;color:${AMBER_HEX};font-size:35px;font-family:'Dosis',sans-serif;font-weight:400;letter-spacing:1px;z-index:5;cursor:pointer;`, 'SANDBOX');
     let sandboxActive = false;
-    sandboxRow.addEventListener('click', () => {
+    const toggleSandbox = () => {
       sandboxActive = !sandboxActive;
       sandboxCheck.textContent = sandboxActive ? '\u2714' : '';
       sandboxCheck.style.background = sandboxActive ? AMBER_HEX : 'transparent';
       sandboxCheck.style.color = sandboxActive ? '#000' : AMBER_HEX;
       GameRules.bSandboxMode = sandboxActive;
       SoundManager.playUI('Intro_AcceptButton');
-    });
-    sandboxRow.addEventListener('mouseenter', () => { sandboxLabel.style.color = '#FFE696'; });
-    sandboxRow.addEventListener('mouseleave', () => { sandboxLabel.style.color = AMBER_HEX; });
-    this.overlay.appendChild(sandboxRow);
+    };
+    sandboxCheck.addEventListener('click', toggleSandbox);
+    sandboxLabel.addEventListener('click', toggleSandbox);
+    sandboxLabel.addEventListener('mouseenter', () => { sandboxLabel.style.color = '#FFE696'; });
+    sandboxLabel.addEventListener('mouseleave', () => { sandboxLabel.style.color = AMBER_HEX; });
+    this.overlay.appendChild(sandboxCheck);
+    this.overlay.appendChild(sandboxLabel);
 
     // Back
     const backBtn = this.el('div',
@@ -448,30 +442,30 @@ export class NewGameScreenState implements SceneState {
   private buildConfirmDecline() {
     // Confirm and Decline buttons — ON the left sidebar panel
     // Lua: pos = { '-W/2 + 50', 'H/2 - 90' }, scale = { 154, 154 }
-    const btnLeft = 50;
-    const btnTop = 90;
-    const btnSize = 154;
+    const btnLeft = 30;
+    const btnTop = 60;
+    const btnSize = 100;
 
     // Confirm button
     this.confirmBtnEl = document.createElement('div');
     this.confirmBtnEl.setAttribute('role', 'button');
     this.confirmBtnEl.setAttribute('aria-label', 'Confirm');
-    this.confirmBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${btnTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;display:none;`;
-    const confirmImg = document.createElement('img');
+    this.confirmBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${btnTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;pointer-events:none;`;
+    const confirmImg = this.confirmImg = document.createElement('img');
     confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
     confirmImg.style.cssText = `width:100%;height:100%;`;
     this.confirmBtnEl.appendChild(confirmImg);
 
     // Label below confirm — Lua: LabelAccept, dosisregular35, Gui.BLACK
-    const confirmLabel = this.el('div', `color:#000;font-size:35px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS002TEXT')); /* Lua dosisregular35 */
+    const confirmLabel = this.el('div', `color:${AMBER_HEX};font-size:24px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS002TEXT')); /* Lua dosisregular35 */
     this.confirmBtnEl.appendChild(confirmLabel);
 
     this.confirmBtnEl.addEventListener('mouseenter', () => {
-      confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_active.png';
+      confirmImg.style.filter = 'brightness(1.3)';
       SoundManager.playUI('UI_Hilight');
     });
     this.confirmBtnEl.addEventListener('mouseleave', () => {
-      confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
+      confirmImg.style.filter = 'brightness(1)';
     });
     this.confirmBtnEl.addEventListener('click', () => this.onConfirm());
     this.overlay.appendChild(this.confirmBtnEl);
@@ -479,22 +473,22 @@ export class NewGameScreenState implements SceneState {
     // Decline button — below confirm
     this.declineBtnEl = document.createElement('div');
     // Lua: pos = { '-W/2 + 50', 'H/2 - 300' }
-    const declineTop = 300;
-    this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;display:none;`;
-    const declineImg = document.createElement('img');
+    const declineTop = 210;
+    this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;pointer-events:none;`;
+    const declineImg = this.declineImg = document.createElement('img');
     declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
     declineImg.style.cssText = `width:100%;height:100%;`;
     this.declineBtnEl.appendChild(declineImg);
 
-    const declineLabel = this.el('div', `color:#000;font-size:35px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS003TEXT')); /* Lua dosisregular35 */
+    const declineLabel = this.el('div', `color:${AMBER_HEX};font-size:24px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS003TEXT')); /* Lua dosisregular35 */
     this.declineBtnEl.appendChild(declineLabel);
 
     this.declineBtnEl.addEventListener('mouseenter', () => {
-      declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_active.png';
+      declineImg.style.filter = 'brightness(1.3)';
       SoundManager.playUI('UI_Hilight');
     });
     this.declineBtnEl.addEventListener('mouseleave', () => {
-      declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
+      declineImg.style.filter = 'brightness(1)';
     });
     this.declineBtnEl.addEventListener('click', () => this.onDecline());
     this.overlay.appendChild(this.declineBtnEl);
@@ -505,8 +499,6 @@ export class NewGameScreenState implements SceneState {
     //   Housing (launchbutton_active): left=110, Y=204 from bottom, 405x351
     //   Cover (launchbutton_cover):    left=-40, Y=252 from bottom, 366px wide
     //   Cancel hitbox:                 left=10,  Y=302 from bottom, 60x50
-    const housingW = 405;
-    const housingH = 351;
     const housingLeft = 110;
     const coverW = 366;
     const coverLeft = -40;
@@ -519,16 +511,12 @@ export class NewGameScreenState implements SceneState {
 
     // Deploy housing (red button + CANCEL — hidden until confirmed)
     this.launchActiveEl = document.createElement('div');
-    this.launchActiveEl.style.cssText = `position:absolute;left:${housingLeft}px;top:calc(100% - 204px);width:${housingW}px;height:${housingH}px;z-index:5;display:none;cursor:pointer;`;
+    this.launchActiveEl.style.cssText = `position:absolute;left:66px;top:calc(100% - 244px);width:180px;height:120px;z-index:5;display:none;cursor:pointer;`;
 
     const activeImg = document.createElement('img');
     activeImg.src = '/assets/ui/newgame/launchbutton_active.png';
-    activeImg.style.cssText = 'width:100%;height:100%;pointer-events:none;';
+    activeImg.style.cssText = 'width:183px;height:auto;pointer-events:none;';
     this.launchActiveEl.appendChild(activeImg);
-
-    // DEPLOY label centered over the red button area
-    const deployLabel = this.el('div', `position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);color:white;font-size:28px;font-family:'Dosis',sans-serif;letter-spacing:3px;text-shadow:0 0 8px rgba(255,60,0,0.8);`, line('NEWBUI002TEXT')); /* Lua dosisregular35 */
-    this.launchActiveEl.appendChild(deployLabel);
 
     this.launchActiveEl.addEventListener('mouseenter', () => {
       activeImg.style.filter = 'brightness(1.3)';
@@ -542,7 +530,18 @@ export class NewGameScreenState implements SceneState {
 
     // Cancel button — Lua: pos = { '-W/2 + 10', '-(H/2) + 302' }, scale = { 60, 50 }
     this.cancelBtnEl = document.createElement('div');
-    this.cancelBtnEl.style.cssText = `position:absolute;left:10px;top:calc(100% - 302px);width:60px;height:50px;z-index:8;display:none;cursor:pointer;`;
+    this.cancelBtnEl.style.cssText = `position:absolute;left:0px;top:calc(100% - 340px);width:80px;height:65px;z-index:8;display:none;cursor:pointer;`;
+    const cancelImg = document.createElement('img');
+    cancelImg.src = '/assets/ui/newgame/cancelbutton_active.png';
+    cancelImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+    this.cancelBtnEl.appendChild(cancelImg);
+    this.cancelBtnEl.addEventListener('mouseenter', () => {
+      cancelImg.style.filter = 'brightness(1.3)';
+      SoundManager.playUI('UI_Hilight');
+    });
+    this.cancelBtnEl.addEventListener('mouseleave', () => {
+      cancelImg.style.filter = 'brightness(1)';
+    });
     this.cancelBtnEl.addEventListener('click', () => this.onCancel());
     this.overlay.appendChild(this.cancelBtnEl);
   }
@@ -638,8 +637,10 @@ export class NewGameScreenState implements SceneState {
     SoundManager.playUI('Intro_UIAppear');  // Lua: previewappear
     playWarbleFullscreen(this.overlay, 0.3, 0.3);
     this.showInspector(this.selectedZone);
-    this.confirmBtnEl.style.display = 'block';
-    this.declineBtnEl.style.display = 'block';
+    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_active.png';
+    this.confirmBtnEl.style.pointerEvents = 'auto';
+    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_active.png';
+    this.declineBtnEl.style.pointerEvents = 'auto';
   }
 
   private onMouseMove(e: MouseEvent) {
@@ -662,8 +663,10 @@ export class NewGameScreenState implements SceneState {
     SoundManager.playUI('Intro_LaunchOpen');     // Lua: launchopen
     playWarbleFullscreen(this.overlay, 0.6, 0.5);
     this.state = 'ConfirmedLandingZone';
-    this.confirmBtnEl.style.display = 'none';
-    this.declineBtnEl.style.display = 'none';
+    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
+    this.confirmBtnEl.style.pointerEvents = 'none';
+    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
+    this.declineBtnEl.style.pointerEvents = 'none';
     this.helpText.style.display   = 'none';
 
     // Slide launch cover away to reveal active button
@@ -679,8 +682,10 @@ export class NewGameScreenState implements SceneState {
     this.state = 'Initial';
     this.selectedZone = null;
     this.infoPanel.style.display       = 'none';
-    this.confirmBtnEl.style.display    = 'none';
-    this.declineBtnEl.style.display    = 'none';
+    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
+    this.confirmBtnEl.style.pointerEvents = 'none';
+    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
+    this.declineBtnEl.style.pointerEvents = 'none';
     this.launchActiveEl.style.display  = 'none';
     this.cancelBtnEl.style.display     = 'none';
 
@@ -700,8 +705,10 @@ export class NewGameScreenState implements SceneState {
     this.state = 'Initial';
     this.selectedZone = null;
     this.infoPanel.style.display       = 'none';
-    this.confirmBtnEl.style.display    = 'none';
-    this.declineBtnEl.style.display    = 'none';
+    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
+    this.confirmBtnEl.style.pointerEvents = 'none';
+    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
+    this.declineBtnEl.style.pointerEvents = 'none';
     this.launchActiveEl.style.display  = 'none';
     this.cancelBtnEl.style.display     = 'none';
 
