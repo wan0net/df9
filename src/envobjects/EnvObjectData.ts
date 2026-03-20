@@ -488,7 +488,7 @@ export const tObjects: Record<string, EnvObjectDef> = {
 
   // ── Airlock ───────────────────────────────────────────────────
   AirlockLocker: def({
-    spriteName: 'AirlockLocker', friendlyName: line('ZONEUI040TEXT'), matterCost: 50,
+    spriteName: 'AirlockLocker', friendlyName: line('ZONEUI040TEXT'), matterCost: 25, // Lua EnvObjectData.lua matterCost=25
     againstWall: true, zoneName: ZoneType.AIRLOCK,
     customClass: 'AirlockLocker', sidebarIcon: 'icon_airlock_locker',
     explodeOnFailure: true, bAttackable: false,
