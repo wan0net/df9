@@ -99,6 +99,11 @@ export class BrigZone extends Zone {
     return Array.from(brigsByRoomId.values());
   }
 
+  /** Find the BrigZone associated with a room, or null. */
+  static findBrigForRoom(room: Room): BrigZone | null {
+    return brigsByRoomId.get(room.id) ?? null;
+  }
+
   /** Find which BrigZone a character is assigned to, or null. */
   static findBrigForChar(charId: number): BrigZone | null {
     for (const brig of brigsByRoomId.values()) {
