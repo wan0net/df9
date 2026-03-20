@@ -60,8 +60,8 @@ async function startNewGame(page: Page) {
   // 5. Click Confirm button
   await page.getByRole('button', { name: 'Confirm' }).click({ timeout: 5_000 });
 
-  // 6. Click DEPLOY
-  await page.getByText('DEPLOY', { exact: true }).click({ timeout: 5_000 });
+  // 6. Click DEPLOY (launch button is image-only, no text)
+  await page.locator('img[src*="launchbutton_active"]').click({ timeout: 5_000, force: true });
 
   // 7. Wait for deploy animation to finish (new-game overlay disappears)
   await expect(page.locator('#new-game')).toBeHidden({ timeout: 30_000 });
@@ -3192,7 +3192,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       // The tileInfoEl sits below the top HUD bar
       const divs = ui.querySelectorAll('div');
       for (const d of divs) {
-        if (d.style.right === '10px' && d.style.pointerEvents === 'none' && d.style.opacity === '0.7') return true;
+        if (d.style.left === '120px' && d.style.pointerEvents === 'none' && d.style.opacity === '0.7') return true;
       }
       return false;
     });
@@ -3211,8 +3211,8 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       }
       return count;
     });
-    // 7 sidebar buttons have icon sprites (Inspect, Assign, Research, Goals, Construct, Mine, Beacon)
-    expect(iconCount).toBe(7);
+    // 7 sidebar + 6 construct submenu mode icons + 2 construct cancel/confirm icons = 15
+    expect(iconCount).toBe(15);
   });
 
   // P1.2: CharacterRenderer creates shadow meshes for characters
