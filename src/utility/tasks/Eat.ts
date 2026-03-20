@@ -6,6 +6,7 @@
 import { Task, type NeedAdvertisement } from '../Task';
 import { MORALE_ATE_MEAL_BASE } from '../../characters/CharacterConstants';
 import { Base } from '../../core/Base';
+import { SpatialAudio } from '../../audio/SpatialAudio';
 
 export class Eat extends Task {
   readonly name = 'Eat';
@@ -35,12 +36,14 @@ export class Eat extends Task {
     // Phase 3: Tick interaction
     if (this.interacting) {
       if (this.tickInteraction(dt)) {
+        SpatialAudio.playAtTile('Citizen_Drink', this.character.tileX, this.character.tileY);
         this.character.addMorale(MORALE_ATE_MEAL_BASE);
         Base.incrementStat('nMealsServed');
         this.complete();
       }
     } else if (this.elapsedTime >= this.duration) {
       // Fallback: complete after duration if interaction never started
+      SpatialAudio.playAtTile('Citizen_Drink', this.character.tileX, this.character.tileY);
       this.character.addMorale(MORALE_ATE_MEAL_BASE);
       Base.incrementStat('nMealsServed');
       this.complete();

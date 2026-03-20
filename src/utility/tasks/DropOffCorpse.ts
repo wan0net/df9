@@ -9,6 +9,7 @@ import { Base } from '../../core/Base';
 import { MORALE_MINE_ASTEROID } from '../../characters/CharacterConstants';
 import { addLog } from '../../characters/Log';
 import { CORPSE_TYPE_RAIDER, CORPSE_TYPE_MONSTER } from '../../pickups/Corpse';
+import { SpatialAudio } from '../../audio/SpatialAudio';
 
 export class DropOffCorpse extends Task {
   readonly name = 'DropOffCorpse';
@@ -34,6 +35,9 @@ export class DropOffCorpse extends Task {
 
   protected onUpdate(dt: number) {
     if (this.elapsedTime >= this.duration) {
+      if (this.character) {
+        SpatialAudio.playAtTile('DropOffBody', this.character.tileX, this.character.tileY);
+      }
       const heldItem = this.character?.heldItem ?? 'Corpse';
 
       if (heldItem === 'Corpse') {

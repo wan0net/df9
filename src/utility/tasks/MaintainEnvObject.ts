@@ -8,6 +8,7 @@ import type { EnvObject } from '../../envobjects/EnvObject';
 import { researchSystem } from '../../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../../research/ResearchData';
 import { MORALE_MAINTAIN_OBJECT } from '../../characters/CharacterConstants';
+import { SpatialAudio } from '../../audio/SpatialAudio';
 
 export class MaintainEnvObject extends Task {
   readonly name = 'MaintainEnvObject';
@@ -37,6 +38,7 @@ export class MaintainEnvObject extends Task {
     if (!this.interacting) {
       if (this.attemptInteractWithObject(this.targetObj, this.duration)) {
         this.interacting = true;
+        SpatialAudio.playAtTile('TechMaintain', this.character.tileX, this.character.tileY);
       }
     }
 
