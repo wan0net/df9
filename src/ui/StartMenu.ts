@@ -210,8 +210,8 @@ export class StartMenuState implements SceneState {
       { label: line('UIMISC024TEXT'), action: this.onNewGame },
       { label: line('UIMISC045TEXT'), action: this.onTutorial },
     );
-    // Load Base — ALWAYS available (Lua StartMenu button 4, not conditional)
-    buttons.push({ label: line('UIMISC044TEXT'), action: () => {
+    // Load Base — ALWAYS available (Lua StartMenu button 4, hardcoded 'LOAD BASE')
+    buttons.push({ label: 'LOAD BASE', action: () => {
       this.saveSlotPanel.showLoad(this.overlay, (slotName) => {
         this.onLoadBase(slotName);
       }, () => {});
@@ -219,7 +219,7 @@ export class StartMenuState implements SceneState {
     // Save Base — when game running (Lua StartMenu button 5)
     if (this.gameRunning && this.onSaveBase) {
       const saveFn = this.onSaveBase;
-      buttons.push({ label: line('UIMISC027TEXT'), action: () => {
+      buttons.push({ label: 'SAVE BASE', action: () => {
         this.saveSlotPanel.showSave(this.overlay, (slotName) => {
           saveFn(slotName);
         }, () => {});
