@@ -272,7 +272,7 @@
 |---|-----|-------|--------|
 | U-1 | MAJOR | **Character portraits completely absent** | Lua shows layered portrait sprites (face/hair/accessory). TS shows only text. Major visual gap. |
 | U-2 | MAJOR | **Object portraits absent** | Lua shows object sprite with tint overlay and offset. TS has none. |
-| U-3 | MAJOR | **CitizenLogTab (Spaceface) placeholder only** | Lua shows scrollable timestamped feed. TS shows "No updates yet". |
+| U-3 | ~~MAJOR~~ FALSE POSITIVE | **CitizenLogTab (Spaceface)** | Already implemented — scrollable feed with timestamps from `tLog`. Log entries added for morale, death, join events. |
 | U-4 | ~~MAJOR~~ DONE | **~~CitizenActionTab incomplete~~** | Fixed: Execute now requires cuffed state (disabled when !bCuffed). |
 | U-5 | MAJOR | **Object action tab generic** | Lua shows object-specific actions (release prisoner, view inventory, lock/unlock door). TS shows only Demolish. |
 | U-6 | MODERATE | **No emergency status bar on objects** | Lua shows "On Fire" / "Unpowered" status with background. TS omits. |
@@ -432,7 +432,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | R-1 | ~~CRITICAL~~ PARTIAL | **Skeletal animation** | Full skeletal anim has Three.js/asset issues. Added procedural death pose (90° rotation). Characters lie flat when dead instead of freezing upright. Full skeleton work deferred. |
-| R-2 | MAJOR | **Only 2 of 5 skin tone variants used** | `toneIdx = (charId % 2) + 1`. Assets have `_base_01` through `_base_05`. Lua cycles through all 5. |
+| R-2 | ~~MAJOR~~ DONE | **~~Only 2 of 5 skin tone variants used~~** | Fixed: `toneIdx = (charId % 5) + 1` uses all 5 variants. |
 | R-3 | MAJOR | **Alien races render as humans** | `getVisibleSubsets()` uses `char.id % 2` for male/female. Ignores `tStats.nRace`. Cat, Jelly, Tobian, Birdshark, Shamon, Chicken all look human. |
 | R-4 | MAJOR | **No held-item rendering** | Lua renders weapons/tools in character hands. TS shows nothing. |
 | R-5 | MAJOR | **Hostile characters use citizen model** | Lua has `Bad_Alien.glb`, `Murder_Robot.glb` with separate textures. TS uses Citizen_Base for everyone. |

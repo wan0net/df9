@@ -336,7 +336,8 @@ function loadCharTexture(filename: string): THREE.Texture {
  * Matches material names to texture files using multiple candidate patterns.
  */
 function applyModelTextures(group: THREE.Group, charId: number) {
-  const toneIdx = (charId % 2) + 1;
+  // R-2: Use all 5 skin tone variants (Lua cycles through _base_01 to _base_05)
+  const toneIdx = (charId % 5) + 1;
 
   group.traverse((child) => {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
