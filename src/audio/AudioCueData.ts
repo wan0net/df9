@@ -39,6 +39,12 @@ export const AUDIO_CUES: Record<string, AudioCue> = {
   UI_InspectorDuty: { path: 'ui/UI_InspectorJobSelect.wav', volume: 0.5, loop: false, category: 'ui', spatial: false },
   UI_MapScreen:     { path: 'ui/UI_MapScreen.wav',         volume: 0.6, loop: false, category: 'ui', spatial: false },
   UI_ShortStatic:   { path: 'ui/UI_ShortStatic.wav',       volume: 0.5, loop: false, category: 'ui', spatial: false },
+  degauss:          { path: 'ui/UI_ShortStatic2.wav',      volume: 0.4, loop: false, category: 'ui', spatial: false },
+  selectdegauss:    { path: 'ui/UI_ShortStatic.wav',       volume: 0.5, loop: false, category: 'ui', spatial: false },
+  // Lua SFX name aliases (Lua uses lowercase names, our code uses UI_ prefix)
+  select:           { path: 'ui/NewSelect_1.wav',          volume: 0.8, loop: false, category: 'ui', spatial: false },
+  confirm:          { path: 'ui/UI_Confirm.wav',           volume: 0.9, loop: false, category: 'ui', spatial: false },
+  hilight:          { path: 'ui/UI_Hilight1.wav',          volume: 0.4, loop: false, category: 'ui', spatial: false },
   UI_DoorLock:      { path: 'ui/UI_InspectorDoorLock_PDown.wav', volume: 0.5, loop: false, category: 'ui', spatial: false },
 
   // ── Menu sounds ───────────────────────────────────────────────
