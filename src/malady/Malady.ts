@@ -644,6 +644,11 @@ export const Malady = {
           if (stage.sSymptomLog) tMalady.sSymptomLog = stage.sSymptomLog;
         }
       }
+      // Lua: set nMaladyEnd when all stages exhaust (no next stage, no end yet)
+      const nextStage = tMalady.nCurrentStage + 1;
+      if (nextStage >= tMalady.tSymptomStages.length && tMalady.nMaladyEnd === Infinity) {
+        tMalady.nMaladyEnd = nElapsedTime + randRange(DEFAULT_DURATION_RANGE[0], DEFAULT_DURATION_RANGE[1]);
+      }
     }
 
     // Become contagious
