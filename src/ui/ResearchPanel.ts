@@ -1,24 +1,48 @@
 /**
  * ResearchPanel.ts — Full-screen overlay for research assignment.
- * Matches original ResearchAssignment.lua: full-screen with Back+ESC,
+ * Matches original ResearchAssignment.lua: two-pane layout with
+ * ZoneScrollPane (left) + ProjectScrollPane (right), Back+ESC,
  * Tech/Disease tabs, project list with progress bars.
+ *
+ * Left pane: research zone rooms (ResearchZoneEntry.lua)
+ * Right pane: research projects (ResearchProjectEntry.lua)
+ * Clicking a zone selects it; clicking a project assigns it to the selected zone.
  */
 
 import { researchSystem } from '../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../research/ResearchData';
+import { ResearchZone } from '../zones/ResearchZone';
 import { Malady } from '../malady/Malady';
 import { line } from '../localization/Localization';
 import { playWarble } from './WarbleEffect';
+import type { Room } from '../rooms/Room';
+import { ZoneType } from '../world/ZoneType';
 
 const AMBER = '#dfa200';
+
+/** Data for a research zone entry (mirrors Lua getAllZoneItems). */
+interface ZoneItem {
+  sName: string;
+  nZoneID: number;
+  sProjectID: string | null;
+  sProjectName: string | null;
+  bAssigned: boolean;
+  room: Room;
+}
 
 export class ResearchPanel {
   private el: HTMLDivElement;
   private contentEl!: HTMLDivElement;
   private visible = false;
   private currentTab: 'tech' | 'disease' = 'tech';
+  private getRooms: () => Room[];
 
-  constructor(parent: HTMLElement) {
+  /** Currently selected zone for project assignment (Lua rSelectedZoneEntry). */
+  private selectedZoneId: number | null = null;
+
+  constructor(parent: HTMLElement, getRooms: () => Room[]) {
+    this.getRooms = getRooms;
+
     // Full-screen overlay (matching original ResearchAssignment.lua)
     this.el = document.createElement('div');
     this.el.id = 'research-panel';
@@ -84,6 +108,7 @@ export class ResearchPanel {
       `;
       btn.addEventListener('click', () => {
         this.currentTab = t.tab;
+        this.selectedZoneId = null;
         this.updateTabStyles();
       });
       tabRow.appendChild(btn);
@@ -91,11 +116,11 @@ export class ResearchPanel {
     }
     this.el.appendChild(tabRow);
 
-    // Scrollable content area
+    // Two-pane content area (Lua: ZoneScrollPane left + ProjectScrollPane right)
     this.contentEl = document.createElement('div');
     this.contentEl.style.cssText = `
       position:absolute;top:120px;left:380px;right:60px;bottom:20px;
-      overflow-y:auto;color:#ccc;font-size:22px; /* Lua dosissemibold22 base */
+      display:flex;gap:24px;color:#ccc;font-size:22px;
     `;
     this.el.appendChild(this.contentEl);
 
@@ -115,6 +140,7 @@ export class ResearchPanel {
   show() {
     this.visible = true;
     this.el.style.display = 'block';
+    this.selectedZoneId = null;
     this.updateTabStyles();
     this.update();
     playWarble(this.el, 0.3, 0.3);
@@ -123,6 +149,7 @@ export class ResearchPanel {
   hide() {
     this.visible = false;
     this.el.style.display = 'none';
+    this.selectedZoneId = null;
   }
 
   toggle() {
@@ -140,12 +167,157 @@ export class ResearchPanel {
     while (this.contentEl.firstChild) this.contentEl.removeChild(this.contentEl.firstChild);
     this.updateTabStyles();
 
-    if (this.currentTab === 'tech') {
-      this.renderTechTab(this.contentEl);
+    // ── Left pane: research zone list (Lua ZoneScrollPane) ──────────────
+    const zonePane = document.createElement('div');
+    zonePane.style.cssText = `
+      width:30%;min-width:240px;max-width:360px;overflow-y:auto;
+      border-right:1px solid rgba(223,162,0,0.3);padding-right:16px;
+      flex-shrink:0;
+    `;
+
+    // Zone list header (Lua: RSCHUI003TEXT = "Zone")
+    this.sectionHeader(zonePane, line('RSCHUI003TEXT'));
+
+    const zones = this.getResearchZones();
+    if (zones.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:#888;padding:20px 0;font-size:20px;';
+      empty.textContent = 'No research labs built';
+      zonePane.appendChild(empty);
     } else {
-      this.renderDiseaseTab(this.contentEl);
+      for (const zone of zones) {
+        zonePane.appendChild(this.makeZoneEntry(zone));
+      }
     }
+
+    this.contentEl.appendChild(zonePane);
+
+    // ── Right pane: project list (Lua ProjectScrollPane) ────────────────
+    const projectPane = document.createElement('div');
+    projectPane.style.cssText = `
+      flex:1;overflow-y:auto;padding-left:8px;
+    `;
+
+    // Project list header (Lua: RSCHUI004TEXT = "Project")
+    this.sectionHeader(projectPane, line('RSCHUI004TEXT'));
+
+    // Show selection prompt when a zone is selected (Lua RSCHUI002TEXT)
+    if (this.selectedZoneId !== null) {
+      const prompt = document.createElement('div');
+      prompt.textContent = line('RSCHUI002TEXT');
+      prompt.style.cssText = `
+        color:${AMBER};font-size:20px;font-style:italic;
+        padding:8px 0 12px 0;opacity:0.8;
+      `;
+      projectPane.appendChild(prompt);
+    }
+
+    if (this.currentTab === 'tech') {
+      this.renderTechTab(projectPane);
+    } else {
+      this.renderDiseaseTab(projectPane);
+    }
+
+    this.contentEl.appendChild(projectPane);
   }
+
+  // ── Zone list (Lua getAllZoneItems) ──────────────────────────────────────
+
+  /** Get all RESEARCH-zoned rooms (mirrors Lua Room.getRoomsOfTeam(PLAYER, true, 'RESEARCH')). */
+  private getResearchZones(): ZoneItem[] {
+    const rooms = this.getRooms();
+    const items: ZoneItem[] = [];
+    for (const room of rooms) {
+      if (room.zone !== ZoneType.RESEARCH) continue;
+      const zoneObj = room.zoneObj as ResearchZone | null;
+      const sProjectID = zoneObj?.getActiveResearch() ?? null;
+      let sProjectName: string | null = null;
+      if (sProjectID) {
+        // Check tech research first, then malady
+        const def = RESEARCH_DEFS[sProjectID];
+        if (def) {
+          sProjectName = def.friendlyName;
+        } else {
+          // Could be a malady research
+          sProjectName = sProjectID;
+        }
+      }
+      items.push({
+        sName: room.uniqueZoneName || `Research Lab ${room.id}`,
+        nZoneID: room.id,
+        sProjectID,
+        sProjectName,
+        bAssigned: sProjectName !== null,
+        room,
+      });
+    }
+    return items;
+  }
+
+  /** Create a zone entry element (mirrors Lua ResearchZoneEntry). */
+  private makeZoneEntry(zone: ZoneItem): HTMLDivElement {
+    const isSelected = this.selectedZoneId === zone.nZoneID;
+
+    const entry = document.createElement('div');
+    entry.style.cssText = `
+      padding:12px 16px;margin-bottom:8px;cursor:pointer;
+      border:2px solid ${AMBER};border-radius:8px;
+      background:${isSelected ? AMBER : '#000'};
+      transition:background 0.15s;
+    `;
+
+    // Zone name (Lua: ZoneName, dosissemibold26)
+    const nameEl = document.createElement('div');
+    nameEl.textContent = zone.sName;
+    nameEl.style.cssText = `
+      font-size:22px;font-weight:600;
+      color:${isSelected ? '#000' : AMBER};
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    `;
+    entry.appendChild(nameEl);
+
+    // Current project assignment (Lua: ProjectName / "select a project" prompt)
+    const projectEl = document.createElement('div');
+    if (isSelected) {
+      projectEl.textContent = line('RSCHUI002TEXT');
+      projectEl.style.cssText = 'font-size:18px;color:#000;font-style:italic;margin-top:4px;opacity:0.8;';
+    } else if (zone.sProjectName) {
+      projectEl.textContent = zone.sProjectName;
+      projectEl.style.cssText = `font-size:18px;color:${AMBER};margin-top:4px;opacity:0.8;`;
+    } else {
+      // Lua: empty dashes when no project
+      projectEl.textContent = '--';
+      projectEl.style.cssText = 'font-size:18px;color:#666;margin-top:4px;';
+    }
+    entry.appendChild(projectEl);
+
+    // Hover effects
+    entry.addEventListener('mouseenter', () => {
+      if (!isSelected) {
+        entry.style.background = 'rgba(223,162,0,0.2)';
+      }
+    });
+    entry.addEventListener('mouseleave', () => {
+      if (!isSelected) {
+        entry.style.background = '#000';
+      }
+    });
+
+    // Click to select/deselect zone (Lua: onButtonPressed toggle)
+    entry.addEventListener('click', () => {
+      if (this.selectedZoneId === zone.nZoneID) {
+        // Deselect
+        this.selectedZoneId = null;
+      } else {
+        this.selectedZoneId = zone.nZoneID;
+      }
+      this.update();
+    });
+
+    return entry;
+  }
+
+  // ── Project list rendering ──────────────────────────────────────────────
 
   private renderTechTab(container: HTMLDivElement) {
     const allResearch = researchSystem.getAllResearch();
@@ -163,14 +335,20 @@ export class ResearchPanel {
       else if (def.available) available.push([id, def]);
     }
 
+    const bInSelectionMode = this.selectedZoneId !== null;
+
     // Active research
     if (active.length > 0) {
       this.sectionHeader(container, line('RSCHUI008TEXT'));
-      for (const [, def] of active) {
+      for (const [id, def] of active) {
         const icon = this.getResearchIcon(def.sName);
-        container.appendChild(this.makeResearchEntry(
+        const entry = this.makeResearchEntry(
           def.friendlyName, def.description, icon, progress, def.nCost, false,
-        ));
+        );
+        if (bInSelectionMode) {
+          this.addAssignButton(entry, id);
+        }
+        container.appendChild(entry);
       }
     }
 
@@ -182,8 +360,10 @@ export class ResearchPanel {
         const entry = this.makeResearchEntry(
           def.friendlyName, def.description, icon, 0, def.nCost, false,
         );
-        // Click to start research
-        if (!activeId) {
+        if (bInSelectionMode) {
+          this.addAssignButton(entry, id);
+        } else if (!activeId) {
+          // Legacy behavior: click to start global research when no zone selected
           entry.addEventListener('click', () => {
             researchSystem.startResearch(id);
             this.update();
@@ -199,7 +379,7 @@ export class ResearchPanel {
       for (const [, def] of completed) {
         const icon = this.getResearchIcon(def.sName);
         container.appendChild(this.makeResearchEntry(
-          def.friendlyName, def.description, '✓', def.nCost, def.nCost, true,
+          def.friendlyName, def.description, '\u2713', def.nCost, def.nCost, true,
         ));
       }
     }
@@ -216,19 +396,24 @@ export class ResearchPanel {
     const availableResearch = Malady.getAvailableResearch();
     const completedResearch = Malady.getCompletedResearch();
 
+    const bInSelectionMode = this.selectedZoneId !== null;
+
     for (const entry of availableResearch) {
       const desc = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
       const el = this.makeResearchEntry(
         entry.sMaladyName, desc, '+',
         entry.nCureProgress, entry.nResearchCure, false,
       );
+      if (bInSelectionMode) {
+        this.addAssignButton(el, entry.sMaladyName);
+      }
       container.appendChild(el);
     }
 
     for (const entry of completedResearch) {
       const desc = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
       const el = this.makeResearchEntry(
-        entry.sMaladyName, desc, '✓',
+        entry.sMaladyName, desc, '\u2713',
         entry.nResearchCure, entry.nResearchCure, true,
       );
       container.appendChild(el);
@@ -242,6 +427,48 @@ export class ResearchPanel {
     }
   }
 
+  /**
+   * Add an "Assign" button to a project entry when in zone-selection mode.
+   * Mirrors Lua projectSelected: sets zoneObj.setActiveResearch, deselects zone.
+   */
+  private addAssignButton(entry: HTMLDivElement, projectId: string) {
+    const btn = document.createElement('div');
+    btn.textContent = line('RSCHUI013TEXT'); // "Start" — used as assign label
+    btn.style.cssText = `
+      display:inline-block;margin-top:8px;padding:6px 20px;
+      background:${AMBER};color:#000;border-radius:4px;
+      font-size:18px;font-weight:600;cursor:pointer;
+      transition:opacity 0.15s;
+    `;
+    btn.addEventListener('mouseenter', () => { btn.style.opacity = '0.8'; });
+    btn.addEventListener('mouseleave', () => { btn.style.opacity = '1'; });
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.assignProjectToZone(projectId);
+    });
+    entry.appendChild(btn);
+  }
+
+  /** Assign a research project to the currently selected zone (Lua projectSelected + setZoneProject). */
+  private assignProjectToZone(projectId: string) {
+    if (this.selectedZoneId === null) return;
+    const rooms = this.getRooms();
+    const room = rooms.find(r => r.id === this.selectedZoneId);
+    if (!room) return;
+    const zoneObj = room.zoneObj as ResearchZone | null;
+    if (!zoneObj || typeof zoneObj.setActiveResearch !== 'function') return;
+
+    // Toggle: if already assigned this project, unassign (Lua toggle behavior)
+    if (zoneObj.getActiveResearch() === projectId) {
+      zoneObj.setActiveResearch(null);
+    } else {
+      zoneObj.setActiveResearch(projectId);
+    }
+
+    // Deselect zone after assignment (Lua: zoneSelected(nil) after projectSelected)
+    this.selectedZoneId = null;
+    this.update();
+  }
 
   /**
    * Create a research entry matching the screenshot layout:
@@ -363,15 +590,15 @@ export class ResearchPanel {
   /** Map research ID to a simple icon character (Lua uses UI/JobRoster sprites). */
   private getResearchIcon(id: string): string {
     // Map by research type/unlocks — approximate the Lua sprite icons
-    if (id.includes('Reactor') || id.includes('Power') || id.includes('DarkMatter')) return '⚛';
+    if (id.includes('Reactor') || id.includes('Power') || id.includes('DarkMatter')) return '\u269B';
     if (id.includes('Vaporize') || id.includes('Build')) return 'T';
-    if (id.includes('Green') || id.includes('Garden') || id.includes('Botani')) return '♥';
-    if (id.includes('Refinery') || id.includes('Matter')) return '▶';
-    if (id.includes('Suit') || id.includes('Space')) return '◉';
-    if (id.includes('Security') || id.includes('Turret')) return '⚔';
+    if (id.includes('Green') || id.includes('Garden') || id.includes('Botani')) return '\u2665';
+    if (id.includes('Refinery') || id.includes('Matter')) return '\u25B6';
+    if (id.includes('Suit') || id.includes('Space')) return '\u25C9';
+    if (id.includes('Security') || id.includes('Turret')) return '\u2694';
     if (id.includes('Medical') || id.includes('Hospital')) return '+';
-    if (id.includes('Fitness') || id.includes('Gym')) return '★';
-    return '◆';
+    if (id.includes('Fitness') || id.includes('Gym')) return '\u2605';
+    return '\u25C6';
   }
 
   private sectionHeader(container: HTMLDivElement, text: string) {

@@ -9,7 +9,11 @@ import { GameRules } from '../core/GameRules';
 import { Door, DOOR_STATE, DOOR_OPERATION } from '../envobjects/Door';
 import { BrigZone } from '../zones/BrigZone';
 import type { Room } from '../rooms/Room';
-import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL, UNEMPLOYED } from '../characters/CharacterConstants';
+import {
+  JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL, UNEMPLOYED,
+  RACE_HUMAN, RACE_JELLY, RACE_TOBIAN, RACE_CAT, RACE_BIRDSHARK,
+  RACE_CHICKEN, RACE_MONSTER, RACE_SHAMON, RACE_MURDERFACE, RACE_KILLBOT,
+} from '../characters/CharacterConstants';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 
 import { line } from '../localization/Localization';
@@ -209,11 +213,99 @@ export class InspectorPanel {
     }
   }
 
+  // ── Portraits ──────────────────────────────────────────
+
+  /** Race → background color for the procedural portrait avatar. */
+  private static RACE_PORTRAIT_COLORS: Record<number, string> = {
+    [RACE_HUMAN]:      '#7a5c3a', // warm brown
+    [RACE_TOBIAN]:     '#4a6e4a', // greenish
+    [RACE_JELLY]:      '#3a5c8a', // blue
+    [RACE_CAT]:        '#b87333', // orange-copper
+    [RACE_BIRDSHARK]:  '#6a4a7a', // purple
+    [RACE_CHICKEN]:    '#8a7a3a', // olive-gold
+    [RACE_SHAMON]:     '#3a7a7a', // teal
+    [RACE_MONSTER]:    '#7a2a2a', // dark red
+    [RACE_MURDERFACE]: '#5a1a1a', // darker red
+    [RACE_KILLBOT]:    '#4a4a5a', // steel grey
+  };
+
+  /** Build a CSS-only character portrait: colored circle with initials. */
+  private buildCharacterPortrait(char: Character): HTMLDivElement {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px;';
+
+    const circle = document.createElement('div');
+    const bgColor = InspectorPanel.RACE_PORTRAIT_COLORS[char.tStats.nRace] ?? '#555';
+    const isDead = !char.isAlive();
+    const initial = char.getName().charAt(0).toUpperCase() || '?';
+    circle.style.cssText = `
+      width:64px;height:64px;border-radius:50%;
+      background:${isDead ? '#333' : bgColor};
+      border:3px solid ${isDead ? '#666' : AMBER};
+      display:flex;align-items:center;justify-content:center;
+      font-size:28px;font-weight:bold;color:#fff;
+      font-family:'Orbitron','Dosis',sans-serif;
+      flex-shrink:0;
+      ${isDead ? 'opacity:0.6;' : ''}
+    `;
+    circle.textContent = initial;
+    wrapper.appendChild(circle);
+
+    // Race label beside avatar
+    const raceDef = char.getRaceDef();
+    const raceLabel = document.createElement('div');
+    raceLabel.style.cssText = `font-size:16px;color:#888;text-transform:capitalize;`;
+    raceLabel.textContent = raceDef.sName;
+    wrapper.appendChild(raceLabel);
+
+    return wrapper;
+  }
+
+  /** Build a CSS-only object portrait: condition-colored box with object type. */
+  private buildObjectPortrait(obj: EnvObject): HTMLDivElement {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px;';
+
+    // Condition → border color
+    let borderColor = '#4f4'; // good
+    if (obj.nCondition <= 0) borderColor = '#f44';        // destroyed
+    else if (obj.nCondition <= 25) borderColor = '#f44';   // critical
+    else if (obj.nCondition <= 50) borderColor = '#ff8800'; // damaged (amber)
+    else if (obj.nCondition <= 75) borderColor = '#dfa200'; // worn
+
+    const box = document.createElement('div');
+    box.style.cssText = `
+      width:64px;height:64px;
+      border:3px solid ${borderColor};
+      background:rgba(255,255,255,0.05);
+      display:flex;align-items:center;justify-content:center;
+      font-size:12px;color:${borderColor};text-align:center;
+      font-family:'Dosis',sans-serif;font-weight:600;
+      padding:4px;line-height:1.2;flex-shrink:0;
+      word-break:break-word;
+    `;
+    // Show abbreviated sprite/type name inside box
+    const spriteName = obj.tData.spriteName ?? obj.sName;
+    box.textContent = spriteName.length > 12 ? spriteName.slice(0, 11) + '\u2026' : spriteName;
+    wrapper.appendChild(box);
+
+    // Condition text beside portrait
+    const condLabel = document.createElement('div');
+    condLabel.style.cssText = `font-size:16px;color:${borderColor};`;
+    condLabel.textContent = `${obj.getConditionUIString()} (${Math.round(obj.nCondition)}%)`;
+    wrapper.appendChild(condLabel);
+
+    return wrapper;
+  }
+
   // ── Character Inspector ─────────────────────────────────
 
   private renderCharacter(char: Character) {
     const isDead = !char.isAlive();
     const isPlayer = char.tStats.nTeam === 1; // TEAM_ID_PLAYER
+
+    // Portrait (U-1): colored circle with initial + race label
+    this.contentEl.appendChild(this.buildCharacterPortrait(char));
 
     // Header with editable name
     const header = this.makeSection();
@@ -752,6 +844,9 @@ export class InspectorPanel {
   }
 
   private renderObject(obj: EnvObject) {
+    // Portrait (U-2): condition-colored box with object type
+    this.contentEl.appendChild(this.buildObjectPortrait(obj));
+
     // ── Header area (always shown, Lua ObjectInspector main view) ──
     const header = this.makeSection();
     const condStr = obj.getConditionUIString();

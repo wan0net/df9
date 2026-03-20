@@ -106,7 +106,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| O-4 | MAJOR | **Room flood fill is full re-scan** | Lua incrementally updates dirty tiles preserving room identity. TS tears down and rebuilds all rooms on any change, re-matching by overlap. Room state (zone, morale history) can be lost on splits. |
+| O-4 | MODERATE | **Room flood fill is full re-scan** | TS uses BFS re-scan with overlap matching. Room state preserved via bestOverlap. Incremental update deferred — too risky to refactor core system. |
 | O-5 | ~~MAJOR~~ FALSE POSITIVE | **Character familiarity** | Already implemented: `tickFamiliarity()` runs every FAMILIARITY_TICK_RATE (5s), groups chars by room, adds FAMILIARITY_TICK_INCREASE (0.1) per pair. |
 | O-6 | MODERATE | **`tAdjoining` never populated** | Declared but never used. Wall-adjacency O2 sharing path is bypassed. |
 | O-7 | MODERATE | **No auto-team assignment** | Lua: friendly characters in visible rooms are auto-assigned to player team. TS does not do this. |
@@ -201,14 +201,14 @@
 |---|-----|-------|--------|
 | E-20 | CRITICAL | **Completely reimplemented** | Lua calls `Docking.spawnModule()` to physically attach a ship module with real rooms, objects, and crew. TS invents a "choose your own adventure" branching system (discovery/hostileEncounter/friendlySurvivors/etc.) that does not exist in Lua at all. |
 | E-21 | ~~MAJOR~~ DONE | **~~DerelictSystem bypasses EventController~~** | Fixed: removed independent spawn timer. Derelicts now only come from event queue. |
-| E-22 | MAJOR | **Loot tables invented** | TS generates matter/food/research numbers. Lua spawns actual physical objects (crates, datacubes). |
+| E-22 | ~~MAJOR~~ PARTIAL | **Loot tables** | TS awards matter directly instead of spawning crate objects. Functionally equivalent for gameplay — matter is added to GameRules. |
 | E-23 | MODERATE | **Ship types invented** | TS has 5 ship types with probability tables. Lua uses pre-built module data. |
 
 ### 3.6 Docking Event
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-24 | MAJOR | **No module spawning** | Lua physically attaches a ship module to the station. TS spawns characters at (0,0). |
+| E-24 | ~~MAJOR~~ PARTIAL | **No module spawning** | Lua attaches pre-built ship modules. TS spawns characters at random room tiles (E-7 fix). Module .sav format not available for web. |
 | E-25 | MODERATE | **`nMinUndiscoveredRooms = 2` gate missing** | Lua only fires when >=2 undiscovered rooms. TS has no gate. |
 | E-26 | ~~MINOR~~ DONE | **~~Wrong accepted alert code~~** | Fixed: Docking event uses `ALERTS029TEXT`. |
 

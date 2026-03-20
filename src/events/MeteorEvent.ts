@@ -60,6 +60,9 @@ export class MeteorEvent extends Event {
   /** Callback fired for each meteor impact on a solid tile. */
   onMeteorImpact: MeteorImpactFn | null = null;
 
+  private overlay: HTMLDivElement | null = null;
+  private countLabel: HTMLDivElement | null = null;
+
   /**
    * @param difficulty - Event difficulty (0-1), affects duration and intensity.
    * @param centerTX - Center tile X for the shower (defaults to random indoor target).
@@ -153,12 +156,78 @@ export class MeteorEvent extends Event {
     }
   }
 
+  /** Create the meteor shower warning overlay. */
+  private createOverlay(): void {
+    const overlay = document.createElement('div');
+    overlay.style.cssText =
+      'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9000;';
+
+    const container = document.createElement('div');
+    container.style.cssText =
+      'position:absolute;top:8%;left:50%;transform:translateX(-50%);text-align:center;';
+
+    // Title
+    const title = document.createElement('div');
+    title.textContent = 'Meteor Shower';
+    title.style.cssText =
+      'font-family:"Orbitron",sans-serif;font-size:24px;font-weight:bold;' +
+      'color:#ffcc44;text-shadow:0 0 10px rgba(255,180,0,0.7);';
+
+    // Count label
+    const count = document.createElement('div');
+    count.style.cssText =
+      'font-family:"Dosis",sans-serif;font-size:16px;color:#ffaa22;margin-top:4px;';
+    count.textContent = this.meteors.length + ' incoming';
+    this.countLabel = count;
+
+    // Inject keyframes for flash
+    if (!document.getElementById('df9-meteor-style')) {
+      const style = document.createElement('style');
+      style.id = 'df9-meteor-style';
+      style.textContent =
+        '@keyframes meteorFlash{0%,100%{opacity:0.6;}50%{opacity:1;}}';
+      document.head.appendChild(style);
+    }
+
+    // Flashing warning bar
+    const warn = document.createElement('div');
+    warn.textContent = '\u26A0 WARNING \u26A0';
+    warn.style.cssText =
+      'margin-top:6px;font-family:"Orbitron",sans-serif;font-size:13px;' +
+      'color:#ff6622;letter-spacing:3px;' +
+      'animation:meteorFlash 0.6s ease-in-out infinite;';
+
+    container.appendChild(title);
+    container.appendChild(count);
+    container.appendChild(warn);
+    overlay.appendChild(container);
+    document.body.appendChild(overlay);
+    this.overlay = overlay;
+  }
+
+  /** Update the remaining count on the overlay. */
+  private updateOverlay(): void {
+    if (!this.countLabel) return;
+    const remaining = this.meteors.filter(m => !m.bDone).length;
+    this.countLabel.textContent = remaining + ' remaining';
+  }
+
+  /** Remove the overlay from the DOM. */
+  private removeOverlay(): void {
+    if (this.overlay) {
+      this.overlay.remove();
+      this.overlay = null;
+      this.countLabel = null;
+    }
+  }
+
   protected onUpdate(dt: number) {
     // First tick: generate all meteors and play appear sound (Lua lines 90-147)
     if (!this.bStarted) {
       this.generateMeteors();
       SoundManager.playSfx('MeteorAppear');
       Base.addAlert('meteor', line('ALERTS033TEXT'));
+      this.createOverlay();
       this.bStarted = true;
       return;
     }
@@ -211,7 +280,11 @@ export class MeteorEvent extends Event {
       }
     }
 
+    // Update remaining count on overlay
+    this.updateOverlay();
+
     if (allDone && this.meteors.length > 0) {
+      this.removeOverlay();
       this.complete();
     }
   }

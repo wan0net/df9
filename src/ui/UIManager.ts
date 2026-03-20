@@ -363,7 +363,7 @@ export class UIManager {
     });
 
     // Research panel
-    this.researchPanel = new ResearchPanel(this.uiRoot);
+    this.researchPanel = new ResearchPanel(this.uiRoot, this.getRooms);
 
     // Goals panel
     this.goalsPanel = new GoalsPanel(this.uiRoot, callbacks.goalSystem);

@@ -11,6 +11,34 @@ import { HospitalZone } from '../zones/HospitalZone';
 import { ResearchZone } from '../zones/ResearchZone';
 import { FitnessZone } from '../zones/FitnessZone';
 import { GameRules } from '../core/GameRules';
+import { TEAM_ID_PLAYER } from '../characters/CharacterConstants';
+
+/** Score an old room for identity-matching priority: zoned + owned rooms
+ *  should be preferred when multiple old rooms compete for the same new room. */
+function oldRoomScore(oldRoom: Room, overlap: number): number {
+  let score = overlap;
+  if (oldRoom.zone !== ZoneType.PLAIN) score += 100000;
+  if (oldRoom.nTeam === TEAM_ID_PLAYER) score += 50000;
+  return score;
+}
+
+/** Copy persistent state from an old room onto a new room. */
+function carryForwardState(dst: Room, src: Room): void {
+  dst.oxygen = src.oxygen;
+  dst.zone = src.zone;
+  dst.uniqueZoneName = src.uniqueZoneName;
+  dst.nTeam = src.nTeam;
+  dst.nDangerTimer = src.nDangerTimer;
+  dst.nVisibilityTimer = src.nVisibilityTimer;
+  dst.bUserBlockOxygen = src.bUserBlockOxygen;
+  dst.nMoraleScore = src.nMoraleScore;
+  dst.nLevel = src.nLevel;
+  dst.bEmergencyAlarmEnabled = src.bEmergencyAlarmEnabled;
+  dst.nLastSeen = src.nLastSeen;
+  dst.nLastVisibility = src.nLastVisibility;
+  dst.nLightingScheme = src.nLightingScheme;
+  dst.tWalls = src.tWalls;
+}
 
 /** Create the proper Zone subclass for a given zone type. */
 function createZoneInstance(zoneType: ZoneType): Zone {
@@ -172,66 +200,117 @@ export class RoomManager {
 
         room.sealed = room.tPendingBreaches.size === 0;
 
-        // ── Room identity preservation ─────────────────────────────────
-        // Match new room to old room by maximum tile overlap
-        const newTileSet = new Set(room.tiles.map(t => `${t.x},${t.y}`));
-        let bestOldRoom: Room | null = null;
-        let bestOverlap = 0;
-
-        for (const oldRoom of oldRooms) {
-          let overlap = 0;
-          for (const t of oldRoom.tiles) {
-            if (newTileSet.has(`${t.x},${t.y}`)) overlap++;
-          }
-          if (overlap > bestOverlap) {
-            bestOverlap = overlap;
-            bestOldRoom = oldRoom;
-          }
-        }
-
-        // Carry forward state from matching old room
-        if (bestOldRoom && bestOverlap > 0) {
-          room.oxygen = bestOldRoom.oxygen;
-          room.zone = bestOldRoom.zone;
-          room.uniqueZoneName = bestOldRoom.uniqueZoneName;
-          room.nTeam = bestOldRoom.nTeam;
-          room.nDangerTimer = bestOldRoom.nDangerTimer;
-          room.nVisibilityTimer = bestOldRoom.nVisibilityTimer;
-          room.bUserBlockOxygen = bestOldRoom.bUserBlockOxygen;
-          room.nMoraleScore = bestOldRoom.nMoraleScore;
-          room.nLevel = bestOldRoom.nLevel;
-          room.bEmergencyAlarmEnabled = bestOldRoom.bEmergencyAlarmEnabled;
-          room.nLastSeen = bestOldRoom.nLastSeen;
-          room.nLastVisibility = bestOldRoom.nLastVisibility;
-          room.nLightingScheme = bestOldRoom.nLightingScheme;
-          room.tWalls = bestOldRoom.tWalls;
-        }
-
-        // Restore persisted zone: majority vote from tile zone assignments
-        // (only if no old room match or old room was PLAIN)
-        if (!bestOldRoom || bestOldRoom.zone === ZoneType.PLAIN) {
-          const zoneCounts = new Map<ZoneType, number>();
-          for (const t of room.tiles) {
-            const z = this.tileZones.get(`${t.x},${t.y}`);
-            if (z !== undefined) {
-              zoneCounts.set(z, (zoneCounts.get(z) ?? 0) + 1);
-            }
-          }
-          if (zoneCounts.size > 0) {
-            let bestZone = ZoneType.PLAIN;
-            let bestCount = 0;
-            for (const [z, c] of zoneCounts) {
-              if (c > bestCount) { bestZone = z; bestCount = c; }
-            }
-            room.zone = bestZone;
-          }
-        }
-
-        // Create zone object instance
-        this.assignZoneObj(room);
-
         this.rooms.push(room);
       }
+    }
+
+    // ── Phase 2: Room identity preservation ────────────────────────────
+    // Build tile sets for all new rooms, then compute a full overlap matrix
+    // against old rooms. Two-pass matching ensures:
+    //  - Splits: the LARGEST fragment inherits the old room's identity
+    //  - Merges: the old room with zone/ownership priority wins
+    //  - No old room is assigned to more than one new room
+
+    const newRoomTileSets = this.rooms.map(
+      r => new Set(r.tiles.map(t => `${t.x},${t.y}`))
+    );
+
+    // overlapMap[newIdx] = Map<oldIdx, tileOverlapCount>
+    const overlapMap: Map<number, number>[] = [];
+    for (let ni = 0; ni < this.rooms.length; ni++) {
+      const overlaps = new Map<number, number>();
+      const newTiles = newRoomTileSets[ni];
+      for (let oi = 0; oi < oldRooms.length; oi++) {
+        let count = 0;
+        for (const t of oldRooms[oi].tiles) {
+          if (newTiles.has(`${t.x},${t.y}`)) count++;
+        }
+        if (count > 0) overlaps.set(oi, count);
+      }
+      overlapMap.push(overlaps);
+    }
+
+    const oldRoomClaimed = new Set<number>();
+    const newRoomMatch: (Room | null)[] = new Array(this.rooms.length).fill(null);
+    const newRoomOverlap: number[] = new Array(this.rooms.length).fill(0);
+
+    // First pass — iterate old rooms. Each old room is assigned to the new
+    // room with which it has the LARGEST overlap. If two old rooms both want
+    // the same new room (merge), the one with the higher priority score wins.
+    for (let oi = 0; oi < oldRooms.length; oi++) {
+      let bestNewIdx = -1;
+      let bestOverlap = 0;
+      for (let ni = 0; ni < this.rooms.length; ni++) {
+        const ov = overlapMap[ni].get(oi) ?? 0;
+        if (ov > bestOverlap) {
+          bestOverlap = ov;
+          bestNewIdx = ni;
+        }
+      }
+      if (bestNewIdx < 0) continue;
+
+      const existing = newRoomMatch[bestNewIdx];
+      if (existing) {
+        const existingScore = oldRoomScore(existing, newRoomOverlap[bestNewIdx]);
+        const candidateScore = oldRoomScore(oldRooms[oi], bestOverlap);
+        if (candidateScore <= existingScore) continue;
+        // Candidate wins — release old claim (it may get picked up in pass 2)
+      }
+      newRoomMatch[bestNewIdx] = oldRooms[oi];
+      newRoomOverlap[bestNewIdx] = bestOverlap;
+      oldRoomClaimed.add(oi);
+    }
+
+    // Second pass — unmatched new rooms try unclaimed old rooms (split fragments)
+    for (let ni = 0; ni < this.rooms.length; ni++) {
+      if (newRoomMatch[ni]) continue;
+      let bestOi = -1;
+      let bestScore = 0;
+      for (const [oi, ov] of overlapMap[ni]) {
+        if (oldRoomClaimed.has(oi)) continue;
+        const score = oldRoomScore(oldRooms[oi], ov);
+        if (score > bestScore) {
+          bestScore = score;
+          bestOi = oi;
+        }
+      }
+      if (bestOi >= 0) {
+        newRoomMatch[ni] = oldRooms[bestOi];
+        newRoomOverlap[ni] = overlapMap[ni].get(bestOi) ?? 0;
+        oldRoomClaimed.add(bestOi);
+      }
+    }
+
+    // Apply matched state, then fall back to tileZones for unmatched rooms
+    for (let ni = 0; ni < this.rooms.length; ni++) {
+      const room = this.rooms[ni];
+      const matchedOld = newRoomMatch[ni];
+
+      if (matchedOld) {
+        carryForwardState(room, matchedOld);
+      }
+
+      // Restore persisted zone via majority vote from per-tile zone map
+      // (only if no old room matched or matched room was PLAIN)
+      if (!matchedOld || matchedOld.zone === ZoneType.PLAIN) {
+        const zoneCounts = new Map<ZoneType, number>();
+        for (const t of room.tiles) {
+          const z = this.tileZones.get(`${t.x},${t.y}`);
+          if (z !== undefined) {
+            zoneCounts.set(z, (zoneCounts.get(z) ?? 0) + 1);
+          }
+        }
+        if (zoneCounts.size > 0) {
+          let bestZone = ZoneType.PLAIN;
+          let bestCount = 0;
+          for (const [z, c] of zoneCounts) {
+            if (c > bestCount) { bestZone = z; bestCount = c; }
+          }
+          room.zone = bestZone;
+        }
+      }
+
+      this.assignZoneObj(room);
     }
   }
 
