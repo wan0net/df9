@@ -652,6 +652,30 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     hasBuiltObject: () => EnvObjectManager.getObjects().some(o => o.bBuilt),
     getPopulation: () => characterManager.getPopulation(),
     hasHostiles: () => characterManager.getHostileCount() > 0,
+    getRooms: () => roomManager.getRooms(),
+    getCharacters: () => characterManager.getCharacters().map(c => ({
+      getJob: () => c.getJob(),
+      isAlive: () => c.isAlive(),
+      bLowOxygen: c.bLowOxygen,
+      heldItem: c.heldItem,
+      tStats: c.tStats,
+      nStarveTime: c.nStarveTime,
+      maladies: c.maladies.map(m => ({
+        sMaladyName: m.sMaladyName,
+        sType: m.sMaladyType,
+        bSymptomatic: m.bSymptomatic,
+        bDiagnosed: m.bDiagnosed,
+      })),
+      bRampaging: c.bRampaging,
+      tAssignedToBrig: c.tAssignedToBrig,
+      currentTaskName: c.currentTask?.name ?? null,
+      getJobAffinity: (jobId?: number) => c.getJobAffinity(jobId),
+      bSpacewalking: c.bSpacewalking,
+    })),
+    hasActiveFires: () => fire.getFireCount() > 0,
+    hasBeaconPlaced: () => EmergencyBeacon.getAllBeacons().size > 0,
+    getActiveResearch: () => researchSystem.getActiveResearch(),
+    inEditMode: () => false,
   });
 
   // Tutorial system (Lua GameRules.lua 20-stage tutorial)
