@@ -148,6 +148,8 @@ export interface CharacterInfo {
   isAlive: boolean;
   bIncapacitated: boolean;
   bCuffed: boolean;
+  tAssignedToBrig: number | null;
+  tImprisonedIn: number | null;
 }
 
 export type GetCharactersInRoomsFn = () => { roomId: number; characters: CharacterInfo[] }[];

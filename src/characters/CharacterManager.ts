@@ -315,6 +315,30 @@ export class CharacterManager {
         char.currentTask.update(dtSec);
       }
 
+      // Handle Cuff task completion: cuff the target and assign to brig
+      if (char.currentTask instanceof Cuff && char.currentTask.isComplete()) {
+        const cuffTask = char.currentTask as Cuff;
+        const target = this.characters.find(c => c.id === cuffTask.getTargetCharId());
+        if (target && target.isAlive()) {
+          target.cuff();
+          // Assign to brig if one was found
+          if (cuffTask._assignedBrigRoomId !== null) {
+            target.assignedToBrig(cuffTask._assignedBrigRoomId);
+          }
+        }
+      }
+
+      // Test prison status on any task completion (Lua Character:taskCompleting calls _testInPrison)
+      if (char.currentTask && char.currentTask.isComplete()) {
+        const roomId = charRoom?.id ?? null;
+        char.testInPrison(roomId);
+      }
+
+      // Validate brig assignment each frame (Lua _updatePrison check)
+      if (char.tAssignedToBrig !== null) {
+        char.updatePrison();
+      }
+
       // C-2: Immediate reassignment -- Lua checks needsNewTask() every frame.
       // When a task completes or fails, queue for immediate AI instead of
       // waiting for the next aiTickInterval.

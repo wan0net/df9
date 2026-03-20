@@ -91,6 +91,7 @@ import { DerelictSystem } from './events/DerelictSystem';
 import { DockingSystem } from './docking/DockingSystem';
 import { dialogueSystem } from './characters/DialogueSystem';
 import { ExplosionSystem } from './renderer/ExplosionSystem';
+import { BrigZone } from './zones/BrigZone';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
 
@@ -366,6 +367,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const explosionSystem = new ExplosionSystem(threeRenderer.scene);
 
   Malady.reset();
+  BrigZone.reset();
   // Wire air scrubber count for disease spread reduction
   Malady.getAirScrubberCount = (tx, ty, range) => {
     let count = 0;
@@ -433,6 +435,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           isAlive: c.isAlive(),
           bIncapacitated: Malady.isIncapacitated(c),
           bCuffed: c.bCuffed,
+          tAssignedToBrig: c.tAssignedToBrig,
+          tImprisonedIn: c.tImprisonedIn,
         })),
     }));
   });

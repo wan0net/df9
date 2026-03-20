@@ -48,6 +48,8 @@ import { ITEM_TEMPLATES } from '../inventory/InventoryData';
 import type { Task } from '../utility/Task';
 import { type LogEntry, addLog, postLogFromQueue, getLogCooldown, setElapsedTimeProvider } from './Log';
 import { researchSystem } from '../research/ResearchSystem';
+import { BrigZone } from '../zones/BrigZone';
+import { ZoneType } from '../world/ZoneType';
 
 /** Character stats block (mirrors Lua tStats) */
 export interface CharacterStats {
@@ -125,6 +127,10 @@ export class Character {
   bMarkedForCuff = false;
   /** Marked for execution by security (Lua tStatus.bMarkedForExecution). */
   bMarkedForExecution = false;
+  /** Assigned to a brig room ID (Lua tStatus.tAssignedToBrig). null = not assigned. */
+  tAssignedToBrig: number | null = null;
+  /** Currently imprisoned in a brig room ID (Lua tStatus.tImprisonedIn). null = not imprisoned. */
+  tImprisonedIn: number | null = null;
   /** Base founder (original 3 crew, Lua tStatus.bBaseFounder). */
   bBaseFounder = false;
   /** Immune to parasite (Lua tStatus.bImmuneToParasite). */
@@ -806,11 +812,106 @@ export class Character {
     this.tBrawlingWith.delete(otherId);
   }
 
-  /** Cuff the character — ends rampage, sets bCuffed. */
+  /** Cuff the character — ends rampage, sets bCuffed. Mirrors Lua Character:cuff(). */
   cuff(): void {
+    if (!this.canBeCuffed()) return;
     this.bCuffed = true;
-    this.bMarkedForCuff = false;
+    this.bMarkedForCuff = true;
     this.endRampage();
+  }
+
+  // ── Brig / Prison (Lua Character:assignedToBrig / inPrison / _testInPrison) ──
+
+  /** Whether character is currently imprisoned (in a brig room). */
+  inPrison(): boolean {
+    return this.tImprisonedIn !== null;
+  }
+
+  /**
+   * Assign this character to a brig room (or null to release).
+   * Mirrors Lua Character:assignedToBrig(rRoom, bReassignment).
+   */
+  assignedToBrig(roomId: number | null): void {
+    if (!this.canBeCuffed()) return;
+    if (roomId === this.tAssignedToBrig) return;
+
+    // Unassign from previous brig if any
+    if (this.tAssignedToBrig !== null) {
+      const prevBrig = BrigZone.findBrigForChar(this.id);
+      if (prevBrig) {
+        prevBrig.unassignChar(this.id);
+      }
+    }
+
+    if (roomId === null) {
+      this.tAssignedToBrig = null;
+      return;
+    }
+
+    this.tAssignedToBrig = roomId;
+
+    // Register with the brig zone
+    const brigZone = BrigZone.findBrigForChar(this.id);
+    if (!brigZone) {
+      // Need to find the BrigZone for this room and assign
+      for (const brig of BrigZone.getAllBrigs()) {
+        if (brig.room && brig.room.id === roomId) {
+          brig.assignChar(this.id);
+          break;
+        }
+      }
+    }
+
+    // Anger: first-time brig assignment angers the character (Lua logic)
+    if (!this.bCuffed) {
+      const auth = this.tStats.personality.nAuthoritarian ?? 0.5;
+      this.addAnger(ANGER_MAX * (1 - auth));
+    }
+  }
+
+  /**
+   * Test if character has reached their assigned brig (call after task completion).
+   * Mirrors Lua Character:_testInPrison().
+   */
+  testInPrison(currentRoomId: number | null): void {
+    if (!this.canBeCuffed()) return;
+
+    // If cuffed and in the assigned brig room → uncuff
+    if (this.bCuffed && this.tAssignedToBrig !== null) {
+      if (currentRoomId === this.tAssignedToBrig) {
+        this.bCuffed = false;
+        this.bMarkedForCuff = false;
+      }
+    }
+
+    // If not cuffed, assigned to brig, but not yet imprisoned → check if arrived
+    if (!this.bCuffed && this.tAssignedToBrig !== null && this.tImprisonedIn === null) {
+      if (currentRoomId === this.tAssignedToBrig) {
+        this.tImprisonedIn = currentRoomId;
+        this.bMarkedForCuff = false;
+      }
+    }
+  }
+
+  /**
+   * Validate brig assignment. Call during update tick.
+   * If brig room no longer valid, clear assignment. Mirrors Lua Character:_updatePrison().
+   */
+  updatePrison(): void {
+    if (this.tAssignedToBrig !== null) {
+      const brigRoom = BrigZone.getBrigRoomForChar(this.id);
+      if (!brigRoom) {
+        this.tAssignedToBrig = null;
+      }
+    }
+    if (this.tImprisonedIn !== null) {
+      // Verify imprisoned room is still a valid brig matching assignment
+      if (this.tAssignedToBrig !== this.tImprisonedIn) {
+        const brigZone = BrigZone.findBrigForChar(this.id);
+        if (brigZone) brigZone.unassignChar(this.id);
+        this.tImprisonedIn = null;
+      }
+    }
   }
 
   // ── Duty cycle queries (Lua Character:onDuty / wantsWorkShiftTask) ──
