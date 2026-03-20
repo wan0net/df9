@@ -209,7 +209,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | E-24 | ~~MAJOR~~ PARTIAL | **No module spawning** | Lua attaches pre-built ship modules. TS spawns characters at random room tiles (E-7 fix). Module .sav format not available for web. |
-| E-25 | MODERATE | **`nMinUndiscoveredRooms = 2` gate missing** | Lua only fires when >=2 undiscovered rooms. TS has no gate. |
+| E-25 | ~~MODERATE~~ DONE | **~~`nMinUndiscoveredRooms = 2` gate missing~~** | Fixed: added `nMinUndiscoveredRooms: 2` to Docking EventDef and check in pickWeightedEvent. |
 | E-26 | ~~MINOR~~ DONE | **~~Wrong accepted alert code~~** | Fixed: Docking event uses `ALERTS029TEXT`. |
 
 ### 3.7 Compound Event
@@ -293,7 +293,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | U-13 | MODERATE | **Airlock build mode missing** | Lua has dedicated `rAirlockButton` in construct menu. TS requires building a room then rezoning via inspector. Functional workaround exists. |
-| U-14 | MODERATE | **No "Not enough matter!" label** | Lua shows `rNoFundsLabel`. TS has no visual feedback. |
+| U-14 | ~~MODERATE~~ DONE | **~~No "Not enough matter!" label~~** | Fixed: cost overlay shows `BUILDM016TEXT` in red during hover; alert fired on confirm failure. |
 | U-15 | MODERATE | **Matter cost breakdown missing** | Lua shows 3 lines (build/vaporize/undo). TS shows single total. |
 
 ### 5.4 Start Menu
