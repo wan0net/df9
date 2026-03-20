@@ -33,7 +33,8 @@ export class OxygenSystem {
   private roomManager: RoomManager;
   private grid: TileGrid;
   private tickAccumulator = 0;
-  private tickInterval = 500; // ms between O2 ticks
+  // O-2: Lua ticks O2 every frame. Use 100ms for near-frame-rate fidelity.
+  private tickInterval = 100;
 
   constructor(roomManager: RoomManager, grid: TileGrid) {
     this.roomManager = roomManager;

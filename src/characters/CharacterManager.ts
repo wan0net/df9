@@ -78,6 +78,9 @@ import { MaintainPub } from '../utility/tasks/MaintainPub';
 import { EatAtFoodReplicator } from '../utility/tasks/EatAtFoodReplicator';
 import { EatPlant } from '../utility/tasks/EatPlant';
 import { PlayGameSystem } from '../utility/tasks/PlayGameSystem';
+import { TearDownEnvObjectForResearch } from '../utility/tasks/TearDownEnvObjectForResearch';
+import { DeliverResearchDatacube } from '../utility/tasks/DeliverResearchDatacube';
+import { PutResearchDatacubeWherever } from '../utility/tasks/PutResearchDatacubeWherever';
 import { WorkOutInGym } from '../utility/tasks/WorkOutInGym';
 import { CheckInToHospital } from '../utility/tasks/CheckInToHospital';
 import { PanicOnFire } from '../utility/tasks/PanicOnFire';
@@ -1443,6 +1446,75 @@ export class CharacterManager {
           5 + shiftBoost,
           { tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true } },
         ));
+      }
+    }
+
+    // SCIENTIST: Tear down datacube env objects for research data (C-10)
+    // Lua OptionData: TearDownEnvObjectForResearch — Duty=20, Job=SCIENTIST
+    if (job === SCIENTIST && character.heldItem === null) {
+      for (const obj of EnvObjectManager.getObjectsByType('ResearchDatacube')) {
+        if (!obj.bBuilt || obj.bSlatedForVaporize) continue;
+        options.push(new ActivityOption(
+          new TearDownEnvObjectForResearch(obj, (p) => this.pickups.push(p)),
+          obj.tileX, obj.tileY,
+          20 + shiftBoost,
+          {
+            tags: { Job: SCIENTIST, WorkShift: true },
+            prerequisites: { EmptyHands: true },
+          },
+        ));
+      }
+    }
+
+    // SCIENTIST: Deliver held datacube to research desk (C-11)
+    // Lua OptionData: DeliverResearchDatacube — Duty=20, Job=SCIENTIST,
+    // Prerequisites={HeldItem='ResearchDatacube', Spacewalking=false}
+    if (job === SCIENTIST && character.heldItem === 'ResearchDatacube') {
+      const desks = EnvObjectManager.getObjectsByType('ResearchDesk');
+      const hasDesk = desks.some(d => d.bBuilt && d.isFunctioning());
+      if (hasDesk) {
+        for (const desk of desks) {
+          if (!desk.bBuilt || !desk.isFunctioning()) continue;
+          options.push(new ActivityOption(
+            new DeliverResearchDatacube(),
+            desk.tileX, desk.tileY,
+            20 + shiftBoost,
+            {
+              tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true },
+              prerequisites: { HeldItem: 'ResearchDatacube' },
+            },
+          ));
+        }
+      } else {
+        // No desk available — drop datacube wherever (C-12)
+        // Lua OptionData: PutResearchDatacubeWherever — Duty=7, DropEverything
+        options.push(new ActivityOption(
+          new PutResearchDatacubeWherever((p) => this.pickups.push(p)),
+          character.tileX, character.tileY,
+          7 + shiftBoost,
+          {
+            tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true },
+            prerequisites: { HeldItem: 'ResearchDatacube' },
+          },
+        ));
+      }
+    }
+
+    // SCIENTIST: Pick up datacube pickups from floor
+    if (job === SCIENTIST && character.heldItem === null) {
+      for (const pickup of this.pickups) {
+        if (pickup.sName === 'ResearchDatacube' && !pickup.bPickedUp) {
+          const task = new PickUpFloorItem(pickup, (p) => this.removePickup(p));
+          options.push(new ActivityOption(
+            task,
+            pickup.tileX, pickup.tileY,
+            10 + shiftBoost,
+            {
+              tags: { Job: SCIENTIST, WorkShift: true },
+              prerequisites: { EmptyHands: true },
+            },
+          ));
+        }
       }
     }
 

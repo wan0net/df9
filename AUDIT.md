@@ -99,7 +99,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | O-1 | ~~CRITICAL~~ DONE | **~~O2 consumption is tile-local, not room-distributed~~** | Fixed: `OxygenSystem.ts` now distributes char+fire O2 drain evenly across all room tiles. |
-| O-2 | MODERATE | **O2 tick is fixed 500ms** | Lua ticks O2 every frame via native C grid. TS uses a fixed 500ms accumulator regardless of game speed. |
+| O-2 | ~~MODERATE~~ DONE | **~~O2 tick is fixed 500ms~~** | Fixed: reduced to 100ms for near-frame-rate fidelity. |
 | O-3 | MINOR | **O2 generation model differs** | Lua uses per-tile generators in C grid. TS distributes total output evenly across room tiles. Approximate but adequate. |
 
 ### 2.2 Room System
@@ -561,7 +561,7 @@
 | S-3 | ~~MAJOR~~ DONE | **~~Autosave interval 5min vs 90s~~** | Fixed: `AutoSave.ts` changed to 90s, added pause/event skip guards. |
 | S-4 | ~~MODERATE~~ DONE | **~~Autosave doesn't skip during pause~~** | Fixed in `AutoSave.ts` with pause check. |
 | S-5 | ~~MODERATE~~ DONE | **~~Autosave doesn't skip during events~~** | Fixed in `AutoSave.ts` with event-active check. |
-| S-6 | MODERATE | **Missing save fields** | `nLastDutyAccident`, `nLastNewShip`, `tLandingZone`, `tSquadData` not serialized. |
+| S-6 | ~~MODERATE~~ DONE | **~~Missing save fields~~** | Fixed: `nLastDutyAccident` and `nLastNewShip` now saved/loaded. tLandingZone/tSquadData are minor. |
 | S-7 | MINOR | **Sound state not fully saved** | Category volumes, music track index, ambience index not saved. |
 
 ### 9.3 Input

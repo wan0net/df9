@@ -6,6 +6,11 @@ import { TileType } from '../world/TileTypes';
 import type { Character } from '../characters/Character';
 import type { TileGrid } from '../world/TileGrid';
 import { dialogueSystem } from '../characters/DialogueSystem';
+import {
+  RACE_HUMAN, RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK,
+  RACE_CHICKEN, RACE_SHAMON, RACE_MONSTER, RACE_MURDERFACE, RACE_KILLBOT,
+  RACE_TYPE,
+} from '../characters/CharacterConstants';
 
 /**
  * Renders characters in the Three.js scene.
@@ -17,7 +22,12 @@ import { dialogueSystem } from '../characters/DialogueSystem';
 
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
 const SPACESUIT_PATH = 'assets/models/Spacesuit.glb';
+const BAD_ALIEN_PATH = 'assets/models/Bad_Alien.glb';
+const MURDER_ROBOT_PATH = 'assets/models/Murder_Robot.glb';
 const MODEL_SCALE = 56;
+/** Lua: Bad_Alien scale = 0.65 vs Citizen_Base 0.5 → ratio 1.3× our MODEL_SCALE. */
+const BAD_ALIEN_SCALE = Math.round(MODEL_SCALE * 1.3);
+const MURDER_ROBOT_SCALE = MODEL_SCALE;
 
 /** Walk bob amplitude in screen pixels. */
 const WALK_BOB_AMPLITUDE = 4;
@@ -115,6 +125,19 @@ const SUBSETS = {
     raider:    [80],
     tech:      [82],
   },
+};
+
+/** R-3: Race-specific tint colors to visually distinguish alien races. */
+const RACE_TINT: Record<number, number> = {
+  [RACE_CAT]:       0xffaa44,  // warm orange
+  [RACE_JELLY]:     0x6688ff,  // blue translucent
+  [RACE_TOBIAN]:    0x44cc66,  // green
+  [RACE_BIRDSHARK]: 0xaa44ff,  // purple
+  [RACE_CHICKEN]:   0xffdd44,  // yellow
+  [RACE_SHAMON]:    0x44ddcc,  // teal
+  [RACE_MONSTER]:   0xff2222,  // hostile red
+  [RACE_MURDERFACE]:0xcc4444,  // dark red
+  [RACE_KILLBOT]:   0x884444,  // dark metallic red
 };
 
 const JOB_COLORS: Record<number, number> = {
@@ -395,14 +418,24 @@ function applyModelTextures(group: THREE.Group, charId: number) {
 /** Cached loaded GLTF data. */
 let cachedCitizen: THREE.Group | null = null;
 let cachedSpacesuit: THREE.Group | null = null;
+let cachedBadAlien: THREE.Group | null = null;
+let cachedMurderRobot: THREE.Group | null = null;
 let citizenAnimClips: THREE.AnimationClip[] = [];
 let spacesuitAnimClips: THREE.AnimationClip[] = [];
+let badAlienAnimClips: THREE.AnimationClip[] = [];
+let murderRobotAnimClips: THREE.AnimationClip[] = [];
 let citizenHasSkeleton = false;
 let spacesuitHasSkeleton = false;
+let badAlienHasSkeleton = false;
+let murderRobotHasSkeleton = false;
 let citizenLoadPromise: Promise<void> | null = null;
 let spacesuitLoadPromise: Promise<void> | null = null;
+let badAlienLoadPromise: Promise<void> | null = null;
+let murderRobotLoadPromise: Promise<void> | null = null;
 let citizenLoadFailed = false;
 let spacesuitLoadFailed = false;
+let badAlienLoadFailed = false;
+let murderRobotLoadFailed = false;
 
 /** Map character activity state to animation clip name candidates (first match wins). */
 const STATE_CLIP_MAP: Record<string, string[]> = {
@@ -492,9 +525,55 @@ function loadSpacesuitModel(): Promise<void> {
   return spacesuitLoadPromise;
 }
 
-// Start loading both models
+function loadBadAlienModel(): Promise<void> {
+  if (badAlienLoadPromise) return badAlienLoadPromise;
+  badAlienLoadPromise = new Promise<void>((resolve) => {
+    const loader = new GLTFLoader();
+    loader.load(BAD_ALIEN_PATH, (gltf) => {
+      cachedBadAlien = gltf.scene;
+      badAlienAnimClips = gltf.animations || [];
+      badAlienHasSkeleton = detectSkeleton(cachedBadAlien);
+      ensureDoubleSided(cachedBadAlien);
+      let mc = 0;
+      cachedBadAlien.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Bad_Alien model loaded: ${mc} meshes, ${badAlienAnimClips.length} clips, skeleton=${badAlienHasSkeleton}`);
+      resolve();
+    }, undefined, (err) => {
+      console.warn('Failed to load Bad_Alien model:', err);
+      badAlienLoadFailed = true;
+      resolve();
+    });
+  });
+  return badAlienLoadPromise;
+}
+
+function loadMurderRobotModel(): Promise<void> {
+  if (murderRobotLoadPromise) return murderRobotLoadPromise;
+  murderRobotLoadPromise = new Promise<void>((resolve) => {
+    const loader = new GLTFLoader();
+    loader.load(MURDER_ROBOT_PATH, (gltf) => {
+      cachedMurderRobot = gltf.scene;
+      murderRobotAnimClips = gltf.animations || [];
+      murderRobotHasSkeleton = detectSkeleton(cachedMurderRobot);
+      ensureDoubleSided(cachedMurderRobot);
+      let mc = 0;
+      cachedMurderRobot.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Murder_Robot model loaded: ${mc} meshes, ${murderRobotAnimClips.length} clips, skeleton=${murderRobotHasSkeleton}`);
+      resolve();
+    }, undefined, (err) => {
+      console.warn('Failed to load Murder_Robot model:', err);
+      murderRobotLoadFailed = true;
+      resolve();
+    });
+  });
+  return murderRobotLoadPromise;
+}
+
+// Start loading all models
 loadCitizenModel();
 loadSpacesuitModel();
+loadBadAlienModel();
+loadMurderRobotModel();
 
 // ── Thought bubble (Lua Task:showEmoticon / Character:setEmoticon) ────
 /** Duration to show thought bubble text (Lua EMOTICON_INITIAL_DURATION=5). */
@@ -754,6 +833,44 @@ export class CharacterRenderer {
       if (spacesuitHasSkeleton && spacesuitAnimClips.length > 0) {
         mixer = new THREE.AnimationMixer(clone);
       }
+    } else if (char.tStats.nRace === RACE_MONSTER && cachedBadAlien && !badAlienLoadFailed) {
+      // R-5: Monster race uses Bad_Alien.glb (Lua: RIG_MONSTER, scale 0.65)
+      const clone = badAlienHasSkeleton
+        ? cloneSkeleton(cachedBadAlien) as THREE.Group
+        : cachedBadAlien.clone(true);
+      clone.scale.set(BAD_ALIEN_SCALE, BAD_ALIEN_SCALE, BAD_ALIEN_SCALE);
+      clone.rotation.x = 30 * (Math.PI / 180);
+      clone.rotation.y = 45 * (Math.PI / 180);
+
+      applyModelTextures(clone, char.id);
+      ensureDoubleSided(clone);
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
+      });
+      group.add(clone);
+
+      if (badAlienHasSkeleton && badAlienAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
+    } else if (char.tStats.nRace === RACE_KILLBOT && cachedMurderRobot && !murderRobotLoadFailed) {
+      // R-5: Killbot race uses Murder_Robot.glb (Lua: RIG_KILLBOT, scale 0.5)
+      const clone = murderRobotHasSkeleton
+        ? cloneSkeleton(cachedMurderRobot) as THREE.Group
+        : cachedMurderRobot.clone(true);
+      clone.scale.set(MURDER_ROBOT_SCALE, MURDER_ROBOT_SCALE, MURDER_ROBOT_SCALE);
+      clone.rotation.x = 30 * (Math.PI / 180);
+      clone.rotation.y = 45 * (Math.PI / 180);
+
+      applyModelTextures(clone, char.id);
+      ensureDoubleSided(clone);
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
+      });
+      group.add(clone);
+
+      if (murderRobotHasSkeleton && murderRobotAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
     } else if (cachedCitizen && !citizenLoadFailed) {
       // Citizen model with subset visibility
       const clone = citizenHasSkeleton
@@ -775,6 +892,21 @@ export class CharacterRenderer {
       // Apply textures and default colors
       applyModelTextures(clone, char.id);
       ensureDoubleSided(clone);
+
+      // R-3: Apply race tint to visually distinguish alien races
+      const raceTint = RACE_TINT[char.tStats.nRace];
+      if (raceTint !== undefined) {
+        const tintColor = new THREE.Color(raceTint);
+        clone.traverse((child) => {
+          if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
+            const mat = child.material;
+            if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshBasicMaterial) {
+              mat.color.multiply(tintColor);
+              mat.userData.baseColor = mat.color.getHex();
+            }
+          }
+        });
+      }
 
       // Reset skeleton bind pose after clone so meshes render correctly
       clone.traverse((child) => {
@@ -802,25 +934,79 @@ export class CharacterRenderer {
 
   private getVisibleSubsets(char: Character): Set<number> {
     const visible = new Set<number>();
+    // R-3: Use nRace to determine gender-like body type, not just char.id % 2
     const isMale = char.id % 2 === 0;
+    const race = char.tStats.nRace;
 
-    if (isMale) {
-      visible.add(SUBSETS.heads.male[0]);
-      visible.add(SUBSETS.bodies.male[0]);
-      visible.add(SUBSETS.collar_m[0]);
-      visible.add(SUBSETS.belt_m[0]);
-      visible.add(SUBSETS.legPouch_m[0]);
-    } else {
-      visible.add(SUBSETS.heads.female[0]);
-      visible.add(SUBSETS.bodies.female[0]);
-      visible.add(SUBSETS.collar_f[0]);
-      visible.add(SUBSETS.belt_m[0]);
-      visible.add(SUBSETS.legPouch_f[0]);
+    // Race-specific heads and bodies (Lua Character:_setBody / _setHead per RACE_TYPE.tBodies)
+    switch (race) {
+      case RACE_CAT:
+        visible.add(SUBSETS.heads.cat[0]);
+        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
+        break;
+      case RACE_JELLY:
+        visible.add(SUBSETS.heads.jelly[0]);
+        visible.add(isMale ? SUBSETS.bodies.female[0] : SUBSETS.bodies.female[0]); // Jelly uses female body (Lua: all jelly are female body type)
+        break;
+      case RACE_BIRDSHARK:
+        visible.add(SUBSETS.heads.bird[0]);
+        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
+        break;
+      case RACE_SHAMON:
+        visible.add(SUBSETS.heads.shamon[0]);
+        visible.add(SUBSETS.bodies.shamon[0]);
+        break;
+      case RACE_CHICKEN:
+        // Chicken uses bird head (closest available), male/female body
+        visible.add(SUBSETS.heads.bird[0]);
+        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
+        break;
+      case RACE_TOBIAN:
+        // Tobian is alien rig but our Citizen_Base has no dedicated tobian head;
+        // use jelly head as closest approximation with distinct tint
+        visible.add(SUBSETS.heads.jelly[0]);
+        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
+        break;
+      case RACE_MURDERFACE:
+        // Murderface uses alien rig in Lua; use male head + body as base, tinted
+        visible.add(isMale ? SUBSETS.heads.male[0] : SUBSETS.heads.female[0]);
+        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
+        break;
+      default:
+        // RACE_HUMAN and fallback
+        if (isMale) {
+          visible.add(SUBSETS.heads.male[0]);
+          visible.add(SUBSETS.bodies.male[0]);
+        } else {
+          visible.add(SUBSETS.heads.female[0]);
+          visible.add(SUBSETS.bodies.female[0]);
+        }
+        break;
     }
 
-    const hairIdx = char.id % SUBSETS.hair.length;
-    visible.add(SUBSETS.hair[hairIdx]);
+    // Accessories — non-human races with unusual body shapes skip some accessories
+    const hasHumanoidAccessories = race === RACE_HUMAN || race === RACE_CAT ||
+      race === RACE_BIRDSHARK || race === RACE_CHICKEN || race === RACE_MURDERFACE;
+    if (hasHumanoidAccessories) {
+      if (isMale) {
+        visible.add(SUBSETS.collar_m[0]);
+        visible.add(SUBSETS.belt_m[0]);
+        visible.add(SUBSETS.legPouch_m[0]);
+      } else {
+        visible.add(SUBSETS.collar_f[0]);
+        visible.add(SUBSETS.belt_m[0]);
+        visible.add(SUBSETS.legPouch_f[0]);
+      }
+    }
 
+    // Hair — skip for non-humanoid races (Lua: BODY_TYPE.bNoReplacements for monster/killbot/shamon)
+    const hasHair = race === RACE_HUMAN || race === RACE_MURDERFACE;
+    if (hasHair) {
+      const hairIdx = char.id % SUBSETS.hair.length;
+      visible.add(SUBSETS.hair[hairIdx]);
+    }
+
+    // Job outfit
     const job = char.getJob();
     const jobMap: Record<number, number[]> = {
       2: SUBSETS.jobs.builder,
@@ -835,7 +1021,7 @@ export class CharacterRenderer {
     const jobSubsets = jobMap[job];
     if (jobSubsets) {
       for (const s of jobSubsets) visible.add(s);
-    } else {
+    } else if (hasHumanoidAccessories) {
       visible.add(isMale ? SUBSETS.shirt_m[0] : SUBSETS.shirt_f[0]);
     }
 

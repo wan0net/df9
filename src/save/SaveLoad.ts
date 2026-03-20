@@ -85,6 +85,9 @@ export interface SaveData {
   bHasStartedResearch?: boolean;
   cameraX?: number;
   cameraY?: number;
+  /** S-6: Missing save fields matching Lua */
+  nLastDutyAccident?: number;
+  nLastNewShip?: number;
   cameraZoom?: number;
   tutorialStage?: number;
   bMuted?: boolean;
@@ -178,6 +181,8 @@ export class SaveLoadSystem {
       bHasHadEnclosedRooms: GameRules.bHasHadEnclosedRooms,
       bHasZoned: GameRules.bHasZoned,
       bHasStartedResearch: GameRules.bHasStartedResearch,
+      nLastDutyAccident: GameRules.nLastDutyAccident,
+      nLastNewShip: GameRules.nLastNewShip,
       cameraX: cameraData?.cameraX,
       cameraY: cameraData?.cameraY,
       cameraZoom: cameraData?.cameraZoom,
@@ -243,6 +248,8 @@ export class SaveLoadSystem {
     GameRules.bHasHadEnclosedRooms = data.bHasHadEnclosedRooms ?? false;
     GameRules.bHasZoned = data.bHasZoned ?? false;
     GameRules.bHasStartedResearch = data.bHasStartedResearch ?? false;
+    GameRules.nLastDutyAccident = data.nLastDutyAccident ?? 0;
+    GameRules.nLastNewShip = data.nLastNewShip ?? 0;
 
     // Restore grid
     if (data.gridData && data.gridData.length === data.gridWidth * data.gridHeight) {
