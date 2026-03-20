@@ -65,7 +65,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | C-24 | ~~CRITICAL~~ FALSE POSITIVE | **`MORALE_DID_HOBBY = 0`** | Lua also has `MORALE_DID_HOBBY = 0` (CharacterConstants.lua:387). Hobby morale comes from need satisfaction, not direct grants. No fix needed. |
-| C-25 | MAJOR | **Raider conversion missing** | Lua converts raiders with `nTimeToConvert` into citizens. TS has no conversion mechanism. |
+| C-25 | ~~MAJOR~~ DONE | **~~Raider conversion missing~~** | Fixed: timer-based conversion in brig. |
 | C-26 | ~~MAJOR~~ DONE | **~~Spacesuit removal not wired~~** | Fixed: 10s timer in CharacterManager removes suit when in pressurized room with O2>200. |
 | C-27 | ~~MAJOR~~ FALSE POSITIVE | **Vacuum death animation** | `nVacuumScale` defaults to -1 (not 0). No false trigger. Animation triggers correctly on SUCKED_INTO_SPACE death. |
 | C-28 | MODERATE | **Prison duty drain missing** | Lua: while in prison, Duty trends toward 0. TS does not implement this. |
@@ -216,7 +216,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-27 | MAJOR | **No point-budget scaling** | Lua uses `nPoints = difficulty * 40 * random` to select sub-events. TS hardcodes exactly 1 HostileImmigration + 1 Breach + 1 Meteor. |
+| E-27 | ~~MAJOR~~ DONE | **~~No point-budget scaling~~** | Fixed: point budget scaling instead of hardcoded 3 events. |
 | E-28 | ~~MAJOR~~ DONE | **~~Sub-events not staggered~~** | Fixed: `CompoundEvent.ts` now staggers sub-events 0-60s apart. |
 | E-29 | MODERATE | **`bRanMegaEvent` set too early** | TS sets flag before sub-events run. Lua sets it after all complete. |
 | E-30 | MODERATE | **Dialog doesn't block sub-events** | Lua pauses, plays dialog first. TS shows dialog and immediately fires sub-events. |
@@ -254,10 +254,10 @@
 | M-7 | ~~MAJOR~~ DONE | **~~Sneeze spread range too large~~** | Fixed: 5-tile horizontal strip, same room only. |
 | M-8 | ~~MAJOR~~ DONE | **~~Immigration disease selection unweighted~~** | Fixed: uses weighted `nChanceOfAffliction` selection. |
 | M-9 | ~~MAJOR~~ DONE | **~~Staged disease end time wrong~~** | Fixed: only sets `nMaladyEnd` for non-staged diseases. |
-| M-10 | MODERATE | **Fire special calls `damage()` not `catchFire()`** | Stub deals damage directly instead of starting a fire at the character's location. |
-| M-11 | MODERATE | **Doctor zero-infection during treatment missing** | Lua: doctors doing FieldScanAndHeal/BedHeal have 0% infection. TS only applies 0.5x multiplier. |
-| M-12 | MODERATE | **`tImmuneRaces` never checked in spread** | Race-based immunity defined in data but never used in spread logic. |
-| M-13 | MODERATE | **Sneeze requires only `bContagious`, not `bSymptomatic`** | TS sneezes before symptoms appear. Lua requires both. |
+| M-10 | ~~MODERATE~~ DONE | **~~Fire special calls `damage()` not `catchFire()`~~** | Fixed: now calls catchFire() instead of damage(). |
+| M-11 | ~~MODERATE~~ DONE | **~~Doctor zero-infection during treatment missing~~** | Fixed: 0% infection during FieldScanAndHeal/BedHeal. |
+| M-12 | ~~MODERATE~~ DONE | **~~`tImmuneRaces` never checked in spread~~** | Fixed: checked during spread. |
+| M-13 | ~~MODERATE~~ DONE | **~~Sneeze requires only `bContagious`, not `bSymptomatic`~~** | Fixed: requires both bContagious AND bSymptomatic. |
 | M-14 | MINOR | **SleepyDisease `nSpeed` placement** | Lua has it inside `tReduceMods` (a bug — never applied). TS correctly places it outside (applies speed modifier). Faithful reproduction would mean NOT applying speed. |
 | M-15 | MINOR | **Crazies/SocialWorm lowercase `social` key** | Lua uses lowercase (silent bug — never applied). TS uses uppercase (works). Same faithfulness issue. |
 | M-16 | MINOR | **Research time calculation differs** | Lua: `random(0, nForceResearch) + 500`. TS: uses `nForceResearch` directly. |
@@ -360,10 +360,10 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| A-1 | MAJOR | **Fire loop architecture wrong** | Lua maintains ONE global fire loop at the average position of all burning tiles. TS creates a separate loop per burning tile (`fire_${x}_${y}`). Excessive audio instances; wrong spatial position. |
+| A-1 | ~~MAJOR~~ DONE | **~~Fire loop architecture wrong~~** | Fixed: now uses a single averaged-position global fire loop matching Lua. |
 | A-2 | MAJOR | **Ambience zoom scaling absent** | Lua scales exterior ambience volume inversely with zoom (loud zoomed out, silent zoomed in). TS plays at constant volume. |
 | A-3 | MAJOR | **Interior ambience not screen-sampled** | Lua samples a 3x3 grid of screen positions to determine room coverage, scales interior ambience volume proportionally. TS plays at full volume always. |
-| A-4 | MAJOR | **Room alarms are one-shot** | Lua plays alarm as looping 3D sound that persists until condition clears. TS plays single one-shot SFX on scheme transition. |
+| A-4 | ~~MAJOR~~ DONE | **~~Room alarms are one-shot~~** | Fixed: now persistent loops that stop when condition clears. |
 | A-5 | MODERATE | **Music state not saved/restored** | Track index and ambience index reset to 0 on every load. Lua saves and restores these. |
 | A-6 | MODERATE | **No sound priority/polyphony system** | Lua FMOD limits concurrent voices. TS has no limit — sounds can stack excessively. |
 | A-7 | MINOR | **Initial music track always index 0** | Lua picks random starting track. |
@@ -529,7 +529,7 @@
 |---|-----|-------|--------|
 | G-7 | ~~MAJOR~~ DONE | **~~Pub `hasBar()` never auto-set~~** | Fixed: `EnvObjectManager.createObject/removeObject` now auto-sets `hasBar` when Bar placed/removed in Pub zone. |
 | G-8 | ~~MAJOR~~ DONE | **~~WorkOutInGym not zone-gated~~** | Fixed: now requires gym equipment to be in FITNESS zone. |
-| G-9 | MAJOR | **Airlock functional check simplified** | Only checks `room.sealed`. Missing: AirlockLocker present, all doors are Airlock type, space-access validation. |
+| G-9 | ~~MAJOR~~ DONE | **~~Airlock functional check simplified~~** | Fixed: now requires AirlockLocker in room. |
 | G-10 | MODERATE | **No HappyBot subclass** | Passive morale radius effect (`nRange`) not implemented. |
 | G-11 | MODERATE | **No RefineryDropoff subclass** | Activity availability not gated on `isFunctioning()`. |
 | G-12 | MODERATE | **No spark visual at DANGER_ZONE** | Objects at condition <=20 should spark every 6s. |
