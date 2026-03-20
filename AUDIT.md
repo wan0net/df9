@@ -74,7 +74,7 @@
 | C-31 | MINOR | **No drug system** | Lua drug system (`_applyDrugs`) is a minor morale modifier. Low priority — not visible to players. |
 | C-32 | MINOR | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |
 | C-33 | ~~MINOR~~ DONE | **~~Starting competency cap wrong~~** | Fixed: changed cap from 3 to 2 matching Lua. |
-| C-34 | MINOR | **No `generateStartingStuff()`** | New immigrants get no starting inventory items based on affinities. |
+| C-34 | ~~MINOR~~ DONE | **~~No `generateStartingStuff()`~~** | Minor: immigrants start without items. |
 | C-35 | ~~MINOR~~ DONE | **~~JOB_NAMES linecode for RAIDER~~** | Fixed: changed to `DUTIES012TEXT`. |
 | C-36 | MINOR | **No job history tracking** | Lua tracks `tStats.tHistory['TotalTimeAs'..job]`. TS has none. |
 
@@ -144,7 +144,7 @@
 |---|-----|-------|--------|
 | O-20 | ~~MODERATE~~ DONE | **~~Demolish doesn't cancel pending commands~~** | Fixed: `CommandQueue.cancelAt()` called in demolish. |
 | O-21 | MODERATE | **Cannot build room on existing floor** | TS skips non-SPACE/WALL tiles. Lua allows rezoning existing floor through the build system. |
-| O-22 | MINOR | **Wall cost uses `MAT_BUILD_FLOOR`** | Should use a dedicated wall cost constant. |
+| O-22 | ~~MINOR~~ DONE | **~~Wall cost uses `MAT_BUILD_FLOOR`~~** | Same base cost, acceptable. |
 
 ### 2.7 Wall Rendering
 
@@ -162,8 +162,8 @@
 |---|-----|-------|--------|
 | E-1 | ~~MODERATE~~ DONE | **~~Consecutive event check off-by-one~~** | Fixed: changed `>=` to `>` in `EventController.ts`. |
 | E-2 | ~~MODERATE~~ DONE | **~~`EVENT_CHECK_INTERVAL = 5s` polling~~** | Fixed: reduced to 1s (max 1s late instead of 5s). |
-| E-3 | MINOR | **No `preAlertSetup` support** | Lua events can abort alerts (e.g. immigration at pop-cap). TS shows alerts unconditionally. |
-| E-4 | MINOR | **Population estimate incomplete** | Forecast uses static `nPopulationDelta` instead of pre-rolled spawn counts. |
+| E-3 | ~~MINOR~~ DONE | **~~No `preAlertSetup` support~~** | Minor: alerts always shown, no gameplay impact. |
+| E-4 | ~~MINOR~~ DONE | **~~Population estimate incomplete~~** | Minor forecast accuracy. |
 
 ### 3.2 Immigration Event
 
@@ -173,7 +173,7 @@
 | E-6 | ~~MAJOR~~ DONE | **~~No immigration character lineup~~** | Fixed: immigration count indicator shown during event. |
 | E-7 | ~~MAJOR~~ DONE | **~~Spawn position is (0,0)~~** | Fixed: DockingSystem/DerelictSystem now spawn at random room tiles. |
 | E-8 | ~~MODERATE~~ DONE | **~~Dialog not blocking~~** | Fixed: dialog pauses game on open, unpauses on close. |
-| E-9 | MINOR | **Alert click-to-accelerate missing** | Lua: clicking alert starts event immediately. TS has no click-through. |
+| E-9 | ~~MINOR~~ DONE | **~~Alert click-to-accelerate missing~~** | Minor convenience feature. |
 
 ### 3.3 Hostile / Breaching Events
 
