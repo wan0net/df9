@@ -45,6 +45,11 @@ export const AUDIO_CUES: Record<string, AudioCue> = {
   select:           { path: 'ui/NewSelect_1.wav',          volume: 0.8, loop: false, category: 'ui', spatial: false },
   confirm:          { path: 'ui/UI_Confirm.wav',           volume: 0.9, loop: false, category: 'ui', spatial: false },
   hilight:          { path: 'ui/UI_Hilight1.wav',          volume: 0.4, loop: false, category: 'ui', spatial: false },
+  disallow:         { path: 'ui/UI_DisallowTemp.wav',      volume: 0.7, loop: false, category: 'ui', spatial: false },
+  placebeacon:      { path: 'ui/Spacebase_PlaceBeacon.wav', volume: 0.8, loop: false, category: 'ui', spatial: false },
+  buildscroll:      { path: 'ui/UI_Drag2.wav',             volume: 0.5, loop: false, category: 'ui', spatial: false },
+  mattercounter:    { path: 'ui/UI_MatterScroll.wav',      volume: 0.5, loop: false, category: 'ui', spatial: false },
+  vaporize:         { path: 'sfx/Vaporize_1.wav',          volume: 0.8, loop: false, category: 'sfx', spatial: false },
   UI_DoorLock:      { path: 'ui/UI_InspectorDoorLock_PDown.wav', volume: 0.5, loop: false, category: 'ui', spatial: false },
 
   // ── Menu sounds ───────────────────────────────────────────────
