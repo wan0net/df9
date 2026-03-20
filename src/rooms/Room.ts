@@ -71,8 +71,11 @@ export class Room {
   nPowerDraw = 0;
   nPowerSupply = 0;
 
-  /** Does this room have sufficient power? (Lua Room:hasPower) */
-  get hasPowerFlag(): boolean { return this.nPowerSupply >= this.nPowerDraw; }
+  /** Does this room have ANY power? (Lua Room:hasPower — true if nPowerSupplied > 0 OR canProvidePower) */
+  get hasPowerFlag(): boolean { return this.nPowerSupply > 0 || this.nPowerOutput > 0; }
+
+  /** Does this room have FULL power? (Lua Room:hasFullPower) */
+  get hasFullPower(): boolean { return this.nPowerSupply >= this.nPowerDraw || this.nPowerOutput > 0; }
 
   /** Room morale score: sum of object morale scores / room size. */
   nMoraleScore = 0;

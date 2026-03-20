@@ -22,6 +22,8 @@ export interface CharacterLike {
   tStats: { nTeam: number; nStatus: number; nHP: number; nJob: number };
   bSpacewalking: boolean;
   bSpacesuit: boolean;
+  bRefuseDoctor: boolean;
+  bHideSigns: boolean;
   maladies: MaladyInstance[];
   damage(amount: number, cause: number): void;
   kill(cause: number): void;
@@ -602,6 +604,10 @@ export const Malady = {
 
   /** Tick all maladies on a character. Called from game loop. */
   tickMaladies(rChar: CharacterLike, dt: number): void {
+    // M-4: Lua Malady.tickMaladies returns early if character is in hospital
+    // (freezes disease progression during treatment)
+    if (rChar.currentTask?.name === 'CheckInToHospital') return;
+
     for (let i = rChar.maladies.length - 1; i >= 0; i--) {
       const tMalady = rChar.maladies[i];
       if (Malady._tickMalady(rChar, tMalady, dt)) {
@@ -641,6 +647,13 @@ export const Malady = {
     if (!tMalady.bSymptomatic && nElapsedTime >= tMalady.nSymptomStart) {
       tMalady.bSymptomatic = true;
       Malady.diseaseEncountered(tMalady, rChar.tStats.nTeam);
+      // M-3: Set character flags from malady def (Lua Malady._tickMalady)
+      if (tMalady.bRefuseHeal) {
+        rChar.bRefuseDoctor = true;
+      }
+      if (tMalady.bHidden) {
+        rChar.bHideSigns = true;
+      }
     }
 
     // Handle specials (only when symptomatic)
