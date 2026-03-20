@@ -290,13 +290,6 @@ export class Fire implements TickableSystem {
       const pos = toSpread[0]; // Lua returns after first successful spread
       this.startFire(pos.x, pos.y, INTENSITY_DEFAULT);
     }
-
-    // Update the single global fire loop position (Lua: ONE loop at average of all fires)
-    const allFires: { x: number; y: number }[] = [];
-    for (const fire of this.fires.values()) {
-      allFires.push({ x: fire.x, y: fire.y });
-    }
-    SpatialAudio.updateFireLoop(allFires);
   }
 
   // ── Save/Load (mirrors Lua Fire.getSaveTable / fromSaveTable) ────

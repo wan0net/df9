@@ -17,12 +17,6 @@ interface SpatialLoop {
   sourceKey: string;
 }
 
-/** Pending position update for a loop (applied next startLoop or updateLoopPosition). */
-interface LoopPositionUpdate {
-  tileX: number;
-  tileY: number;
-}
-
 class SpatialAudioClass {
   private activeLoops: Map<string, SpatialLoop> = new Map();
 
