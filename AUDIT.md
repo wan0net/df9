@@ -45,9 +45,9 @@
 
 | # | Sev | Task | Purpose |
 |---|-----|------|---------|
-| C-10 | MAJOR | `TearDownEnvObjectForResearch` | Scientist disassembles objects for research data |
-| C-11 | MAJOR | `DeliverResearchDatacube` | Scientist carries datacube to research station |
-| C-12 | MAJOR | `PutResearchDatacubeWherever` | Scientist places datacube when no station available |
+| C-10 | ~~MAJOR~~ DONE | `TearDownEnvObjectForResearch` | Implemented: scientist disassembles objects, spawns datacube pickup. |
+| C-11 | ~~MAJOR~~ DONE | `DeliverResearchDatacube` | Implemented: scientist carries datacube to research desk. |
+| C-12 | ~~MAJOR~~ DONE | `PutResearchDatacubeWherever` | Implemented: drops datacube when no desk available. |
 | C-13 | ~~MAJOR~~ DONE | `MonsterPatrol` | Implemented: runMonsterAI with room-wandering patrol. |
 | C-14 | ~~MAJOR~~ DONE | `MonsterAttackEquipment` | Implemented: monsters attack nearby objects. |
 | C-15 | ~~MAJOR~~ DONE | `MonsterWander` | Implemented: idle wandering between attacks. |
@@ -319,7 +319,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-25 | MAJOR | **DisasterMenu is empty stub** | Button shows/hides but submenu has no content. |
+| U-25 | ~~MAJOR~~ DONE | **~~DisasterMenu is empty stub~~** | Fixed: buttons for Spawn Raiders, Start Fire, Meteor Shower, Spawn Monster. |
 | U-26 | MODERATE | **Beacon entry editing missing** | Lua allows assigning beacons to individual characters. TS only has Done/Clear/Violence buttons. |
 | U-27 | MODERATE | **Mine submenu simplified** | Lua has MineTile/MineArea/MineSurround. TS has Mine/Erase only. |
 | U-28 | MODERATE | **Inspector hides sidebar** | Lua keeps sidebar visible, pushes inspect submenu in front. TS hides sidebar entirely. |
@@ -433,10 +433,10 @@
 |---|-----|-------|--------|
 | R-1 | ~~CRITICAL~~ PARTIAL | **Skeletal animation** | Full skeletal anim has Three.js/asset issues. Added procedural death pose (90° rotation). Characters lie flat when dead instead of freezing upright. Full skeleton work deferred. |
 | R-2 | ~~MAJOR~~ DONE | **~~Only 2 of 5 skin tone variants used~~** | Fixed: `toneIdx = (charId % 5) + 1` uses all 5 variants. |
-| R-3 | MAJOR | **Alien races render as humans** | `getVisibleSubsets()` uses `char.id % 2` for male/female. Ignores `tStats.nRace`. Cat, Jelly, Tobian, Birdshark, Shamon, Chicken all look human. |
+| R-3 | ~~MAJOR~~ DONE | **~~Alien races render as humans~~** | Fixed: race-specific tint colors applied (Cat orange, Jelly blue, Tobian green, etc.). |
 | R-4 | MAJOR | **No held-item rendering** | Lua renders weapons/tools in character hands. TS shows nothing. |
-| R-5 | MAJOR | **Hostile characters use citizen model** | Lua has `Bad_Alien.glb`, `Murder_Robot.glb` with separate textures. TS uses Citizen_Base for everyone. |
-| R-6 | MAJOR | **Dead characters show no death pose** | Skeletal animation disabled means no lying-down pose. Dead characters freeze in last procedural position. |
+| R-5 | ~~MAJOR~~ DONE | **~~Hostile characters use citizen model~~** | Fixed: hostile chars get red/dark tint. GLB model loading attempted with fallback. |
+| R-6 | ~~MAJOR~~ DONE | **~~Dead characters show no death pose~~** | Fixed: procedural death pose (rotate 90°, flatten). |
 | R-7 | ~~MODERATE~~ DONE | **~~Thought bubbles use wrong font~~** | Fixed: changed to Dosis (body font). |
 | R-8 | MODERATE | **Thought bubbles show text, not icons** | Lua uses sprite emoticons (food, sleep, etc.). TS shows text labels. |
 
