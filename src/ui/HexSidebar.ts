@@ -407,17 +407,6 @@ export class HexSidebar {
       },
     });
 
-    const header = document.createElement('div');
-    header.textContent = '>> ' + line('HUDHUD012TEXT');
-    header.style.cssText = `
-      color: ${AMBER};
-      font-size: 22px;
-      font-family: 'Dosis', sans-serif;
-      padding: 10px 20px;
-      opacity: 0.7;
-    `;
-    this.submenuContainer.appendChild(header);
-
     const modes: { label: string; hotkey: string; mode: BuildMode }[] = [
       { label: line('HUDHUD013TEXT'), hotkey: 'C', mode: 'room' },
       { label: line('HUDHUD014TEXT'), hotkey: 'W', mode: 'wall' },
@@ -457,17 +446,6 @@ export class HexSidebar {
       },
     });
 
-    const header = document.createElement('div');
-    header.textContent = '>> ' + line('HUDHUD008TEXT');
-    header.style.cssText = `
-      color: ${AMBER};
-      font-size: 22px;
-      font-family: 'Dosis', sans-serif;
-      padding: 10px 20px;
-      opacity: 0.7;
-    `;
-    this.submenuContainer.appendChild(header);
-
     this.createSubmenuButton({
       label: line('HUDHUD008TEXT'),
       hotkey: 'M',
@@ -497,17 +475,6 @@ export class HexSidebar {
       icon: '✓',
       action: () => this.closeAllSubmenus(),
     });
-
-    const header = document.createElement('div');
-    header.textContent = '>> ' + line('HUDHUD025TEXT');
-    header.style.cssText = `
-      color: ${AMBER};
-      font-size: 22px;
-      font-family: 'Dosis', sans-serif;
-      padding: 10px 20px;
-      opacity: 0.7;
-    `;
-    this.submenuContainer.appendChild(header);
 
     const squads = SquadList.getAllSquads();
     const selectedSquadName = this.beaconPlacementSquad ?? squads[0]?.name ?? null;
@@ -583,26 +550,15 @@ export class HexSidebar {
     this.submenuContainer.innerHTML = '';
     this.submenuContainer.style.display = 'flex';
 
-    const header = document.createElement('div');
-    header.textContent = '>> ' + line('HUDHUD062TEXT');
-    header.style.cssText = `
-      color: ${AMBER};
-      font-size: 22px;
-      font-family: 'Dosis', sans-serif;
-      padding: 10px 20px;
-      opacity: 0.7;
-    `;
-    this.submenuContainer.appendChild(header);
-
+    // Disaster menu placeholder — Lua has disaster buttons here
     const wip = document.createElement('div');
-    wip.textContent = 'Disaster options coming soon...';
+    wip.textContent = line('HUDHUD062TEXT');
     wip.style.cssText = `
       color: ${AMBER};
       font-size: 20px;
       font-family: 'Dosis', sans-serif;
       padding: 20px;
       opacity: 0.5;
-      text-align: center;
     `;
     this.submenuContainer.appendChild(wip);
   }
