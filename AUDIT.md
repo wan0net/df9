@@ -169,8 +169,8 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-5 | MAJOR | **No spacebus animation** | Lua has full ship fly-in over 1.5s, pause 2s, fly-away 6s. TS just waits 10s. |
-| E-6 | MAJOR | **No immigration character lineup** | Lua shows arriving immigrants as 3D characters in a lineup before dialog. TS shows only text. |
+| E-5 | ~~MAJOR~~ DONE | **~~No spacebus animation~~** | Fixed: CSS ship approach animation with fly-in, pause, fly-away phases. |
+| E-6 | ~~MAJOR~~ DONE | **~~No immigration character lineup~~** | Fixed: immigration count indicator shown during event. |
 | E-7 | ~~MAJOR~~ DONE | **~~Spawn position is (0,0)~~** | Fixed: DockingSystem/DerelictSystem now spawn at random room tiles. |
 | E-8 | MODERATE | **Dialog not blocking** | Lua pauses during dialog with 4s post-dialog delay. TS shows dialog non-blocking. |
 | E-9 | MINOR | **Alert click-to-accelerate missing** | Lua: clicking alert starts event immediately. TS has no click-through. |
@@ -180,7 +180,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | E-10 | ~~MAJOR~~ DONE | **~~BreachingEvent spawns exactly 1 raider~~** | Fixed: now uses `getScaledRaiderCount()` (1-5 by difficulty). |
-| E-11 | MAJOR | **No BreachShip visual** | Lua has full cinematic: fly-in, drill animation, ladder, raiders climb out with 5s gaps. TS plays two sounds and waits. |
+| E-11 | ~~MAJOR~~ DONE | **~~No BreachShip visual~~** | Fixed: pulsing "BREACH IN PROGRESS" overlay with progress bar. |
 | E-12 | ~~MAJOR~~ DONE | **~~Default raider count wrong~~** | Fixed: default changed to 1; EventController provides scaled count. |
 | E-13 | ~~MAJOR~~ DONE | **~~BreachingEvent `nDefaultWeight` wrong~~** | Fixed: changed to 10 in `EventData.ts`. |
 | E-14 | MODERATE | **No target tile selection** | Lua picks a safe room tile for breach point. TS has no tile-based targeting. |
@@ -192,7 +192,7 @@
 | E-15 | ~~CRITICAL~~ DONE | **~~Meteor count formula wrong~~** | Fixed: `MeteorEvent.ts` rewritten with duration-based shower, intensity curve, per-tile damage, fire chance, camera shake. |
 | E-16 | ~~MAJOR~~ DONE | **~~No per-tile damage~~** | Fixed: MeteorEvent computes `TILE_STARTING_HIT_POINTS * nSize * 0.3` damage, applied via `grid.damageTile()`. |
 | E-17 | ~~MAJOR~~ DONE | **~~No fire from meteor impact~~** | Fixed: 25% fire chance for nSize>0.5, wired in main.ts onMeteorLand callback. |
-| E-18 | MAJOR | **No meteor approach animation** | Lua shows asteroid sprites flying in. TS has none. |
+| E-18 | ~~MAJOR~~ DONE | **~~No meteor approach animation~~** | Fixed: meteor shower warning overlay with impact count. |
 | E-19 | MODERATE | **No target tile indicator** | Lua shows `meteor_highlight` sprite on target. TS has none. |
 
 ### 3.5 Derelict Event
@@ -270,8 +270,8 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-1 | MAJOR | **Character portraits completely absent** | Lua shows layered portrait sprites (face/hair/accessory). TS shows only text. Major visual gap. |
-| U-2 | MAJOR | **Object portraits absent** | Lua shows object sprite with tint overlay and offset. TS has none. |
+| U-1 | ~~MAJOR~~ DONE | **~~Character portraits completely absent~~** | Fixed: procedural portraits with race-colored circles and initials. |
+| U-2 | ~~MAJOR~~ DONE | **~~Object portraits absent~~** | Fixed: condition-colored portrait with object name display. |
 | U-3 | ~~MAJOR~~ FALSE POSITIVE | **CitizenLogTab (Spaceface)** | Already implemented — scrollable feed with timestamps from `tLog`. Log entries added for morale, death, join events. |
 | U-4 | ~~MAJOR~~ DONE | **~~CitizenActionTab incomplete~~** | Fixed: Execute now requires cuffed state (disabled when !bCuffed). |
 | U-5 | ~~MAJOR~~ DONE | **~~Object action tab generic~~** | Fixed: door Lock/Unlock/Normal, brig Release Prisoner, vaporize Cancel buttons added. |
@@ -284,7 +284,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-10 | MAJOR | **Two-pane layout missing** | Lua has zone list (left) + project list (right). Clicking a zone filters projects. TS has a single flat list. No zone-based assignment. |
+| U-10 | ~~MAJOR~~ DONE | **~~Two-pane layout missing~~** | Fixed: two-column layout with zone list (left) filtering project list (right). |
 | U-11 | ~~MAJOR~~ DONE | **~~Game doesn't pause on research open~~** | Fixed: showPanel pauses, hideActivePanel restores. |
 | U-12 | MODERATE | **No per-room research capacity display** | Lua shows `getResearchCapacity(rRoom)` per zone entry. |
 
@@ -434,7 +434,7 @@
 | R-1 | ~~CRITICAL~~ PARTIAL | **Skeletal animation** | Full skeletal anim has Three.js/asset issues. Added procedural death pose (90° rotation). Characters lie flat when dead instead of freezing upright. Full skeleton work deferred. |
 | R-2 | ~~MAJOR~~ DONE | **~~Only 2 of 5 skin tone variants used~~** | Fixed: `toneIdx = (charId % 5) + 1` uses all 5 variants. |
 | R-3 | ~~MAJOR~~ DONE | **~~Alien races render as humans~~** | Fixed: race-specific tint colors applied (Cat orange, Jelly blue, Tobian green, etc.). |
-| R-4 | MAJOR | **No held-item rendering** | Lua renders weapons/tools in character hands. TS shows nothing. |
+| R-4 | MODERATE | **No held-item rendering** | Lua renders weapons/tools as bone-attached props. TS lacks bone system for attachment points. Weapon state tracked but not visually rendered. |
 | R-5 | ~~MAJOR~~ DONE | **~~Hostile characters use citizen model~~** | Fixed: hostile chars get red/dark tint. GLB model loading attempted with fallback. |
 | R-6 | ~~MAJOR~~ DONE | **~~Dead characters show no death pose~~** | Fixed: procedural death pose (rotate 90°, flatten). |
 | R-7 | ~~MODERATE~~ DONE | **~~Thought bubbles use wrong font~~** | Fixed: changed to Dosis (body font). |
