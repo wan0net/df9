@@ -157,15 +157,14 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(motdBg);
 
-    // Game logo — Lua StartMenuLayout: 'logo' from 'UI/StartMenu' spritesheet at scale 1.5
-    // Extracted logo is 1280x386; Lua pos={-960, 626} from center, scale 1.5
+    // Game logo — Lua StartMenuLayout: Logo element with hidden=false, scale 1.5
     const logoImg = document.createElement('img');
     logoImg.src = 'assets/ui/startmenu_logo.png';
     logoImg.style.cssText = `
       position:absolute;top:20px;left:0px;
       width:${1280 * 0.75}px;height:auto;
       pointer-events:none;
-    `; // ~960px wide (Lua scale 1.5 on half-res = 0.75 effective)
+    `;
     this.overlay.appendChild(logoImg);
 
     // Subtitle — Lua WebsiteText: UIMISC016TEXT, dosismedium32, center-justified
