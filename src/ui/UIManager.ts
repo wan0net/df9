@@ -870,12 +870,6 @@ export class UIManager {
     inspBackEl.addEventListener('mouseleave', () => { inspBackEl.style.background = 'transparent'; });
     this.inspectSub.appendChild(inspBackEl);
 
-    // ">> Inspect" label
-    const inspLabel = document.createElement('div');
-    inspLabel.textContent = '>> ' + line('HUDHUD005TEXT'); // Lua prepends ">>" to submenu headers
-    inspLabel.style.cssText = `font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;padding:4px 12px;opacity:0.7;`; // Lua dosissemibold22
-    this.inspectSub.appendChild(inspLabel);
-
     sidebar.appendChild(this.inspectSub);
 
     // Construct sub-menu — Lua ConstructMenu.lua: replaces sidebar buttons entirely
@@ -934,16 +928,7 @@ export class UIManager {
     confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.color = '#A5D318'; confirmLbl.style.color = '#A5D318'; });
     this.constructSub.appendChild(confirmEl);
 
-    // ── ">> Construct" label — Lua HUDHUD012TEXT ──
-    const constructLabel = document.createElement('div');
-    constructLabel.textContent = '>> ' + line('HUDHUD012TEXT'); // Lua prepends ">>" to submenu headers
-    constructLabel.style.cssText = `
-      font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
-      padding:4px 12px;opacity:0.7;
-    `; // Lua dosissemibold22
-    this.constructSub.appendChild(constructLabel);
-
-    // ── Build mode buttons — matching screenshot order ──
+    // ── Build mode buttons — matching Lua ConstructMenu order ──
     // Screenshot order: Cancel, Confirm, label, then mode buttons
     // Screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase
     // Layout: [icon] Label           hotkey  (matching screenshot 20.32.27)
@@ -1839,7 +1824,7 @@ export class UIManager {
       this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`;
       for (const sb of this.sidebarBtns) sb.el.style.display = 'none';
       // Highlight active sub-button (skip cancelEl + confirmEl + constructLabel = 3 children)
-      const SUB_OFFSET = 3;
+      const SUB_OFFSET = 2; // cancel + confirm (no header label)
       const subBtns = this.constructSub.children;
       for (let i = 0; i < this.constructSubModes.length; i++) {
         const el = subBtns[i + SUB_OFFSET] as HTMLElement;
