@@ -1668,10 +1668,16 @@ export class UIManager {
     return this.goalsPanel.isVisible();
   }
 
+  /** Whether the game was paused before opening a panel. */
+  private bWasPausedBeforePanel = false;
+
   private showPanel(panel: 'research' | 'goals') {
     this.hideActivePanel();
     this.setBuildMode('none');
     this.activePanel = panel;
+    // U-11: Lua pauses game when research/goals panel opens
+    this.bWasPausedBeforePanel = GameRules.playerTimeScale === 0;
+    if (!this.bWasPausedBeforePanel) GameRules.togglePause();
     if (panel === 'research') {
       this.researchPanel.show();
     } else {
@@ -1682,6 +1688,10 @@ export class UIManager {
   private hideActivePanel() {
     this.researchPanel.hide();
     this.goalsPanel.hide();
+    // U-11: Restore pause state when panel closes
+    if (this.activePanel !== 'none' && !this.bWasPausedBeforePanel) {
+      GameRules.togglePause();
+    }
     this.activePanel = 'none';
   }
 

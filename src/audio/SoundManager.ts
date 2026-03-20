@@ -540,7 +540,10 @@ class SoundManagerClass {
       this.settings.musicVolume * musicScale, ct);
     this.categoryGains.sfx?.gain.setValueAtTime(
       this.settings.sfxVolume * sfxScale, ct);
-    this.categoryGains.ambience?.gain.setValueAtTime(this.settings.ambienceVolume, ct);
+    // A-2: Lua scales exterior ambience inversely with zoom (loud far out, silent close in)
+    const ambienceScale = 1.0 - this.zoomDepth; // 1.0 far → 0.0 close
+    this.categoryGains.ambience?.gain.setValueAtTime(
+      this.settings.ambienceVolume * ambienceScale, ct);
     this.categoryGains.ui?.gain.setValueAtTime(this.settings.uiVolume, ct);
   }
 

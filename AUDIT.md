@@ -285,7 +285,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | U-10 | MAJOR | **Two-pane layout missing** | Lua has zone list (left) + project list (right). Clicking a zone filters projects. TS has a single flat list. No zone-based assignment. |
-| U-11 | MAJOR | **Game doesn't pause on research open** | Lua pauses. TS does not. |
+| U-11 | ~~MAJOR~~ DONE | **~~Game doesn't pause on research open~~** | Fixed: showPanel pauses, hideActivePanel restores. |
 | U-12 | MODERATE | **No per-room research capacity display** | Lua shows `getResearchCapacity(rRoom)` per zone entry. |
 
 ### 5.3 Construct Menu
@@ -361,7 +361,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | A-1 | ~~MAJOR~~ DONE | **~~Fire loop architecture wrong~~** | Fixed: now uses a single averaged-position global fire loop matching Lua. |
-| A-2 | MAJOR | **Ambience zoom scaling absent** | Lua scales exterior ambience volume inversely with zoom (loud zoomed out, silent zoomed in). TS plays at constant volume. |
+| A-2 | ~~MAJOR~~ DONE | **~~Ambience zoom scaling absent~~** | Fixed: ambience gain now scales inversely with zoom depth (1.0 far → 0.0 close). |
 | A-3 | MAJOR | **Interior ambience not screen-sampled** | Lua samples a 3x3 grid of screen positions to determine room coverage, scales interior ambience volume proportionally. TS plays at full volume always. |
 | A-4 | ~~MAJOR~~ DONE | **~~Room alarms are one-shot~~** | Fixed: now persistent loops that stop when condition clears. |
 | A-5 | MODERATE | **Music state not saved/restored** | Track index and ambience index reset to 0 on every load. Lua saves and restores these. |
