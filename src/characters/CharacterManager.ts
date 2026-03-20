@@ -1207,7 +1207,7 @@ export class CharacterManager {
         new Eat(),
         food.tileX, food.tileY,
         2,
-        { tags: { DestOwned: true, DestSafe: true } },
+        // Eat is a survival need — no DestOwned/DestSafe so starving chars can always eat
       );
       opt.targetObject = food;
       options.push(opt);
