@@ -300,7 +300,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-16 | MAJOR | **ESC doesn't open start menu** | Lua ESC opens start menu when nothing selected. TS ESC only clears build mode. No way to return to start menu during gameplay. |
+| U-16 | ~~MAJOR~~ DONE | **~~ESC doesn't open start menu~~** | Fixed: S-9 added pause menu overlay. ESC shows it when nothing selected. |
 | U-17 | MODERATE | **Quit button missing** | Lua has Quit → SaveYesNo dialog. |
 | U-18 | MODERATE | **Save/Load uses simplified slot picker** | Lua has full directory browser with thumbnails and timestamps. |
 | U-19 | MINOR | **MOTD system absent** | Lua fetches from `spacebasehub.net/motd.json`. |
@@ -340,7 +340,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-36 | MAJOR | **Tooltip doesn't follow cursor** | Lua tooltip tracks mouse at offset (68, -30). TS is fixed at top-right corner. |
+| U-36 | ~~MAJOR~~ DONE | **~~Tooltip doesn't follow cursor~~** | Fixed: tooltip now follows cursor at Lua offset (68, -30). |
 | U-37 | ~~MAJOR~~ FALSE POSITIVE | **`getHostileImmigrationDialogs()`** | Function IS defined at line 144 of `DialogSystem.ts`. No crash. |
 | U-38 | MODERATE | **Alert icons missing** | Lua shows sprite icons per alert type. TS shows text only. |
 | U-39 | MODERATE | **Alert count limit differs** | Lua: 5 max. TS: 10 max. |

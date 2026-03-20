@@ -1514,12 +1514,19 @@ export class UIManager {
   private createTooltip() {
     this.tooltipEl = document.createElement('div');
     this.tooltipEl.style.cssText = `
-      position:absolute;top:50px;right:10px;width:280px;
+      position:fixed;width:280px;z-index:999;
       background:rgba(0,0,0,0.8);color:#ccc;font-size:22px; /* Lua dosissemibold22 */
       padding:8px;line-height:1.6;white-space:pre-wrap;
       display:none;pointer-events:none;
     `;
-    this.uiRoot.appendChild(this.tooltipEl);
+    // U-36: Tooltip follows cursor (Lua WorldToolTip nOffsetX=68, nOffsetY=-30)
+    document.addEventListener('mousemove', (e) => {
+      if (this.tooltipEl.style.display !== 'none') {
+        this.tooltipEl.style.left = (e.clientX + 68) + 'px';
+        this.tooltipEl.style.top = (e.clientY - 30) + 'px';
+      }
+    });
+    document.body.appendChild(this.tooltipEl);
   }
 
   // ── Alert Log ───────────────────────────────────────────────────
