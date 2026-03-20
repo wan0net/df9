@@ -578,7 +578,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| S-13 | MAJOR | **20+ hints missing** | TS has 30 hints. Lua has 50+. Missing: FailedDutyAccident, DerelictNoBeacon, FireNoExtinguisher, BeaconNoSecurity, StarvingNoFood, GardenNoBotanist, and 15+ more contextual hints. |
+| S-13 | ~~MAJOR~~ DONE | **~~20+ hints missing~~** | Fixed: added 20+ hints from Lua HintData.lua with correct linecodes and conditions. |
 | S-14 | MODERATE | **Hint linecode mappings wrong** | NoFitnessZone uses `HINTSX019TEXT` (Lua: PubAtCapacity). NoJukebox uses `HINTSX020TEXT` (Lua: PubButNoBar). Several others mismatched. |
 | S-15 | MODERATE | **Hint logic conditions differ** | notEnoughTechnicians missing total decay check. notEnoughBeds triggers on count instead of actual floor-sleeping. lowOxygen uses raw value instead of `MORALE_LOW_OXYGEN_THRESHOLD`. |
 
