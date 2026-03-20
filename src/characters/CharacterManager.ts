@@ -3,7 +3,7 @@ import { addLog } from './Log';
 import { line } from '../localization/Localization';
 import {
   MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
-  RAIDER,
+  RAIDER, UNEMPLOYED,
   CAUSE_OF_DEATH, FAMILIARITY_TICK_RATE, FAMILIARITY_TICK_INCREASE,
   HURT_THRESHOLD,
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
@@ -11,6 +11,7 @@ import {
   OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH, SPACESUIT_MAX_OXYGEN,
   OXYGEN_LOW, OXYGEN_SUFFOCATING,
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
+  JOB_EXPERIENCE_RATE,
 } from './CharacterConstants';
 import { TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
@@ -283,6 +284,15 @@ export class CharacterManager {
         if (mod !== undefined) maladyMods[need] = mod;
       }
       char.needs.decay(dtSec, promisedNeeds, Object.keys(maladyMods).length > 0 ? maladyMods : undefined);
+
+      // C-5: Continuous job XP gain for on-duty characters performing work-shift tasks
+      // Lua Character.lua: JOB_EXPERIENCE_RATE = 25/60 per second while working
+      if (char.currentTask && char.currentTask.tags?.WorkShift && char.onDuty()) {
+        const job = char.tStats.nJob;
+        if (job >= 0 && job !== UNEMPLOYED) {
+          char.addJobExperience(JOB_EXPERIENCE_RATE * dtSec);
+        }
+      }
 
       // Starvation check (Lua Character.lua:2430-2443)
       if (char.needs.hunger <= NEEDS_HUNGER_STARVATION) {
