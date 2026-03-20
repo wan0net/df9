@@ -8,7 +8,7 @@ import type { Task, NeedAdvertisement } from './Task';
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
 import type { Room } from '../rooms/Room';
-import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT, OXYGEN_LOW } from '../characters/CharacterConstants';
+import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT, OXYGEN_LOW, NEEDS_HUNGER_STARVATION } from '../characters/CharacterConstants';
 import { isoSquareDist } from '../core/MiscUtil';
 
 /** Distance penalty factor for utility scoring. */
@@ -246,6 +246,15 @@ export class ActivityOption {
       // Needs range -100..+100, so urgency maps to 0..1 across full range
       const urgency = Math.max(0, 100 - currentValue) / 200;
       score += urgency * adv.amount;
+    }
+
+    // C-6: Elevate priority to SURVIVAL_NORMAL when starving and option satisfies Hunger
+    // Matches Lua: starving characters urgently seek food
+    if (character.needs.hunger <= NEEDS_HUNGER_STARVATION) {
+      const satisfiesHunger = advertisedNeeds.some(a => a.need === 'hunger');
+      if (satisfiesHunger && this.priorityLevel < PRIORITY.SURVIVAL_NORMAL) {
+        score += 1000; // SURVIVAL_NORMAL bonus
+      }
     }
 
     // Distance penalty

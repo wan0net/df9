@@ -21,6 +21,7 @@ import type { EnvObject } from '../envobjects/EnvObject';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { TileType } from '../world/TileTypes';
 import { researchSystem } from '../research/ResearchSystem';
+import { SpatialAudio } from '../audio/SpatialAudio';
 
 /** Grapple duration before melee damage is applied. */
 const GRAPPLE_TIME = 3;
@@ -235,6 +236,13 @@ export class CombatSystem {
         const meleeCooldown = eng.weapon.nMeleeCoolDown ?? GRAPPLE_TIME;
         if (eng.grappleTimer >= meleeCooldown) {
           eng.grappleTimer = 0;
+          // A-12: Race-specific melee attack sounds for hostile creatures
+          const race = attacker.tStats.nRace;
+          if (race === RACE_MONSTER) {
+            SpatialAudio.playAtTile('BadAlien_Attack', attacker.tileX, attacker.tileY);
+          } else if (race === RACE_KILLBOT) {
+            SpatialAudio.playAtTile('Killbot_Attack', attacker.tileX, attacker.tileY);
+          }
           hits.push({
             attackerId: eng.attackerId,
             defenderId: eng.defenderId,
@@ -270,6 +278,18 @@ export class CombatSystem {
             }
 
             if (hasLoS) {
+              // A-9/A-10/A-12: Weapon fire sounds
+              if (eng.weapon.sName === 'TurretLaser') {
+                SpatialAudio.playAtTile('TurretFire', attacker.tileX, attacker.tileY);
+              } else {
+                const race = attacker.tStats.nRace;
+                if (race === RACE_KILLBOT) {
+                  SpatialAudio.playAtTile('Killbot_Attack', attacker.tileX, attacker.tileY);
+                } else {
+                  SpatialAudio.playAtTile('GunShot', attacker.tileX, attacker.tileY);
+                }
+              }
+
               // Fire projectile visual
               if (this.projectileManager) {
                 this.projectileManager.fire(
@@ -404,7 +424,7 @@ export class CombatSystem {
     const reduction = CombatSystem.getDamageReduction(defender, allChars);
     const effectiveDamage = Math.max(1, Math.round(damage * (1 - reduction)));
     // C-40: Removed separate ArmorLevel2 dodge — Lua only uses damage reduction (0.5)
-    defender.takeDamage(effectiveDamage);
+    defender.takeDamage(effectiveDamage, damageType);
     if (!defender.isAlive()) {
       // Stunner damage type → incapacitate instead of kill (Lua Character.lua:5592-5617)
       if (damageType === DAMAGE_TYPE.Stunner) {

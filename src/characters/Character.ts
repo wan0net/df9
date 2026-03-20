@@ -37,6 +37,8 @@ import {
   RACE_HUMAN, RACE_TYPE, type RaceTypeDef,
   HUMAN_RACE_PCT, CAT_RACE_PCT,
   RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK, RACE_CHICKEN, RACE_SHAMON,
+  RACE_MONSTER,
+  DAMAGE_TYPE,
 } from './CharacterConstants';
 import { GameRules } from '../core/GameRules';
 import { line } from '../localization/Localization';
@@ -103,6 +105,10 @@ export class Character {
   bCuffed = false;
   /** Whether character is wearing a spacesuit */
   bSpacesuit = false;
+  /** Malady flag: character refuses doctor treatment (Lua bRefuseDoctor). */
+  bRefuseDoctor = false;
+  /** Malady flag: character hides disease signs (Lua bHideSigns). */
+  bHideSigns = false;
   /** Running state (Lua: sWalkOverride='run', bUseRunSpeed). */
   bRunning = false;
   /** Remaining suit oxygen (in O2 units) */
@@ -263,9 +269,20 @@ export class Character {
   getHP(): number { return this.tStats.nHP; }
   setHP(hp: number) { this.tStats.nHP = Math.max(0, Math.min(this.tStats.nMaxHP, hp)); }
   /** Apply damage to this character. Kills if HP drops to 0. */
-  takeDamage(amount: number) {
+  takeDamage(amount: number, damageType?: number) {
     this.tStats.nHP = Math.max(0, this.tStats.nHP - amount);
-    SpatialAudio.playAtTile('Brawl_Impact', this.tileX, this.tileY);
+    // A-40: Distinguish impact sounds by damage type
+    if (damageType === DAMAGE_TYPE.Laser) {
+      SpatialAudio.playAtTile('Laser_Impact', this.tileX, this.tileY);
+    } else if (damageType === DAMAGE_TYPE.Stunner) {
+      SpatialAudio.playAtTile('Taser_Impact', this.tileX, this.tileY);
+    } else {
+      SpatialAudio.playAtTile('Brawl_Impact', this.tileX, this.tileY);
+    }
+    // A-12: Monster hit react sound when taking damage
+    if (this.tStats.nRace === RACE_MONSTER) {
+      SpatialAudio.playAtTile('MonsterAttack', this.tileX, this.tileY);
+    }
   }
   /** Whether character has been stunned/knocked out (Lua KnockedOut malady). */
   bIncapacitated = false;

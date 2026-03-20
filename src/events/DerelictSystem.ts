@@ -353,7 +353,11 @@ export class DerelictSystem {
 
   private rescueSurvivors(ship: DerelictShip) {
     for (let i = 0; i < ship.crewRemaining; i++) {
-      this.characterManager.spawnCharacterAt(0, 0, false, true);
+      // E-7: Spawn at a random room tile instead of (0,0)
+      const tile = this.characterManager.getRandomRoomTile();
+      if (tile) {
+        this.characterManager.spawnCharacterAt(tile.x, tile.y, false, true);
+      }
     }
     Base.addAlert('system', line('DERELICT_RESCUED', { count: String(ship.crewRemaining) }));
     ship.crewRemaining = 0;
