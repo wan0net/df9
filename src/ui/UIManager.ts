@@ -113,6 +113,12 @@ export class UIManager {
   private hasPendingBuild: (() => boolean) | null = null;
   private onAlertClick: ((alertType: string) => void) | null = null;
 
+  // Disaster callbacks
+  private onSpawnRaiders: (() => void) | null = null;
+  private onStartFire: (() => void) | null = null;
+  private onMeteorShower: (() => void) | null = null;
+  private onSpawnMonster: (() => void) | null = null;
+
   // HUD elements
   private matterText!: HTMLSpanElement;
   private matterLabel!: HTMLSpanElement;
@@ -196,6 +202,13 @@ export class UIManager {
   // Beacon sub-menu
   private beaconSub!: HTMLDivElement;
   selectedViolenceLevel = 'default';
+
+  // Disaster sub-menu
+  private disasterSub!: HTMLDivElement;
+  private disasterSubActive = false;
+
+  // Object placement cursor label (U-43)
+  private objectCursorLabel!: HTMLDivElement;
 
   // Inspect sub-menu (screenshot: "Back" + ">> Inspect" replaces sidebar)
   private inspectSub!: HTMLDivElement;
