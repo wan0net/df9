@@ -12,8 +12,6 @@ const RED = '#ff3d00';
 const BEACON_RED = '#e60000';
 const BEACON_PURPLE = '#8a2be2';
 
-const HEX_CLIP_PATH = 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)';
-
 interface SidebarCallbacks {
   setBuildMode: (mode: BuildMode) => void;
   getBuildMode: () => BuildMode;
@@ -94,8 +92,7 @@ export class HexSidebar {
       left: 0;
       width: 286px;
       height: 100%;
-      background: linear-gradient(90deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 100%);
-      border-right: 2px solid ${AMBER};
+      background: rgba(0,0,0,0.8);
     `;
     this.sidebarEl.appendChild(bg);
 
@@ -103,10 +100,10 @@ export class HexSidebar {
     this.buttonsContainer.style.cssText = `
       position: relative;
       width: 286px;
-      padding-top: 20px;
+      padding-top: 0;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 0;
     `;
     this.sidebarEl.appendChild(this.buttonsContainer);
 
@@ -119,31 +116,24 @@ export class HexSidebar {
       left: 0;
       width: 286px;
       height: 100%;
-      background: rgba(0,0,0,0.95);
+      background: rgba(0,0,0,0.8);
       display: none;
       flex-direction: column;
-      padding-top: 20px;
+      padding-top: 0;
     `;
     this.sidebarEl.appendChild(this.submenuContainer);
 
-    const endCap = document.createElement('div');
+    const endCap = document.createElement('img');
+    endCap.src = 'assets/ui/hud/ui_hud_anglebottom.png';
     endCap.style.cssText = `
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 286px;
-      height: 60px;
-      background: linear-gradient(90deg, rgba(223,162,0,0.3) 0%, transparent 100%);
-      border-top: 1px solid ${AMBER};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: ${AMBER};
-      font-size: 14px;
-      font-family: 'Dosis', sans-serif;
+      position: relative;
+      width: 104px;
+      left: -152px;
+      display: block;
+      pointer-events: none;
     `;
-    endCap.textContent = 'DF-9';
-    this.sidebarEl.appendChild(endCap);
+    endCap.dataset.role = 'endcap';
+    this.buttonsContainer.appendChild(endCap);
 
     this.sidebarEl.addEventListener('mouseenter', () => this.expand());
     this.sidebarEl.addEventListener('mouseleave', () => this.collapse());
@@ -229,48 +219,32 @@ export class HexSidebar {
       display: flex;
       align-items: center;
       cursor: pointer;
-      transition: all 0.15s ease;
-    `;
-
-    const hexBg = document.createElement('div');
-    hexBg.style.cssText = `
-      position: absolute;
-      left: 10px;
-      width: 80px;
-      height: 70px;
-      background: rgba(223,162,0,0.1);
-      border: 2px solid ${AMBER};
-      clip-path: ${HEX_CLIP_PATH};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s ease;
+      background: transparent;
     `;
 
     const icon = document.createElement('img');
     icon.src = btn.iconSrc;
     icon.style.cssText = `
-      width: 40px;
-      height: 40px;
+      position: absolute;
+      left: 10px;
+      width: 48px;
+      height: 48px;
       object-fit: contain;
       filter: sepia(1) saturate(5) hue-rotate(5deg);
-      transition: all 0.15s ease;
     `;
-    hexBg.appendChild(icon);
-    wrapper.appendChild(hexBg);
+    wrapper.appendChild(icon);
 
     const label = document.createElement('div');
     label.textContent = btn.label;
     label.style.cssText = `
       position: absolute;
-      left: 100px;
+      left: 105px;
       color: ${AMBER};
       font-size: 40px;
       font-family: 'Dosis', sans-serif;
       font-weight: 400;
       white-space: nowrap;
       opacity: 0;
-      transition: opacity 0.15s ease;
       pointer-events: none;
     `;
     wrapper.appendChild(label);
@@ -279,30 +253,26 @@ export class HexSidebar {
     hotkey.textContent = btn.hotkey;
     hotkey.style.cssText = `
       position: absolute;
-      right: 20px;
+      right: ${286 - 104}px;
       color: ${AMBER};
-      font-size: 20px;
+      font-size: 22px;
       font-family: 'Dosis', sans-serif;
       font-weight: 600;
-      opacity: 0;
-      transition: opacity 0.15s ease;
       pointer-events: none;
     `;
     wrapper.appendChild(hotkey);
 
     wrapper.addEventListener('mouseenter', () => {
       SoundManager.playUI('UI_Hilight');
-      hexBg.style.background = AMBER;
-      hexBg.style.transform = 'scale(1.05)';
+      wrapper.style.background = AMBER;
       icon.style.filter = 'brightness(0)';
-      label.style.color = '#fff';
-      hotkey.style.color = '#fff';
+      label.style.color = '#000';
+      hotkey.style.color = '#000';
     });
 
     wrapper.addEventListener('mouseleave', () => {
       const isActive = btn.checkActive?.() ?? false;
-      hexBg.style.background = isActive ? AMBER : 'rgba(223,162,0,0.1)';
-      hexBg.style.transform = 'scale(1)';
+      wrapper.style.background = isActive ? AMBER : 'transparent';
       icon.style.filter = isActive ? 'brightness(0)' : 'sepia(1) saturate(5) hue-rotate(5deg)';
       label.style.color = AMBER;
       hotkey.style.color = AMBER;
@@ -326,12 +296,22 @@ export class HexSidebar {
     if (this.expanded) return;
     this.expanded = true;
     this.sidebarEl.style.width = '286px';
-    
-    for (const [id, { el }] of this.buttons) {
+
+    for (const [, { el }] of this.buttons) {
       const label = el.querySelector('div:nth-child(2)') as HTMLElement;
       const hotkey = el.querySelector('div:nth-child(3)') as HTMLElement;
       if (label) label.style.opacity = '1';
-      if (hotkey) hotkey.style.opacity = '0.8';
+      if (hotkey) {
+        hotkey.style.opacity = '1';
+        hotkey.style.right = `${286 - 112 - 105}px`;
+      }
+    }
+
+    // Adjust endcap for expanded width
+    const endCap = this.buttonsContainer.querySelector('[data-role="endcap"]') as HTMLElement;
+    if (endCap) {
+      endCap.style.width = `${286 * 1.12}px`;
+      endCap.style.left = '0px';
     }
 
     SoundManager.playUI('UI_Expand');
@@ -342,11 +322,21 @@ export class HexSidebar {
     this.expanded = false;
     this.sidebarEl.style.width = '104px';
 
-    for (const [id, { el }] of this.buttons) {
+    for (const [, { el }] of this.buttons) {
       const label = el.querySelector('div:nth-child(2)') as HTMLElement;
       const hotkey = el.querySelector('div:nth-child(3)') as HTMLElement;
       if (label) label.style.opacity = '0';
-      if (hotkey) hotkey.style.opacity = '0';
+      if (hotkey) {
+        hotkey.style.opacity = '1';
+        hotkey.style.right = `${286 - 104}px`;
+      }
+    }
+
+    // Adjust endcap for collapsed width
+    const endCap = this.buttonsContainer.querySelector('[data-role="endcap"]') as HTMLElement;
+    if (endCap) {
+      endCap.style.width = '104px';
+      endCap.style.left = '-152px';
     }
 
     SoundManager.playSfx('degauss');
@@ -627,14 +617,13 @@ export class HexSidebar {
   }) {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = `
+      position: relative;
       width: 286px;
       height: 81px;
       display: flex;
       align-items: center;
       cursor: pointer;
-      padding: 0 20px;
-      gap: 12px;
-      transition: background 0.15s ease;
+      background: transparent;
     `;
 
     let iconNode: HTMLElement;
@@ -642,17 +631,25 @@ export class HexSidebar {
       const img = document.createElement('img');
       img.src = opts.iconSrc;
       img.style.cssText = `
-        width: 32px; height: 32px; object-fit: contain;
-        filter: sepia(1) saturate(3) hue-rotate(15deg) brightness(0.9);
+        position: absolute;
+        left: 10px;
+        width: 48px;
+        height: 48px;
+        object-fit: contain;
+        filter: sepia(1) saturate(5) hue-rotate(5deg);
       `;
-      const iconWrap = document.createElement('div');
-      iconWrap.style.cssText = 'width:48px;text-align:center;display:flex;align-items:center;justify-content:center;';
-      iconWrap.appendChild(img);
-      iconNode = iconWrap;
+      iconNode = img;
     } else {
       const span = document.createElement('span');
       span.textContent = opts.icon;
-      span.style.cssText = `width:48px;text-align:center;font-size:24px;color:${opts.color};`;
+      span.style.cssText = `
+        position: absolute;
+        left: 10px;
+        width: 48px;
+        text-align: center;
+        font-size: 24px;
+        color: ${opts.color};
+      `;
       iconNode = span;
     }
     wrapper.appendChild(iconNode);
@@ -660,22 +657,27 @@ export class HexSidebar {
     const label = document.createElement('div');
     label.textContent = opts.label;
     label.style.cssText = `
-      flex: 1;
+      position: absolute;
+      left: 105px;
       color: ${opts.color};
       font-size: 40px;
       font-family: 'Dosis', sans-serif;
       font-weight: 400;
+      white-space: nowrap;
+      pointer-events: none;
     `;
     wrapper.appendChild(label);
 
     const hotkey = document.createElement('div');
     hotkey.textContent = opts.hotkey;
     hotkey.style.cssText = `
+      position: absolute;
+      right: 10px;
       color: ${AMBER};
-      font-size: 20px;
+      font-size: 22px;
       font-family: 'Dosis', sans-serif;
       font-weight: 600;
-      opacity: 0.6;
+      pointer-events: none;
     `;
     wrapper.appendChild(hotkey);
 
@@ -683,8 +685,7 @@ export class HexSidebar {
       SoundManager.playUI('UI_Hilight');
       wrapper.style.background = opts.color;
       if (opts.iconSrc) {
-        const img = iconNode.querySelector('img');
-        if (img) img.style.filter = 'brightness(0)';
+        (iconNode as HTMLImageElement).style.filter = 'brightness(0)';
       } else {
         (iconNode as HTMLSpanElement).style.color = '#000';
       }
@@ -695,8 +696,7 @@ export class HexSidebar {
     wrapper.addEventListener('mouseleave', () => {
       wrapper.style.background = 'transparent';
       if (opts.iconSrc) {
-        const img = iconNode.querySelector('img');
-        if (img) img.style.filter = 'sepia(1) saturate(3) hue-rotate(15deg) brightness(0.9)';
+        (iconNode as HTMLImageElement).style.filter = 'sepia(1) saturate(5) hue-rotate(5deg)';
       } else {
         (iconNode as HTMLSpanElement).style.color = opts.color;
       }
@@ -798,7 +798,7 @@ export class HexSidebar {
       floor: { icon: '▢', iconSrc: 'assets/ui/icons/ui_iconIso_floor.png' },
       object: { icon: '○', iconSrc: 'assets/ui/icons/ui_iconIso_object.png' },
       demolish: { icon: '⚒', iconSrc: 'assets/ui/icons/ui_iconIso_demolish.png' },
-      vaporize: { icon: '⚡', iconSrc: 'assets/ui/icons/ui_iconIso_demolish.png' },
+      vaporize: { icon: '⚡' },
       erase: { icon: '✕', iconSrc: 'assets/ui/icons/ui_iconIso_erase.png' },
       mine: { icon: '⛏', iconSrc: 'assets/ui/icons/ui_iconIso_mine.png' },
       door: { icon: '▯', iconSrc: 'assets/ui/icons/ui_iconIso_door.png' },
