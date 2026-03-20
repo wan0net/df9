@@ -1001,13 +1001,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; tutorialFlags.vizModes = true; });
   inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
   inputManager.onKeyPress('KeyR', () => { uiManager.toggleJobRoster(); });
-  inputManager.onKeyPress('Space', () => { GameRules.togglePause(); tutorialFlags.timeSpeed = true; });
-  inputManager.onKeyPress('Digit1', () => { GameRules.setTimeScale(1); tutorialFlags.timeSpeed = true; });
-  inputManager.onKeyPress('Digit2', () => { GameRules.setTimeScale(2); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
-  inputManager.onKeyPress('Digit3', () => { GameRules.setTimeScale(4); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  inputManager.onKeyPress('Space', () => { GameRules.bRunning = true; GameRules.togglePause(); tutorialFlags.timeSpeed = true; });
+  inputManager.onKeyPress('Digit1', () => { GameRules.bRunning = true; GameRules.setTimeScale(1); tutorialFlags.timeSpeed = true; });
+  inputManager.onKeyPress('Digit2', () => { GameRules.bRunning = true; GameRules.setTimeScale(2); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  inputManager.onKeyPress('Digit3', () => { GameRules.bRunning = true; GameRules.setTimeScale(4); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
   // ] / [ keys: speed up / slow down time (Lua GameScreen.lua:285-291)
-  inputManager.onKeyPress('BracketRight', () => { GameRules.timeFaster(); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
-  inputManager.onKeyPress('BracketLeft', () => { GameRules.timeSlower(); tutorialFlags.timeSpeed = true; });
+  inputManager.onKeyPress('BracketRight', () => { GameRules.bRunning = true; GameRules.timeFaster(); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  inputManager.onKeyPress('BracketLeft', () => { GameRules.bRunning = true; GameRules.timeSlower(); tutorialFlags.timeSpeed = true; });
   // K key: toggle cutaway mode (Lua GameScreen.lua)
   inputManager.onKeyPress('KeyK', () => {
     GameRules.cycleCutawayMode();
@@ -1250,9 +1250,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   // ── Game loop ─────────────────────────────────────────────
   let lastTime = performance.now();
 
+  /** Lua caps dt at 1/10 s to prevent simulation explosions on tab-background (S-1) */
+  const MAX_FRAME_TIME = 100; // ms
+
   function gameLoop() {
     const now = performance.now();
-    const delta = now - lastTime;
+    const delta = Math.min(now - lastTime, MAX_FRAME_TIME);
     lastTime = now;
 
     // Camera

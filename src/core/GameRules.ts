@@ -278,6 +278,8 @@ class GameRulesClass {
       MIN_PLAYER_TIME_SCALE,
       Math.min(MAX_PLAYER_TIME_SCALE, scale),
     );
+    // Setting a speed implicitly unpauses the game (bRunning gates the game loop)
+    this.bRunning = true;
   }
 
   /** Lua GameRules.togglePause — spacebar pause toggle. */
