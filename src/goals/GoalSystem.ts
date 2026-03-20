@@ -29,12 +29,14 @@ export class GoalSystem {
   private providers: GoalCheckProviders;
   private tickAccum = 0;
   /** Check one goal per second to spread load. */
-  private static readonly CHECK_INTERVAL = 1;
+  // G-5: Lua checks 1 goal per frame (every tick). Use small interval for near-instant detection.
+  private static readonly CHECK_INTERVAL = 0.05; // ~20Hz per goal
   private checkIndex = 0;
   /** Suppress alerts on first few ticks (prevents alerts on game load). */
   private suppressAlerts = true;
   private totalElapsed = 0;
-  private static readonly SUPPRESS_DURATION = 5; // seconds
+  // G-6: Lua suppresses for #GoalData.tGoals ticks ≈ 16 ticks at 60fps = ~0.27s
+  private static readonly SUPPRESS_DURATION = 0.3; // seconds
 
   constructor(providers: GoalCheckProviders) {
     this.providers = providers;

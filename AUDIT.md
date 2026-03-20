@@ -520,8 +520,8 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | G-4 | ~~MAJOR~~ DONE | **~~Goal thresholds wrong~~** | Fixed: BuiltEverything=44, AllTechs=20, AllPossessions=30 in `GoalData.ts`. |
-| G-5 | MODERATE | **Goal check rate 60x slower** | TS checks 1 goal/second. Lua checks 1 goal/frame. Goals can go undetected for up to 17 seconds. |
-| G-6 | MINOR | **Suppress duration 18x too long** | TS: 5s. Lua: ~0.27s. Prevents valid goal alerts at game start. |
+| G-5 | ~~MODERATE~~ DONE | **~~Goal check rate 60x slower~~** | Fixed: check interval 0.05s (~20Hz) instead of 1s. |
+| G-6 | ~~MINOR~~ DONE | **~~Suppress duration 18x too long~~** | Fixed: 0.3s instead of 5s. |
 
 ### 8.3 Environment Objects
 
