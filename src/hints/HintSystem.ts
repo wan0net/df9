@@ -354,10 +354,13 @@ const HINTS: HintDef[] = [
 ];
 
 export class HintSystem {
-  private shownHints: Set<string> = new Set();
+  private shownHints: Set<string> = new Set(); // kept for save/load compat
   private providers: HintProviders;
   private trueSince: Map<string, number> = new Map();
+  private lastShownTime: Map<string, number> = new Map();
   private suppressUntil = 0;
+  /** Min seconds between re-showing the same hint */
+  private static readonly HINT_COOLDOWN = 120;
   private tickAccum = 0;
   private static readonly CHECK_INTERVAL = 5;
 
@@ -403,7 +406,9 @@ export class HintSystem {
     const now = GameRules.elapsedTime;
 
     for (const hint of HINTS) {
-      if (this.shownHints.has(hint.id)) continue;
+      // Lua: hints can re-trigger after cooldown (not permanently consumed)
+      const lastShown = this.lastShownTime.get(hint.id);
+      if (lastShown !== undefined && (now - lastShown) < HintSystem.HINT_COOLDOWN) continue;
 
       if (!hint.check(ctx)) {
         this.trueSince.delete(hint.id);
@@ -426,10 +431,14 @@ export class HintSystem {
     }
 
     if (!selected) return;
-    this.shownHints.add(selected.id);
+    // Lua Hint.lua: hints are NOT permanently consumed — they re-trigger when
+    // conditions return after nDisplayTimeBeforeHide expires. We use suppressUntil
+    // to prevent spam but don't permanently add to shownHints.
     this.trueSince.delete(selected.id);
     Base.addAlert('hint', line(selected.sLC));
-    this.suppressUntil = now + (selected.nDisplayTimeBeforeHide ?? 10);
+    this.suppressUntil = now + (selected.nDisplayTimeBeforeHide ?? 30);
+    // Track last-shown time per hint to avoid showing same hint too frequently
+    this.lastShownTime.set(selected.id, now);
   }
 
   getShownHints(): string[] {
