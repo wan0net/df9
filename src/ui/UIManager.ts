@@ -111,6 +111,7 @@ export class UIManager {
   private onConfirmBuild: (() => boolean) | null = null;
   private onCancelBuild: (() => void) | null = null;
   private hasPendingBuild: (() => boolean) | null = null;
+  private onAlertClick: ((alertType: string) => void) | null = null;
 
   // HUD elements
   private matterText!: HTMLSpanElement;
@@ -251,6 +252,7 @@ export class UIManager {
     onConfirmBuild?: () => boolean;
     onCancelBuild?: () => void;
     hasPendingBuild?: () => boolean;
+    onAlertClick?: (alertType: string) => void;
   }) {
     this.container = container;
     this.getBuildMode = callbacks.getBuildMode;
@@ -280,6 +282,7 @@ export class UIManager {
     this.onConfirmBuild = callbacks.onConfirmBuild ?? null;
     this.onCancelBuild = callbacks.onCancelBuild ?? null;
     this.hasPendingBuild = callbacks.hasPendingBuild ?? null;
+    this.onAlertClick = callbacks.onAlertClick ?? null;
 
     this.createUI(callbacks.onSetJob, callbacks);
   }
@@ -580,7 +583,7 @@ export class UIManager {
     // Persistent coordinate display — below the top HUD bar
     this.tileInfoEl = document.createElement('div');
     this.tileInfoEl.style.cssText = `
-      position:absolute;top:52px;right:10px;
+      position:absolute;bottom:70px;left:120px;
       color:${AMBER};font-size:18px;font-family:'Dosis',sans-serif;font-weight:600; /* Lua dosissemibold18 */
       pointer-events:none;opacity:0.7;
     `;
@@ -945,14 +948,14 @@ export class UIManager {
     // Screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase
     // Layout: [icon] Label           hotkey  (matching screenshot 20.32.27)
     // No Door/Airlock button (doors auto-placed at room boundaries in original)
-    const subBtns: { label: string; hotkey: string; mode: BuildMode; icon: string }[] = [
-      { label: line('HUDHUD013TEXT'), hotkey: 'c', mode: 'room',      icon: '\u25A3' },  // Room (⬓ square with inner)
-      { label: line('HUDHUD014TEXT'), hotkey: 'w', mode: 'wall',      icon: '\u2592' },  // Wall (▒ medium shade)
-      { label: line('HUDHUD027TEXT'), hotkey: 'b', mode: 'floor',     icon: '\u2B1C' },  // Floor (⬜ large white square)
-      { label: line('ZONEUI014TEXT'), hotkey: 'p', mode: 'object',    icon: '\u2B1A' },  // Object (⬚ dotted square)
-      { label: line('HUDHUD017TEXT'), hotkey: 'x', mode: 'demolish',  icon: '\u21B5' },  // Tear Down (↵ arrow)
+    const subBtns: { label: string; hotkey: string; mode: BuildMode; icon: string; iconSrc?: string }[] = [
+      { label: line('HUDHUD013TEXT'), hotkey: 'c', mode: 'room',      icon: '\u25A3', iconSrc: 'assets/ui/icons/ui_iconIso_room.png' },  // Room (⬓ square with inner)
+      { label: line('HUDHUD014TEXT'), hotkey: 'w', mode: 'wall',      icon: '\u2592', iconSrc: 'assets/ui/icons/ui_iconIso_Wall.png' },  // Wall (▒ medium shade)
+      { label: line('HUDHUD027TEXT'), hotkey: 'b', mode: 'floor',     icon: '\u2B1C', iconSrc: 'assets/ui/icons/ui_iconIso_floor.png' },  // Floor (⬜ large white square)
+      { label: line('ZONEUI014TEXT'), hotkey: 'p', mode: 'object',    icon: '\u2B1A', iconSrc: 'assets/ui/icons/ui_iconIso_object.png' },  // Object (⬚ dotted square)
+      { label: line('HUDHUD017TEXT'), hotkey: 'x', mode: 'demolish',  icon: '\u21B5', iconSrc: 'assets/ui/icons/ui_iconIso_demolish.png' },  // Tear Down (↵ arrow)
       { label: line('BUILDM009TEXT'), hotkey: 'v', mode: 'vaporize',  icon: '\u26A1' },  // Vaporize (⚡ lightning)
-      { label: line('HUDHUD011TEXT'), hotkey: 'e', mode: 'erase',     icon: '\u2716' },  // Erase (✖ heavy multiply)
+      { label: line('HUDHUD011TEXT'), hotkey: 'e', mode: 'erase',     icon: '\u2716', iconSrc: 'assets/ui/icons/ui_iconIso_erase.png' },  // Erase (✖ heavy multiply)
     ];
     this.constructSubModes = [];
     for (const sb of subBtns) {
@@ -961,10 +964,21 @@ export class UIManager {
         height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;
         gap:8px;position:relative;
       `;
-      // Icon on LEFT (screenshot: yellow isometric icon)
-      const iconEl = document.createElement('span');
-      iconEl.textContent = sb.icon;
-      iconEl.style.cssText = `font-size:24px;color:${AMBER};width:48px;text-align:center;flex-shrink:0;`;
+      // Icon on LEFT — use real game icon if available, fallback to text
+      let iconEl: HTMLElement;
+      if (sb.iconSrc) {
+        const img = document.createElement('img');
+        img.src = sb.iconSrc;
+        img.style.cssText = `width:32px;height:32px;object-fit:contain;`;
+        const wrap = document.createElement('div');
+        wrap.style.cssText = `width:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0;`;
+        wrap.appendChild(img);
+        iconEl = wrap;
+      } else {
+        iconEl = document.createElement('span');
+        iconEl.textContent = sb.icon;
+        iconEl.style.cssText = `font-size:24px;color:${AMBER};width:48px;text-align:center;flex-shrink:0;`;
+      }
       // Label in CENTER
       const lbl = document.createElement('span');
       lbl.textContent = sb.label;
@@ -991,13 +1005,23 @@ export class UIManager {
       el.addEventListener('mouseenter', () => {
         SoundManager.playUI('UI_Hilight');
         el.style.background = AMBER;
-        iconEl.style.color = '#000';
+        if (sb.iconSrc) {
+          const img = iconEl.querySelector('img');
+          if (img) img.style.filter = 'brightness(0)';
+        } else {
+          (iconEl as HTMLSpanElement).style.color = '#000';
+        }
         lbl.style.color = '#000';
         hk.style.color = '#000';
       });
       el.addEventListener('mouseleave', () => {
         el.style.background = 'transparent';
-        iconEl.style.color = AMBER;
+        if (sb.iconSrc) {
+          const img = iconEl.querySelector('img');
+          if (img) img.style.filter = 'none';
+        } else {
+          (iconEl as HTMLSpanElement).style.color = AMBER;
+        }
         lbl.style.color = AMBER;
         hk.style.color = AMBER;
       });
@@ -1518,7 +1542,7 @@ export class UIManager {
     this.alertContainer = document.createElement('div');
     this.alertContainer.id = 'alert-panel';
     this.alertContainer.style.cssText = `
-      position:absolute;top:140px;right:10px;width:380px;
+      position:absolute;top:200px;right:10px;width:380px;
       pointer-events:auto;font-size:22px; /* Lua dosissemibold22 */
     `;
 
@@ -1681,6 +1705,7 @@ export class UIManager {
       } else {
         this.displayedMatter = Math.max(currentMatter, this.displayedMatter - increment);
       }
+      SoundManager.playUI('UI_MatterScroll'); // Lua: SoundManager.playSfx('mattercounter')
     }
     if (this.matterFlashTimer > 0) {
       this.matterFlashTimer--;
@@ -1815,8 +1840,14 @@ export class UIManager {
         // Children: icon(0), label(1), hotkey(2)
         const isSubActive = buildMode === this.constructSubModes[i] && buildMode !== 'none';
         el.style.background = isSubActive ? AMBER : 'transparent';
-        for (let c = 0; c < el.children.length; c++) {
-          (el.children[c] as HTMLElement).style.color = isSubActive ? '#000' : AMBER;
+         for (let c = 0; c < el.children.length; c++) {
+          const child = el.children[c] as HTMLElement;
+          const img = child.querySelector('img');
+          if (img) {
+            img.style.filter = isSubActive ? 'brightness(0)' : 'none';
+          } else {
+            child.style.color = isSubActive ? '#000' : AMBER;
+          }
         }
       }
     } else if (isObjectMode) {
@@ -1958,7 +1989,12 @@ export class UIManager {
         const el = document.createElement('div');
         el.style.cssText = `
           background:${cardBg};padding:8px 10px;display:flex;gap:8px;align-items:flex-start;
+          cursor:pointer;
         `;
+        el.addEventListener('click', () => {
+          this.onAlertClick?.(alert.type);
+          this.uiClickConsumed = true;
+        });
         // Icon: "!" for alerts, "?" for hints (Lua uses different icon styles)
         const icon = document.createElement('div');
         icon.textContent = isHint ? '?' : '!';
