@@ -68,8 +68,8 @@
 | C-25 | ~~MAJOR~~ DONE | **~~Raider conversion missing~~** | Fixed: timer-based conversion in brig. |
 | C-26 | ~~MAJOR~~ DONE | **~~Spacesuit removal not wired~~** | Fixed: 10s timer in CharacterManager removes suit when in pressurized room with O2>200. |
 | C-27 | ~~MAJOR~~ FALSE POSITIVE | **Vacuum death animation** | `nVacuumScale` defaults to -1 (not 0). No false trigger. Animation triggers correctly on SUCKED_INTO_SPACE death. |
-| C-28 | MODERATE | **Prison duty drain missing** | Lua: while in prison, Duty trends toward 0. TS does not implement this. |
-| C-29 | MODERATE | **Brig anger reduction gated wrong** | TS applies enhanced anger reduction when `bCuffed`. Lua gates on `inPrison()` (actually in brig zone, not just cuffed). |
+| C-28 | ~~MODERATE~~ DONE | **~~Prison duty drain missing~~** | Fixed: duty trends toward 0 per morale tick while `inPrison()`. |
+| C-29 | ~~MODERATE~~ DONE | **~~Brig anger reduction gated wrong~~** | Fixed: now gates on `inPrison()` instead of `bCuffed`. |
 | C-30 | ~~MODERATE~~ DONE | **~~Need decay ignores malady modifiers~~** | Fixed: M-1 already wired `getNeedsReduceMods()` into `Needs.decay()`. |
 | C-31 | MODERATE | **No drug system** | Lua calls `_applyDrugs(tx,ty)` on every morale tick. TS has no drug implementation. |
 | C-32 | MINOR | **No Stuff need** | Lua has a `Stuff` need driving inventory AI. TS has no equivalent need. |

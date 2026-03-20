@@ -586,8 +586,8 @@ export class Character {
       this.moraleTickAccum -= MORALE_TICK;
 
       // Anger reduction first (Lua tickMorale lines 5996-6001)
-      // Lua: prison check first (even incapacitated prisoners cool down)
-      if (this.bCuffed) {
+      // C-29: Lua gates brig anger reduction on inPrison() not just bCuffed
+      if (this.inPrison()) {
         this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK_BRIG);
       } else if (!this.bIncapacitated) {
         this.angerReduction(ANGER_REDUCTION_PER_MORALE_TICK);
@@ -595,6 +595,12 @@ export class Character {
 
       // Hostiles skip morale
       if (this.tStats.nTeam !== TEAM_ID_PLAYER) return;
+
+      // C-28: While in prison, Duty trends toward 0 (Lua Character.lua:2377-2383)
+      if (this.inPrison()) {
+        if (this.needs.duty > 0) this.needs.duty = Math.max(0, this.needs.duty - 1);
+        else if (this.needs.duty < 0) this.needs.duty = Math.min(0, this.needs.duty + 1);
+      }
 
       // Skip morale tick while sleeping or rampaging (Lua Character.lua:6045)
       const taskName = this.currentTask?.name;
