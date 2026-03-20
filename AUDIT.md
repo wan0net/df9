@@ -218,7 +218,7 @@
 |---|-----|-------|--------|
 | E-27 | ~~MAJOR~~ DONE | **~~No point-budget scaling~~** | Fixed: point budget scaling instead of hardcoded 3 events. |
 | E-28 | ~~MAJOR~~ DONE | **~~Sub-events not staggered~~** | Fixed: `CompoundEvent.ts` now staggers sub-events 0-60s apart. |
-| E-29 | MODERATE | **`bRanMegaEvent` set too early** | TS sets flag before sub-events run. Lua sets it after all complete. |
+| E-29 | ~~MODERATE~~ DONE | **~~`bRanMegaEvent` set too early~~** | Fixed: set via compound.onCompleteCallback after all sub-events finish. |
 | E-30 | MODERATE | **Dialog doesn't block sub-events** | Lua pauses, plays dialog first. TS shows dialog and immediately fires sub-events. |
 
 ### 3.8 Trader Event

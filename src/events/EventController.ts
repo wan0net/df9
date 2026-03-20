@@ -687,10 +687,11 @@ export class EventController implements TickableSystem {
         }
       }
 
+      // E-29: Lua sets bRanMegaEvent AFTER all sub-events complete, not before
+      compound.onCompleteCallback = () => { this.bRanMegaEvent = true; };
       compound.start(GameRules.simTime);
       this.currentEvent = compound;
       this.currentEventEntry = null;
-      this.bRanMegaEvent = true;
       Base.addAlert('siege', line('ALERTS040TEXT'));
     };
 
