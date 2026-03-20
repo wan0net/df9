@@ -924,7 +924,7 @@ export class CharacterRenderer {
     if (handle.is3D && handle.showingSpacesuit !== char.bSpacewalking) {
       this.scene.remove(handle.object);
       handle.object.traverse((child) => {
-        if (child instanceof THREE.Mesh) child.geometry.dispose();
+        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) child.geometry.dispose();
       });
 
       const result = this.createModel(char, char.bSpacewalking);

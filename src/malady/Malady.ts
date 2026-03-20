@@ -40,7 +40,8 @@ const SNEEZE_RANGE_MIN = 45;
 const SNEEZE_RANGE_MAX = 90;
 const LOG_RANGE_MIN = 120;
 const LOG_RANGE_MAX = 360;
-const SPREAD_RANGE = 5;
+/** Default duration range for staged diseases after all stages exhaust (Lua MaladyData.Default.tDurationRange). */
+const DEFAULT_DURATION_RANGE: [number, number] = [600, 2000];
 
 const INCAPACITATED_ALLOWED = new Set(['IncapacitatedOnFloor', 'GetFieldScanned']);
 
@@ -440,7 +441,9 @@ export const Malady = {
 
     const duration = randRange(def.tDurationRange[0], def.tDurationRange[1]);
     const start = nElapsedTime;
-    const end = start + duration;
+    // Lua: only set nMaladyEnd for non-staged diseases.
+    // Staged diseases get nMaladyEnd after all stages exhaust (in _tickMalady).
+    const end = def.tSymptomStages ? Infinity : start + duration;
 
     // Contagious start time
     let contagiousStart = end + 1;
@@ -717,21 +720,35 @@ export const Malady = {
     return null;
   },
 
-  /** After sneeze animation, spread to nearby characters in same room. */
+  /** After sneeze animation, spread to nearby characters in same room.
+   *  Lua: 5-tile horizontal strip (X +-2) at sneezer's Y, same room only. */
   playedSymptomAnim(rChar: CharacterLike, allChars: CharacterLike[]): void {
+    // Get sneezer's room (Lua: rChar:getRoom())
+    const srcRoomId = Malady.getRoomIdAtTile
+      ? Malady.getRoomIdAtTile(rChar.tileX, rChar.tileY)
+      : null;
+
     for (const m of rChar.maladies) {
       if (!m.bContagious || !m.bSpreadSneeze) continue;
 
       m.nNextSneeze = nElapsedTime + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX);
 
+      // Skip spreading if sneezer is not in a room
+      if (srcRoomId == null) continue;
+
       for (const target of allChars) {
         if (target === rChar) continue;
         if (target.tStats.nStatus === STATUS_DEAD) continue;
+        // Lua: 5-tile horizontal strip at sneezer's Y coordinate (x-2 to x+2)
         const dx = Math.abs(target.tileX - rChar.tileX);
-        const dy = Math.abs(target.tileY - rChar.tileY);
-        if (dx <= SPREAD_RANGE && dy <= SPREAD_RANGE) {
-          Malady._testSpread(m, rChar, target);
+        if (dx > 2) continue;
+        if (target.tileY !== rChar.tileY) continue;
+        // Same room check (Lua: rSpreadRoom == rRoom)
+        if (Malady.getRoomIdAtTile) {
+          const targetRoomId = Malady.getRoomIdAtTile(target.tileX, target.tileY);
+          if (targetRoomId !== srcRoomId) continue;
         }
+        Malady._testSpread(m, rChar, target);
       }
     }
   },
@@ -873,11 +890,33 @@ export const Malady = {
     }
   },
 
-  /** Infect a character with a random spawnable disease (Lua: immigration pre-roll). */
+  /** Infect a character with a random spawnable disease (Lua: immigration pre-roll).
+   *  Uses nChanceOfAffliction as weighted probability (Lua parity). */
   infectWithRandom(rChar: CharacterLike): MaladyInstance | null {
     const diseases = getSpawnableDiseases();
     if (diseases.length === 0) return null;
-    const pick = diseases[Math.floor(Math.random() * diseases.length)];
+    // Weighted random selection using nChanceOfAffliction
+    let totalWeight = 0;
+    const weights: number[] = [];
+    for (const name of diseases) {
+      const w = MALADY_DEFS[name].nChanceOfAffliction ?? 0;
+      weights.push(w);
+      totalWeight += w;
+    }
+    if (totalWeight <= 0) {
+      // Fallback: uniform if all weights are zero
+      const pick = diseases[Math.floor(Math.random() * diseases.length)];
+      return Malady.infectCharacter(rChar, pick);
+    }
+    let roll = Math.random() * totalWeight;
+    let pick = diseases[diseases.length - 1];
+    for (let i = 0; i < diseases.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) {
+        pick = diseases[i];
+        break;
+      }
+    }
     return Malady.infectCharacter(rChar, pick);
   },
 

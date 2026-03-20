@@ -379,6 +379,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }
     return count;
   };
+  // Wire room lookup for same-room sneeze spread check
+  Malady.getRoomIdAtTile = (tx, ty) => {
+    const room = roomManager.getRoomAt(tx, ty);
+    return room ? room.id : null;
+  };
   EnvObjectManager.init(roomManager);
 
   // Wire door sprite lookup for TileRenderer3D
