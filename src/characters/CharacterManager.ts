@@ -276,7 +276,13 @@ export class CharacterManager {
           promisedNeeds = new Set(advNeeds.map(a => a.need.charAt(0).toUpperCase() + a.need.slice(1)));
         }
       }
-      char.needs.decay(dtSec, promisedNeeds);
+      // M-1: Get malady need modifiers (one per need)
+      const maladyMods: Record<string, number> = {};
+      for (const need of ['Hunger', 'Energy', 'Amusement', 'Social', 'Duty'] as const) {
+        const mod = Malady.getNeedsReduceMods(char, need);
+        if (mod !== undefined) maladyMods[need] = mod;
+      }
+      char.needs.decay(dtSec, promisedNeeds, Object.keys(maladyMods).length > 0 ? maladyMods : undefined);
 
       // Starvation check (Lua Character.lua:2430-2443)
       if (char.needs.hunger <= NEEDS_HUNGER_STARVATION) {
@@ -1683,7 +1689,7 @@ export class CharacterManager {
           ref.tileX, ref.tileY,
           7 + shiftBoost,
           {
-            tags: { Job: MINER },
+            tags: { Job: MINER, DestOwned: true, WorkShift: true },
             prerequisites: { HeldItem: 'Rock' },
           },
         ));
@@ -1760,6 +1766,7 @@ export class CharacterManager {
           new CheckInToHospital(),
           bed.tileX, bed.tileY,
           4,
+          { tags: { DestOwned: true, DestSafe: true } },
         );
         opt.targetObject = bed;
         options.push(opt);

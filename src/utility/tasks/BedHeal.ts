@@ -5,6 +5,7 @@
 
 import { Task, type NeedAdvertisement } from '../Task';
 import type { Character } from '../../characters/Character';
+import { Malady } from '../../malady/Malady';
 
 export class BedHeal extends Task {
   readonly name = 'BedHeal';
@@ -39,6 +40,17 @@ export class BedHeal extends Task {
         this.patient.tStats.nMaxHP,
         this.patient.tStats.nHP + healAmount,
       );
+      // M-2: Diagnose + cure (same as FieldScanAndHeal)
+      let undiagnosed = Malady.getNextUndiagnosedMalady(this.patient);
+      while (undiagnosed) {
+        Malady.diagnoseMalady(undiagnosed);
+        undiagnosed = Malady.getNextUndiagnosedMalady(this.patient);
+      }
+      const skillLevel = this.character.getEffectiveCompetency();
+      const curable = Malady.getNextCurableMalady(this.patient, skillLevel);
+      if (curable) {
+        Malady.cureMalady(this.patient, curable);
+      }
       this.complete();
     }
   }
