@@ -257,10 +257,17 @@ export class ActivityOption {
       }
     }
 
-    // Distance penalty
-    const dist = isoSquareDist(character.tileX, character.tileY, this.targetX, this.targetY);
-    const distFactor = this.tags.HighDistPenalty ? HIGH_DIST_PENALTY_FACTOR : DISTANCE_PENALTY_FACTOR;
-    score -= dist * distFactor;
+    // C-9: Distance penalty matching Lua formula
+    // Lua: no penalty <5 tiles, then DISTANCE_ADJUST_SCORE=-1 per tile up to 50
+    // HighDistPenalty: -3 per tile, 0→50
+    const dx = Math.abs(character.tileX - this.targetX);
+    const dy = Math.abs(character.tileY - this.targetY);
+    const tileDist = Math.min(50, Math.max(dx, dy)); // Chebyshev distance, capped at 50
+    if (this.tags.HighDistPenalty) {
+      score -= tileDist * 3;
+    } else if (tileDist > 5) {
+      score -= (tileDist - 5) * 1;
+    }
 
     // Activity affinity modifier (Lua: +/-20% from topic affinity)
     const activityAff = character.getAffinityForActivity(this.task.name);

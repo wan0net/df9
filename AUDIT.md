@@ -39,7 +39,7 @@
 | C-6 | ~~MAJOR~~ DONE | **~~Hunger starvation priority elevation missing~~** | Fixed: `ActivityOption.ts` adds +1000 score bonus for Hunger tasks when starving. |
 | C-7 | MODERATE | **No `getScaledDutyScore`** | Lua specially scales Duty need scores for work-shift tasks. TS has no equivalent. |
 | C-8 | ~~MODERATE~~ DONE | **~~Chat cooldown not enforced~~** | Fixed: `tLastChatTime` map per character; cooldown checked before offering Chat. |
-| C-9 | MODERATE | **Distance penalty formula differs** | Lua: no penalty <5 tiles, then -1/tile up to 50. TS: `DISTANCE_PENALTY_FACTOR = 0.05` on squared isometric distance. Different weighting of distant tasks. |
+| C-9 | ~~MODERATE~~ DONE | **~~Distance penalty formula differs~~** | Fixed: now uses Lua formula (no penalty <5, -1/tile 5→50, high=-3/tile). |
 
 ### 1.2 Missing Tasks (14 total)
 
