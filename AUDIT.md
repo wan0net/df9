@@ -179,10 +179,10 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| E-10 | MAJOR | **BreachingEvent spawns exactly 1 raider** | Lua uses `rollRandomRaiders(difficulty, true)` giving 1–3 + killbots. TS hardcodes 1. |
+| E-10 | ~~MAJOR~~ DONE | **~~BreachingEvent spawns exactly 1 raider~~** | Fixed: now uses `getScaledRaiderCount()` (1-5 by difficulty). |
 | E-11 | MAJOR | **No BreachShip visual** | Lua has full cinematic: fly-in, drill animation, ladder, raiders climb out with 5s gaps. TS plays two sounds and waits. |
 | E-12 | MAJOR | **Default raider count wrong** | TS: 2–4 raiders. Lua: 1 at low difficulty (<0.2), scaling up. |
-| E-13 | MAJOR | **BreachingEvent `nDefaultWeight` wrong** | TS: 5. Lua: 10 (forecast) or 16 (no exterior rooms). |
+| E-13 | ~~MAJOR~~ DONE | **~~BreachingEvent `nDefaultWeight` wrong~~** | Fixed: changed to 10 in `EventData.ts`. |
 | E-14 | MODERATE | **No target tile selection** | Lua picks a safe room tile for breach point. TS has no tile-based targeting. |
 
 ### 3.4 Meteor Event
@@ -217,7 +217,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | E-27 | MAJOR | **No point-budget scaling** | Lua uses `nPoints = difficulty * 40 * random` to select sub-events. TS hardcodes exactly 1 HostileImmigration + 1 Breach + 1 Meteor. |
-| E-28 | MAJOR | **Sub-events not staggered** | Lua staggers sub-events 0–60s apart. TS fires all simultaneously. |
+| E-28 | ~~MAJOR~~ DONE | **~~Sub-events not staggered~~** | Fixed: `CompoundEvent.ts` now staggers sub-events 0-60s apart. |
 | E-29 | MODERATE | **`bRanMegaEvent` set too early** | TS sets flag before sub-events run. Lua sets it after all complete. |
 | E-30 | MODERATE | **Dialog doesn't block sub-events** | Lua pauses, plays dialog first. TS shows dialog and immediately fires sub-events. |
 
