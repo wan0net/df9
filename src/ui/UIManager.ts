@@ -879,9 +879,9 @@ export class UIManager {
     // ── Cancel button (red) — Lua CancelButton ──
     const cancelEl = document.createElement('div');
     cancelEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
-    const cancelIcon = document.createElement('span');
-    cancelIcon.textContent = '\u{1F6AB}';
-    cancelIcon.style.cssText = `font-size:24px;`;
+    const cancelIcon = document.createElement('img');
+    cancelIcon.src = 'assets/ui/icons/ui_iconIso_decline.png';
+    cancelIcon.style.cssText = `width:32px;height:32px;object-fit:contain;filter:sepia(1) saturate(10) hue-rotate(-10deg) brightness(1.2);`; // Red tint
     const cancelLbl = document.createElement('span');
     cancelLbl.textContent = line('BUILDM014TEXT');
     cancelLbl.style.cssText = `font-size:40px;color:#FF3D00;font-family:'Dosis',sans-serif;font-weight:400;`; // Lua CONSTRUCT_CANCEL = Gui.RED, dosisregular40
@@ -899,16 +899,16 @@ export class UIManager {
       GameRules.bTimeLocked = false;
       GameRules.enableCutawayMode(this.bCutawayModeWasEnabled);
     });
-    cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = '#FF3D00'; cancelLbl.style.color = '#000'; }); // Lua: CONSTRUCT_CANCEL bg, black text
-    cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; cancelLbl.style.color = '#FF3D00'; });
+    cancelEl.addEventListener('mouseenter', () => { cancelEl.style.background = '#FF3D00'; cancelLbl.style.color = '#000'; cancelIcon.style.filter = 'brightness(0)'; }); // Lua: CONSTRUCT_CANCEL bg, black text/icon
+    cancelEl.addEventListener('mouseleave', () => { cancelEl.style.background = 'transparent'; cancelLbl.style.color = '#FF3D00'; cancelIcon.style.filter = 'sepia(1) saturate(10) hue-rotate(-10deg) brightness(1.2)'; });
     this.constructSub.appendChild(cancelEl);
 
     // ── Confirm button (green) — Lua ConfirmButton at position 2 (screenshot: right after Cancel) ──
     const confirmEl = document.createElement('div');
     confirmEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
-    const confirmIcon = document.createElement('span');
-    confirmIcon.textContent = '\u2714';
-    confirmIcon.style.cssText = `font-size:24px;color:#A5D318;`; // Lua CONSTRUCT_CONFIRM = Gui.GREEN
+    const confirmIcon = document.createElement('img');
+    confirmIcon.src = 'assets/ui/icons/ui_iconIso_confirm.png';
+    confirmIcon.style.cssText = `width:32px;height:32px;object-fit:contain;filter:sepia(1) saturate(10) hue-rotate(40deg) brightness(1.1);`; // Green tint
     const confirmLbl = document.createElement('span');
     confirmLbl.textContent = line('HUDHUD019TEXT');
     confirmLbl.style.cssText = `font-size:40px;color:#A5D318;font-family:'Dosis',sans-serif;font-weight:400;`; // Lua Gui.GREEN, dosisregular40
@@ -924,8 +924,8 @@ export class UIManager {
       GameRules.bTimeLocked = false;
       GameRules.enableCutawayMode(this.bCutawayModeWasEnabled);
     });
-    confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = '#A5D318'; confirmIcon.style.color = '#000'; confirmLbl.style.color = '#000'; }); // Lua CONSTRUCT_CONFIRM
-    confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.color = '#A5D318'; confirmLbl.style.color = '#A5D318'; });
+    confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = '#A5D318'; confirmIcon.style.filter = 'brightness(0)'; confirmLbl.style.color = '#000'; }); // Lua CONSTRUCT_CONFIRM
+    confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.filter = 'sepia(1) saturate(10) hue-rotate(40deg) brightness(1.1)'; confirmLbl.style.color = '#A5D318'; });
     this.constructSub.appendChild(confirmEl);
 
     // ── Build mode buttons — matching Lua ConstructMenu order ──
