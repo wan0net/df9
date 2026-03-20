@@ -872,7 +872,7 @@ export class UIManager {
     inspBackEl.addEventListener('mouseleave', () => { inspBackEl.style.background = 'transparent'; });
     this.inspectSub.appendChild(inspBackEl);
 
-    sidebar.appendChild(this.inspectSub);
+    this.uiRoot.appendChild(this.inspectSub);
 
     // Construct sub-menu — Lua ConstructMenu.lua: replaces sidebar buttons entirely
     this.constructSub = document.createElement('div');
@@ -1015,18 +1015,18 @@ export class UIManager {
       this.constructSub.appendChild(el);
     }
 
-    sidebar.appendChild(this.constructSub);
+    this.uiRoot.appendChild(this.constructSub);
 
     // ── Object Menu — Lua ObjectMenu: zone category buttons (330×72) ──
     this.objectMenuEl = document.createElement('div');
     this.objectMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${OBJECT_PICKER_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
     this.buildObjectZoneMenu();
-    sidebar.appendChild(this.objectMenuEl);
+    this.uiRoot.appendChild(this.objectMenuEl);
 
     // ── Object Sub-Menu — Lua SelectObjectForZoneMenu: individual object buttons (430×81) ──
     this.objectSubMenuEl = document.createElement('div');
     this.objectSubMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
-    sidebar.appendChild(this.objectSubMenuEl);
+    this.uiRoot.appendChild(this.objectSubMenuEl);
 
     // Mine sub-menu — Lua MineMenu: replaces sidebar with Confirm/>>Mine/Mine/Erase
     this.mineSub = document.createElement('div');
@@ -1111,7 +1111,7 @@ export class UIManager {
       mineEraseHk.style.color = AMBER;
     });
     this.mineSub.appendChild(mineEraseEl);
-    sidebar.appendChild(this.mineSub);
+    this.uiRoot.appendChild(this.mineSub);
 
     // Beacon sub-menu — Lua BeaconMenu.lua: replaces sidebar when beacon/security mode is active
     this.beaconSub = document.createElement('div');
@@ -1182,7 +1182,7 @@ export class UIManager {
       (el as any)._violenceColor = vb.color;
       this.beaconSub.appendChild(el);
     }
-    sidebar.appendChild(this.beaconSub);
+    this.uiRoot.appendChild(this.beaconSub);
 
     // Endcap — Lua: ui_hud_anglebottom positioned at bottom of button column
     const endcap = document.createElement('img');
