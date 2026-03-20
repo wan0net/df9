@@ -92,6 +92,9 @@ export interface SaveData {
   tutorialStage?: number;
   bMuted?: boolean;
   masterVolume?: number;
+  /** S-7: Per-category volume levels */
+  sfxVolume?: number;
+  musicVolume?: number;
 }
 
 export class SaveLoadSystem {
@@ -109,7 +112,7 @@ export class SaveLoadSystem {
   getPickupData: (() => { sName: string; tileX: number; tileY: number }[]) | null = null;
   getCameraData: (() => { cameraX: number; cameraY: number; cameraZoom: number }) | null = null;
   getTutorialStage: (() => number) | null = null;
-  getAudioData: (() => { bMuted: boolean; masterVolume: number }) | null = null;
+  getAudioData: (() => { bMuted: boolean; masterVolume: number; sfxVolume: number; musicVolume: number }) | null = null;
 
   loadCharacterData: ((data: CharSaveData[]) => void) | null = null;
   loadObjectData: ((data: ObjSaveData[]) => void) | null = null;
@@ -121,7 +124,7 @@ export class SaveLoadSystem {
   loadPickupData: ((data: { sName: string; tileX: number; tileY: number }[]) => void) | null = null;
   loadCameraData: ((data: { cameraX: number; cameraY: number; cameraZoom: number }) => void) | null = null;
   loadTutorialStage: ((stage: number) => void) | null = null;
-  loadAudioData: ((data: { bMuted: boolean; masterVolume: number }) => void) | null = null;
+  loadAudioData: ((data: { bMuted: boolean; masterVolume: number; sfxVolume: number; musicVolume: number }) => void) | null = null;
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -150,6 +153,8 @@ export class SaveLoadSystem {
     const audioData = this.getAudioData?.() ?? {
       bMuted: SoundManager.isMuted(),
       masterVolume: SoundManager.getMasterVolume(),
+      sfxVolume: SoundManager.getSfxVolume(),
+      musicVolume: SoundManager.getMusicVolume(),
     };
 
     return {
@@ -189,6 +194,8 @@ export class SaveLoadSystem {
       tutorialStage,
       bMuted: audioData.bMuted,
       masterVolume: audioData.masterVolume,
+      sfxVolume: audioData.sfxVolume,
+      musicVolume: audioData.musicVolume,
     };
   }
 

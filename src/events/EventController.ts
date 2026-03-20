@@ -299,6 +299,8 @@ export class EventController implements TickableSystem {
       if (def.nMaxUndiscoveredRooms !== undefined && def.nMaxUndiscoveredRooms >= 0 && nHiddenRooms >= def.nMaxUndiscoveredRooms) continue;
       if (def.nMaxExteriorRooms !== undefined && def.nMaxExteriorRooms >= 0 && nExteriorRooms >= def.nMaxExteriorRooms) continue;
       if (def.nMinExteriorRooms !== undefined && def.nMinExteriorRooms >= 0 && nExteriorRooms < def.nMinExteriorRooms) continue;
+      // E-25: Min undiscovered rooms gate (Lua DockingEvent.nMinUndiscoveredRooms = 2)
+      if (def.nMinUndiscoveredRooms !== undefined && def.nMinUndiscoveredRooms >= 0 && nHiddenRooms < def.nMinUndiscoveredRooms) continue;
 
       let weight = def.weight;
 

@@ -38,6 +38,8 @@ export interface EventDef {
   nMaxExteriorRooms?: number;
   /** Min exterior rooms for this event to be eligible (-1 = no limit). */
   nMinExteriorRooms?: number;
+  /** Min undiscovered rooms for this event to be eligible (-1 = no limit). */
+  nMinUndiscoveredRooms?: number;
   /** Estimated population change when this event fires (for forecast accumulation). */
   nPopulationDelta?: number;
   /** Linecode key for forecast alert (Lua: sAlertLC). */
@@ -157,6 +159,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 1,
     nChanceHostile: 0,
     nPopulationDelta: 2,
+    nMinUndiscoveredRooms: 2,  // Lua DockingEvent.lua:26
     sAlertLC: 'ALERTS028TEXT',  // Lua DockingEvent.lua:18
   },
   HostileDocking: {

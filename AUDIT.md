@@ -109,7 +109,7 @@
 | O-4 | MODERATE | **Room flood fill is full re-scan** | TS uses BFS re-scan with overlap matching. Room state preserved via bestOverlap. Incremental update deferred — too risky to refactor core system. |
 | O-5 | ~~MAJOR~~ FALSE POSITIVE | **Character familiarity** | Already implemented: `tickFamiliarity()` runs every FAMILIARITY_TICK_RATE (5s), groups chars by room, adds FAMILIARITY_TICK_INCREASE (0.1) per pair. |
 | O-6 | MINOR | **`tAdjoining` never populated** | Wall-adjacency O2 sharing is handled by the room-level O2 system. Minor architectural difference. |
-| O-7 | MODERATE | **No auto-team assignment** | Lua: friendly characters in visible rooms are auto-assigned to player team. TS does not do this. |
+| O-7 | ~~MODERATE~~ DONE | **~~No auto-team assignment~~** | Fixed: friendly chars in visible rooms auto-assigned to TEAM_ID_PLAYER. |
 | O-8 | ~~MINOR~~ DONE | **~~Walla threshold off by 2~~** | Fixed: changed to `>4` in `Room.ts`. |
 | O-9 | MINOR | **Visibility constants offset** | TS: 0/1/2. Lua: 1/2/3. Internal only, no functional impact. |
 
@@ -172,7 +172,7 @@
 | E-5 | ~~MAJOR~~ DONE | **~~No spacebus animation~~** | Fixed: CSS ship approach animation with fly-in, pause, fly-away phases. |
 | E-6 | ~~MAJOR~~ DONE | **~~No immigration character lineup~~** | Fixed: immigration count indicator shown during event. |
 | E-7 | ~~MAJOR~~ DONE | **~~Spawn position is (0,0)~~** | Fixed: DockingSystem/DerelictSystem now spawn at random room tiles. |
-| E-8 | MODERATE | **Dialog not blocking** | Lua pauses during dialog with 4s post-dialog delay. TS shows dialog non-blocking. |
+| E-8 | ~~MODERATE~~ DONE | **~~Dialog not blocking~~** | Fixed: dialog pauses game on open, unpauses on close. |
 | E-9 | MINOR | **Alert click-to-accelerate missing** | Lua: clicking alert starts event immediately. TS has no click-through. |
 
 ### 3.3 Hostile / Breaching Events

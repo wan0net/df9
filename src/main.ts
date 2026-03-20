@@ -958,6 +958,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     const total = pendingTotalCost();
     if (GameRules.nMatter < total) {
       SoundManager.playSfx('disallow');
+      // U-14: Show "Insufficient Matter!" alert (Lua NoFundsLabel feedback)
+      Base.addAlert('build', locLine('BUILDM016TEXT'));
       return false;
     }
     GameRules.nMatter -= total;
