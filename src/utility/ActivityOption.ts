@@ -238,13 +238,14 @@ export class ActivityOption {
       // NORMAL: no bonus
     }
 
-    // Need satisfaction utility
+    // C-4: Need satisfaction utility using sigmoid curve (Lua Needs.scoreFn)
+    // Lua uses a sigmoid that makes urgency grow exponentially as needs get lower.
+    // At need=100: urgency≈0, at need=0: urgency≈0.5, at need=-100: urgency≈1.0
     const advertisedNeeds = this.task.getAdvertisedNeeds();
     for (const adv of advertisedNeeds) {
       const currentValue = this.getNeedValue(character, adv.need);
-      // Lower current value = higher utility for satisfying it
-      // Needs range -100..+100, so urgency maps to 0..1 across full range
-      const urgency = Math.max(0, 100 - currentValue) / 200;
+      // Sigmoid: 1 / (1 + exp(currentValue * 0.06)) — maps -100..+100 to ~1..~0
+      const urgency = 1 / (1 + Math.exp(currentValue * 0.06));
       score += urgency * adv.amount;
     }
 

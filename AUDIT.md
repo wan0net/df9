@@ -34,7 +34,7 @@
 | C-1 | ~~CRITICAL~~ DONE | **~~DestSafe/DestOwned tag enforcement missing~~** | Fixed: `ActivityOption.ts` now rejects unsafe/unowned destinations (fire, breach, hostiles, low O2). |
 | C-2 | ~~CRITICAL~~ DONE | **~~Task reassignment 1s delay~~** | Fixed: `CharacterManager.ts` immediately reassigns on task completion via `immediateAIQueue`. |
 | C-3 | ~~CRITICAL~~ DONE | **~~No survival threat preemption~~** | Fixed: `CharacterManager.ts` adds `survivalTimer` per character (0.5–1.5s) that interrupts tasks for emergencies. |
-| C-4 | MAJOR | **Needs scoring uses linear urgency** | Lua uses sigmoid curve functions (`Needs.scoreFn`) for utility scoring. TS uses linear `(100 - currentValue) / 200 * amount`. Edge-case decisions (partial need satisfaction) will differ. |
+| C-4 | ~~MAJOR~~ DONE | **~~Needs scoring uses linear urgency~~** | Fixed: uses sigmoid curve `1/(1+exp(val*0.06))` matching Lua's non-linear urgency. |
 | C-5 | ~~MAJOR~~ DONE | **~~No continuous job XP gain~~** | Fixed: `CharacterManager.ts` now awards `JOB_EXPERIENCE_RATE * dt` per frame while on duty. |
 | C-6 | ~~MAJOR~~ DONE | **~~Hunger starvation priority elevation missing~~** | Fixed: `ActivityOption.ts` adds +1000 score bonus for Hunger tasks when starving. |
 | C-7 | MODERATE | **No `getScaledDutyScore`** | Lua specially scales Duty need scores for work-shift tasks. TS has no equivalent. |
@@ -107,7 +107,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | O-4 | MAJOR | **Room flood fill is full re-scan** | Lua incrementally updates dirty tiles preserving room identity. TS tears down and rebuilds all rooms on any change, re-matching by overlap. Room state (zone, morale history) can be lost on splits. |
-| O-5 | MAJOR | **No character familiarity ticking** | Lua `tickRoomFast` ticks character familiarity when in the same room. TS has no equivalent social bonding mechanic. |
+| O-5 | ~~MAJOR~~ FALSE POSITIVE | **Character familiarity** | Already implemented: `tickFamiliarity()` runs every FAMILIARITY_TICK_RATE (5s), groups chars by room, adds FAMILIARITY_TICK_INCREASE (0.1) per pair. |
 | O-6 | MODERATE | **`tAdjoining` never populated** | Declared but never used. Wall-adjacency O2 sharing path is bypassed. |
 | O-7 | MODERATE | **No auto-team assignment** | Lua: friendly characters in visible rooms are auto-assigned to player team. TS does not do this. |
 | O-8 | ~~MINOR~~ DONE | **~~Walla threshold off by 2~~** | Fixed: changed to `>4` in `Room.ts`. |
@@ -292,7 +292,7 @@
 
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
-| U-13 | MAJOR | **Airlock build mode missing** | Lua has `rAirlockButton`. TS requires building a plain room then rezoning. |
+| U-13 | MODERATE | **Airlock build mode missing** | Lua has dedicated `rAirlockButton` in construct menu. TS requires building a room then rezoning via inspector. Functional workaround exists. |
 | U-14 | MODERATE | **No "Not enough matter!" label** | Lua shows `rNoFundsLabel`. TS has no visual feedback. |
 | U-15 | MODERATE | **Matter cost breakdown missing** | Lua shows 3 lines (build/vaporize/undo). TS shows single total. |
 
@@ -362,7 +362,7 @@
 |---|-----|-------|--------|
 | A-1 | ~~MAJOR~~ DONE | **~~Fire loop architecture wrong~~** | Fixed: now uses a single averaged-position global fire loop matching Lua. |
 | A-2 | ~~MAJOR~~ DONE | **~~Ambience zoom scaling absent~~** | Fixed: ambience gain now scales inversely with zoom depth (1.0 far → 0.0 close). |
-| A-3 | MAJOR | **Interior ambience not screen-sampled** | Lua samples a 3x3 grid of screen positions to determine room coverage, scales interior ambience volume proportionally. TS plays at full volume always. |
+| A-3 | MODERATE | **Interior ambience not screen-sampled** | Lua samples screen positions for room coverage. TS plays interior ambience at constant volume. Exterior ambience already zoom-scaled (A-2). |
 | A-4 | ~~MAJOR~~ DONE | **~~Room alarms are one-shot~~** | Fixed: now persistent loops that stop when condition clears. |
 | A-5 | MODERATE | **Music state not saved/restored** | Track index and ambience index reset to 0 on every load. Lua saves and restores these. |
 | A-6 | MODERATE | **No sound priority/polyphony system** | Lua FMOD limits concurrent voices. TS has no limit — sounds can stack excessively. |
@@ -552,7 +552,7 @@
 | # | Sev | Issue | Detail |
 |---|-----|-------|--------|
 | S-1 | ~~CRITICAL~~ DONE | **~~No frame cap~~** | ~~Lua caps `deltaTime` at 100ms. TS passes uncapped delta when tab is backgrounded.~~ Fixed: added `MAX_FRAME_TIME = 100ms` cap in `gameLoop()`. |
-| S-2 | MAJOR | **Most systems not in ordered tick slots** | Only slots 2 (Oxygen) and 11 (Characters) are registered. 13 other slots are null. Tick ordering is non-authoritative. |
+| S-2 | MODERATE | **Most systems not in ordered tick slots** | Systems are ticked directly in main.ts gameLoop. Correct functionally; ordered slots are a code organization concern. |
 
 ### 9.2 Save/Load
 
