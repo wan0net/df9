@@ -1227,16 +1227,28 @@ export class CharacterManager {
       options.push(opt);
     }
 
-    // ── Combat response: attack hostiles ────────────────────
+    // ── Combat response: attack hostiles (C-37: bravery gating) ──
+    // Lua has 3 tiers: RangedAttack (bravery>0.1, has gun, score=120),
+    // AttackThreat (bravery>0.8, score=110), AttackFallback (no gate, score=99)
     if (job === EMERGENCY || this.getHostileCount() > 0) {
       const nearest = this.combatSystem.findNearestHostile(character, this.characters);
       if (nearest) {
-        const combatPriority = job === EMERGENCY ? 15 : 5;
+        const bravery = character.tStats.personality?.nBravery ?? 0.5;
+        let combatScore = 0;
+        if (bravery > 0.1 && character.weapon) {
+          combatScore = 120; // Ranged attack tier
+        } else if (bravery > 0.8) {
+          combatScore = 110; // Brave melee tier
+        } else {
+          combatScore = 99;  // Fallback — everyone can fight as last resort
+        }
+        // Emergency job gets boost
+        if (job === EMERGENCY) combatScore += 20;
         const attackTask = new AttackEnemy(nearest.id);
         options.push(new ActivityOption(
           attackTask,
           nearest.tileX, nearest.tileY,
-          combatPriority,
+          combatScore,
         ));
       }
     }
