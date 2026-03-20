@@ -21,8 +21,9 @@ export function countsAsFloor(tile: number): boolean {
 
 /**
  * Whether a tile counts as a wall for room boundaries.
- * Mirrors Lua World.countsAsWall(): WALL or WALL_DESTROYED.
+ * Lua WorldConstants.lua: only WALL (value 4) is a wall boundary.
+ * WALL_DESTROYED is a broken wall that allows O2/flood-fill through.
  */
 export function countsAsWall(tile: number): boolean {
-  return tile === TileType.WALL || tile === TileType.WALL_DESTROYED;
+  return tile === TileType.WALL;
 }
