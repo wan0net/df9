@@ -119,7 +119,7 @@
 |---|-----|-------|--------|
 | O-10 | ~~MAJOR~~ DONE | **~~`Room.hasPower()` returns full-power-only~~** | Fixed: `hasPowerFlag` now returns true if ANY power OR produces power. Added `hasFullPower`. |
 | O-11 | ~~MODERATE~~ DONE | **~~`canProvidePower()` guard missing~~** | Fixed: LOWPOWER check now exempts rooms with nPowerOutput>0. |
-| O-12 | MODERATE | **No `g_PowerHoliday` in EnvObject** | Global power override for tutorials/debug not implemented. |
+| O-12 | ~~MODERATE~~ DONE | **~~No `g_PowerHoliday` in EnvObject~~** | Fixed: `hasPower()` checks `GameRules.bPowerHoliday`. |
 | O-13 | MINOR | **No sabotage timer** | `nTempPowerLossEnd` not implemented. Sabotage power loss is permanent until manually repaired. |
 
 ### 2.4 Door System

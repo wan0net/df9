@@ -6,6 +6,7 @@
 import { EnvObjectDef, tObjects } from './EnvObjectData';
 import { ObjectList, OBJ_ENVOBJECT, type ObjectTag, type TaggableObject } from '../core/ObjectList';
 import { SpatialAudio } from '../audio/SpatialAudio';
+import { GameRules } from '../core/GameRules';
 import { SoundManager } from '../audio/SoundManager';
 import type { Room } from '../rooms/Room';
 import type { Character } from '../characters/Character';
@@ -216,6 +217,8 @@ export class EnvObject implements TaggableObject {
   hasPower(): boolean {
     if (!this.bActive) return false;
     if (this.tData.nPowerDraw <= 0 && this.tData.nPowerOutput <= 0) return true;
+    // O-12: Lua g_PowerHoliday bypasses all power checks
+    if (GameRules.bPowerHoliday) return true;
     return this.bHasPower;
   }
 
