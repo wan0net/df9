@@ -851,7 +851,7 @@ export class UIManager {
 
     // ── Inspect sub-menu (screenshot 20.32.12: "Back" + ">> Inspect") ──
     this.inspectSub = document.createElement('div');
-    this.inspectSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;`;
+    this.inspectSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
 
     // Back button (ESC)
     const inspBackEl = document.createElement('div');
@@ -876,7 +876,7 @@ export class UIManager {
 
     // Construct sub-menu — Lua ConstructMenu.lua: replaces sidebar buttons entirely
     this.constructSub = document.createElement('div');
-    this.constructSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;`;
+    this.constructSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
 
     // ── Cancel button (red) — Lua CancelButton ──
     const cancelEl = document.createElement('div');
@@ -1019,18 +1019,18 @@ export class UIManager {
 
     // ── Object Menu — Lua ObjectMenu: zone category buttons (330×72) ──
     this.objectMenuEl = document.createElement('div');
-    this.objectMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${OBJECT_PICKER_W}px;z-index:2;`;
+    this.objectMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${OBJECT_PICKER_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
     this.buildObjectZoneMenu();
     sidebar.appendChild(this.objectMenuEl);
 
     // ── Object Sub-Menu — Lua SelectObjectForZoneMenu: individual object buttons (430×81) ──
     this.objectSubMenuEl = document.createElement('div');
-    this.objectSubMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;`;
+    this.objectSubMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
     sidebar.appendChild(this.objectSubMenuEl);
 
     // Mine sub-menu — Lua MineMenu: replaces sidebar with Confirm/>>Mine/Mine/Erase
     this.mineSub = document.createElement('div');
-    this.mineSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;`;
+    this.mineSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
 
     // Confirm button
     const mineConfirmEl = document.createElement('div');
@@ -1115,7 +1115,7 @@ export class UIManager {
 
     // Beacon sub-menu — Lua BeaconMenu.lua: replaces sidebar when beacon/security mode is active
     this.beaconSub = document.createElement('div');
-    this.beaconSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;`;
+    this.beaconSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:2;background:rgba(0,0,0,0.8);`;
 
     // Done button
     const beaconDoneEl = document.createElement('div');
