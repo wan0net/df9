@@ -462,29 +462,42 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     }
   };
-  eventController.onMeteorLand = () => {
-    // Pick a random floor tile in a random room
-    const rooms = roomManager.getRooms();
-    if (rooms.length === 0) return;
-    const room = rooms[Math.floor(Math.random() * rooms.length)];
-    if (room.tiles.length === 0) return;
-    const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
-
-    // Destroy the tile — becomes a breach point (set() auto-marks dirty)
-    grid.set(tile.x, tile.y, TileType.WALL_DESTROYED);
-
-    // Start a fire at the impact site
-    fire.startFire(tile.x, tile.y);
-
-    // Camera shake on meteor impact (Lua Camera:shake(15, 0.2))
-    cameraController.shake(15, 0.2);
-
+  // Meteor shower: per-impact callback with tile coords and size (Lua MeteorEvent.lua:183-210)
+  eventController.onMeteorLand = (tx, ty, nSize, nDamage) => {
     // Meteor trail particles (Lua AnimatedSprite "asteroid01_")
-    effectParticles.spawnMeteorTrail(tile.x, tile.y);
+    effectParticles.spawnMeteorTrail(tx, ty);
 
-    // Force room re-detection (breach)
-    roomManager.markDirty([tile]);
+    // Spatial audio at impact site
+    const screenPos = tileToScreen(tx, ty);
+    SoundManager.playSfx3D('MeteorImpact', screenPos.x, screenPos.y);
+
+    // Camera shake for large meteors (Lua: nSize > 0.9 -> shake(15, 0.2))
+    if (nSize > 0.9) {
+      cameraController.shake(15, 0.2);
+    }
+
+    // Explosion effect for medium+ meteors (Lua: nSize > 0.5 -> playExplosion)
+    if (nSize > 0.5) {
+      explosionSystem.spawnExplosion(tx, ty, nSize);
+    }
+
+    // Apply tile damage (Lua: World.damageTile)
+    grid.damageTile(tx, ty, nDamage);
+
+    // 25% fire chance if nSize > 0.5 and tile didn't become SPACE (Lua lines 208-209)
+    if (nSize > 0.5 && Math.random() < 0.25) {
+      const tileAfter = grid.get(tx, ty);
+      if (tileAfter !== TileType.SPACE) {
+        fire.startFire(tx, ty);
+      }
+    }
+
+    // Force room re-detection if tile was damaged/destroyed
+    roomManager.markDirty([{ x: tx, y: ty }]);
   };
+
+  // Wire getTileType so MeteorEvent can detect SPACE tiles for pass-through
+  eventController.getTileType = (tx, ty) => grid.get(tx, ty);
   eventController.onHostileSpawn = (count, hp) => {
     characterManager.spawnHostiles(count, hp);
   };

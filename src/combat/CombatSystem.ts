@@ -100,8 +100,7 @@ export function checkLineOfSight(
       if (tileValue === TileType.WALL) return false;
     } else {
       if (tileValue === TileType.WALL) return false;
-      if (tileValue === TileType.SPACE) return false;
-      // Closed doors block LoS (Lua: if rDoor and not rDoor:isOpen())
+      // C-38: SPACE tiles do NOT block LoS in Lua — only walls and closed doors
       if (tileValue === TileType.DOOR) {
         const door = EnvObjectManager.getDoorAt(x, y);
         if (door && !door.isOpen()) return false;
@@ -404,25 +403,16 @@ export class CombatSystem {
     // Apply damage reduction (armor + team tactics)
     const reduction = CombatSystem.getDamageReduction(defender, allChars);
     const effectiveDamage = Math.max(1, Math.round(damage * (1 - reduction)));
-    // Dodge chance from ArmorLevel2 (Lua: nDodgeChance = 0.2)
-    if (defender.tStats.nJob === EMERGENCY && researchSystem.isCompleted('ArmorLevel2')) {
-      if (Math.random() < 0.2) return false; // dodged
-    }
+    // C-40: Removed separate ArmorLevel2 dodge — Lua only uses damage reduction (0.5)
     defender.takeDamage(effectiveDamage);
     if (!defender.isAlive()) {
       // Stunner damage type → incapacitate instead of kill (Lua Character.lua:5592-5617)
       if (damageType === DAMAGE_TYPE.Stunner) {
-        // Revive with 10 HP and apply KnockedOut
-        defender.setHP(10);
-        defender.bIncapacitated = true;
-        return false; // Not dead, just stunned
-      }
-      // Melee has 50% chance to stun (Lua: random stun)
-      if (damageType === DAMAGE_TYPE.Melee && Math.random() < 0.5) {
         defender.setHP(10);
         defender.bIncapacitated = true;
         return false;
       }
+      // C-39: Removed invented 50% melee stun — not in Lua
       return true; // Actually dead
     }
     return false;

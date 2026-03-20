@@ -11,6 +11,7 @@ import { GameRules, type TickableSystem } from '../core/GameRules';
 import { getDiamondFootprint } from '../world/IsometricUtils';
 import type { Room } from '../rooms/Room';
 import type { RoomManager } from '../rooms/RoomManager';
+import { Pub } from '../zones/Pub';
 
 export type EnvObjectCallback = (id: number, obj: EnvObject) => void;
 
@@ -64,6 +65,11 @@ class EnvObjectManagerClass implements TickableSystem {
       }
     }
 
+    // G-7: Auto-set hasBar on Pub zones when a Bar object is placed
+    if (sName === 'Bar' && obj.rRoom?.zoneObj instanceof Pub) {
+      (obj.rRoom.zoneObj as Pub).setHasBar(true);
+    }
+
     // Notify renderer (now with correct bBuilt state)
     this.onObjectCreated?.(id, obj);
 
@@ -74,6 +80,19 @@ class EnvObjectManagerClass implements TickableSystem {
   removeObject(obj: EnvObject) {
     for (const [id, o] of this.objects) {
       if (o === obj) {
+        // G-7: Recheck hasBar when removing a Bar from Pub
+        if (obj.sName === 'Bar' && obj.rRoom?.zoneObj instanceof Pub) {
+          const pub = obj.rRoom.zoneObj as Pub;
+          const room = obj.rRoom;
+          let hasOtherBar = false;
+          for (const [, other] of this.objects) {
+            if (other !== obj && other.sName === 'Bar' && other.rRoom === room) {
+              hasOtherBar = true;
+              break;
+            }
+          }
+          pub.setHasBar(hasOtherBar);
+        }
         this.objects.delete(id);
         obj.remove();
         this.onObjectRemoved?.(id);

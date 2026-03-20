@@ -7,7 +7,7 @@ import { GameRules, type TickableSystem } from '../core/GameRules';
 import { Base } from '../core/Base';
 import { Event, EVENT_STATUS } from './Event';
 import { ImmigrationEvent } from './ImmigrationEvent';
-import { MeteorEvent } from './MeteorEvent';
+import { MeteorEvent, type MeteorImpactFn } from './MeteorEvent';
 import { HostileImmigrationEvent } from './HostileImmigrationEvent';
 import { BreachingEvent } from './BreachingEvent';
 import { DerelictEvent } from './DerelictEvent';
@@ -38,7 +38,9 @@ const DEFAULT_ALLOWED_FAILURES = 30;
 
 export type SpawnCharacterFn = (count: number) => void;
 export type SpawnHostileFn = (count: number, hp: number) => void;
-export type MeteorLandFn = () => void;
+export type MeteorLandFn = MeteorImpactFn;
+/** Callback to read tile type at coords (needed by MeteorEvent for SPACE detection). */
+export type GetTileTypeFn = (tx: number, ty: number) => number;
 export type BreachWallFn = () => void;
 export type DockingFn = (count: number) => void;
 export type DerelictExploreFn = (payload: {
@@ -95,6 +97,8 @@ export class EventController implements TickableSystem {
   // ── Callbacks ──────────────────────────────────────────────────
   onImmigration: SpawnCharacterFn | null = null;
   onMeteorLand: MeteorLandFn | null = null;
+  /** Callback to read tile type at coords (MeteorEvent needs this for SPACE detection). */
+  getTileType: GetTileTypeFn | null = null;
   onHostileSpawn: SpawnHostileFn | null = null;
   onBreachWall: BreachWallFn | null = null;
   onDocking: DockingFn | null = null;
@@ -477,9 +481,14 @@ export class EventController implements TickableSystem {
         return immEvent;
       }
       case 'Meteor Shower': {
-        const meteorEvent = new MeteorEvent();
-        meteorEvent.onMeteorLandCallback = () => {
-          this.onMeteorLand?.();
+        const meteorEvent = new MeteorEvent(
+          this.getDifficulty(),
+          undefined,
+          undefined,
+          this.getTileType ?? undefined,
+        );
+        meteorEvent.onMeteorImpact = (tx, ty, nSize, nDamage) => {
+          this.onMeteorLand?.(tx, ty, nSize, nDamage);
         };
         return meteorEvent;
       }
@@ -613,9 +622,14 @@ export class EventController implements TickableSystem {
         this.onBreachWall?.();
       };
 
-      const meteorEvent = new MeteorEvent();
-      meteorEvent.onMeteorLandCallback = () => {
-        this.onMeteorLand?.();
+      const meteorEvent = new MeteorEvent(
+        this.getDifficulty(),
+        undefined,
+        undefined,
+        this.getTileType ?? undefined,
+      );
+      meteorEvent.onMeteorImpact = (tx, ty, nSize, nDamage) => {
+        this.onMeteorLand?.(tx, ty, nSize, nDamage);
       };
 
       compound.addSubEvent(raiderEvent);

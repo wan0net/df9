@@ -7,7 +7,8 @@
 import type { Task, NeedAdvertisement } from './Task';
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
-import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT } from '../characters/CharacterConstants';
+import type { Room } from '../rooms/Room';
+import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT, OXYGEN_LOW } from '../characters/CharacterConstants';
 import { isoSquareDist } from '../core/MiscUtil';
 
 /** Distance penalty factor for utility scoring. */
@@ -56,6 +57,13 @@ export interface PersonalityGates {
 }
 
 export class ActivityOption {
+  /**
+   * Room lookup function, set once by CharacterManager so that
+   * meetsTags() can enforce DestSafe / DestOwned without a direct
+   * RoomManager dependency.  Mirrors Lua's global Room.getRoomAt.
+   */
+  static roomLookup: ((tx: number, ty: number) => Room | undefined) | null = null;
+
   /** The task this option would create. */
   task: Task;
 
@@ -128,6 +136,7 @@ export class ActivityOption {
 
   /**
    * Check if this activity's tags are met.
+   * Lua: _gateActivity checks WorkShift/Job; _locationGates checks DestSafe/DestOwned.
    */
   meetsTags(character: Character): boolean {
     const t = this.tags;
@@ -137,6 +146,44 @@ export class ActivityOption {
 
     // Job restriction: only available to characters with matching job
     if (t.Job !== undefined && character.getJob() !== t.Job) return false;
+
+    // ── DestOwned: reject if destination room is not owned by the character's team ──
+    // Lua ActivityOption:_locationGates lines 500-535
+    if (t.DestOwned && ActivityOption.roomLookup) {
+      const nTeam = character.bCuffed ? TEAM_ID_PLAYER : character.tStats.nTeam;
+      if (this.targetObject) {
+        // Object-based: check object's team
+        if ((this.targetObject as any).nTeam !== undefined &&
+            (this.targetObject as any).nTeam !== nTeam) {
+          return false;
+        }
+      } else {
+        const destRoom = ActivityOption.roomLookup(this.targetX, this.targetY);
+        if (!destRoom || destRoom.nTeam !== nTeam) return false;
+      }
+    }
+
+    // ── DestSafe: reject if destination has fire, breach, hostiles, or low O2 ──
+    // Lua ActivityOption:_locationGates lines 536-579
+    if (t.DestSafe && ActivityOption.roomLookup) {
+      const destRoom = ActivityOption.roomLookup(this.targetX, this.targetY);
+      if (!destRoom) return false; // No room at dest -> not safe
+
+      // Room on fire (Lua: retrieveMemory MEMORY_ROOM_FIRE_PREFIX..rRoom.id)
+      if (destRoom.bBurning || destRoom.nFireTiles > 0) return false;
+
+      // DestSafe !== 'AllowAirlock' -> reject functional airlocks
+      // (We don't have airlock zone logic yet; skip this sub-check)
+
+      // Room breached (Lua: rRoom.bBreach -- uses direct check, not memory)
+      if (destRoom.bBreach) return false;
+
+      // Room in combat (Lua: retrieveMemory MEMORY_ROOM_COMBAT_PREFIX..rRoom.id)
+      if (destRoom.bHasHostiles) return false;
+
+      // Room low oxygen (Lua: rRoom:getOxygenScore() < Character.OXYGEN_LOW)
+      if (destRoom.getOxygenScore() < OXYGEN_LOW) return false;
+    }
 
     return true;
   }
@@ -206,7 +253,7 @@ export class ActivityOption {
     const distFactor = this.tags.HighDistPenalty ? HIGH_DIST_PENALTY_FACTOR : DISTANCE_PENALTY_FACTOR;
     score -= dist * distFactor;
 
-    // Activity affinity modifier (Lua: ±20% from topic affinity)
+    // Activity affinity modifier (Lua: +/-20% from topic affinity)
     const activityAff = character.getAffinityForActivity(this.task.name);
     if (activityAff !== null) {
       const affinityBonus = activityAff / STARTING_AFFINITY;

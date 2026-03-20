@@ -77,7 +77,7 @@ import { CheckInToHospital } from '../utility/tasks/CheckInToHospital';
 import { PanicOnFire } from '../utility/tasks/PanicOnFire';
 import { VacuumPull } from '../utility/tasks/VacuumPull';
 import { CircleBeacon } from '../utility/tasks/CircleBeacon';
-import { PRIORITY } from '../utility/ActivityOption';
+import { PRIORITY, type PriorityLevel } from '../utility/ActivityOption';
 import { EmergencyBeacon } from '../combat/EmergencyBeacon';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
@@ -105,6 +105,10 @@ import type { VacuumSystem } from '../oxygen/VacuumSystem';
 /** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
 const UPDATES_PER_TICK = 10;
 
+/** Lua CharacterConstants.SURVIVAL_TICK = 1 second.
+ *  Timer per character: 0.5 * SURVIVAL_TICK + random * SURVIVAL_TICK -> 0.5-1.5s */
+const SURVIVAL_TICK = 1;
+
 export class CharacterManager {
   private grid: TileGrid;
   private roomManager: RoomManager;
@@ -118,6 +122,9 @@ export class CharacterManager {
 
   /** Characters needing new task decisions. */
   private decisionQueue: Character[] = [];
+
+  /** Characters needing immediate AI re-evaluation (task just completed or survival threat). */
+  private immediateAIQueue: Set<Character> = new Set();
 
   /** Active pickups (corpses, debris, etc.) */
   pickups: Pickup[] = [];

@@ -166,6 +166,8 @@ export class Character {
   // AI
   idleTimer = 0;
   currentTask: Task | null = null;
+  /** C-3: Per-character survival threat timer (Lua: survivalTimer, 0.5-1.5s). */
+  survivalTimer: number | undefined;
 
   // Morale tick accumulator
   private moraleTickAccum = 0;

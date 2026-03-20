@@ -394,14 +394,13 @@ export class Room {
     const charCount = this.tCharacters.size;
     const wallaKey = `walla_room_${this.id}`;
 
-    if (charCount >= 3 && !this.wallaActive) {
-      // Determine positive vs negative walla based on average morale placeholder
-      // (simplified: use positive walla for player rooms)
+    if (charCount > 4 && !this.wallaActive) {
+      // O-8: Lua Room.lua:1103 triggers walla at >4 (5+ characters)
       const cue = this.nTeam === TEAM_ID_PLAYER ? 'WallaPos' : 'WallaNeg';
       const center = this._getRoomCenter();
       SpatialAudio.startLoop(wallaKey, cue, center.x, center.y);
       this.wallaActive = true;
-    } else if (charCount < 3 && this.wallaActive) {
+    } else if (charCount <= 4 && this.wallaActive) {
       SpatialAudio.stopLoop(wallaKey);
       this.wallaActive = false;
     }
