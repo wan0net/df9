@@ -635,18 +635,22 @@ export const Malady = {
       return true;
     }
 
-    // Advance symptom stages
+    // Advance symptom stages — MD-6: only ONE stage per tick (Lua checks nCurrentStage+1 only)
     if (tMalady.tSymptomStages && tMalady.tSymptomStageStarts) {
-      for (let i = tMalady.nCurrentStage + 1; i < tMalady.tSymptomStages.length; i++) {
-        if (nElapsedTime >= tMalady.tSymptomStageStarts[i]) {
-          tMalady.nCurrentStage = i;
-          const stage = tMalady.tSymptomStages[i];
-          if (stage.tReduceMods) tMalady.tReduceMods = { ...stage.tReduceMods };
-          if (stage.sSpecial) tMalady.sSpecial = stage.sSpecial;
-          if (stage.nSpeed !== undefined) tMalady.nSpeed = stage.nSpeed;
-          if (stage.bHidden !== undefined) tMalady.bHidden = stage.bHidden;
-          if (stage.sSymptomLog) tMalady.sSymptomLog = stage.sSymptomLog;
+      const nNextStage = tMalady.nCurrentStage + 1;
+      if (nNextStage < tMalady.tSymptomStages.length &&
+          tMalady.tSymptomStageStarts[nNextStage] !== undefined &&
+          nElapsedTime >= tMalady.tSymptomStageStarts[nNextStage]) {
+        tMalady.nCurrentStage = nNextStage;
+        // MD-5: Lua copies ALL stage fields except tTimeToSymptoms (not just 5)
+        const stage = tMalady.tSymptomStages[nNextStage];
+        for (const key of Object.keys(stage)) {
+          if (key !== 'tTimeToSymptoms') {
+            (tMalady as any)[key] = (stage as any)[key];
+          }
         }
+        // Force immediate symptomatic on stage entry (Lua line 614)
+        tMalady.nSymptomStart = nElapsedTime - 0.01;
       }
       // Lua: set nMaladyEnd when all stages exhaust (no next stage, no end yet)
       const nextStage = tMalady.nCurrentStage + 1;
