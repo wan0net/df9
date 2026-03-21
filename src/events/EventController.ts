@@ -27,8 +27,6 @@ import {
   getDifficulty, getChallengeLevel, getExpMod,
   getNextEventTimeDelta, computeTimeBetweenEvents,
   rollRandomRaiders,
-  BASE_RAIDER_COUNT, MAX_EXTRA_RAIDERS,
-  BASE_RAIDER_HP, MAX_EXTRA_HP,
 } from './EventData';
 
 /** Time between event checks. */
@@ -153,16 +151,19 @@ export class EventController implements TickableSystem {
     return getDifficulty(GameRules.elapsedTime, this.population);
   }
 
-  /** Get raider count scaled by difficulty. */
+  /** Get raider count scaled by difficulty (Lua: math.random(1,3) tiered by difficulty). */
   getScaledRaiderCount(): number {
     const diff = this.getDifficulty();
-    return BASE_RAIDER_COUNT + Math.floor(diff * MAX_EXTRA_RAIDERS);
+    if (diff > 0.4) return 1 + Math.floor(Math.random() * 3); // 1-3
+    if (diff > 0.2) return 1 + Math.floor(Math.random() * 2); // 1-2
+    return 1;
   }
 
-  /** Get raider HP scaled by difficulty. */
+  /** Get raider HP scaled by difficulty.
+   *  Lua uses point-buy system; approximate with STARTING_HIT_POINTS scaling. */
   getScaledRaiderHP(): number {
     const diff = this.getDifficulty();
-    return BASE_RAIDER_HP + Math.floor(diff * MAX_EXTRA_HP);
+    return Math.min(200, 100 + Math.floor(diff * 100));
   }
 
   onTick(dt: number) {
