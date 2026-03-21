@@ -2641,9 +2641,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       char.needs.amusement = -80;
       char.needs.social = -80;
       const logCountBefore = char.tLog.length + char.tLogQueue.length;
-      // Force a morale tick — moraleTickAccum starts jittered at 15-30s,
-      // so we need 31+ seconds to guarantee the first tick fires
-      char.updateMorale(35, 0);
+      // Force morale tick: reset accumulator then pass enough time
+      char.moraleTickAccum = 0;
+      char.updateMorale(16, 0);
       const logCountAfter = char.tLog.length + char.tLogQueue.length;
       return { before: logCountBefore, after: logCountAfter, increased: logCountAfter > logCountBefore };
     });
