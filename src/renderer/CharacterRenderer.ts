@@ -84,46 +84,25 @@ function getBlobShadowTexture(): THREE.Texture {
 /**
  * Subset indices from .brig (Citizen_Base) by category.
  */
+// GLB primitive indices verified from Citizen_Base.glb material names:
+// [0] Builder01, [1] Bird_Head, [2] Cat_Head, [3-8] Human_Head variants,
+// [5] Jelly_Head, [9] Shamon_Head, [10-11] Female_Body, [12-15] Male_Body,
+// [16] Cat_Head_variant, [17-25] Hair, [26+] Accessories, [60+] Job equipment
 const SUBSETS = {
   heads: {
-    male:       [7],
-    maleFat:    [6],
-    maleThin:   [8],
-    female:     [4],
-    femaleFat:  [3],
-    bird:       [1],
-    cat:        [2],
-    jelly:      [5],
-    shamon:     [9],
+    male:       [3],   // Human_Head_Male01
+    female:     [4],   // Human_Head_Male01 (same mesh, different texture)
+    bird:       [1],   // Bird_Head_Male01
+    cat:        [2],   // Cat_Head_Male01
+    jelly:      [5],   // Jelly_Head_Female01
+    shamon:     [9],   // Shamon_Head01
   },
   bodies: {
-    male:       [12],
-    maleFat:    [13],
-    maleThin:   [15],
-    female:     [10],
-    femaleFat:  [11],
-    shamon:     [14],
+    male:       [12],  // Human_Body_Male01
+    female:     [10],  // Human_Body_Female01
+    shamon:     [14],  // Human_Body_Male01_base_03
   },
-  hair: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25],
-  belt_m: [26],
-  belt_f: [26],
-  legPouch_m: [33],
-  legPouch_f: [28],
-  shorts_m: [37],
-  shorts_f: [36],
-  collar_m: [52],
-  collar_f: [44],
-  shirt_m: [62],
-  shirt_f: [61],
-  jobs: {
-    builder:   [68],
-    bartender: [67],
-    doctor:    [72],
-    emergency: [74],
-    miner:     [77],
-    raider:    [80],
-    tech:      [82],
-  },
+  hair: [17, 18, 19, 20, 21, 22, 23, 24, 25],
 };
 
 /** R-3: Race-specific tint colors to visually distinguish alien races. */
@@ -908,25 +887,24 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
-      // Hide ALL meshes first, then show only the ones matching visible subset indices.
-      // Note: GLTFLoader traverse order may differ from .brig subset indices,
-      // so we use a name-based fallback if index-based visibility fails.
-      const visibleSet = this.getVisibleSubsets(char);
-      let meshIdx = 0;
-      let totalMeshes = 0;
-      clone.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) totalMeshes++;
-      });
-      // If model has fewer meshes than expected (GLB packing), show all and skip subset logic
-      if (totalMeshes < 10) {
-        // Simple model (Bad_Alien, Murder_Robot, etc.) — show everything
-      } else {
+      // Apply subset visibility: hide all meshes first, then show only selected ones.
+      // GLB primitive order matches SUBSETS indices (verified from Citizen_Base.glb).
+      {
+        const visibleSet = this.getVisibleSubsets(char);
+        const meshes: (THREE.Mesh | THREE.SkinnedMesh)[] = [];
         clone.traverse((child) => {
           if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-            child.visible = visibleSet.has(meshIdx);
-            meshIdx++;
+            meshes.push(child);
           }
         });
+
+        if (meshes.length >= 10) {
+          // Citizen_Base (89 primitives): hide all, show only visible set
+          for (let i = 0; i < meshes.length; i++) {
+            meshes[i].visible = visibleSet.has(i);
+          }
+        }
+        // Simple models (Bad_Alien, Murder_Robot <10 meshes): leave all visible
       }
 
       // Apply textures and default colors
@@ -1024,47 +1002,16 @@ export class CharacterRenderer {
         break;
     }
 
-    // Accessories — non-human races with unusual body shapes skip some accessories
-    const hasHumanoidAccessories = race === RACE_HUMAN || race === RACE_CAT ||
-      race === RACE_BIRDSHARK || race === RACE_CHICKEN || race === RACE_MURDERFACE;
-    if (hasHumanoidAccessories) {
-      if (isMale) {
-        visible.add(SUBSETS.collar_m[0]);
-        visible.add(SUBSETS.belt_m[0]);
-        visible.add(SUBSETS.legPouch_m[0]);
-      } else {
-        visible.add(SUBSETS.collar_f[0]);
-        visible.add(SUBSETS.belt_m[0]);
-        visible.add(SUBSETS.legPouch_f[0]);
-      }
-    }
-
-    // Hair — skip for non-humanoid races (Lua: BODY_TYPE.bNoReplacements for monster/killbot/shamon)
-    const hasHair = race === RACE_HUMAN || race === RACE_MURDERFACE;
-    if (hasHair) {
+    // Hair — only for human-like races
+    const hasHair = race === RACE_HUMAN || race === RACE_MURDERFACE ||
+      race === RACE_CAT || race === RACE_BIRDSHARK || race === RACE_CHICKEN;
+    if (hasHair && SUBSETS.hair.length > 0) {
       const hairIdx = char.id % SUBSETS.hair.length;
       visible.add(SUBSETS.hair[hairIdx]);
     }
 
-    // Job outfit
-    const job = char.getJob();
-    const jobMap: Record<number, number[]> = {
-      2: SUBSETS.jobs.builder,
-      3: SUBSETS.jobs.tech,
-      4: SUBSETS.jobs.miner,
-      5: SUBSETS.jobs.emergency,
-      7: SUBSETS.jobs.bartender,
-      9: SUBSETS.jobs.tech,
-      12: SUBSETS.jobs.doctor,
-      13: SUBSETS.jobs.tech,
-    };
-    const jobSubsets = jobMap[job];
-    if (jobSubsets) {
-      for (const s of jobSubsets) visible.add(s);
-    } else if (hasHumanoidAccessories) {
-      visible.add(isMale ? SUBSETS.shirt_m[0] : SUBSETS.shirt_f[0]);
-    }
-
+    // Skip accessory/job subsets — their GLB indices need re-verification
+    // Characters display cleanly with head + body + hair for now
     return visible;
   }
 
