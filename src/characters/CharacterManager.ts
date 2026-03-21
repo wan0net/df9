@@ -2190,6 +2190,16 @@ export class CharacterManager {
 
     // Path to task target if not already there
     if (task.targetX >= 0 && (task.targetX !== char.tileX || task.targetY !== char.tileY)) {
+      // Lua: builders auto-suit to reach WALL_PENDING tiles in SPACE.
+      // Without this, non-spacewalking characters can't pathfind through SPACE
+      // to reach exterior wall tiles, causing walls to never get built.
+      const needsSpacewalk = !char.bSpacewalking &&
+        task instanceof BuildTile &&
+        this.grid.get(task.targetX, task.targetY) === TileType.WALL_PENDING;
+      if (needsSpacewalk) {
+        char.bSpacesuit = true;
+        char.bSpacewalking = true;
+      }
       const filter = char.bSpacewalking ? WALKABLE_SPACEWALK : WALKABLE_DEFAULT;
       const maxNodes = char.bSpacewalking ? 3000 : 1000;
       // Lua Room:_refreshPropJobList sets pathToNearest=true for build tasks.

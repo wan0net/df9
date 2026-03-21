@@ -1065,17 +1065,36 @@ export class InspectorPanel {
   private renderRoom(room: Room) {
     const zoneName = ZONE_SPRITES[room.zone]?.name ?? 'Unknown';
 
-    // Room header — custom name if set, else zone name + room ID (Lua: uniqueZoneName)
+    // Room header — amber bar with zone icon + black text (Lua ZoneInspector header)
     const displayName = room.uniqueZoneName
       ? room.uniqueZoneName
       : `${zoneName} Room #${room.id}`;
-    const header = this.makeSection();
-    header.innerHTML = `
-      <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
-        ${displayName}
-        ${room.uniqueZoneName ? `<span style="color:#888;font-size:20px;"> (${zoneName} #${room.id})</span>` : ''}
-      </div>
+    // Map zone type to icon filename
+    const zoneIconMap: Record<string, string> = {
+      PLAIN: 'generic', GARDEN: 'garden', INFIRMARY: 'infirmary',
+      LIFESUPPORT: 'lifesupport', RESIDENCE: 'residence', PUB: 'pub',
+      POWER: 'reactor', AIRLOCK: 'airlock', REFINERY: 'refinery',
+      FITNESS: 'fitness', RESEARCH: 'research', BRIG: 'generic',
+    };
+    const iconKey = zoneIconMap[room.zone] ?? 'generic';
+    const header = document.createElement('div');
+    header.style.cssText = `
+      background:${AMBER};padding:8px 10px;display:flex;align-items:center;gap:8px;
     `;
+    const iconImg = document.createElement('img');
+    iconImg.src = `assets/ui/icons/ui_iconIso_${iconKey}.png`;
+    iconImg.style.cssText = 'width:32px;height:32px;image-rendering:pixelated;flex-shrink:0;';
+    header.appendChild(iconImg);
+    const titleDiv = document.createElement('div');
+    titleDiv.style.cssText = 'font-size:24px;font-weight:bold;color:#000;';
+    titleDiv.textContent = displayName;
+    if (room.uniqueZoneName) {
+      const subSpan = document.createElement('span');
+      subSpan.style.cssText = 'color:#333;font-size:18px;';
+      subSpan.textContent = ` (${zoneName} #${room.id})`;
+      titleDiv.appendChild(subSpan);
+    }
+    header.appendChild(titleDiv);
     this.contentEl.appendChild(header);
 
     // Tabs: Info | Rezone | Actions (Lua: ZoneInspector has folder tabs)
@@ -1132,6 +1151,7 @@ export class InspectorPanel {
     const citizenLabel = charCount === 1 ? line('INSPEC063TEXT') : line('INSPEC061TEXT');
     const moraleScore = room.nMoraleScore;
     const section = this.makeSection();
+    section.style.cssText = 'padding:8px;background:rgba(0,0,0,0.6);margin:4px 8px;border-radius:2px;';
     let html = `
       <div style="margin-bottom:4px;">${line('INSPEC055TEXT')} ${room.size} ${line('INSPEC057TEXT')}</div>
       <div style="margin-bottom:4px;">${line('INSPEC060TEXT')} <span style="color:#fff;">${charCount}</span> ${citizenLabel}</div>
@@ -1157,6 +1177,7 @@ export class InspectorPanel {
   /** Room Rezone tab — zone type buttons (Lua ZoneRezoneTab). */
   private renderRoomRezone(room: Room) {
     const section = this.makeSection();
+    section.style.cssText = 'padding:8px;background:rgba(0,0,0,0.6);margin:4px 8px;border-radius:2px;';
     // Zone type buttons matching Lua ZoneRezoneTab.tZoneOptions order
     for (const zone of ZONE_LIST) {
       const config = ZONE_SPRITES[zone];
@@ -1192,6 +1213,7 @@ export class InspectorPanel {
   /** Room Actions tab — claim/unclaim, seal/unseal (Lua ZoneActionTab). */
   private renderRoomActions(room: Room) {
     const section = this.makeSection();
+    section.style.cssText = 'padding:8px;background:rgba(0,0,0,0.6);margin:4px 8px;border-radius:2px;';
     const isPlayer = room.nTeam === TEAM_ID_PLAYER;
 
     // Claim / Unclaim button (Lua ZoneActionTab.claimButtonPressed)
