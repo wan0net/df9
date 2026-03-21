@@ -981,7 +981,7 @@ export class UIManager {
       { label: line('HUDHUD027TEXT'), hotkey: 'b', mode: 'floor',     icon: '\u2B1C', iconSrc: 'assets/ui/icons/ui_iconIso_floor.png' },  // Floor (⬜ large white square)
       { label: line('ZONEUI014TEXT'), hotkey: 'p', mode: 'object',    icon: '\u2B1A', iconSrc: 'assets/ui/icons/ui_iconIso_object.png' },  // Object (⬚ dotted square)
       { label: line('HUDHUD017TEXT'), hotkey: 'x', mode: 'demolish',  icon: '\u21B5', iconSrc: 'assets/ui/icons/ui_iconIso_demolish.png' },  // Tear Down (↵ arrow)
-      { label: line('BUILDM009TEXT'), hotkey: 'v', mode: 'vaporize',  icon: '\u26A1' },  // Vaporize (⚡ lightning)
+      { label: line('BUILDM009TEXT'), hotkey: 'v', mode: 'vaporize',  icon: '\u26A1', iconSrc: 'assets/ui/icons/ui_iconIso_demolish.png' },  // Vaporize reuses demolish icon (Lua parity)
       { label: line('HUDHUD011TEXT'), hotkey: 'e', mode: 'erase',     icon: '\u2716', iconSrc: 'assets/ui/icons/ui_iconIso_erase.png' },  // Erase (✖ heavy multiply)
     ];
     this.constructSubModes = [];
@@ -996,7 +996,7 @@ export class UIManager {
       if (sb.iconSrc) {
         const img = document.createElement('img');
         img.src = sb.iconSrc;
-        img.style.cssText = `width:32px;height:32px;object-fit:contain;`;
+        img.style.cssText = `width:32px;height:32px;object-fit:contain;${ICON_FILTER_AMBER}`;
         const wrap = document.createElement('div');
         wrap.style.cssText = `width:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0;`;
         wrap.appendChild(img);
