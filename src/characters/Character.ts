@@ -12,7 +12,8 @@ import {
   BUILDER, TECHNICIAN, MINER, EMERGENCY, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR,
   STARTING_HIT_POINTS, BASE_SPEED, RUN_SPEED,
   MORALE_MAX, MORALE_MIN, MORALE_TICK,
-  MAX_ROOM_MORALE_BOOST, ROOM_MORALE_TICK, ROOM_MORALE_FALLOFF_END,
+  MAX_ROOM_MORALE_BOOST, MAX_ROOM_MORALE_SCORE, ROOM_MORALE_TICK,
+  ROOM_MORALE_FALLOFF_START, ROOM_MORALE_FALLOFF_END,
   ANGER_MAX, ANGER_REDUCTION_PER_MORALE_TICK,
   MORALE_COMPETENCY_THRESHOLD, MORALE_COMPETENCY_MODIFIER,
   MORALE_SPEED_THRESHOLD, MORALE_LOW_SPEED_MODIFIER, MORALE_HIGH_SPEED_MODIFIER,
@@ -627,8 +628,9 @@ export class Character {
         Energy: this.needs.energy,
         Fun: this.needs.amusement,
         Social: this.needs.social,
+        Duty: this.needs.duty,
       };
-      const avgNeed = (needValues.Hunger + needValues.Energy + needValues.Fun + needValues.Social) / 4;
+      const avgNeed = (needValues.Hunger + needValues.Energy + needValues.Fun + needValues.Social + needValues.Duty) / 5;
       let sLowestNeed: string | null = null;
       let sHighestNeed: string | null = null;
       let nLowest = Infinity;
@@ -686,18 +688,24 @@ export class Character {
       }
 
       // Room morale drift — rolling 5-sample average (sampled every 3s above)
-      // Diminishing returns: no room morale bonus above morale 60 (Lua ROOM_MORALE_FALLOFF_END)
+      // Lua Character.lua:6127-6151: normalize by MAX_ROOM_MORALE_SCORE, scale by MAX_ROOM_MORALE_BOOST,
+      // then apply falloff lerp between ROOM_MORALE_FALLOFF_START (30) and ROOM_MORALE_FALLOFF_END (60).
       const avgRoomMorale = this.tRoomScores.length > 0
         ? this.tRoomScores.reduce((a, b) => a + b, 0) / this.tRoomScores.length
         : 0;
       if (avgRoomMorale !== 0) {
-        const drift = Math.min(MAX_ROOM_MORALE_BOOST, Math.abs(avgRoomMorale) * 0.1);
-        if (avgRoomMorale > 0) {
-          if (this.nMorale < ROOM_MORALE_FALLOFF_END) {
-            this.nMorale = Math.min(MORALE_MAX, this.nMorale + drift);
-          }
-        } else {
-          this.nMorale = Math.max(MORALE_MIN, this.nMorale - drift);
+        const normalized = avgRoomMorale / MAX_ROOM_MORALE_SCORE;
+        let nRoomMoraleBonus = normalized * MAX_ROOM_MORALE_BOOST;
+        // Diminishing returns: falloff lerp between START (30) and END (60)
+        if (this.nMorale > ROOM_MORALE_FALLOFF_END) {
+          nRoomMoraleBonus = 0;
+        } else if (this.nMorale > ROOM_MORALE_FALLOFF_START) {
+          const nNormalizedMoraleInRange = (this.nMorale - ROOM_MORALE_FALLOFF_START) /
+            (ROOM_MORALE_FALLOFF_END - ROOM_MORALE_FALLOFF_START);
+          nRoomMoraleBonus = nRoomMoraleBonus * (1 - nNormalizedMoraleInRange);
+        }
+        if (nRoomMoraleBonus !== 0) {
+          this.addMorale(nRoomMoraleBonus);
         }
       }
 

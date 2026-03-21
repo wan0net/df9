@@ -144,6 +144,12 @@ export class ActivityOption {
     // Work shift check: if tagged, only available when on shift
     if (t.WorkShift && !character.wantsWorkShiftTask()) return false;
 
+    // Lua _gateActivity line 710: on-duty characters can't do non-work activities (WorkShift===false)
+    if (character.onDuty() && t.WorkShift === false) return false;
+
+    // Lua _gateActivity line 714: imprisoned characters can't do work tasks (WorkShift===true)
+    if (character.inPrison() && t.WorkShift === true) return false;
+
     // Job restriction: only available to characters with matching job
     if (t.Job !== undefined && character.getJob() !== t.Job) return false;
 

@@ -473,7 +473,7 @@ export const Malady = {
       bDiagnosed: false,
       nCurrentStage: -1,
       tSymptomStageStarts: [],
-      nNextSneeze: start + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX),
+      nNextSneeze: start,
       nNextLog: start + randRange(LOG_RANGE_MIN, LOG_RANGE_MAX),
       sType: def.sType,
       nDifficultyTier: def.nDifficultyTier,
@@ -722,6 +722,8 @@ export const Malady = {
   getSymptomAnim(rChar: CharacterLike): string | null {
     for (const m of rChar.maladies) {
       if (m.bSymptomatic && m.bSpreadSneeze && nElapsedTime >= m.nNextSneeze) {
+        // Reset sneeze timer here (Lua parity: timer reset in getSymptomAnim, not playedSymptomAnim)
+        m.nNextSneeze = nElapsedTime + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX);
         return 'sneeze';
       }
     }
@@ -738,8 +740,6 @@ export const Malady = {
 
     for (const m of rChar.maladies) {
       if (!m.bContagious || !m.bSpreadSneeze) continue;
-
-      m.nNextSneeze = nElapsedTime + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX);
 
       // Skip spreading if sneezer is not in a room
       if (srcRoomId == null) continue;
@@ -823,7 +823,7 @@ export const Malady = {
     // Air scrubber environment mod (Lua Malady._getEnvironmentSpreadMod)
     // Each powered air scrubber in range halves chance, floor = MIN_SPREAD_CHANCE
     if (Malady.getAirScrubberCount) {
-      const nScrubbers = Malady.getAirScrubberCount(rTarget.tileX, rTarget.tileY, 12);
+      const nScrubbers = Malady.getAirScrubberCount(_rSource.tileX, _rSource.tileY, 12);
       for (let i = 0; i < nScrubbers; i++) {
         chance *= 0.5;
       }

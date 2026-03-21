@@ -23,9 +23,9 @@ const TILE_TO_ROOM = O2_MAX / TILE_O2_MAX;
 
 // ── Inter-room sharing constants (Room.lua:1328-1414) ──────────────────
 /** Minimum O2 difference (tile scale) for sharing to occur. */
-const MIN_O2_DIFF_TILE = 10;
+const MIN_O2_DIFF_TILE = 655;
 /** Minimum source room average O2 (tile scale) for sharing. */
-const MIN_O2_FOR_SHARING_TILE = 200;
+const MIN_O2_FOR_SHARING_TILE = 13107;
 /** Max O2 transfer per shared tile per second (tile scale). */
 const MAX_O2_GIVE_PER_TILE = 50;
 
@@ -50,6 +50,16 @@ export class OxygenSystem {
     const grid = this.grid;
 
     for (const room of this.roomManager.getRooms()) {
+      // ── Consumption: fire drains from fire tiles (BEFORE sealed check, Lua parity) ──
+      // Character consumption handled per-character in CharacterManager
+      if (room.nFireTiles > 0) {
+        const fireDrain = Math.round(OXYGEN_PER_SECOND * dt);
+        for (const fireKey of room.tFires) {
+          const [fx, fy] = fireKey.split(',').map(Number);
+          grid.addO2(fx, fy, -fireDrain);
+        }
+      }
+
       if (!room.sealed) {
         // Breached room: drain all tiles toward vacuum
         const drain = Math.round(O2_DRAIN_RATE * ROOM_TO_TILE);
@@ -74,17 +84,6 @@ export class OxygenSystem {
         const perTile = Math.round(totalO2Output / room.tiles.length);
         for (const t of room.tiles) {
           grid.addO2(t.x, t.y, perTile);
-        }
-      }
-
-      // ── Consumption: characters drain from their tile, fire from fire tiles ──
-      // Character consumption handled per-character in CharacterManager (below)
-      // Fire consumption: drain from each fire tile
-      if (room.nFireTiles > 0) {
-        const fireDrain = Math.round(OXYGEN_PER_SECOND * dt);
-        for (const fireKey of room.tFires) {
-          const [fx, fy] = fireKey.split(',').map(Number);
-          grid.addO2(fx, fy, -fireDrain);
         }
       }
 

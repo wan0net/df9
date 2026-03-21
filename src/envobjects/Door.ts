@@ -134,8 +134,11 @@ export class Door extends EnvObject {
     this.rWestRoom = westRoom;
     this.rEastRoom = eastRoom;
 
-    this.bWestSideVacuum = !westRoom || westRoom.isBreached();
-    this.bEastSideVacuum = !eastRoom || eastRoom.isBreached();
+    // Lua parity: treat rooms with O2 below OXYGEN_SUFFOCATING as vacuum
+    // OXYGEN_SUFFOCATING = 100 on Lua 0-65535 scale ≈ 0 on 0-255 scale
+    const OXYGEN_SUFFOCATING_255 = 1; // 100 * 255 / 65535 ≈ 0.39, round up to 1
+    this.bWestSideVacuum = !westRoom || westRoom.isBreached() || westRoom.oxygen < OXYGEN_SUFFOCATING_255;
+    this.bEastSideVacuum = !eastRoom || eastRoom.isBreached() || eastRoom.oxygen < OXYGEN_SUFFOCATING_255;
     this.bTouchesVacuum = this.bWestSideVacuum || this.bEastSideVacuum;
 
     // Check for brig door
@@ -208,7 +211,10 @@ export class Door extends EnvObject {
       }
     } else {
       // NORMAL operation: auto-open/close based on character proximity
-      if ((this.characterNearby || this.stayOpenTimer > 0) && this.hasPower()) {
+      if (!this.hasPower()) {
+        // Fail-safe: unpowered doors default open (Lua parity)
+        newState = DOOR_STATE.OPEN;
+      } else if (this.characterNearby || this.stayOpenTimer > 0) {
         newState = DOOR_STATE.OPEN;
       } else {
         newState = DOOR_STATE.CLOSED;
