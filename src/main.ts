@@ -985,6 +985,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }
     if (changed.length > 0) {
       wallAutoGen.update(changed);
+      wallAutoGen.cleanupOrphans(changed); // Fix: remove orphan WALL_PENDING from cancelled builds
       roomManager.markDirty(changed);
     }
     pendingSavedTiles = [];
@@ -1322,7 +1323,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   });
 
   // Keyboard bindings for panels (must come after uiManager creation)
-  inputManager.onKeyPress('KeyE', () => { uiManager.toggleResearchPanel(); });
+  // KeyE is erase mode (line 1008) — research panel uses KeyT to avoid conflict
+  inputManager.onKeyPress('KeyT', () => { uiManager.toggleResearchPanel(); });
   inputManager.onKeyPress('KeyG', () => { uiManager.toggleGoalsPanel(); });
 
   // ── Game loop ─────────────────────────────────────────────

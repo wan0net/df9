@@ -138,8 +138,10 @@ const SPRITE_ALIASES: Record<string, string> = {
   FoodReplicator_destroyed: 'food_replicator_destroyed',
   // Military — R-21: Lua uses turret_frames0003 (idle), not 0001
   Turret: 'turret_frames0003',
+  Turret_damaged: 'turret_frames0003',    // show idle frame when damaged
   Turret_destroyed: 'turret_destroyed',
-  TurretLv2: 'turret_lv2_frames0003',  // R-20
+  TurretLv2: 'turret_lv2_frames0003',
+  TurretLv2_damaged: 'turret_lv2_frames0003', // show idle frame when damaged
   TurretLv2_destroyed: 'turret_lv2_destroyed',
   // Garden
   HydroPlant: 'hydro_farm',
