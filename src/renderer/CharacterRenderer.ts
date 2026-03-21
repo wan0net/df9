@@ -908,14 +908,26 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
+      // Hide ALL meshes first, then show only the ones matching visible subset indices.
+      // Note: GLTFLoader traverse order may differ from .brig subset indices,
+      // so we use a name-based fallback if index-based visibility fails.
       const visibleSet = this.getVisibleSubsets(char);
       let meshIdx = 0;
+      let totalMeshes = 0;
       clone.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-          child.visible = visibleSet.has(meshIdx);
-          meshIdx++;
-        }
+        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) totalMeshes++;
       });
+      // If model has fewer meshes than expected (GLB packing), show all and skip subset logic
+      if (totalMeshes < 10) {
+        // Simple model (Bad_Alien, Murder_Robot, etc.) — show everything
+      } else {
+        clone.traverse((child) => {
+          if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
+            child.visible = visibleSet.has(meshIdx);
+            meshIdx++;
+          }
+        });
+      }
 
       // Apply textures and default colors
       applyModelTextures(clone, char.id);

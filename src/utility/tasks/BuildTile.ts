@@ -65,6 +65,19 @@ export class BuildTile extends Task {
   }
 
   protected onUpdate(dt: number) {
+    // Don't count build time until character has arrived at the tile
+    // (task.start() is called at assignment before pathfinding completes)
+    if (!this.character) return;
+    const cmd = CommandQueue.get(this.commandId);
+    if (!cmd) { this.fail(); return; }
+    const atTile = this.character.tileX === cmd.tileX && this.character.tileY === cmd.tileY;
+    const adjacent = Math.abs(this.character.tileX - cmd.tileX) <= 1 &&
+                     Math.abs(this.character.tileY - cmd.tileY) <= 1;
+    if (!atTile && !adjacent) {
+      // Still walking — don't accumulate build time
+      this.elapsedTime = 0;
+      return;
+    }
     if (this.elapsedTime >= this.duration) {
       this.complete();
     }
