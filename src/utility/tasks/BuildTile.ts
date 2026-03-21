@@ -103,6 +103,10 @@ export class BuildTile extends Task {
     }
 
     CommandQueue.complete(this.commandId);
-    Base.addAlert('build', `${this.character?.getName() ?? 'Builder'} built tile at (${cmd.tileX}, ${cmd.tileY})`);
+  }
+
+  /** Release command claim on failure so other builders can pick it up. */
+  protected onFail() {
+    CommandQueue.release(this.commandId);
   }
 }

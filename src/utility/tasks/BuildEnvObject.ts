@@ -49,7 +49,12 @@ export class BuildEnvObject extends Task {
     }
   }
 
-  protected onUpdate(dt: number) {
+  protected onUpdate(_dt: number) {
+    // Don't count build time while character is still walking
+    if (this.character && (this.character.moving || this.character.path.length > 0)) {
+      this.elapsedTime = 0;
+      return;
+    }
     if (this.elapsedTime >= this.duration) {
       this.complete();
     }
@@ -96,5 +101,9 @@ export class BuildEnvObject extends Task {
     this.character?.addMorale(MORALE_BUILD_BASE);
 
     Base.addAlert('build', `${this.character?.getName() ?? 'Builder'} built ${this.targetObj.tData.friendlyName}`);
+  }
+
+  protected onFail() {
+    CommandQueue.release(this.commandId);
   }
 }

@@ -1103,9 +1103,8 @@ export class CharacterManager {
       : PRIORITY.NO_ACTIVITY;
     if (nThreat > currentPri) {
       if (char.currentTask) {
-        if (char.currentTask.rTargetObject) {
-          char.currentTask.rTargetObject.unreserve(char.id);
-        }
+        // Call task.fail() to properly release CommandQueue claims (Bug 5 fix)
+        char.currentTask.fail();
         char.currentTask = null;
         char.path = [];
       }

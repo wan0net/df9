@@ -73,7 +73,12 @@ export abstract class Task {
   fail() {
     this.status = TASK_STATUS.FAILED;
     this._releaseReservation();
+    this.onFail();
   }
+
+  /** Override in subclasses to release CommandQueue claims on failure. */
+  protected onFail() {}
+
 
   /** Release object reservation and end interaction when task ends. */
   private _releaseReservation() {
