@@ -1242,7 +1242,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       // Current drag info (for room size display, etc.)
       const count = hasDrag ? buildCursor.dragTileCount : 0;
       const dims = hasDrag ? buildCursor.dragDimensions : { w: 0, h: 0 };
-      const totalCost = pendingBuildCost + pendingVaporizeCost + pendingCancelCost;
+
+      // Live preview cost during drag (Lua: ConstructMenu:onTick reads getPendingBuildCost live)
+      let dragPreviewCost = 0;
+      if (hasDrag && count > 0) {
+        if (buildMode === 'room' || buildMode === 'floor' || buildMode === 'wall') {
+          dragPreviewCost = count * MAT_BUILD_FLOOR; // Each tile costs MAT_BUILD_FLOOR
+        }
+      }
+      const buildCostTotal = pendingBuildCost + dragPreviewCost;
+      const totalCost = buildCostTotal + pendingVaporizeCost + pendingCancelCost;
 
       if (buildMode === 'room' && hasDrag) {
         const floorW = Math.max(0, dims.w - 2);
@@ -1250,10 +1259,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         const floorCount = floorW * floorH;
         const wallCount = count - floorCount;
         const capacityLines = getProjectedCapacity(floorW, floorH);
-        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH, capacityLines, buildCost: pendingBuildCost, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
+        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH, capacityLines, buildCost: buildCostTotal, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
       }
 
-      return { cost: totalCost, tileCount: count || pendingSavedTiles.length, mode: buildMode, w: dims.w, h: dims.h, buildCost: pendingBuildCost, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
+      return { cost: totalCost, tileCount: count || pendingSavedTiles.length, mode: buildMode, w: dims.w, h: dims.h, buildCost: buildCostTotal, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
     },
     onConfirmBuild: () => confirmBuild(),
     onCancelBuild: () => cancelBuild(),
