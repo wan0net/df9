@@ -1342,7 +1342,8 @@ export class CharacterRenderer {
         'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
         'width:fit-content;';
       handle.thoughtTail.style.borderTopColor = 'rgba(255,255,255,0.85)';
-    } else if (!bubbleText && handle.thoughtTextSpan.textContent && !handle.lastTaskName) {
+    } else if (!bubbleText && handle.thoughtEl.style.display !== 'none') {
+      // Hide speech/thought bubble when there's nothing to show
       handle.thoughtEl.style.display = 'none';
     }
   }
