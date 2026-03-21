@@ -887,24 +887,51 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
-      // Apply subset visibility: hide all meshes first, then show only selected ones.
-      // GLB primitive order matches SUBSETS indices (verified from Citizen_Base.glb).
+      // Hide all meshes, then show only the ones matching this character's body config.
+      // Use MATERIAL NAMES (stable across clone methods) instead of indices.
       {
-        const visibleSet = this.getVisibleSubsets(char);
-        const meshes: (THREE.Mesh | THREE.SkinnedMesh)[] = [];
+        const isMale = char.id % 2 === 0;
+        const race = char.tStats.nRace;
+
+        // Build set of material names to show
+        const showMats = new Set<string>();
+
+        // Head — pick ONE head material based on race
+        if (race === RACE_CAT) showMats.add('Cat_Head_Male01_base_02');
+        else if (race === RACE_JELLY) showMats.add('Jelly_Head_Female01_base_04');
+        else if (race === RACE_BIRDSHARK || race === RACE_CHICKEN) showMats.add('Bird_Head_Male01_base_01');
+        else if (race === RACE_SHAMON) showMats.add('Shamon_Head01');
+        else showMats.add('Human_Head_Male01'); // Human + fallback
+
+        // Body — male or female
+        if (race === RACE_JELLY) showMats.add('Human_Body_Female01'); // Jelly always female body
+        else if (isMale) showMats.add('Human_Body_Male01');
+        else showMats.add('Human_Body_Female01');
+
+        // Hair — for human-like races
+        const hasHair = race === RACE_HUMAN || race === RACE_CAT ||
+          race === RACE_BIRDSHARK || race === RACE_CHICKEN || race === RACE_MURDERFACE;
+        if (hasHair) showMats.add('Hair01');
+
+        // Apply: hide everything, show only matching materials.
+        // For materials with multiple primitives (e.g. 5 head variants), show only ONE.
+        const shown = new Map<string, number>(); // count per material name
         clone.traverse((child) => {
           if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-            meshes.push(child);
+            const matName = (child.material as THREE.Material)?.name ?? '';
+            if (showMats.has(matName)) {
+              const count = shown.get(matName) ?? 0;
+              if (count === 0) {
+                child.visible = true;
+                shown.set(matName, 1);
+              } else {
+                child.visible = false; // duplicate — hide it
+              }
+            } else {
+              child.visible = false;
+            }
           }
         });
-
-        if (meshes.length >= 10) {
-          // Citizen_Base (89 primitives): hide all, show only visible set
-          for (let i = 0; i < meshes.length; i++) {
-            meshes[i].visible = visibleSet.has(i);
-          }
-        }
-        // Simple models (Bad_Alien, Murder_Robot <10 meshes): leave all visible
       }
 
       // Apply textures and default colors
