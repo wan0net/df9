@@ -5,6 +5,7 @@
 
 import { EnvObject } from './EnvObject';
 import { SpatialAudio } from '../audio/SpatialAudio';
+import { EMERGENCY, DOCTOR, TECHNICIAN, BUILDER } from '../characters/CharacterConstants';
 import type { Room } from '../rooms/Room';
 
 export const DOOR_STATE = {
@@ -28,6 +29,9 @@ export const STAY_OPEN_DURATION = 2;
 export const tDoorsByAddr = new Map<string, Door>();
 
 export class Door extends EnvObject {
+  /** Optional tile obstruction check (Lua g_World._shouldObstructPathing). Set from main.ts. */
+  static tileObstructionCheck: ((x: number, y: number) => boolean) | null = null;
+
   state: number = DOOR_STATE.CLOSED;
   operation: number = DOOR_OPERATION.NORMAL;
 
@@ -52,6 +56,10 @@ export class Door extends EnvObject {
   bTouchesVacuum = false;
   /** Is between a brig room and a non-brig room. */
   bBrigDoor = false;
+  /** Whether adjacent tiles are obstructed for pathfinding (Lua Door._updateSpaceStatus). */
+  bWestSideObstructed = false;
+  bEastSideObstructed = false;
+  bIsObstructed = false;
 
   /** Rooms on either side (set by EnvObjectManager on room rebuild). */
   rWestRoom: Room | null = null;
@@ -113,6 +121,26 @@ export class Door extends EnvObject {
     return this.state === DOOR_STATE.LOCKED || this.state === DOOR_STATE.BROKEN_CLOSED;
   }
 
+  /**
+   * DR-4: Per-character lock check for brig doors (Lua Door:locked(rChar)).
+   * Brig doors allow EMERGENCY, DOCTOR, TECHNICIAN, BUILDER through.
+   * Other characters are blocked from entering the brig.
+   */
+  isLockedForCharacter(charJob: number): boolean {
+    if (this.bBrigDoor && this.operation === DOOR_OPERATION.NORMAL) {
+      if (this.state === DOOR_STATE.BROKEN_OPEN) return false;
+      if (this.state === DOOR_STATE.LOCKED || this.state === DOOR_STATE.BROKEN_CLOSED) return true;
+      if (!this.hasPower()) return false;
+      // Allow security, medical, technical, and builder staff through brig doors
+      if (charJob === EMERGENCY || charJob === DOCTOR || charJob === TECHNICIAN || charJob === BUILDER) {
+        return false;
+      }
+      // Block other jobs from entering brig
+      return true;
+    }
+    return this.state === DOOR_STATE.LOCKED || this.state === DOOR_STATE.BROKEN_CLOSED;
+  }
+
   // ── Auto-open proximity ───────────────────────────────────────
 
   setCharacterNearby(nearby: boolean) {
@@ -147,18 +175,41 @@ export class Door extends EnvObject {
       this.bBrigDoor = true;
     }
 
+    // DR-3: Check obstruction on adjacent tiles (Lua Door:_updateSpaceStatus lines 459-474)
+    this.bWestSideObstructed = false;
+    this.bEastSideObstructed = false;
+    if (Door.tileObstructionCheck) {
+      const xLeft = (this.tileY & 1) === 0 ? -1 : 0;
+      // West side = NW neighbor, East side = SE neighbor (simplified from Lua wall-direction logic)
+      const westTileX = this.tileX + xLeft;
+      const westTileY = this.tileY - 1;
+      const eastTileX = this.tileX + xLeft + 1;
+      const eastTileY = this.tileY + 1;
+      this.bWestSideObstructed = Door.tileObstructionCheck(westTileX, westTileY);
+      this.bEastSideObstructed = Door.tileObstructionCheck(eastTileX, eastTileY);
+    }
+    this.bIsObstructed = this.bWestSideObstructed || this.bEastSideObstructed;
+
     this._updateDoorState(false);
   }
 
   /** Refresh lockdown state (Lua Door:refreshLockdown). */
   refreshLockdown(): void {
-    const bShouldLockdown =
+    let bShouldLockdown = false;
+
+    // DR-5: Sabotage check first — sabotaged doors stay locked (Lua Door.lua:113)
+    if (this._isSabotaged()) {
+      bShouldLockdown = true;
+    } else if (
       (this.rWestRoom && this.rWestRoom.bUserBlockOxygen) ||
-      (this.rEastRoom && this.rEastRoom.bUserBlockOxygen);
+      (this.rEastRoom && this.rEastRoom.bUserBlockOxygen)
+    ) {
+      bShouldLockdown = true;
+    }
 
     if (bShouldLockdown) {
       this.setOperation(DOOR_OPERATION.LOCKED);
-    } else if (this.operation === DOOR_OPERATION.LOCKED) {
+    } else {
       this.setOperation(DOOR_OPERATION.NORMAL);
     }
   }
@@ -200,20 +251,27 @@ export class Door extends EnvObject {
       }
     } else if (this.operation === DOOR_OPERATION.FORCED_OPEN) {
       newState = DOOR_STATE.OPEN;
-    } else if (this.operation === DOOR_OPERATION.LOCKED) {
-      newState = DOOR_STATE.LOCKED;
-    } else if (this.bTouchesVacuum && this.bEastSideVacuum !== this.bWestSideVacuum) {
-      // Vacuum safety lock: one side vacuum, other side not → lock (Lua Door.lua:593)
+    } else if (
+      this._isSabotaged() ||
+      this.operation === DOOR_OPERATION.LOCKED ||
+      (this.bTouchesVacuum && this.bEastSideVacuum !== this.bWestSideVacuum) ||
+      this.bIsObstructed
+    ) {
+      // Lua Door.lua:593 — sabotaged, locked, vacuum-one-side, or obstructed → LOCKED
       newState = DOOR_STATE.LOCKED;
     } else if (bForce) {
       if (this.operation === DOOR_OPERATION.NORMAL) {
         newState = DOOR_STATE.CLOSED;
       }
     } else {
-      // NORMAL operation: auto-open/close based on character proximity
+      // NORMAL operation (Lua Door.lua:600-648)
       if (!this.hasPower()) {
-        // Fail-safe: unpowered doors default open (Lua parity)
-        newState = DOOR_STATE.OPEN;
+        // No power: seal if one side vacuum or obstructed, otherwise fail-open
+        if ((this.bTouchesVacuum && this.bEastSideVacuum !== this.bWestSideVacuum) || this.bIsObstructed) {
+          newState = DOOR_STATE.LOCKED;
+        } else {
+          newState = DOOR_STATE.OPEN;
+        }
       } else if (this.characterNearby || this.stayOpenTimer > 0) {
         newState = DOOR_STATE.OPEN;
       } else {

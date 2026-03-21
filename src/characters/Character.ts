@@ -108,6 +108,8 @@ export class Character {
   heldItem: string | null = null;
   /** Whether character is cuffed (brig/security) */
   bCuffed = false;
+  /** Whether the character's previous task was a WorkShift task (Lua bOldTaskWorkShift). */
+  bOldTaskWorkShift = false;
   /** Whether character is wearing a spacesuit */
   bSpacesuit = false;
   /** Malady flag: character refuses doctor treatment (Lua bRefuseDoctor). */
@@ -190,8 +192,8 @@ export class Character {
   /** C-8: Chat cooldown — maps partner ID to last chat game time. */
   tLastChatTime: Map<number, number> = new Map();
 
-  // Morale tick accumulator
-  private moraleTickAccum = 0;
+  // Morale tick accumulator — jittered start to spread ticks across characters (Lua pattern)
+  private moraleTickAccum = MORALE_TICK + Math.random() * MORALE_TICK;
   /** Room morale sample accumulator (Lua ROOM_MORALE_TICK = 3s) */
   private roomMoraleTickAccum = 0;
   /** Rolling room morale buffer (Lua tRoomScores, 5 samples averaged). */
@@ -313,9 +315,12 @@ export class Character {
   getMeleeDamage(): number { return this.getRaceDef().nMeleeDamage; }
 
   /** Dodge chance for incoming ranged attacks (Lua Character:dodgeAttackChance).
-   *  Grapple attacks cannot be dodged. Monsters (RACE_MONSTER) have 30% base dodge; all others 10%. */
+   *  CC-7: EMERGENCY job with ArmorLevel2 researched gets 0.2 dodge (armor approximation).
+   *  CC-8 fix: Only RACE_MONSTER gets 30% base dodge; all others (including killbots) get 10%. */
   dodgeAttackChance(): number {
     if (this.tStats.nRace === RACE_MONSTER) return 0.3;
+    // CC-7: Approximate inventory armor dodge via research level
+    if (this.tStats.nJob === EMERGENCY && researchSystem.isCompleted('ArmorLevel2')) return 0.2;
     return 0.1; // Default for all other races including killbots
   }
 
@@ -605,8 +610,10 @@ export class Character {
       }
 
       // Skip morale tick while sleeping or rampaging (Lua Character.lua:6045)
+      // Bug 6: SleepInBed only skips morale when bSnoozing is set (actual sleep phase)
       const taskName = this.currentTask?.name;
-      if (taskName === 'SleepInBed' || taskName === 'SleepOnFloor' || this.bRampaging) {
+      if ((taskName === 'SleepInBed' && (this.currentTask as any).bSnoozing) ||
+          taskName === 'SleepOnFloor' || this.bRampaging) {
         return;
       }
 
@@ -944,10 +951,13 @@ export class Character {
 
   /** Whether character wants to start/continue a work shift task. */
   wantsWorkShiftTask(): boolean {
-    if (this.bCuffed) return false;
+    // Bug 36: Lua gates on inPrison() not just bCuffed
+    if (this.inPrison()) return false;
     if (this.nRemainingDutyTime > 0) return true;
     // Currently doing a work task — continue it
     if (this.currentTask?.tags?.WorkShift) return true;
+    // Bug 21: Previous task was WorkShift — favor continuing work
+    if (this.bOldTaskWorkShift) return true;
     // Been off duty for a long time — favor work (Lua: < -SHIFT_COOLDOWN * 1.5)
     if (this.nRemainingDutyTime < -Character.SHIFT_COOLDOWN * 1.5) return true;
     return false;
@@ -1053,8 +1063,9 @@ export class Character {
   /** Rotation accumulator for vacuum death spin. */
   nVacuumRotation = 0;
 
-  /** Kill the character with a specific cause of death. */
-  kill(cause: number = CAUSE_OF_DEATH.UNSPECIFIED) {
+  /** Kill the character with a specific cause of death.
+   *  MD-12: Optional tData can carry sDiseaseName for disease deaths (Lua parity). */
+  kill(cause: number = CAUSE_OF_DEATH.UNSPECIFIED, _tData?: { sDiseaseName?: string }) {
     if (this.tStats.nStatus === STATUS_DEAD) return; // Already dead
 
     // Death log (Lua: per-cause log entries)

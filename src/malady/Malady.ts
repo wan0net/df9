@@ -26,7 +26,7 @@ export interface CharacterLike {
   bHideSigns: boolean;
   maladies: MaladyInstance[];
   damage(amount: number, cause: number): void;
-  kill(cause: number): void;
+  kill(cause: number, tData?: { sDiseaseName?: string }): void;
   catchFire(): void;
   currentTask: { name?: string } | null;
 }
@@ -101,6 +101,8 @@ export interface MaladyInstance {
   tTimeToSymptoms?: [number, number];
   sFriendlyName?: string;
   sDesc?: string;
+  /** MD-11: If true, symptom stages loop back to start after exhausting (Lua bStagesLoop). */
+  bStagesLoop?: boolean;
 }
 
 // ── Research Entry ───────────────────────────────────────────────────────
@@ -505,6 +507,7 @@ export const Malady = {
       tTimeToSymptoms: def.tTimeToSymptoms,
       sFriendlyName: def.sFriendlyName,
       sDesc: def.sDesc,
+      bStagesLoop: def.bStagesLoop,
     };
 
     Malady._initSymptomStarts(instance);
@@ -637,7 +640,17 @@ export const Malady = {
 
     // Advance symptom stages — MD-6: only ONE stage per tick (Lua checks nCurrentStage+1 only)
     if (tMalady.tSymptomStages && tMalady.tSymptomStageStarts) {
-      const nNextStage = tMalady.nCurrentStage + 1;
+      let nNextStage = tMalady.nCurrentStage + 1;
+
+      // MD-11: bStagesLoop — when all stages are exhausted and looping is enabled,
+      // re-initialize symptom start times and reset stage counter (Lua Malady.lua:607-609).
+      // No disease currently uses this but the engine supports it.
+      if (nNextStage >= tMalady.tSymptomStages.length && tMalady.bStagesLoop) {
+        Malady._initSymptomStarts(tMalady);
+        tMalady.nCurrentStage = -1;
+        nNextStage = 0;
+      }
+
       if (nNextStage < tMalady.tSymptomStages.length &&
           tMalady.tSymptomStageStarts[nNextStage] !== undefined &&
           nElapsedTime >= tMalady.tSymptomStageStarts[nNextStage]) {
@@ -653,8 +666,9 @@ export const Malady = {
         tMalady.nSymptomStart = nElapsedTime - 0.01;
       }
       // Lua: set nMaladyEnd when all stages exhaust (no next stage, no end yet)
-      const nextStage = tMalady.nCurrentStage + 1;
-      if (nextStage >= tMalady.tSymptomStages.length && tMalady.nMaladyEnd === Infinity) {
+      // MD-11: Don't set end time if stages loop
+      const nextStageCheck = tMalady.nCurrentStage + 1;
+      if (nextStageCheck >= tMalady.tSymptomStages.length && tMalady.nMaladyEnd === Infinity && !tMalady.bStagesLoop) {
         tMalady.nMaladyEnd = nElapsedTime + randRange(DEFAULT_DURATION_RANGE[0], DEFAULT_DURATION_RANGE[1]);
       }
     }
@@ -690,9 +704,10 @@ export const Malady = {
     switch (tMalady.sSpecial) {
       case 'thing':
         // Lua: 15s cooldown timer, then ~10% random gate
+        // MD-13: Lua uses math.random(0,100) < 10 — integer random (0-100 inclusive = 101 values, 9.9%)
         if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
           tMalady.nNextSpawnAttempt = nElapsedTime + 15;
-          if (Math.random() < 0.1) {
+          if (Math.floor(Math.random() * 101) < 10) {
             Malady.spawnThing(rChar);
           }
         }
@@ -705,13 +720,17 @@ export const Malady = {
         }
         break;
       case 'death':
-        rChar.kill(CAUSE_OF_DEATH.DISEASE);
+        // MD-12: Lua passes friendly disease name to killCharacter (Malady.lua:662)
+        rChar.kill(CAUSE_OF_DEATH.DISEASE, {
+          sDiseaseName: Malady.getFriendlyName(tMalady.sMaladyName),
+        });
         break;
       case 'fire':
         // Lua: 60-300s cooldown timer, 50% chance to catch fire
+        // MD-13: Lua uses math.random(0,100) < 50 — integer random (0-100 inclusive = 101 values, 49.5%)
         if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
           tMalady.nNextSpawnAttempt = nElapsedTime + randRange(60, 300);
-          if (Math.random() < 0.5) {
+          if (Math.floor(Math.random() * 101) < 50) {
             rChar.catchFire();
           }
         }
@@ -722,46 +741,47 @@ export const Malady = {
   // ── Contagion / Spread ──────────────────────────────────────
 
   /** Get sneeze animation name if it's time to sneeze.
-   *  Lua: requires bSymptomatic AND bSpreadSneeze (Malady.lua:681). */
-  getSymptomAnim(rChar: CharacterLike): string | null {
+   *  Lua: requires bSymptomatic AND bSpreadSneeze (Malady.lua:681).
+   *  MD-7: Returns the specific malady instance (Lua returns tMalady alongside anim name). */
+  getSymptomAnim(rChar: CharacterLike): { anim: string; malady: MaladyInstance } | null {
     for (const m of rChar.maladies) {
       if (m.bSymptomatic && m.bSpreadSneeze && nElapsedTime >= m.nNextSneeze) {
         // Reset sneeze timer here (Lua parity: timer reset in getSymptomAnim, not playedSymptomAnim)
         m.nNextSneeze = nElapsedTime + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX);
-        return 'sneeze';
+        return { anim: 'sneeze', malady: m };
       }
     }
     return null;
   },
 
-  /** After sneeze animation, spread to nearby characters in same room.
+  /** After sneeze animation, spread the specific malady to nearby characters in same room.
+   *  MD-7: Lua passes tMalady from getSymptomAnim — only that one malady is spread, not all.
    *  Lua: 5-tile horizontal strip (X +-2) at sneezer's Y, same room only. */
-  playedSymptomAnim(rChar: CharacterLike, allChars: CharacterLike[]): void {
+  playedSymptomAnim(rChar: CharacterLike, allChars: CharacterLike[], tMalady: MaladyInstance): void {
+    // Only spread if this malady is contagious and sneeze-capable
+    if (!tMalady.bContagious || !tMalady.bSpreadSneeze) return;
+
     // Get sneezer's room (Lua: rChar:getRoom())
     const srcRoomId = Malady.getRoomIdAtTile
       ? Malady.getRoomIdAtTile(rChar.tileX, rChar.tileY)
       : null;
 
-    for (const m of rChar.maladies) {
-      if (!m.bContagious || !m.bSpreadSneeze) continue;
+    // Skip spreading if sneezer is not in a room
+    if (srcRoomId == null) return;
 
-      // Skip spreading if sneezer is not in a room
-      if (srcRoomId == null) continue;
-
-      for (const target of allChars) {
-        if (target === rChar) continue;
-        if (target.tStats.nStatus === STATUS_DEAD) continue;
-        // Lua: 5-tile horizontal strip at sneezer's Y coordinate (x-2 to x+2)
-        const dx = Math.abs(target.tileX - rChar.tileX);
-        if (dx > 2) continue;
-        if (target.tileY !== rChar.tileY) continue;
-        // Same room check (Lua: rSpreadRoom == rRoom)
-        if (Malady.getRoomIdAtTile) {
-          const targetRoomId = Malady.getRoomIdAtTile(target.tileX, target.tileY);
-          if (targetRoomId !== srcRoomId) continue;
-        }
-        Malady._testSpread(m, rChar, target);
+    for (const target of allChars) {
+      if (target === rChar) continue;
+      if (target.tStats.nStatus === STATUS_DEAD) continue;
+      // Lua: 5-tile horizontal strip at sneezer's Y coordinate (x-2 to x+2)
+      const dx = Math.abs(target.tileX - rChar.tileX);
+      if (dx > 2) continue;
+      if (target.tileY !== rChar.tileY) continue;
+      // Same room check (Lua: rSpreadRoom == rRoom)
+      if (Malady.getRoomIdAtTile) {
+        const targetRoomId = Malady.getRoomIdAtTile(target.tileX, target.tileY);
+        if (targetRoomId !== srcRoomId) continue;
       }
+      Malady._testSpread(tMalady, rChar, target);
     }
   },
 

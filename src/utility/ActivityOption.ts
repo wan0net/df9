@@ -308,7 +308,12 @@ export class ActivityOption {
       case 'energy': return character.needs.energy;
       case 'amusement': return character.needs.amusement;
       case 'social': return character.needs.social;
-      case 'duty': return character.needs.duty;
+      case 'duty': {
+        // Bug 16: Cap duty at 90 for WorkShift tasks so it never looks "full"
+        // Lua: duty value capped at 90 when evaluating work-shift activities
+        const raw = character.needs.duty;
+        return (this.tags.WorkShift) ? Math.min(raw, 90) : raw;
+      }
       default: return 100;
     }
   }

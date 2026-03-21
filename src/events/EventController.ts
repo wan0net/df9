@@ -36,7 +36,7 @@ const EVENT_CHECK_INTERVAL = 1;
 const DEFAULT_ALLOWED_FAILURES = 30;
 
 export type SpawnCharacterFn = (count: number) => void;
-export type SpawnHostileFn = (count: number, hp: number) => void;
+export type SpawnHostileFn = (count: number, hp: number, difficulty?: number) => void;
 export type MeteorLandFn = MeteorImpactFn;
 /** Callback to read tile type at coords (needed by MeteorEvent for SPACE detection). */
 export type GetTileTypeFn = (tx: number, ty: number) => number;
@@ -167,6 +167,9 @@ export class EventController implements TickableSystem {
   }
 
   onTick(dt: number) {
+    // EV-8: No events when all citizens are dead (Lua EventController.onTick:495)
+    if (this.population <= 0) return;
+
     // Generate forecast on first tick after delay
     if (!this.forecastGenerated && GameRules.elapsedTime >= FIRST_EVENT_TIME_MIN) {
       this.generateForecast();
@@ -509,11 +512,12 @@ export class EventController implements TickableSystem {
         hostileEvent.onCompleteCallback = () => {
           const count = hostileEvent.getRaiderCount();
           const hp = this.getScaledRaiderHP();
+          const hiDiff = this.getDifficulty();
           if (this.dialogSystem) {
             this.dialogSystem.showHostileImmigrationDialog(def.nChanceObey, (result) => {
               if (this.shouldSpawn(result)) {
                 // Hostile immigrants always spawn on accept or ignored refusal
-                this.onHostileSpawn?.(count, hp);
+                this.onHostileSpawn?.(count, hp, hiDiff);
                 const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
                 Base.addAlert('hostile', line(alertLC));
               } else {
@@ -522,7 +526,7 @@ export class EventController implements TickableSystem {
               }
             });
           } else {
-            this.onHostileSpawn?.(count, hp);
+            this.onHostileSpawn?.(count, hp, hiDiff);
             Base.addAlert('hostile', line('ALERTS041TEXT'));
           }
         };
@@ -530,11 +534,13 @@ export class EventController implements TickableSystem {
       }
       case 'Breaching': {
         const breachEvent = new BreachingEvent();
-        // E-10/E-12: Lua rollRandomRaiders gives 1-3 raiders based on difficulty
-        const breachRaiderCount = this.getScaledRaiderCount();
+        // EV-4/CC-10: Pass difficulty for point-buy equipment
+        const breachDiff = this.getDifficulty();
+        const breachCount = this.getScaledRaiderCount();
         breachEvent.onCompleteCallback = () => {
           this.onBreachWall?.();
-          this.onHostileSpawn?.(breachRaiderCount, this.getScaledRaiderHP());
+          const hp = this.getScaledRaiderHP();
+          this.onHostileSpawn?.(breachCount, hp, breachDiff);
           Base.incrementStat('nBreachShipsDestroyed');
           Base.addAlert('breach', line('ALERTS009TEXT'));
         };
@@ -575,10 +581,11 @@ export class EventController implements TickableSystem {
         hostileDockEvent.onCompleteCallback = () => {
           const count = hostileDockEvent.getRaiderCount();
           const hp = this.getScaledRaiderHP();
+          const hdDiff = this.getDifficulty();
           if (this.dialogSystem) {
             this.dialogSystem.showDockingDialog(true, def.nChanceObey, (result) => {
               if (this.shouldSpawn(result)) {
-                this.onHostileSpawn?.(count, hp);
+                this.onHostileSpawn?.(count, hp, hdDiff);
                 const alertLC = result === 'ignored' ? 'ALERTS025TEXT' : 'ALERTS030TEXT';
                 Base.addAlert('hostile', line(alertLC));
               } else {
@@ -586,7 +593,7 @@ export class EventController implements TickableSystem {
               }
             });
           } else {
-            this.onHostileSpawn?.(count, hp);
+            this.onHostileSpawn?.(count, hp, hdDiff);
             Base.addAlert('hostile', line('ALERTS041TEXT'));
           }
         };
@@ -680,21 +687,27 @@ export class EventController implements TickableSystem {
           };
           compound.addSubEvent(breachEvent);
         } else {
-          // hostileImmigrationEvents — raiders cost 1-4 points based on challenge level
-          const challengeLevel = getChallengeLevel(diff);
-          let raiderCost: number;
-          if (challengeLevel > 0.6) {
-            raiderCost = 3;
-          } else if (challengeLevel > 0.2) {
-            raiderCost = 2;
-          } else {
-            raiderCost = 1;
-          }
-          nPoints -= raiderCost;
+          // EV-5: hostileImmigrationEvents — deduct per-raider (Lua CompoundEvent.selectEvents:102-124)
+          // Roll raiders using rollRandomRaiders (includes killbot chance)
+          const raiders = rollRandomRaiders(diff, true);
 
-          const raiderEvent = new HostileImmigrationEvent(this.getScaledRaiderCount());
+          // Deduct points per individual raider based on challenge level / killbot
+          for (const raider of raiders) {
+            if (raider.bKillbot) {
+              nPoints -= 4;
+            } else if (raider.nChallengeLevel > 0.6) {
+              nPoints -= 3;
+            } else if (raider.nChallengeLevel > 0.2) {
+              nPoints -= 2;
+            } else {
+              nPoints -= 1;
+            }
+          }
+
+          const raiderEvent = new HostileImmigrationEvent(raiders.length);
           raiderEvent.onCompleteCallback = () => {
-            this.onHostileSpawn?.(raiderEvent.getRaiderCount(), this.getScaledRaiderHP());
+            // EV-4: Pass difficulty so spawnHostiles rolls killbots internally
+            this.onHostileSpawn?.(raiderEvent.getRaiderCount(), this.getScaledRaiderHP(), diff);
           };
           compound.addSubEvent(raiderEvent);
         }

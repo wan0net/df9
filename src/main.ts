@@ -521,8 +521,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Wire getTileType so MeteorEvent can detect SPACE tiles for pass-through
   eventController.getTileType = (tx, ty) => grid.get(tx, ty);
-  eventController.onHostileSpawn = (count, hp) => {
-    characterManager.spawnHostiles(count, hp);
+  eventController.onHostileSpawn = (count, hp, difficulty) => {
+    characterManager.spawnHostiles(count, hp, difficulty);
   };
   eventController.onBreachWall = () => {
     // Pick a random wall tile adjacent to a room and destroy it
@@ -552,7 +552,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   eventController.onDerelictExplore = ({ ship, event, choiceId }) => {
     if (event.type === 'hostileEncounter' && choiceId === 'fight') {
       const count = Math.max(1, Math.min(4, Math.ceil(ship.dangerLevel / 2)));
-      characterManager.spawnHostiles(count, eventController.getScaledRaiderHP());
+      characterManager.spawnHostiles(count, eventController.getScaledRaiderHP(), eventController.getDifficulty());
     }
   };
 

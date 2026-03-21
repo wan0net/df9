@@ -245,6 +245,18 @@ export class EnvObject implements TaggableObject {
     this.nTempPowerLossEnd = GameRules.elapsedTime + duration;
   }
 
+  /** Lua EnvObject:_isSabotaged — true while sabotage power-loss timer is active. */
+  _isSabotaged(): boolean {
+    if (this.nTempPowerLossEnd > 0) {
+      if (this.nTempPowerLossEnd < GameRules.elapsedTime) {
+        this.nTempPowerLossEnd = -1;
+        return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
   // ── Oxygen generation ────────────────────────────────────────
 
   private _updateOxygenGeneration() {

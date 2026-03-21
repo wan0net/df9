@@ -112,8 +112,8 @@ import type { ProjectileManager } from '../hazards/Projectile';
 import type { DecalRenderer } from '../renderer/DecalRenderer';
 import type { VacuumSystem } from '../oxygen/VacuumSystem';
 
-/** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
-const UPDATES_PER_TICK = 10;
+/** Max AI decisions per tick (Lua processes exactly 1 decision per frame from FIFO queue) */
+const UPDATES_PER_TICK = 1;
 
 /** Lua CharacterConstants.SURVIVAL_TICK = 1 second.
  *  Timer per character: 0.5 * SURVIVAL_TICK + random * SURVIVAL_TICK -> 0.5-1.5s */
@@ -292,7 +292,14 @@ export class CharacterManager {
         const mod = Malady.getNeedsReduceMods(char, need);
         if (mod !== undefined) maladyMods[need] = mod;
       }
-      char.needs.decay(dtSec, promisedNeeds, Object.keys(maladyMods).length > 0 ? maladyMods : undefined);
+      // Bug 2: Skip need decay for non-player characters in rooms without full visibility
+      // Lua only decays needs for player-team chars or chars in fully-visible rooms
+      const charRoomForDecay = this.roomManager.getRoomAt(char.tileX, char.tileY);
+      const bDecayNeeds = char.tStats.nTeam === TEAM_ID_PLAYER ||
+        (charRoomForDecay !== undefined && charRoomForDecay.nLastVisibility === VISIBILITY_FULL);
+      if (bDecayNeeds) {
+        char.needs.decay(dtSec, promisedNeeds, Object.keys(maladyMods).length > 0 ? maladyMods : undefined);
+      }
 
       // C-5: Continuous job XP gain for on-duty characters performing work-shift tasks
       // Lua Character.lua: JOB_EXPERIENCE_RATE = 25/60 per second while working
@@ -337,6 +344,8 @@ export class CharacterManager {
 
       // Test prison status on any task completion (Lua Character:taskCompleting calls _testInPrison)
       if (char.currentTask && char.currentTask.isComplete()) {
+        // Bug 21: Track whether completed task was a WorkShift task
+        char.bOldTaskWorkShift = !!char.currentTask.tags?.WorkShift;
         const roomId = charRoom?.id ?? null;
         char.testInPrison(roomId);
       }
@@ -632,15 +641,38 @@ export class CharacterManager {
     return null;
   }
 
-  /** Spawn hostile raiders in a random room. */
-  spawnHostiles(count: number, hp: number = STARTING_HIT_POINTS) {
+  /** Spawn hostile raiders in a random room.
+   *  CC-10: Optional difficulty (0-1) for point-buy equipment approximation. */
+  spawnHostiles(count: number, hp: number = STARTING_HIT_POINTS, difficulty: number = 0) {
     const rooms = this.roomManager.getRooms();
     if (rooms.length === 0) return;
 
     for (let i = 0; i < count; i++) {
       const room = rooms[Math.floor(Math.random() * rooms.length)];
       if (room.tiles.length === 0) continue;
-      const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      let tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+
+      // EV-9: Validate spawn tile is walkable (not WALL/SPACE); try adjacent if not
+      const tileType = this.grid.get(tile.x, tile.y);
+      if (tileType === TileType.WALL || tileType === TileType.SPACE) {
+        let found = false;
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+          const nx = tile.x + dx, ny = tile.y + dy;
+          const nt = this.grid.get(nx, ny);
+          if (nt === TileType.FLOOR || nt === TileType.DOOR) {
+            tile = { x: nx, y: ny };
+            found = true;
+            break;
+          }
+        }
+        if (!found) continue; // skip this raider if no walkable tile
+      }
+
+      // CC-10: Per-raider challenge level from difficulty (Lua getChallengeLevel)
+      const diff = Math.max(0, Math.min(1, difficulty - 0.15 + Math.random() * 0.3));
+
+      // CC-10: Killbot chance at high difficulty (Lua: challenge > 0.75 && random > 0.5)
+      const bKillbot = diff > 0.75 && Math.random() > 0.5;
 
       const char = new Character(this.nextId++, tile.x, tile.y);
       char.tStats.nTeam = TEAM_ID_DEBUG_ENEMYGROUP;
@@ -648,7 +680,29 @@ export class CharacterManager {
       char.tStats.nHP = hp;
       char.tStats.nMaxHP = hp;
       char.tStats.sName = `Raider ${i + 1}`;
-      char.weapon = 'LaserPistol';
+
+      // CC-10: Equipment based on difficulty tier (Lua point-buy approximation)
+      if (diff > 0.75) {
+        char.weapon = 'LaserRifle';
+        char.tStats.nToughness = 0.6;
+        if (bKillbot) {
+          char.tStats.nRace = RACE_KILLBOT;
+          char.tStats.nHP = hp * 2;
+          char.tStats.nMaxHP = hp * 2;
+          char.tStats.sName = 'Kill Bot';
+          char.weapon = 'KillbotRifle';
+        }
+      } else if (diff > 0.5) {
+        char.weapon = 'LaserRifle';
+        char.tStats.nToughness = 0.4;
+      } else if (diff > 0.2) {
+        char.weapon = 'Pistol';
+        char.tStats.nToughness = 0.2;
+      } else {
+        char.weapon = 'Pistol';
+        char.tStats.nToughness = 0;
+      }
+
       // Lua: nTimeToConvert = (1 - nAuthoritarian) * 600 (Character.lua:5344)
       const auth = char.tStats.personality.nAuthoritarian ?? 0.5;
       char.nTimeToConvert = (1 - auth) * 600;
@@ -866,9 +920,10 @@ export class CharacterManager {
       if (!carrier.isAlive() || carrier.maladies.length === 0) continue;
 
       // Check if it's time for a sneeze-spread
-      const anim = Malady.getSymptomAnim(carrier);
-      if (anim === 'sneeze') {
-        Malady.playedSymptomAnim(carrier, this.characters);
+      // MD-7: getSymptomAnim now returns { anim, malady } — only that specific malady is spread
+      const result = Malady.getSymptomAnim(carrier);
+      if (result && result.anim === 'sneeze') {
+        Malady.playedSymptomAnim(carrier, this.characters, result.malady);
       }
     }
   }

@@ -446,14 +446,34 @@ export class CombatSystem {
    */
   static processHit(
     defender: Character, damage: number, damageType: number,
-    _attacker?: Character, allChars?: Character[],
+    attacker?: Character, allChars?: Character[],
   ): boolean {
     // Apply damage reduction (armor + team tactics)
     const reduction = CombatSystem.getDamageReduction(defender, allChars);
     const effectiveDamage = Math.max(1, Math.round(damage * (1 - reduction)));
     // C-40: Removed separate ArmorLevel2 dodge — Lua only uses damage reduction (0.5)
     defender.takeDamage(effectiveDamage, damageType);
+
+    // CC-6: Minor/serious injury on hit (Lua: 75% chance minor, proportional serious)
+    if (defender.isAlive() && effectiveDamage > 1) {
+      if (Math.random() < 0.75) {
+        const minorInjuries = ['BrokenNose', 'SprainedAnkle', 'BrokenRib'];
+        Malady.infectCharacter(defender, minorInjuries[Math.floor(Math.random() * minorInjuries.length)]);
+      }
+      if (Math.random() * 1.5 * 100 < effectiveDamage) {
+        const seriousInjuries = ['BrokenLeg', 'CrackedSkull'];
+        Malady.infectCharacter(defender, seriousInjuries[Math.floor(Math.random() * seriousInjuries.length)]);
+      }
+    }
+
     if (!defender.isAlive()) {
+      // CC-5: Brawl always stuns — brawling partners get KnockedOut, never killed
+      if (attacker && attacker.tBrawlingWith.has(defender.id)) {
+        defender.setHP(10);
+        defender.bIncapacitated = true;
+        Malady.infectCharacter(defender, 'KnockedOut');
+        return false;
+      }
       // C-41: Stunner → apply KnockedOut malady (Lua creates malady, not just flag)
       if (damageType === DAMAGE_TYPE.Stunner) {
         defender.setHP(10);
