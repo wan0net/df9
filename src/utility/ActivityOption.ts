@@ -268,16 +268,18 @@ export class ActivityOption {
       }
     }
 
-    // C-9: Distance penalty matching Lua formula
-    // Lua: no penalty <5 tiles, then DISTANCE_ADJUST_SCORE=-1 per tile up to 50
-    // HighDistPenalty: -3 per tile, 0→50
+    // Bug 18 fix: Lua ActivityOption.lua:482-497 — distance NORMALIZED to [0,1] before scoring
+    // DISTANCE_ADJUST_START=5, DISTANCE_ADJUST_END=50
+    // DISTANCE_ADJUST_SCORE=-1, DISTANCE_ADJUST_SEVERE_SCORE=-3
     const dx = Math.abs(character.tileX - this.targetX);
     const dy = Math.abs(character.tileY - this.targetY);
-    const tileDist = Math.min(50, Math.max(dx, dy)); // Chebyshev distance, capped at 50
+    const tileDist = Math.min(50, Math.max(dx, dy));
     if (this.tags.HighDistPenalty) {
-      score -= tileDist * 3;
+      // Lua: dist/50 * -3 (max penalty = -3)
+      score += (tileDist / 50) * -3;
     } else if (tileDist > 5) {
-      score -= (tileDist - 5) * 1;
+      // Lua: (dist-5)/45 * -1 (max penalty = -1)
+      score += ((tileDist - 5) / 45) * -1;
     }
 
     // Activity affinity modifier (Lua: +/-20% from topic affinity)

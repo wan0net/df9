@@ -355,10 +355,11 @@ export const Malady = {
   diseaseEncountered(tMalady: MaladyInstance, nTeam: number): void {
     const key = tMalady.sMaladyName;
     if (!tS.tResearch[key]) {
-      // M-16: Lua uses random(0, nForceResearch) + 500 for forced research diseases
+      // MD-1 fix: Lua Malady.lua:322-326 sets nResearchCure=0 for non-forced diseases
+      // (immediately curable after first encounter). Only nForceResearch diseases need research.
       const researchTime = tMalady.nForceResearch
         ? Math.floor(Math.random() * tMalady.nForceResearch) + 500
-        : Math.max(200, tMalady.nSeverity * 1000);
+        : 0;
       tS.tResearch[key] = {
         sMaladyName: key,
         sMaladyType: tMalady.sMaladyType,

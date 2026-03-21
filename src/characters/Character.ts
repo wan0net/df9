@@ -64,6 +64,8 @@ export interface CharacterStats {
   nXP: number;
   /** Per-job competency (0-1) */
   tCompetency: Record<number, number>;
+  /** Toughness stat (0-1) for damage reduction. Lua Character.tStats.nToughness. */
+  nToughness: number;
 }
 
 export class Character {
@@ -222,6 +224,7 @@ export class Character {
       personality,
       nXP: 0,
       tCompetency: {},
+      nToughness: 0,
     };
 
     // Skill-point budget allocation (Lua: STARTING_SKILL_POINTS=8 across random jobs)

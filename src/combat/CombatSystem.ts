@@ -384,18 +384,25 @@ export class CombatSystem {
 
   /**
    * Get damage reduction for a character.
-   * Lua Character.lua:5468-5484 — ArmorLevel2 (0.5) + TeamTactics (+0.75 if nearby security).
-   * @param allChars — all characters for team tactics proximity check.
+   * CC-1/CC-2 fix: Lua Character.lua:5488-5493 — hyperbolic formula:
+   *   reduction = (toughness + armor) / (toughness + armor + 2) + teamTacticsCount * 0.05
    */
   static getDamageReduction(defender: Character, allChars?: Character[]): number {
-    let reduction = 0;
-    // ArmorLevel2: security officers get 0.5 damage reduction
-    if (defender.tStats.nJob === EMERGENCY && researchSystem.isCompleted('ArmorLevel2')) {
-      reduction += 0.5;
+    // Lua: toughness from character stats (0-1 range)
+    const toughness = defender.tStats.nToughness ?? 0;
+    // Lua: armor from equipped inventory item (0-0.75 range based on ArmorLevel0-3)
+    // Since we don't have full inventory, approximate from research:
+    let armor = 0;
+    if (defender.tStats.nJob === EMERGENCY) {
+      if (researchSystem.isCompleted('ArmorLevel2')) armor = 0.5;
+      else armor = 0.25; // base security armor
     }
-    // TeamTactics: +0.75 if 1-5 other security officers within ~20 tiles
-    if (defender.tStats.nJob === EMERGENCY && defender.tStats.nTeam === TEAM_ID_PLAYER
-        && researchSystem.isCompleted('TeamTactics') && allChars) {
+    // CC-1: Hyperbolic formula: resistance / (resistance + 2)
+    const resistance = toughness + armor;
+    let reduction = resistance / (resistance + 2);
+
+    // CC-2: TeamTactics: count * 0.05 (max 5 nearby = +0.25)
+    if (researchSystem.isCompleted('TeamTactics') && allChars) {
       let nearbyCount = 0;
       for (const other of allChars) {
         if (other === defender || !other.isAlive()) continue;
@@ -406,9 +413,10 @@ export class CombatSystem {
           if (nearbyCount >= 5) break;
         }
       }
-      if (nearbyCount > 0) reduction += 0.75;
+      reduction += nearbyCount * 0.05;
     }
-    return Math.min(reduction, 0.95); // cap at 95%
+    // Lua has no explicit cap — hyperbolic formula naturally limits
+    return reduction;
   }
 
   /**
@@ -434,7 +442,14 @@ export class CombatSystem {
         Malady.infectCharacter(defender, 'KnockedOut');
         return false;
       }
-      // C-39: Removed invented 50% melee stun — not in Lua
+      // CC-4: 50% melee stun IS in Lua (Character.lua:5604-5606)
+      // Previous comment was incorrect — Lua has: math.random() < 0.5 → stun
+      if (damageType === DAMAGE_TYPE.Melee && Math.random() < 0.5) {
+        defender.setHP(10);
+        defender.bIncapacitated = true;
+        Malady.infectCharacter(defender, 'KnockedOut');
+        return false;
+      }
       return true; // Actually dead
     }
     return false;
