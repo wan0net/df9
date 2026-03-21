@@ -972,10 +972,8 @@ export class CharacterRenderer {
 
       group.add(clone);
 
-      // Set up animation mixer if clips available
-      if (citizenHasSkeleton && citizenAnimClips.length > 0) {
-        mixer = new THREE.AnimationMixer(clone);
-      }
+      // Skeletal animation disabled — GLB bone mapping causes artifacts.
+      // Using procedural animation (walk bob, idle breathe, death pose) instead.
     } else {
       // Fallback box
       const color = JOB_COLORS[char.getJob()] ?? 0xcccccc;
@@ -1201,12 +1199,10 @@ export class CharacterRenderer {
       }
     }
 
-    // Animation: use skeletal clips if available, else procedural
-    if (handle.mixer) {
-      this.updateSkeletalAnim(handle, char);
-    } else {
-      this.applyProceduralAnim(handle, char);
-    }
+    // Animation: procedural only — skeletal clips cause "clock swinging" artifacts
+    // because the GLB bone structure doesn't map correctly to Three.js AnimationMixer.
+    // The mixer is created but not used for playback.
+    this.applyProceduralAnim(handle, char);
 
     // Thought bubble (Lua Task:showEmoticon — show for EMOTICON_INITIAL_DURATION on task change)
     this.updateThoughtBubble(handle, char);
