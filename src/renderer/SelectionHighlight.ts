@@ -81,7 +81,7 @@ export class SelectionHighlight {
     this.scene.add(this.mesh);
 
     this.roomMat = new THREE.MeshBasicMaterial({
-      color: AMBER,
+      map: getDiamondTexture(),
       transparent: true,
       depthWrite: false,
       opacity: 0.15,

@@ -148,7 +148,7 @@ export class InspectorPanel {
       this.currentTab = 'duty';
     }
     this.objectTab = 'action'; // Lua: default tab is ObjectActionTab
-    this.roomTab = 'info';
+    this.roomTab = 'rezone'; // Lua: clicking a room defaults to Rezone tab
     this.editingName = false;
     if (entity) {
       this.el.style.display = 'block';
