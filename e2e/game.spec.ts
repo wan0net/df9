@@ -2640,11 +2640,17 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       char.needs.energy = -80;
       char.needs.amusement = -80;
       char.needs.social = -80;
+      if (!char.isAlive()) return null;
       const logCountBefore = char.tLog.length + char.tLogQueue.length;
       // Force morale tick: reset accumulator then pass enough time
       char.moraleTickAccum = 0;
-      char.updateMorale(16, 0);
-      const logCountAfter = char.tLog.length + char.tLogQueue.length;
+      char.roomMoraleTickAccum = 0;
+      char.updateMorale(20, 0);
+      // Also flush log queue
+      while (char.tLogQueue.length > 0) {
+        char.tLog.push(char.tLogQueue.shift());
+      }
+      const logCountAfter = char.tLog.length;
       return { before: logCountBefore, after: logCountAfter, increased: logCountAfter > logCountBefore };
     });
     expect(result).toBeTruthy();
