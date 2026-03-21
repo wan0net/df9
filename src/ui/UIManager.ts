@@ -194,6 +194,7 @@ export class UIManager {
 
   // Construct sub-menu
   private constructSub!: HTMLDivElement;
+  private constructConfirmEl: HTMLDivElement | null = null;
   private constructSubModes: BuildMode[] = [];
 
   // Mine sub-menu
@@ -957,18 +958,25 @@ export class UIManager {
     confirmEl.appendChild(confirmIcon);
     confirmEl.appendChild(confirmLbl);
     confirmEl.addEventListener('click', () => {
+      // Lua: confirmBuild returns false when can't afford — menu stays open
+      let success = true;
       if (this.onConfirmBuild) {
-        this.onConfirmBuild();
+        success = this.onConfirmBuild() !== false;
       }
-      this.setBuildMode('none');
-      // Lua: closeConstructMenu — restore pause state + unlock time + cutaway
-      if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
-      GameRules.bTimeLocked = false;
-      GameRules.enableCutawayMode(this.bCutawayModeWasEnabled);
+      if (success) {
+        SoundManager.playUI('UI_Confirm');
+        this.setBuildMode('none');
+        if (!this.wasPausedBeforeConstruct) GameRules.bRunning = true;
+        GameRules.bTimeLocked = false;
+        GameRules.enableCutawayMode(this.bCutawayModeWasEnabled);
+      } else {
+        SoundManager.playUI('UI_Disallow');
+      }
     });
     confirmEl.addEventListener('mouseenter', () => { confirmEl.style.background = AMBER; confirmIcon.style.filter = 'brightness(0)'; confirmLbl.style.color = '#000'; });
     confirmEl.addEventListener('mouseleave', () => { confirmEl.style.background = 'transparent'; confirmIcon.style.cssText = `width:32px;height:32px;object-fit:contain;${ICON_FILTER_AMBER}`; confirmLbl.style.color = AMBER; });
     this.constructSub.appendChild(confirmEl);
+    this.constructConfirmEl = confirmEl;
 
     // ── Build mode buttons — matching Lua ConstructMenu order ──
     // Screenshot order: Cancel, Confirm, label, then mode buttons
@@ -2260,8 +2268,14 @@ export class UIManager {
         }
         // "Not enough matter" warning (Lua: NoFundsLabel)
         const totalCost = costInfo.cost ?? (bc + vc + cc);
-        if (totalCost > 0 && GameRules.nMatter < totalCost) {
+        const canAfford = totalCost <= 0 || GameRules.nMatter >= totalCost;
+        if (!canAfford) {
           html += `<div style="color:#f44;font-size:22px;">${line('BUILDM016TEXT')}</div>`;
+        }
+        // Lua: confirm button dims when can't afford
+        if (this.constructConfirmEl) {
+          this.constructConfirmEl.style.opacity = canAfford ? '1' : '0.3';
+          this.constructConfirmEl.style.pointerEvents = canAfford ? 'auto' : 'none';
         }
         if (html) {
           this.costOverlay.innerHTML = html;
