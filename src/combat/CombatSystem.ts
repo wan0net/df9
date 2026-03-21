@@ -207,7 +207,7 @@ export class CombatSystem {
   }
 
   /** Update all combat engagements. Returns array of hits for damage processing. */
-  update(dt: number, getCharById: (id: number) => Character | undefined): {
+  update(dt: number, getCharById: (id: number) => Character | undefined, allChars: Character[] = []): {
     attackerId: number; defenderId: number; damage: number; damageType: number;
   }[] {
     const hits: { attackerId: number; defenderId: number; damage: number; damageType: number }[] = [];
@@ -244,10 +244,12 @@ export class CombatSystem {
           } else if (race === RACE_KILLBOT) {
             SpatialAudio.playAtTile('Killbot_Attack', attacker.tileX, attacker.tileY);
           }
+          // CC-3: Apply TeamTactics offensive multiplier
+          const ttMult = CombatSystem.getTeamTacticsDamageMultiplier(attacker, allChars);
           hits.push({
             attackerId: eng.attackerId,
             defenderId: eng.defenderId,
-            damage: eng.weapon.nDamage,
+            damage: Math.round(eng.weapon.nDamage * ttMult),
             damageType: eng.weapon.nDamageType,
           });
         }
@@ -305,11 +307,12 @@ export class CombatSystem {
               // Dodge check (Lua Projectile:_attemptToHitTarget)
               const dodgeChance = defender.dodgeAttackChance();
               if (Math.random() > dodgeChance) {
-                // Hit!
+                // Hit! CC-3: Apply TeamTactics offensive multiplier
+                const ttMultR = CombatSystem.getTeamTacticsDamageMultiplier(attacker, allChars);
                 hits.push({
                   attackerId: eng.attackerId,
                   defenderId: eng.defenderId,
-                  damage: eng.weapon.nDamage,
+                  damage: Math.round(eng.weapon.nDamage * ttMultR),
                   damageType: eng.weapon.nDamageType,
                 });
               }
@@ -380,6 +383,22 @@ export class CombatSystem {
       case DAMAGE_TYPE.Stunner: return CAUSE_OF_DEATH.STUNNER;
       default: return CAUSE_OF_DEATH.UNSPECIFIED;
     }
+  }
+
+  /**
+   * CC-3: Get TeamTactics offensive damage multiplier for an attacker.
+   * Lua Character.lua:2167-2170: nBonus = 1 + count * 0.1 (max 1.5x at 5 nearby).
+   */
+  static getTeamTacticsDamageMultiplier(attacker: Character, allChars: Character[]): number {
+    if (attacker.tStats.nJob !== EMERGENCY || !researchSystem.isCompleted('TeamTactics')) return 1;
+    let count = 0;
+    for (const other of allChars) {
+      if (other === attacker || !other.isAlive()) continue;
+      if (other.tStats.nJob !== EMERGENCY || other.tStats.nTeam !== attacker.tStats.nTeam) continue;
+      const dist = tileDist(attacker.tileX, attacker.tileY, other.tileX, other.tileY);
+      if (dist <= 20) { count++; if (count >= 5) break; }
+    }
+    return 1 + count * 0.1;
   }
 
   /**

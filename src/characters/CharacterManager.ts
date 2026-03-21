@@ -395,12 +395,9 @@ export class CharacterManager {
           const o2 = room ? room.getOxygenScore() : 0;
           char.needs.updateOxygen(room?.oxygen ?? 0);
 
-          // Lua: _updateSpacewalking(o2 < OXYGEN_LOW)
-          if (o2 < OXYGEN_LOW) {
-            if (!char.bSpacewalking) char.bSpacewalking = true;
-          } else {
-            if (char.bSpacewalking) char.bSpacewalking = false;
-          }
+          // Lua: _updateSpacewalking — sets bSpacewalking = wearingSpacesuit()
+          // (Character.lua:1755-1759: bSpacesuitActive, not O2-based)
+          char.bSpacewalking = char.bSpacesuit;
 
           // Suit vs no-suit logic (Lua Character.updateOxygen lines 1627-1750)
           if (!char.bSpacesuit) {
@@ -663,7 +660,8 @@ export class CharacterManager {
 
   /** Process combat system — resolve hits. */
   private processCombat(dt: number) {
-    const hits = this.combatSystem.update(dt, (id) => this.characters.find(c => c.id === id));
+    // CC-3: Pass allChars for TeamTactics offensive damage multiplier
+    const hits = this.combatSystem.update(dt, (id) => this.characters.find(c => c.id === id), this.characters);
 
     for (const hit of hits) {
       const defender = this.characters.find(c => c.id === hit.defenderId);
