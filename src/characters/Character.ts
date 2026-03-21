@@ -313,12 +313,10 @@ export class Character {
   getMeleeDamage(): number { return this.getRaceDef().nMeleeDamage; }
 
   /** Dodge chance for incoming ranged attacks (Lua Character:dodgeAttackChance).
-   *  Grapple attacks cannot be dodged. Monsters have 30% base dodge, humans 10%. */
+   *  Grapple attacks cannot be dodged. Monsters (RACE_MONSTER) have 30% base dodge; all others 10%. */
   dodgeAttackChance(): number {
-    // TODO: factor in armor when inventory armor system is implemented
-    const raceDef = this.getRaceDef();
-    if (!raceDef.bBreathes) return 0.3; // Monsters/killbots have higher dodge
-    return 0.1; // Default for humanoid races
+    if (this.tStats.nRace === RACE_MONSTER) return 0.3;
+    return 0.1; // Default for all other races including killbots
   }
 
   setJob(job: number) {

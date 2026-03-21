@@ -255,8 +255,8 @@ export const FIRST_EVENT_TIME_MAX = 440;
 /** Previous events retained. */
 export const PREV_EVENTS_COUNT = 10;
 
-/** Max consecutive same-event allowed in forecast. */
-export const MAX_CONSECUTIVE_SAME = 3;
+/** Max consecutive same-event allowed in forecast (Lua: nConsecutiveEvents < 3 → max 2). */
+export const MAX_CONSECUTIVE_SAME = 2;
 
 /** Chance of malady on incoming characters (Lua: Event.nChanceOfMalady = 15). */
 export const CHANCE_OF_MALADY = 15;
