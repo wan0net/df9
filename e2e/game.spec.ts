@@ -3221,8 +3221,8 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       }
       return count;
     });
-    // 7 sidebar + 6 construct submenu mode icons + 2 construct cancel/confirm icons = 15
-    expect(iconCount).toBe(15);
+    // 7 sidebar + 7 construct submenu mode icons (incl. vaporize) + 2 cancel/confirm = 16
+    expect(iconCount).toBe(16);
   });
 
   // P1.2: CharacterRenderer creates shadow meshes for characters
