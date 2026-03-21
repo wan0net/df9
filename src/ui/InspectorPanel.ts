@@ -91,6 +91,11 @@ export class InspectorPanel {
   private onCenterCamera: ((char: Character) => void) | null = null;
   private onSelectRoom: ((room: Room) => void) | null = null;
   private onRezoneRoom: ((room: Room, zone: ZoneType) => void) | null = null;
+  /** Dirty flag — when true, DOM will be rebuilt on next update(). */
+  private dirty = true;
+  private lastRebuildTime = 0;
+  /** How often to rebuild DOM for live data refresh (ms). */
+  private static REBUILD_INTERVAL = 500;
 
   constructor(
     parent: HTMLElement,
@@ -150,11 +155,18 @@ export class InspectorPanel {
     this.objectTab = 'action'; // Lua: default tab is ObjectActionTab
     this.roomTab = 'rezone'; // Lua: clicking a room defaults to Rezone tab
     this.editingName = false;
+    this.dirty = true;
     if (entity) {
       this.el.style.display = 'block';
     } else {
       this.el.style.display = 'none';
     }
+  }
+
+  /** Force an immediate DOM rebuild (used by internal event handlers). */
+  private refresh() {
+    this.dirty = true;
+    this.update();
   }
 
   /** Whether the inspector is currently showing an entity. */
@@ -177,6 +189,17 @@ export class InspectorPanel {
     if (this.entity.type === 'character' && !this.entity.data.isAlive() && this.entity.data.getHP() <= 0) {
       // Keep showing dead characters for inspection, but could auto-close after decay
     }
+
+    // Throttle DOM rebuilds so click events can complete.
+    // update() is called every frame but full DOM rebuild destroys/recreates elements,
+    // preventing click events (mousedown target != mouseup target). Only rebuild when
+    // dirty (user interaction) or every REBUILD_INTERVAL for live data refresh.
+    const now = performance.now();
+    if (!this.dirty && now - this.lastRebuildTime < InspectorPanel.REBUILD_INTERVAL) {
+      return;
+    }
+    this.dirty = false;
+    this.lastRebuildTime = now;
 
     this.contentEl.textContent = '';
 
@@ -347,7 +370,7 @@ export class InspectorPanel {
       nameSpan.title = 'Click to edit name';
       nameSpan.addEventListener('click', () => {
         this.editingName = true;
-        this.update();
+        this.refresh();
       });
       nameRow.appendChild(nameSpan);
     }
@@ -414,13 +437,13 @@ export class InspectorPanel {
       const shortcuts = document.createElement('div');
       shortcuts.style.cssText = 'display:flex;gap:4px;margin-top:4px;padding:0 8px;';
       const shortcutDefs: { label: string; title: string; action: () => void }[] = [
-        { label: 'HP', title: 'View Stats', action: () => { this.currentTab = 'stats'; this.update(); } },
-        { label: 'MOR', title: 'View Morale/Psych', action: () => { this.currentTab = 'psych'; this.update(); } },
+        { label: 'HP', title: 'View Stats', action: () => { this.currentTab = 'stats'; this.refresh(); } },
+        { label: 'MOR', title: 'View Morale/Psych', action: () => { this.currentTab = 'psych'; this.refresh(); } },
         { label: 'ROOM', title: 'View Room', action: () => {
           const room = this.getRoomForChar?.(char);
           if (room && this.onSelectRoom) this.onSelectRoom(room);
         }},
-        { label: 'ACT', title: 'View Actions', action: () => { this.currentTab = 'actions'; this.update(); } },
+        { label: 'ACT', title: 'View Actions', action: () => { this.currentTab = 'actions'; this.refresh(); } },
         { label: 'CAM', title: 'Center Camera', action: () => { this.onCenterCamera?.(char); } },
       ];
       for (const sd of shortcutDefs) {
@@ -495,7 +518,7 @@ export class InspectorPanel {
       btn.appendChild(span);
       btn.addEventListener('click', () => {
         this.currentTab = t.tab;
-        this.update();
+        this.refresh();
       });
       tabRow.appendChild(btn);
     }
@@ -540,7 +563,7 @@ export class InspectorPanel {
       `;
       row.addEventListener('click', () => {
         if (this.onSetJob) this.onSetJob(char, jobId);
-        this.update();
+        this.refresh();
       });
       row.addEventListener('mouseenter', () => { row.style.background = 'rgba(223,162,0,0.15)'; });
       row.addEventListener('mouseleave', () => {
@@ -809,7 +832,7 @@ export class InspectorPanel {
       opacity:${disabled ? '0.5' : '1'};
     `;
     if (!disabled) {
-      btn.addEventListener('click', () => { onClick(); this.update(); });
+      btn.addEventListener('click', () => { onClick(); this.refresh(); });
       btn.addEventListener('mouseenter', () => { btn.style.background = `rgba(${color === '#f44' ? '255,68,68' : '223,162,0'},0.2)`; });
       btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
     }
@@ -899,7 +922,7 @@ export class InspectorPanel {
       const span = document.createElement('span');
       span.textContent = t.label;
       btn.appendChild(span);
-      btn.addEventListener('click', () => { this.objectTab = t.key; this.update(); });
+      btn.addEventListener('click', () => { this.objectTab = t.key; this.refresh(); });
       tabRow.appendChild(btn);
     }
     this.contentEl.appendChild(tabRow);
@@ -1130,7 +1153,7 @@ export class InspectorPanel {
       const span = document.createElement('span');
       span.textContent = tab.label;
       tabEl.appendChild(span);
-      tabEl.addEventListener('click', () => { this.roomTab = tab.key; this.update(); });
+      tabEl.addEventListener('click', () => { this.roomTab = tab.key; this.refresh(); });
       tabBar.appendChild(tabEl);
     }
     this.contentEl.appendChild(tabBar);
@@ -1227,7 +1250,7 @@ export class InspectorPanel {
       if (!isActive) {
         btn.addEventListener('click', () => {
           if (this.onRezoneRoom) this.onRezoneRoom(room, zone);
-          this.update();
+          this.refresh();
         });
         btn.addEventListener('mouseenter', () => {
           btn.style.background = 'rgba(223,162,0,0.2)';
@@ -1251,7 +1274,7 @@ export class InspectorPanel {
     const claimLabel = isPlayer ? line('ZONEUI112TEXT') || 'Unclaim' : line('ZONEUI111TEXT') || 'Claim';
     const claimBtn = this.makeActionButton(claimLabel, false, () => {
       if (isPlayer) { room.unclaim(); } else { room.claim(); }
-      this.update();
+      this.refresh();
     });
     section.appendChild(claimBtn);
 
@@ -1260,7 +1283,7 @@ export class InspectorPanel {
     const sealLabel = isSealed ? (line('ZONEUI072TEXT') || 'Unseal Oxygen') : (line('ZONEUI071TEXT') || 'Seal Oxygen');
     const sealBtn = this.makeActionButton(sealLabel, false, () => {
       room.bUserBlockOxygen = !room.bUserBlockOxygen;
-      this.update();
+      this.refresh();
     });
     section.appendChild(sealBtn);
 
