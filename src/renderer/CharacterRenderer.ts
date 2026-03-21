@@ -916,22 +916,32 @@ export class CharacterRenderer {
         // Apply: hide everything, show only matching materials.
         // For materials with multiple primitives (e.g. 5 head variants), show only ONE.
         const shown = new Map<string, number>(); // count per material name
+        let totalMeshes = 0;
+        let hiddenCount = 0;
         clone.traverse((child) => {
           if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-            const matName = (child.material as THREE.Material)?.name ?? '';
+            totalMeshes++;
+            const mat = child.material;
+            const matName = mat && 'name' in mat ? (mat as any).name : '';
             if (showMats.has(matName)) {
               const count = shown.get(matName) ?? 0;
               if (count === 0) {
                 child.visible = true;
                 shown.set(matName, 1);
               } else {
-                child.visible = false; // duplicate — hide it
+                child.visible = false;
+                hiddenCount++;
               }
             } else {
               child.visible = false;
+              hiddenCount++;
             }
           }
         });
+        // Debug: log first character's mesh visibility
+        if (char.id <= 3) {
+          console.log(`Char ${char.id}: ${totalMeshes} meshes, ${hiddenCount} hidden, showing: ${[...shown.keys()].join(', ')}`);
+        }
       }
 
       // Apply textures and default colors

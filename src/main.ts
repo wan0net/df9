@@ -1036,7 +1036,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     uiManager.setSelectedEntity(null);
     uiManager.dismissInspectSub();
     tutorialFlags.deselected = true;
-    // Don't set bRunning here — ESC should not unpause the game
+    // First ESC starts the game; subsequent ESCs don't unpause
+    if (!GameRules.bRunning) {
+      GameRules.bRunning = true;
+      if (GameRules.playerTimeScale === 0) GameRules.playerTimeScale = 1;
+    }
   });
   inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; tutorialFlags.vizModes = true; });
   inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
