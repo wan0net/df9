@@ -112,8 +112,9 @@ import type { ProjectileManager } from '../hazards/Projectile';
 import type { DecalRenderer } from '../renderer/DecalRenderer';
 import type { VacuumSystem } from '../oxygen/VacuumSystem';
 
-/** Max AI decisions per tick (Lua processes exactly 1 decision per frame from FIFO queue) */
-const UPDATES_PER_TICK = 1;
+/** Lua processes 1 decision per frame at 60fps = 60/sec.
+ *  Our aiTickInterval is 1000ms, so ~60 per tick matches Lua throughput. */
+const UPDATES_PER_TICK = 60;
 
 /** Lua CharacterConstants.SURVIVAL_TICK = 1 second.
  *  Timer per character: 0.5 * SURVIVAL_TICK + random * SURVIVAL_TICK -> 0.5-1.5s */
@@ -838,7 +839,21 @@ export class CharacterManager {
   /** Spawn a character at a specific tile position. Returns the new character.
    *  @param bImmigration — if true, apply malady pre-roll (Lua: CHANCE_OF_MALADY). */
   spawnCharacterAt(tileX: number, tileY: number, spacewalking = false, bImmigration = false): Character {
-    const char = new Character(this.nextId++, tileX, tileY);
+    // EV-9: Validate spawn tile is walkable; try adjacent tiles if WALL/SPACE
+    let spawnX = tileX, spawnY = tileY;
+    const tileType = this.grid.get(spawnX, spawnY);
+    if (tileType === TileType.WALL || tileType === TileType.SPACE) {
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+        const nx = spawnX + dx, ny = spawnY + dy;
+        const nt = this.grid.get(nx, ny);
+        if (nt === TileType.FLOOR || nt === TileType.DOOR) {
+          spawnX = nx;
+          spawnY = ny;
+          break;
+        }
+      }
+    }
+    const char = new Character(this.nextId++, spawnX, spawnY);
     char.bSpacewalking = spacewalking;
     this.characterRenderer?.createCharacter(char);
     this.characters.push(char);

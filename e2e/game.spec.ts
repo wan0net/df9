@@ -1316,8 +1316,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       ([id]) => (window as any).__df9?.getMaladySpeedMod(id),
       [charId] as const,
     );
-    // Should be 0.3 once symptomatic
-    expect(speedMod).toBe(0.3);
+    // MD-10: Lua has nSpeed inside tReduceMods (data bug — speed never applied at runtime).
+    // For Lua parity, SleepyDisease does NOT slow characters. Speed modifier returns 1 (default).
+    expect(speedMod).toBe(1);
   });
 
   test('multi-stage diseases have correct stage data', async () => {
