@@ -87,6 +87,7 @@ import { EmergencyBeacon } from './combat/EmergencyBeacon';
 import { SquadList } from './combat/SquadList';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
 import { CAUSE_OF_DEATH, FACTION_BEHAVIOR, UNEMPLOYED, TEAM_ID_DEBUG_MONSTER, RACE_MONSTER } from './characters/CharacterConstants';
+import { setOnTileBuilt } from './utility/tasks/BuildTile';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
 import { DerelictSystem } from './events/DerelictSystem';
 import { DockingSystem } from './docking/DockingSystem';
@@ -257,6 +258,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const roomManager = new RoomManager(grid);
   tileRenderer.setRoomManager(roomManager);
   buildSystem.setRoomManager(roomManager);
+  // Wire BuildTile → RoomManager so rooms are detected after construction
+  setOnTileBuilt((tiles) => { roomManager.markDirty(tiles); });
   const oxygenSystem = new OxygenSystem(roomManager, grid);
   const vacuumSystem = new VacuumSystem(grid);
   const characterManager = new CharacterManager(grid, roomManager);
@@ -1038,7 +1041,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; tutorialFlags.vizModes = true; });
   inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
   inputManager.onKeyPress('KeyR', () => { uiManager.toggleJobRoster(); });
-  inputManager.onKeyPress('Space', () => { GameRules.bRunning = true; GameRules.togglePause(); tutorialFlags.timeSpeed = true; });
+  inputManager.onKeyPress('Space', () => {
+    if (!GameRules.bRunning) {
+      // First press: start the game
+      GameRules.bRunning = true;
+      if (GameRules.playerTimeScale === 0) GameRules.playerTimeScale = 1;
+    } else {
+      GameRules.togglePause();
+    }
+    tutorialFlags.timeSpeed = true;
+  });
   inputManager.onKeyPress('Digit1', () => { GameRules.bRunning = true; GameRules.setTimeScale(1); tutorialFlags.timeSpeed = true; });
   inputManager.onKeyPress('Digit2', () => { GameRules.bRunning = true; GameRules.setTimeScale(2); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
   inputManager.onKeyPress('Digit3', () => { GameRules.bRunning = true; GameRules.setTimeScale(4); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
