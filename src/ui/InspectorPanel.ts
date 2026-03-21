@@ -1174,35 +1174,66 @@ export class InspectorPanel {
     this.contentEl.appendChild(section);
   }
 
-  /** Room Rezone tab — zone type buttons (Lua ZoneRezoneTab). */
+  /** Room Rezone tab — scrollable zone list (Lua ZoneRezoneTab + ZoneRezoneButton). */
   private renderRoomRezone(room: Room) {
     const section = this.makeSection();
-    section.style.cssText = 'padding:8px;background:rgba(0,0,0,0.6);margin:4px 8px;border-radius:2px;';
-    // Zone type buttons matching Lua ZoneRezoneTab.tZoneOptions order
+    section.style.cssText = 'padding:4px 8px;max-height:400px;overflow-y:auto;';
+
+    // Zone icon mapping
+    const ZONE_ICONS: Record<string, string> = {
+      AIRLOCK: 'airlock', LIFESUPPORT: 'lifesupport', POWER: 'reactor',
+      REFINERY: 'refinery', RESIDENCE: 'residence', PUB: 'pub',
+      GARDEN: 'garden', FITNESS: 'fitness', RESEARCH: 'research',
+      INFIRMARY: 'infirmary', BRIG: 'generic', PLAIN: 'generic',
+    };
+
+    // Lua ZoneRezoneTab: scrollable list of ZoneRezoneButtons
     for (const zone of ZONE_LIST) {
       const config = ZONE_SPRITES[zone];
       if (!config) continue;
       const isActive = room.zone === zone;
+      const zoneName = ZoneType[zone] ?? 'PLAIN';
+
       const btn = document.createElement('div');
       btn.style.cssText = `
-        padding:6px 10px;margin-bottom:3px;cursor:pointer;font-size:22px; /* Lua dosissemibold22 */
-        background:${isActive ? 'rgba(223,162,0,0.25)' : 'transparent'};
-        color:${isActive ? AMBER : '#aaa'};
-        border:1px solid ${isActive ? AMBER : '#444'};
+        display:flex;align-items:center;gap:8px;
+        padding:8px 10px;margin-bottom:2px;cursor:pointer;
+        background:${isActive ? AMBER : 'rgba(40,35,25,0.9)'};
+        border:1px solid ${isActive ? AMBER : '#555'};
       `;
-      btn.textContent = config.name;
+
+      // Zone icon
+      const iconFile = ZONE_ICONS[zoneName] ?? 'generic';
+      const icon = document.createElement('img');
+      icon.src = `assets/ui/icons/ui_iconIso_${iconFile}.png`;
+      icon.style.cssText = `width:28px;height:28px;object-fit:contain;flex-shrink:0;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);'}`;
+      btn.appendChild(icon);
+
+      // Name + description
+      const textWrap = document.createElement('div');
+      textWrap.style.cssText = 'flex:1;';
+      const nameEl = document.createElement('div');
+      nameEl.textContent = config.name;
+      nameEl.style.cssText = `font-size:22px;font-family:'Dosis',sans-serif;font-weight:600;color:${isActive ? '#000' : AMBER};`;
+      textWrap.appendChild(nameEl);
+
+      // Zone is "Unzoned" for PLAIN
+      if (zone === ZoneType.PLAIN) {
+        nameEl.textContent = line('ZONEUI005TEXT') || 'Unzoned';
+      }
+
+      btn.appendChild(textWrap);
+
       if (!isActive) {
         btn.addEventListener('click', () => {
           if (this.onRezoneRoom) this.onRezoneRoom(room, zone);
           this.update();
         });
         btn.addEventListener('mouseenter', () => {
-          btn.style.background = 'rgba(223,162,0,0.15)';
-          btn.style.color = AMBER;
+          btn.style.background = 'rgba(223,162,0,0.2)';
         });
         btn.addEventListener('mouseleave', () => {
-          btn.style.background = 'transparent';
-          btn.style.color = '#aaa';
+          btn.style.background = 'rgba(40,35,25,0.9)';
         });
       }
       section.appendChild(btn);
