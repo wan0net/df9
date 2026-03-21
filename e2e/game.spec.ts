@@ -1379,18 +1379,18 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // ── UI Panel Tests ──────────────────────────────────────────
 
-  test('Research panel opens and closes with E key', async () => {
+  test('Research panel opens and closes with T key', async () => {
     // Initially hidden
     const visibleBefore = await page.evaluate(() => (window as any).__df9?.getResearchPanelVisible());
     expect(visibleBefore).toBe(false);
 
-    // Open with E
-    await page.keyboard.press('e');
+    // Open with T (moved from E to avoid erase-mode conflict)
+    await page.keyboard.press('t');
     const visibleAfterOpen = await page.evaluate(() => (window as any).__df9?.getResearchPanelVisible());
     expect(visibleAfterOpen).toBe(true);
 
-    // Close with E again
-    await page.keyboard.press('e');
+    // Close with T again
+    await page.keyboard.press('t');
     const visibleAfterClose = await page.evaluate(() => (window as any).__df9?.getResearchPanelVisible());
     expect(visibleAfterClose).toBe(false);
   });
