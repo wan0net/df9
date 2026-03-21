@@ -38,13 +38,13 @@ const COMPETENCY_COLORS: Record<number, string> = {
   5: 'rgb(28,91,118)',   // teal-blue
 };
 
-// Lua AFFINITY_ICONS — emoticon faces with colors
+// Lua AFFINITY_ICONS — actual sprite images from UI sprite sheet
 const AFFINITY_ICONS = [
-  { icon: '>:(', minAff: -Infinity, color: '#ff3333' },  // RED — bigfrown
-  { icon: ':(', minAff: -7.5, color: '#ff8800' },         // ORANGE — frown
-  { icon: ':|', minAff: DUTY_AFFINITY_DISLIKE, color: AMBER }, // AMBER — meh
-  { icon: ':)', minAff: DUTY_AFFINITY_LIKE, color: '#88cc00' }, // AMBERGREEN — smile
-  { icon: ':D', minAff: 7.5, color: '#44cc44' },          // GREEN — bigsmile
+  { icon: 'assets/ui/hud/ui_dialogicon_bigfrown.png', minAff: -10, color: '#ff3333' },
+  { icon: 'assets/ui/hud/ui_dialogicon_frown.png', minAff: -7.5, color: '#ff8800' },
+  { icon: 'assets/ui/hud/ui_dialogicon_meh.png', minAff: DUTY_AFFINITY_DISLIKE, color: AMBER },
+  { icon: 'assets/ui/hud/ui_dialogicon_smile.png', minAff: DUTY_AFFINITY_LIKE, color: '#88cc00' },
+  { icon: 'assets/ui/hud/ui_dialogicon_bigsmile.png', minAff: 7.5, color: '#44cc44' },
 ];
 
 function getAffinityDisplay(affinity: number): { icon: string; color: string } {
@@ -310,12 +310,15 @@ export class JobRoster {
           stars.textContent = renderStars(level);
           stars.style.cssText = `font-size:20px;color:${AMBER};letter-spacing:1px;`; // Lua dosissemibold20
 
-          // Affinity emoticon
+          // Affinity emoticon — use actual sprite images from UI sheet
           const affinity = char.getJobAffinity(jobId);
           const affDisplay = getAffinityDisplay(affinity);
           const affEl = document.createElement('div');
-          affEl.textContent = affDisplay.icon;
-          affEl.style.cssText = `font-size:18px;color:${affDisplay.color};margin-top:1px;`; // Lua dosissemibold18
+          affEl.style.cssText = 'margin-top:1px;text-align:center;';
+          const affImg = document.createElement('img');
+          affImg.src = affDisplay.icon;
+          affImg.style.cssText = 'width:18px;height:18px;image-rendering:pixelated;';
+          affEl.appendChild(affImg);
 
           td.appendChild(stars);
           td.appendChild(affEl);

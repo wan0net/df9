@@ -1139,7 +1139,7 @@ export class InspectorPanel {
         ${this.bar(line('INSPEC062TEXT'), room.oxygen, 255, room.oxygen < 50 ? '#f44' : '#48f')}
       </div>
       <div style="margin-bottom:4px;">
-        <span style="color:${room.sealed ? '#4f4' : '#f44'};">${room.sealed ? line('INSPEC153TEXT') : line('INSPEC152TEXT')}</span>
+        <span style="color:${room.bUserBlockOxygen ? '#4f4' : '#f44'};">${room.bUserBlockOxygen ? line('INSPEC153TEXT') : line('INSPEC152TEXT')}</span>
       </div>
       <div style="margin-bottom:4px;">
         ${line('INSPEC167TEXT')} <span style="color:#4f4;">+${room.nPowerOutput}</span> / ${line('INSPEC163TEXT')} <span style="color:#f44;">-${room.nPowerDraw}</span>

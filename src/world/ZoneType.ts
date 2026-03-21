@@ -169,20 +169,20 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
   },
 };
 
-/** All player-assignable zone types in the original Lua tOrderedZoneList order */
+/** Zone types in Lua ZoneRezoneTab.lua order (AIRLOCK first, PLAIN/Unzoned last) */
 export const ZONE_LIST: ZoneType[] = [
-  ZoneType.PLAIN,
-  ZoneType.GARDEN,
-  ZoneType.INFIRMARY,
+  ZoneType.AIRLOCK,
   ZoneType.LIFESUPPORT,
+  ZoneType.POWER,
+  ZoneType.REFINERY,
   ZoneType.RESIDENCE,
   ZoneType.PUB,
-  ZoneType.POWER,
-  ZoneType.AIRLOCK,
-  ZoneType.REFINERY,
+  ZoneType.GARDEN,
   ZoneType.FITNESS,
   ZoneType.RESEARCH,
+  ZoneType.INFIRMARY,
   ZoneType.BRIG,
+  ZoneType.PLAIN, // "Unzoned" — always last
 ];
 
 /**

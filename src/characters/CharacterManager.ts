@@ -452,8 +452,8 @@ export class CharacterManager {
       }
 
       // C-26: Remove unnecessary spacesuit after 10s in pressurized room
-      // Lua: UNNECESSARY_SPACESUIT_REMOVE = 10 seconds
-      if (char.bSpacesuit && !char.bSpacewalking && charRoom && charRoom.sealed && charRoom.oxygen > 200) {
+      // Check room O2 directly (not bSpacewalking, which equals bSpacesuit per Bug 41)
+      if (char.bSpacesuit && charRoom && charRoom.sealed && charRoom.oxygen > 200) {
         (char as any).nUnnecessarySpacesuit += dtSec;
         if ((char as any).nUnnecessarySpacesuit >= UNNECESSARY_SPACESUIT_REMOVE) {
           char.bSpacesuit = false;
