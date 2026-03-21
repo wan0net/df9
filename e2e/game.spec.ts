@@ -3638,8 +3638,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     const text = await roster.textContent();
     // Star ratings use ★ character (Unicode U+2605)
     expect(text).toContain('\u2605');
-    // Affinity emoticons — one of :D :) :| :( >:(
-    expect(text).toMatch(/:[D)|(]/);
+    // Affinity emoticons — now rendered as <img> sprites, check for img elements
+    const affImgs = await roster.locator('img[src*="dialogicon"]').count();
+    expect(affImgs).toBeGreaterThan(0);
     // Full job names in headers (Lua linecodes)
     expect(text).toContain('Builder');
     expect(text).toContain('Technician');
