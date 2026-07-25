@@ -613,44 +613,50 @@ export class InspectorPanel {
     // XP + Anger stats
     const statsDiv = document.createElement('div');
     statsDiv.style.cssText = 'margin-top:6px;font-size:20px;color:#ccc;'; // Lua nevisBody=20
-    let statsHtml = `
-      <div style="margin-bottom:4px;">${line('INSPUI007TEXT')} ${char.tStats.nXP}</div>
-      <div style="margin-bottom:4px;">${line('INSPUI008TEXT')} ${char.nAnger}</div>
-    `;
+    const appendStat = (text: string, style = 'margin-bottom:4px;') => {
+      const row = document.createElement('div');
+      row.style.cssText = style;
+      row.textContent = text;
+      statsDiv.appendChild(row);
+    };
+    appendStat(`${line('INSPUI007TEXT')} ${char.tStats.nXP}`);
+    appendStat(`${line('INSPUI008TEXT')} ${char.nAnger}`);
     // Join Date (Lua CitizenStatsTab: INSPEC124TEXT)
     const joinDate = GameRules.getFullStarDateString(char.nJoinTime);
-    statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC124TEXT')} ${joinDate}</div>`;
+    appendStat(`${line('INSPEC124TEXT')} ${joinDate}`);
     // Illness (Lua CitizenStatsTab: INSPEC146TEXT if none)
     const maladies = char.maladies ?? [];
     if (maladies.length > 0) {
-      statsHtml += `<div style="margin-bottom:4px;color:#f84;">${maladies.map(m => m.sFriendlyName ?? m.sMaladyName).join(', ')}</div>`;
+      appendStat(
+        maladies.map(m => m.sFriendlyName ?? m.sMaladyName).join(', '),
+        'margin-bottom:4px;color:#f84;',
+      );
     } else {
-      statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC146TEXT')}</div>`;
+      appendStat(line('INSPEC146TEXT'));
     }
     // Inventory (Lua INSPEC087TEXT)
     const invItems = char.inventory.getAll();
     const invStr = invItems.length > 0 ? invItems.map(i => `${i.sName}${i.nCount > 1 ? ` x${i.nCount}` : ''}`).join(', ') : line('INSPUI010TEXT');
-    statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC087TEXT')} ${invStr}</div>`;
+    appendStat(`${line('INSPEC087TEXT')} ${invStr}`);
     // Favorites (Lua INSPEC117TEXT, INSPEC049TEXT, INSPEC050TEXT)
     const favHobby = char.getFavorite('Activities');
     const favFood = char.getFavorite('Foods');
     const favBand = char.getFavorite('Bands');
-    if (favHobby) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC117TEXT')} ${getTopicName(favHobby)}</div>`;
-    if (favFood) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC049TEXT')} ${getTopicName(favFood)}</div>`;
-    if (favBand) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC050TEXT')} ${getTopicName(favBand)}</div>`;
+    if (favHobby) appendStat(`${line('INSPEC117TEXT')} ${getTopicName(favHobby)}`);
+    if (favFood) appendStat(`${line('INSPEC049TEXT')} ${getTopicName(favFood)}`);
+    if (favBand) appendStat(`${line('INSPEC050TEXT')} ${getTopicName(favBand)}`);
     // Friends (Lua INSPEC047TEXT — top 4 people with positive affinity, comma-separated names)
     const friends = char.getPeopleOfAffinity(5, true).sort((a, b) => b.nAffinity - a.nAffinity).slice(0, 4);
     const friendStr = friends.length > 0
       ? friends.map(f => getTopicName(f.sID)).join(', ')
       : line('INSPEC082TEXT');
-    statsHtml += `<div style="margin-bottom:2px;">${line('INSPEC047TEXT')} ${friendStr}</div>`;
+    appendStat(`${line('INSPEC047TEXT')} ${friendStr}`, 'margin-bottom:2px;');
     // Enemies (Lua INSPEC048TEXT — top 4 people with negative affinity, comma-separated names)
     const enemies = char.getPeopleOfAffinity(-5, false).sort((a, b) => a.nAffinity - b.nAffinity).slice(0, 4);
     const enemyStr = enemies.length > 0
       ? enemies.map(e => getTopicName(e.sID)).join(', ')
       : line('INSPEC082TEXT');
-    statsHtml += `<div style="margin-bottom:2px;">${line('INSPEC048TEXT')} ${enemyStr}</div>`;
-    statsDiv.innerHTML = statsHtml;
+    appendStat(`${line('INSPEC048TEXT')} ${enemyStr}`, 'margin-bottom:2px;');
     container.appendChild(statsDiv);
   }
 
@@ -1066,21 +1072,25 @@ export class InspectorPanel {
 
   /** Object About tab — description, builder info (Lua ObjectAboutTab). */
   private renderObjectAboutTab(container: HTMLDivElement, obj: EnvObject) {
-    let html = '';
+    const appendAboutRow = (text: string, style: string) => {
+      const row = document.createElement('div');
+      row.style.cssText = style;
+      row.textContent = text;
+      container.appendChild(row);
+    };
     // Description (Lua ObjectInspector: rObject:getDescription())
     const desc = obj.tData.description ?? '';
     if (desc) {
-      html += `<div style="margin-bottom:8px;color:#ccc;font-size:20px;">${desc}</div>`;
+      appendAboutRow(desc, 'margin-bottom:8px;color:#ccc;font-size:20px;');
     }
     // Builder name (Lua INSPEC111TEXT)
     if (obj.sBuilderName) {
-      html += `<div style="margin-bottom:4px;">${line('INSPEC111TEXT')} ${obj.sBuilderName}</div>`;
+      appendAboutRow(`${line('INSPEC111TEXT')} ${obj.sBuilderName}`, 'margin-bottom:4px;');
     }
     // Build time (Lua INSPEC110TEXT)
     if (obj.sBuildTime) {
-      html += `<div style="margin-bottom:4px;">${line('INSPEC110TEXT')} ${obj.sBuildTime}</div>`;
+      appendAboutRow(`${line('INSPEC110TEXT')} ${obj.sBuildTime}`, 'margin-bottom:4px;');
     }
-    container.innerHTML = html;
   }
 
   // ── Room Inspector ──────────────────────────────────────

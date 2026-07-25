@@ -25,6 +25,7 @@ export interface FindPathOptions {
   allowLockedDoors?: boolean;
   softBlockPenalty?: number;
   breachPenalty?: number;
+  /** @deprecated Paths are no longer cached because grid/door mutations are external. */
   cacheTtlMs?: number;
 }
 
@@ -46,21 +47,9 @@ export const WALKABLE_SPACEWALK: WalkableFilter = (t) =>
   t === TileType.FLOOR || t === TileType.DOOR || t === TileType.SPACE ||
   t === TileType.FLOOR_PENDING || t === TileType.WALL_PENDING;
 
-const DEFAULT_CACHE_TTL_MS = 1000;
 const DEFAULT_SOFT_BLOCK_PENALTY = 6;
 const DEFAULT_BREACH_PENALTY = 60;
 const AIRLOCK_TRAVERSAL_COST = 15;
-
-interface PathCacheEntry {
-  expiresAt: number;
-  path: PathNode[] | null;
-}
-
-const pathCache = new Map<string, PathCacheEntry>();
-const gridIds = new WeakMap<TileGrid, number>();
-const filterIds = new WeakMap<WalkableFilter, number>();
-let nextGridId = 1;
-let nextFilterId = 1;
 
 // ── Binary min-heap for O(log n) open list ───────────────────────────────
 
@@ -146,28 +135,6 @@ export function findPath(
     if (!walkableFilter(endType)) return null;
   }
 
-  const cacheKey = getCacheKey(
-    grid,
-    startX,
-    startY,
-    endX,
-    endY,
-    maxNodes,
-    walkableFilter,
-    bPathToNearest,
-    softBlockedTiles,
-    options,
-    startSuited,
-  );
-  const cacheHit = pathCache.get(cacheKey);
-  if (cacheHit && cacheHit.expiresAt > Date.now()) {
-    return clonePath(cacheHit.path);
-  }
-
-  if (cacheHit && cacheHit.expiresAt <= Date.now()) {
-    pathCache.delete(cacheKey);
-  }
-
   // Lua Pathfinder.lua:264-267 — bCharacterStartOnWallCheat:
   // Characters can end up on wall tiles due to construction. The start tile
   // is never checked against walkableFilter, so they can path off naturally
@@ -204,10 +171,7 @@ export function findPath(
 
     // Goal check
     if (current.x === endX && current.y === endY) {
-      const result = reconstructPath(current);
-      setCachedPath(cacheKey, result, options.cacheTtlMs);
-      pruneExpiredCacheEntries();
-      return result;
+      return reconstructPath(current);
     }
 
     // bPathToNearest: if we're adjacent to the target, we've arrived
@@ -215,10 +179,7 @@ export function findPath(
       const neighbors = grid.getDiagonalNeighbors(current.x, current.y);
       for (const n of neighbors) {
         if (n.x === endX && n.y === endY) {
-          const result = reconstructPath(current);
-          setCachedPath(cacheKey, result, options.cacheTtlMs);
-          pruneExpiredCacheEntries();
-          return result;
+          return reconstructPath(current);
         }
       }
     }
@@ -281,8 +242,6 @@ export function findPath(
     }
   }
 
-  setCachedPath(cacheKey, null, options.cacheTtlMs);
-  pruneExpiredCacheEntries();
   return null; // No path found
 }
 
@@ -392,85 +351,4 @@ function resolveDoorForTransition(
 
 function tileKey(x: number, y: number): string {
   return `${x},${y}`;
-}
-
-function getCacheKey(
-  grid: TileGrid,
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number,
-  maxNodes: number,
-  walkableFilter: WalkableFilter,
-  bPathToNearest: boolean,
-  softBlockedTiles: Set<string> | undefined,
-  options: FindPathOptions,
-  startSuited: boolean,
-): string {
-  const gridId = getGridId(grid);
-  const filterId = getFilterId(walkableFilter);
-  const softBlockedSig = getSoftBlockedSignature(softBlockedTiles);
-  const roomAware = options.roomManager ? 1 : 0;
-  const allowLocked = options.allowLockedDoors ? 1 : 0;
-  return [
-    gridId,
-    startX,
-    startY,
-    endX,
-    endY,
-    maxNodes,
-    filterId,
-    bPathToNearest ? 1 : 0,
-    startSuited ? 1 : 0,
-    roomAware,
-    allowLocked,
-    options.softBlockPenalty ?? DEFAULT_SOFT_BLOCK_PENALTY,
-    options.breachPenalty ?? DEFAULT_BREACH_PENALTY,
-    softBlockedSig,
-  ].join(':');
-}
-
-function getGridId(grid: TileGrid): number {
-  let id = gridIds.get(grid);
-  if (id !== undefined) return id;
-  id = nextGridId++;
-  gridIds.set(grid, id);
-  return id;
-}
-
-function getFilterId(filter: WalkableFilter): number {
-  let id = filterIds.get(filter);
-  if (id !== undefined) return id;
-  id = nextFilterId++;
-  filterIds.set(filter, id);
-  return id;
-}
-
-function getSoftBlockedSignature(softBlockedTiles?: Set<string>): string {
-  if (!softBlockedTiles || softBlockedTiles.size === 0) return '-';
-  if (softBlockedTiles.size > 128) return `large-${softBlockedTiles.size}`;
-  return Array.from(softBlockedTiles).sort().join('|');
-}
-
-function setCachedPath(key: string, path: PathNode[] | null, ttlMs?: number): void {
-  const ttl = Math.max(1, ttlMs ?? DEFAULT_CACHE_TTL_MS);
-  pathCache.set(key, {
-    expiresAt: Date.now() + ttl,
-    path: clonePath(path),
-  });
-}
-
-function clonePath(path: PathNode[] | null): PathNode[] | null {
-  if (!path) return null;
-  return path.map((node) => ({ x: node.x, y: node.y, bSuited: node.bSuited }));
-}
-
-function pruneExpiredCacheEntries(): void {
-  if (pathCache.size < 256) return;
-  const now = Date.now();
-  for (const [key, entry] of pathCache) {
-    if (entry.expiresAt <= now) {
-      pathCache.delete(key);
-    }
-  }
 }

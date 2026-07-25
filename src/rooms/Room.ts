@@ -6,6 +6,7 @@ import { TEAM_ID_PLAYER, TEAM_ID_PLAYER_ABANDONED, OXYGEN_LOW, OXYGEN_SUFFOCATIN
 import { GameRules } from '../core/GameRules';
 import { SpatialAudio } from '../audio/SpatialAudio';
 import type { TileGrid } from '../world/TileGrid';
+import type { EnvObject } from '../envobjects/EnvObject';
 
 type FloatAwayObject = { remove: () => void };
 type FloatAwayCharacter = { kill: (cause: number) => void };
@@ -16,6 +17,19 @@ interface FloatAwayContext {
   getCharactersAtTile?: (tx: number, ty: number) => FloatAwayCharacter[];
   removeRoom?: (room: Room) => void;
   deathCause?: number;
+}
+
+export interface PropPlacement {
+  addr: string;
+  sName: string;
+  tx: number;
+  ty: number;
+  bFlipX: boolean;
+  bFlipY: boolean;
+  nCost: number;
+  commandId: number;
+  buildGhost: EnvObject;
+  bCanBuildInSpace: boolean;
 }
 
 // ── Room constants — mirrors Room.lua:46-59 ─────────────────────────────────
@@ -102,6 +116,8 @@ export class Room {
   nCharacters = 0;
   /** Environment object IDs in this room. */
   tProps = new Set<number>();
+  /** Pending prop ghosts owned by this room. */
+  private tPropPlacements = new Map<string, PropPlacement>();
   /** Door tile keys ("x,y") in this room's boundaries. */
   tDoors = new Set<string>();
   /** Wall tile entries: keyed by "x,y", stores wall direction info. */
@@ -135,6 +151,8 @@ export class Room {
   nLevel = 1;
   /** Unique zone name (e.g. "Botany Lab Alpha"). */
   uniqueZoneName = '';
+  /** Exterior fallback room marker. */
+  bSpaceRoom = false;
 
   // ── Visibility tracking — mirrors Room.lua ────────────────────────────────
   /** Last time a player character was in this room (GameRules.elapsedTime). */
@@ -147,8 +165,10 @@ export class Room {
   tFailedPathfinds = new Map<number, number>();
 
   // ── Oxygen cache ──────────────────────────────────────────────────────────
-  /** Cached oxygen score (Lua per-tile average mapped to 0-65535 scale). */
+  /** Cached oxygen score (Lua per-tile average on the native tile scale). */
   private nOxygenScore = 0;
+  /** Cached total oxygen across all room tiles (Lua parity/debugging). */
+  private nTotalOxygen = 0;
   /** Whether oxygen score needs recalculation. */
   bOxygenScoreOutOfDate = true;
 
@@ -190,6 +210,30 @@ export class Room {
     this.tiles.push({ x, y });
   }
 
+  addPropPlacement(placement: PropPlacement): void {
+    this.tPropPlacements.set(placement.addr, placement);
+  }
+
+  getPropPlacements(): PropPlacement[] {
+    return Array.from(this.tPropPlacements.values());
+  }
+
+  getPropPlacementAt(tx: number, ty: number): PropPlacement | undefined {
+    return this.tPropPlacements.get(`${tx},${ty}`);
+  }
+
+  removePropGhostAt(tx: number, ty: number): PropPlacement | undefined {
+    const placement = this.tPropPlacements.get(`${tx},${ty}`);
+    if (placement) {
+      this.tPropPlacements.delete(`${tx},${ty}`);
+    }
+    return placement;
+  }
+
+  clearPropPlacements(): void {
+    this.tPropPlacements.clear();
+  }
+
   get size(): number {
     return this.tiles.length;
   }
@@ -201,19 +245,25 @@ export class Room {
     return this.bBreach;
   }
 
-  /** Get oxygen score for this room. Uses `oxygen` field (0-255) mapped to Lua scale.
-   *  Lua stores per-tile 0-65535; we use room-level 0-255. Scale for comparison with
-   *  character constants (which use Lua scale). */
+  /** Get oxygen score for this room on Lua's native tile scale. */
   getOxygenScore(): number {
-    if (this.bOxygenScoreOutOfDate) {
-      this.bOxygenScoreOutOfDate = false;
-      // Map our 0-255 oxygen to Lua's 0-65535 scale for threshold comparison
-      this.nOxygenScore = (this.oxygen / 255) * 65535;
-    }
     return this.nOxygenScore;
   }
 
-  /** Mark oxygen as needing recalculation. */
+  /** Cached total oxygen across all room tiles (Lua parity/debugging). */
+  getTotalOxygen(): number {
+    return this.nTotalOxygen;
+  }
+
+  /** OxygenSystem updates both the UI-facing room oxygen and Lua-scale score. */
+  setOxygenStats(displayOxygen: number, oxygenScore: number, totalOxygen: number): void {
+    this.oxygen = displayOxygen;
+    this.nOxygenScore = oxygenScore;
+    this.nTotalOxygen = totalOxygen;
+    this.bOxygenScoreOutOfDate = false;
+  }
+
+  /** Mark oxygen as needing recalculation. Keeps the last known score until refreshed. */
   invalidateOxygenScore(): void {
     this.bOxygenScoreOutOfDate = true;
   }
@@ -295,7 +345,7 @@ export class Room {
   updateEmergency(): void {
     if (this.nLastVisibility === VISIBILITY_DIM) {
       this.setLightingScheme(LIGHTING_SCHEME_DIM);
-    } else if (this.nPowerDraw > 0 && this.nPowerSupply === 0) {
+    } else if (this.nPowerSupply === 0) {
       this.setLightingScheme(LIGHTING_SCHEME_VACUUM);
     } else if (this.bBurning || this.bEmergencyAlarmEnabled || this.bPendingBreach ||
                this.bBreach || this.getOxygenScore() < OXYGEN_SUFFOCATING) {

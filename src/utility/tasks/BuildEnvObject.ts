@@ -9,6 +9,7 @@ import { Base } from '../../core/Base';
 import { TileType } from '../../world/TileTypes';
 import { MORALE_BUILD_BASE } from '../../characters/CharacterConstants';
 import { Door } from '../../envobjects/Door';
+import { EnvObjectManager } from '../../envobjects/EnvObjectManager';
 import type { EnvObject } from '../../envobjects/EnvObject';
 import type { TileGrid } from '../../world/TileGrid';
 
@@ -24,6 +25,15 @@ export class BuildEnvObject extends Task {
     this.targetObj = targetObj;
     this.commandId = commandId;
     this.grid = grid ?? null;
+    this.pathToNearest = true;
+  }
+
+  private clearPlacement(): void {
+    this.targetObj.rRoom?.removePropGhostAt(this.targetObj.tileX, this.targetObj.tileY);
+  }
+
+  private isTargetManaged(): boolean {
+    return EnvObjectManager.getObjects().includes(this.targetObj);
   }
 
   getAdvertisedNeeds(): NeedAdvertisement[] {
@@ -35,7 +45,13 @@ export class BuildEnvObject extends Task {
 
     // Verify object is still unbuilt
     if (this.targetObj.bBuilt) {
+      this.clearPlacement();
       CommandQueue.complete(this.commandId);
+      this.fail();
+      return;
+    }
+
+    if (!this.isTargetManaged() || !CommandQueue.get(this.commandId)) {
       this.fail();
       return;
     }
@@ -50,6 +66,11 @@ export class BuildEnvObject extends Task {
   }
 
   protected onUpdate(_dt: number) {
+    if (!this.isTargetManaged() || !CommandQueue.get(this.commandId)) {
+      this.fail();
+      return;
+    }
+
     // Don't count build time while character is still walking
     if (this.character && (this.character.moving || this.character.path.length > 0)) {
       this.elapsedTime = 0;
@@ -94,6 +115,7 @@ export class BuildEnvObject extends Task {
 
     // Build the object (triggers re-render with correct DOOR tile type)
     this.targetObj.markBuilt();
+    this.clearPlacement();
 
     CommandQueue.complete(this.commandId);
 
@@ -104,6 +126,15 @@ export class BuildEnvObject extends Task {
   }
 
   protected onFail() {
+    const command = CommandQueue.get(this.commandId);
+    if (!this.isTargetManaged() || !command) {
+      this.clearPlacement();
+      if (command) {
+        CommandQueue.cancel(this.commandId);
+      }
+      return;
+    }
+
     CommandQueue.release(this.commandId);
   }
 }

@@ -33,8 +33,9 @@ export class PostFX {
     // Lua uses multiple blur passes with additive blending at various intensities (.3, .2, .2, .2, .15)
     // UnrealBloomPass is a good approximation
     const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
-    this.bloomPass = new UnrealBloomPass(resolution, 0.3, 0.4, 0.85);
-    // strength=0.3 (subtle), radius=0.4 (spread), threshold=0.85 (only bright areas bloom)
+    this.bloomPass = new UnrealBloomPass(resolution, 0.42, 0.5, 0.72);
+    // Slightly stronger than the previous baseline so bright sprites and HUD accents
+    // pick up a soft DF-9-like halo without washing out the whole scene.
     this.composer.addPass(this.bloomPass);
 
     // Output pass for tone mapping

@@ -130,7 +130,9 @@ export class PowerSystem {
         }
         this.prevPowered.set(r.id, bPowered);
 
-        let nRemainingForConsumers = nTotalPowerSupplied;
+        // Lua includes the room itself in tPowerConsumers, so its per-tile
+        // draw consumes supply before that same supply can power props.
+        let nRemainingForConsumers = Math.max(0, nTotalPowerSupplied - nRoomDraw);
         for (const consumer of objectConsumers) {
           if (consumer.draw <= nRemainingForConsumers) {
             consumer.obj.bHasPower = true;

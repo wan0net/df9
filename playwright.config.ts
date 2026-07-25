@@ -1,19 +1,25 @@
 import { defineConfig } from '@playwright/test';
 
+const testPort = Number(process.env.PLAYWRIGHT_PORT ?? 5173);
+
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 60_000,
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR ?? `/tmp/df9-playwright-${process.pid}`,
+  timeout: 120_000,
   expect: { timeout: 15_000 },
-  fullyParallel: false,
+  fullyParallel: true,
   retries: 0,
-  workers: 1,
+  workers: process.env.CI ? 2 : 4,
   reporter: 'list',
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${testPort}`,
     headless: true,
     viewport: { width: 1280, height: 720 },
     actionTimeout: 10_000,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
 
   projects: [
@@ -29,8 +35,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
-    port: 5173,
+    command: `VITE_E2E=true npm run dev -- --mode e2e --port ${testPort}`,
+    port: testPort,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },

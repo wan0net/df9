@@ -198,6 +198,8 @@ export class Character {
   private roomMoraleTickAccum = 0;
   /** Rolling room morale buffer (Lua tRoomScores, 5 samples averaged). */
   private tRoomScores: number[] = [];
+  /** Rolling average of all needs for morale debug parity (Lua nAllNeedsAverage). */
+  nAllNeedsAverage = 0;
 
   // ── Memory system (mirrors Lua Character.tMemory) ────────────
   /** Timed memory store: key → { value, expiry (GameRules.elapsedTime) } */
@@ -617,14 +619,6 @@ export class Character {
         return;
       }
 
-      // Low O2 morale penalty — mirrors Character.lua:6063-6069
-      // Fires when no spacesuit and average O2 < MORALE_LOW_OXYGEN_THRESHOLD (Lua tile scale 0-65535)
-      const o2LuaScale = this.needs.oxygen / 100 * 65535;
-      if (!this.bSpacesuit && o2LuaScale < MORALE_LOW_OXYGEN_THRESHOLD) {
-        this.addMorale(MORALE_LOW_OXYGEN);
-        return; // Skip other morale effects this tick (mirrors Lua early return)
-      }
-
       // Morale drifts based on needs (needs range -100..+100)
       // Lua tickMorale lines 6036-6061
       let bLogged = false;
@@ -634,15 +628,36 @@ export class Character {
         Fun: this.needs.amusement,
         Social: this.needs.social,
         Duty: this.needs.duty,
-      };
+      } as const;
       const avgNeed = (needValues.Hunger + needValues.Energy + needValues.Fun + needValues.Social + needValues.Duty) / 5;
-      let sLowestNeed: string | null = null;
-      let sHighestNeed: string | null = null;
+      this.nAllNeedsAverage = avgNeed;
+      const needLogIds: Record<keyof typeof needValues, { low: string; high: string }> = {
+        Hunger: { low: 'MORALE_LOW_HUNGER', high: 'MORALE_HIGH_HUNGER' },
+        Energy: { low: 'MORALE_LOW_ENERGY', high: 'MORALE_HIGH_ENERGY' },
+        Fun: { low: 'MORALE_LOW_AMUSEMENT', high: 'MORALE_HIGH_AMUSEMENT' },
+        Social: { low: 'MORALE_LOW_SOCIAL', high: 'MORALE_HIGH_SOCIAL' },
+        Duty: { low: 'MORALE_LOW_DUTY', high: 'MORALE_HIGH_DUTY' },
+      };
+      const tLowestNeeds: (keyof typeof needValues)[] = [];
+      const tHighestNeeds: (keyof typeof needValues)[] = [];
       let nLowest = Infinity;
       let nHighest = -Infinity;
-      for (const [name, val] of Object.entries(needValues)) {
-        if (val < nLowest) { nLowest = val; sLowestNeed = name; }
-        if (val > nHighest) { nHighest = val; sHighestNeed = name; }
+      let bAllNeedsMet = true;
+      for (const [name, val] of Object.entries(needValues) as [keyof typeof needValues, number][]) {
+        if (val < MORALE_NEEDS_LOW) {
+          bAllNeedsMet = false;
+          if (val < nLowest) {
+            nLowest = val;
+            tLowestNeeds.length = 0;
+          }
+          if (val === nLowest) tLowestNeeds.push(name);
+        } else if (val > MORALE_NEEDS_HIGH) {
+          if (val > nHighest) {
+            nHighest = val;
+            tHighestNeeds.length = 0;
+          }
+          if (val === nHighest) tHighestNeeds.push(name);
+        }
       }
 
       if (avgNeed < MORALE_NEEDS_LOW) {
@@ -652,13 +667,22 @@ export class Character {
       }
 
       // Needs-based log (Lua Character.lua:6049-6061, rate-limited)
-      if ((sLowestNeed || sHighestNeed) && !this.retrieveMemory(MEMORY_LOGGED_MORALE_RECENTLY)) {
-        if (avgNeed < MORALE_NEEDS_LOW && sLowestNeed) {
-          addLog('MORALE_LOW_NEED', this);
-          bLogged = true;
-        } else if (avgNeed > MORALE_NEEDS_HIGH && sHighestNeed) {
-          addLog('MORALE_HIGH_NEED', this);
-          bLogged = true;
+      if ((tLowestNeeds.length > 0 || tHighestNeeds.length > 0) && !this.retrieveMemory(MEMORY_LOGGED_MORALE_RECENTLY)) {
+        const tCandidates = (tLowestNeeds.length > 0 ? tLowestNeeds : tHighestNeeds).map((sNeed) =>
+          tLowestNeeds.length > 0 ? needLogIds[sNeed].low : needLogIds[sNeed].high
+        );
+        for (let i = tCandidates.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [tCandidates[i], tCandidates[j]] = [tCandidates[j], tCandidates[i]];
+        }
+        for (const sLogType of tCandidates) {
+          const nLogCountBefore = this.tLog.length + this.tLogQueue.length;
+          addLog(sLogType, this);
+          const nLogCountAfter = this.tLog.length + this.tLogQueue.length;
+          if (nLogCountAfter > nLogCountBefore) {
+            bLogged = true;
+            break;
+          }
         }
         if (bLogged) {
           this.storeMemory(MEMORY_LOGGED_MORALE_RECENTLY, true, LOG_MORALE_NEEDS_RATE);
@@ -666,10 +690,16 @@ export class Character {
       }
 
       // Needs-met bonus — mirrors Character.lua:6067-6069
-      const bAllNeedsMet = this.needs.hunger > 0 && this.needs.energy > 0 &&
-        this.needs.amusement > 0 && this.needs.social > 0;
       if (bAllNeedsMet && this.nMorale < 0) {
         this.addMorale(MORALE_NEEDS_MET_BONUS);
+      }
+
+      // Low O2 morale penalty — mirrors Character.lua:6063-6069
+      // Fires when no spacesuit and average O2 < MORALE_LOW_OXYGEN_THRESHOLD (Lua tile scale 0-65535)
+      const o2LuaScale = this.needs.oxygen / 100 * 65535;
+      if (!this.bSpacesuit && o2LuaScale < MORALE_LOW_OXYGEN_THRESHOLD) {
+        this.addMorale(MORALE_LOW_OXYGEN);
+        return; // Skip later morale effects this tick (mirrors Lua early return)
       }
 
       // Stuff satisfaction log (Lua Character.lua:6072-6076)

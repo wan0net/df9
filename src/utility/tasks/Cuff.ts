@@ -17,11 +17,10 @@ export class Cuff extends Task {
   constructor(targetCharId: number) {
     super();
     this.targetCharId = targetCharId;
-    this.nJobExperience = 15;
   }
 
   getAdvertisedNeeds(): NeedAdvertisement[] {
-    return [{ need: 'duty', amount: 20 }];
+    return [{ need: 'duty', amount: 10 }];
   }
 
   getTargetCharId(): number {
@@ -39,6 +38,7 @@ export class Cuff extends Task {
   }
 
   protected override onComplete(): void {
+    super.onComplete();
     // Cuff the target character and assign to nearest brig
     // The caller (CharacterManager) resolves the target by ID and calls cuff()
     // We store a flag so the manager knows this completed successfully

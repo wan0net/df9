@@ -9,18 +9,20 @@ import {
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
   STATUS_DEAD,
   OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH, SPACESUIT_MAX_OXYGEN,
-  OXYGEN_LOW, OXYGEN_SUFFOCATING,
+  OXYGEN_LOW, OXYGEN_SUFFOCATING, SPACESUIT_OXYGEN_SUFFOCATING,
+  VACUUM_THRESHOLD, VACUUM_THRESHOLD_END,
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
   JOB_EXPERIENCE_RATE, UNNECESSARY_SPACESUIT_REMOVE,
   RACE_KILLBOT, RACE_MONSTER, CHAT_COOLDOWN,
   ANGER_MAX, FACTION_BEHAVIOR,
 } from './CharacterConstants';
 import { SpatialAudio } from '../audio/SpatialAudio';
-import { TileGrid } from '../world/TileGrid';
+import { Direction, getAdjacentTile, TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { RoomManager } from '../rooms/RoomManager';
 import { Room, VISIBILITY_FULL } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
+import { ResearchZone } from '../zones/ResearchZone';
 import { findPath, WALKABLE_DEFAULT, WALKABLE_SPACEWALK } from '../pathfinding/AStar';
 import { INITIAL_CREW } from '../config';
 import { GameRules } from '../core/GameRules';
@@ -390,8 +392,9 @@ export class CharacterManager {
       const room = charRoom;
       const OXYGEN_TICK = 0.25;
 
-      // Non-breathing races (MONSTER, KILLBOT) don't need O2
-      if (!char.doesBreathe()) {
+      // Lua fully exempts killbots. Monsters still run the space branch below,
+      // but are clamped above suffocation in indoor low-O2 rooms.
+      if (char.tStats.nRace === RACE_KILLBOT) {
         char.needs.updateOxygen(255);
         char.suffocationTime = 0;
         if (char.bSpacewalking) char.bSpacewalking = false;
@@ -419,6 +422,8 @@ export class CharacterManager {
             if (tileType === TileType.SPACE) {
               char.suffocationTime += 15;
               newO2 = 0;
+            } else if (char.tStats.nRace === RACE_MONSTER) {
+              newO2 = Math.max(OXYGEN_SUFFOCATING + 1, newO2);
             }
 
             if (newO2 < OXYGEN_SUFFOCATING) {
@@ -434,8 +439,8 @@ export class CharacterManager {
           } else {
             // Wearing spacesuit — consume suit O2 (Lua lines 1712-1745)
             char.nSuitOxygen -= OXYGEN_PER_SECOND * o2dt;
-            if (char.nSuitOxygen <= 0) {
-              char.nSuitOxygen = 0;
+            if (char.nSuitOxygen < SPACESUIT_OXYGEN_SUFFOCATING) {
+              if (char.nSuitOxygen < 0) char.nSuitOxygen = 0;
               char.suffocationTime += o2dt;
               char.bLowOxygen = true;
             } else {
@@ -448,7 +453,17 @@ export class CharacterManager {
 
       // Kill if suffocated too long
       if (char.suffocationTime >= OXYGEN_SUFFOCATION_UNTIL_DEATH && char.isAlive()) {
-        char.kill(CAUSE_OF_DEATH.SUFFOCATION);
+        char.kill(this.getSuffocationDeathCause(char.tileX, char.tileY));
+      } else if (
+        char.isAlive() &&
+        !char.bSpacesuit &&
+        char.tStats.nRace !== RACE_KILLBOT &&
+        this.grid.get(char.tileX, char.tileY) === TileType.SPACE &&
+        char.bLowOxygen
+      ) {
+        // Character.lua kills unsuited characters in SPACE on the first
+        // suffocation update, even before the normal timer expires.
+        char.kill(CAUSE_OF_DEATH.SUCKED_INTO_SPACE);
       }
 
       // C-26: Remove unnecessary spacesuit after 10s in pressurized room
@@ -614,6 +629,22 @@ export class CharacterManager {
       this.aiTickAccum -= this.aiTickInterval;
       this.runAI();
     }
+  }
+
+  /** Lua World.isDestroyedWallAdjacentToSpace + Character death selection. */
+  private getSuffocationDeathCause(tileX: number, tileY: number): number {
+    if (this.grid.get(tileX, tileY) === TileType.SPACE) {
+      return CAUSE_OF_DEATH.SUCKED_INTO_SPACE;
+    }
+    if (this.grid.get(tileX, tileY) === TileType.WALL_DESTROYED) {
+      for (let direction = Direction.NW; direction <= Direction.W; direction++) {
+        const [adjX, adjY] = getAdjacentTile(tileX, tileY, direction);
+        if (this.grid.get(adjX, adjY) === TileType.SPACE) {
+          return CAUSE_OF_DEATH.SUCKED_INTO_SPACE;
+        }
+      }
+    }
+    return CAUSE_OF_DEATH.SUFFOCATION;
   }
 
   /** Get a random tile from an existing room (for spawn placement). */
@@ -974,19 +1005,7 @@ export class CharacterManager {
             9,
           ));
         }
-        // Build objects (doors on walls, etc.) while spacewalking
-        for (const cmd of CommandQueue.getAvailable('build_object')) {
-          const obj = EnvObjectManager.getObjects().find(
-            o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
-          );
-          if (obj) {
-            outdoorOptions.push(new ActivityOption(
-              new BuildEnvObject(obj, cmd.id, this.grid),
-              cmd.tileX, cmd.tileY,
-              8,
-            ));
-          }
-        }
+        this.addBuildEnvObjectOptions(outdoorOptions, 8, true);
         for (const cmd of CommandQueue.getAvailable('mine')) {
           outdoorOptions.push(new ActivityOption(
             new Mine(cmd.id, this.grid),
@@ -1128,17 +1147,7 @@ export class CharacterManager {
           cmd.tileX, cmd.tileY, 9,
         ));
       }
-      for (const cmd of CommandQueue.getAvailable('build_object')) {
-        const obj = EnvObjectManager.getObjects().find(
-          o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
-        );
-        if (obj) {
-          outdoorOptions.push(new ActivityOption(
-            new BuildEnvObject(obj, cmd.id, this.grid),
-            cmd.tileX, cmd.tileY, 8,
-          ));
-        }
-      }
+      this.addBuildEnvObjectOptions(outdoorOptions, 8, true);
       for (const cmd of CommandQueue.getAvailable('mine')) {
         outdoorOptions.push(new ActivityOption(
           new Mine(cmd.id, this.grid),
@@ -1280,6 +1289,38 @@ export class CharacterManager {
     this.wander(char);
   }
 
+  /** BuildEnvObject options from room-owned prop placements. */
+  private addBuildEnvObjectOptions(
+    options: ActivityOption[],
+    basePriority: number,
+    includeSpaceRoom: boolean,
+  ): void {
+    const seen = new Set<string>();
+    for (const placement of this.roomManager.getAllPropPlacements(includeSpaceRoom)) {
+      const cmd = CommandQueue.get(placement.commandId);
+      if (!cmd || cmd.status !== 'pending') continue;
+      if (placement.buildGhost.bBuilt) continue;
+      const key = `${placement.commandId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const task = new BuildEnvObject(placement.buildGhost, placement.commandId, this.grid);
+      task.rTargetObject = placement.buildGhost;
+      const opt = new ActivityOption(
+        task,
+        placement.tx,
+        placement.ty,
+        basePriority,
+        {
+          tags: { WorkShift: true, Job: BUILDER },
+          prerequisites: { EmptyHands: true },
+        },
+      );
+      opt.targetObject = placement.buildGhost;
+      options.push(opt);
+    }
+  }
+
   /** Gather all available activity options for a character. */
   private gatherOptions(character: Character): ActivityOption[] {
     const options: ActivityOption[] = [];
@@ -1345,20 +1386,8 @@ export class CharacterManager {
       ));
     }
 
-    // ── Build object commands ────────────────────────────────
-    for (const cmd of CommandQueue.getAvailable('build_object')) {
-      const obj = EnvObjectManager.getObjects().find(
-        o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
-      );
-      if (obj) {
-        const priority = job === BUILDER ? 8 : 3;
-        options.push(new ActivityOption(
-          new BuildEnvObject(obj, cmd.id, this.grid),
-          cmd.tileX, cmd.tileY,
-          priority,
-        ));
-      }
-    }
+    // ── Build object jobs ───────────────────────────────────
+    this.addBuildEnvObjectOptions(options, job === BUILDER ? 8 : 3, false);
 
     // ── Build tile commands (floor/wall construction) ─────
     // Floors get higher priority than walls so builders complete the interior
@@ -1513,8 +1542,11 @@ export class CharacterManager {
     if (job === SCIENTIST) {
       for (const desk of EnvObjectManager.getObjectsByType('ResearchDesk')) {
         if (!desk.bBuilt || !desk.isFunctioning()) continue;
+        const room = this.roomManager.getRoomAt(desk.tileX, desk.tileY);
+        const researchZone = room?.zoneObj;
+        if (!(researchZone instanceof ResearchZone) || !researchZone.hasActiveResearch()) continue;
         options.push(new ActivityOption(
-          new ResearchInLab(),
+          new ResearchInLab(researchZone),
           desk.tileX, desk.tileY,
           5 + shiftBoost,
           { tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true } },
@@ -1863,7 +1895,7 @@ export class CharacterManager {
     }
 
     // ── Oxygen response (branching on bravery) ───────────────
-    if (room && room.oxygen < 30) {
+    if (room && room.getOxygenScore() < OXYGEN_LOW) {
       // Low bravery: panic
       options.push(new ActivityOption(
         new PanicOxygen(),
@@ -2081,19 +2113,28 @@ export class CharacterManager {
     }
 
     // ── VacuumPull: character in breaching room gets pulled toward space ───
-    if (room && !room.sealed && room.oxygen < 50 && !character.bSpacesuit) {
-      const spaceTile = this.findNearestSpaceTile(character.tileX, character.tileY);
-      if (spaceTile) {
-        const vec = this.vacuumSystem?.getVacuumVec(character.tileX, character.tileY);
+    if (!character.bSpacesuit) {
+      const vec = this.vacuumSystem?.getVacuumVec(character.tileX, character.tileY);
+      const wasInVacuum = (character as Character & { bWasInVacuum?: boolean }).bWasInVacuum === true;
+      const inVacuum = !!vec && (wasInVacuum
+        ? vec.magnitude >= VACUUM_THRESHOLD_END
+        : vec.magnitude > VACUUM_THRESHOLD);
+      (character as Character & { bWasInVacuum?: boolean }).bWasInVacuum = inVacuum;
+
+      if (inVacuum && vec) {
         const pull = new VacuumPull();
-        pull.vacuumMagnitude = vec?.magnitude ?? 0;
+        pull.vacuumVx = vec.vx;
+        pull.vacuumVy = vec.vy;
+        pull.vacuumMagnitude = vec.magnitude;
         options.push(new ActivityOption(
           pull,
-          spaceTile.x, spaceTile.y,
+          character.tileX, character.tileY,
           500, // PUPPET level — overrides everything
           { priorityLevel: PRIORITY.PUPPET },
         ));
       }
+    } else {
+      (character as Character & { bWasInVacuum?: boolean }).bWasInVacuum = false;
     }
 
     // ── PanicOnFire: character standing on a fire tile ───────
@@ -2152,21 +2193,6 @@ export class CharacterManager {
     return null;
   }
 
-  /** Find nearest SPACE tile from a position (for vacuum pull direction). */
-  private findNearestSpaceTile(x: number, y: number): { x: number; y: number } | null {
-    // Check expanding rings of neighbors
-    for (let r = 1; r <= 5; r++) {
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // only ring edge
-          const nx = x + dx, ny = y + dy;
-          if (this.grid.get(nx, ny) === TileType.SPACE) return { x: nx, y: ny };
-        }
-      }
-    }
-    return null;
-  }
-
   /** Assign a task to a character and start pathfinding if needed. */
   private assignTask(char: Character, task: Task) {
     char.currentTask = task;
@@ -2202,11 +2228,8 @@ export class CharacterManager {
       }
       const filter = char.bSpacewalking ? WALKABLE_SPACEWALK : WALKABLE_DEFAULT;
       const maxNodes = char.bSpacewalking ? 3000 : 1000;
-      // Lua Room:_refreshPropJobList sets pathToNearest=true for build tasks.
-      // If the target tile is non-walkable (e.g. WALL for door building, ASTEROID
-      // for mining), path to the nearest adjacent walkable tile instead.
       const targetType = this.grid.get(task.targetX, task.targetY);
-      const bPathToNearest = !filter(targetType);
+      const bPathToNearest = task.pathToNearest === true || !filter(targetType);
       const path = findPath(this.grid, char.tileX, char.tileY, task.targetX, task.targetY, maxNodes, filter, bPathToNearest);
       if (path && path.length > 0) {
         char.startPath(path);

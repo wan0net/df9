@@ -289,8 +289,8 @@ export function getDifficulty(elapsedTime: number, population: number): number {
  * Mirrors Lua getChallengeLevel():
  *   nChallenge = clamp(0, 1, nDifficulty - 0.15 + random(0,30)/100)
  */
-export function getChallengeLevel(difficulty: number): number {
-  const challenge = difficulty - 0.15 + (Math.random() * 0.3);
+export function getChallengeLevel(difficulty: number, random: () => number = Math.random): number {
+  const challenge = difficulty - 0.15 + (random() * 0.3);
   return Math.max(0, Math.min(1, challenge));
 }
 
@@ -299,7 +299,11 @@ export function getChallengeLevel(difficulty: number): number {
  * Mirrors Lua EventController._getNextEventTimeDelta():
  *   Uses oscillating alpha curve based on game time progression.
  */
-export function getNextEventTimeDelta(elapsedTime: number, nTimeBetween: number): number {
+export function getNextEventTimeDelta(
+  elapsedTime: number,
+  nTimeBetween: number,
+  random: () => number = Math.random,
+): number {
   const x = Math.min(elapsedTime, DIFFICULTY_MAX_TIME) / DIFFICULTY_MAX_TIME;
 
   // Oscillating alpha curve (Lua formula)
@@ -309,7 +313,7 @@ export function getNextEventTimeDelta(elapsedTime: number, nTimeBetween: number)
   const nMin = 0.6 * nTimeBetween;
   const nMax = 1.4 * nTimeBetween;
   // Lua: math.random(-20, 20) returns integers in [-20, 20]
-  return nMin * alpha + nMax * (1 - alpha) + Math.floor(Math.random() * 41) - 20;
+  return nMin * alpha + nMax * (1 - alpha) + Math.floor(random() * 41) - 20;
 }
 
 /**
@@ -362,12 +366,16 @@ export interface RaiderSpec {
  * Roll random raiders based on difficulty.
  * Mirrors Lua EventController.rollRandomRaiders().
  */
-export function rollRandomRaiders(difficulty: number, bAllowKillbots: boolean): RaiderSpec[] {
+export function rollRandomRaiders(
+  difficulty: number,
+  bAllowKillbots: boolean,
+  random: () => number = Math.random,
+): RaiderSpec[] {
   let nRaiders = 1;
   if (difficulty > 0.4) {
-    nRaiders = 1 + Math.floor(Math.random() * 3); // 1-3
+    nRaiders = 1 + Math.floor(random() * 3); // 1-3
   } else if (difficulty > 0.2) {
-    nRaiders = 1 + Math.floor(Math.random() * 2); // 1-2
+    nRaiders = 1 + Math.floor(random() * 2); // 1-2
   }
 
   // Nerf difficulty for multiple spawns
@@ -377,8 +385,8 @@ export function rollRandomRaiders(difficulty: number, bAllowKillbots: boolean): 
 
   const raiders: RaiderSpec[] = [];
   for (let i = 0; i < nRaiders; i++) {
-    const nChallengeLevel = getChallengeLevel(adjDifficulty);
-    const bKillbot = bAllowKillbots && nChallengeLevel > 0.75 && Math.random() > 0.5;
+    const nChallengeLevel = getChallengeLevel(adjDifficulty, random);
+    const bKillbot = bAllowKillbots && nChallengeLevel > 0.75 && random() > 0.5;
     raiders.push({ nChallengeLevel, bKillbot });
   }
   return raiders;

@@ -4,7 +4,7 @@
  * Integrates InspectorPanel and JobRoster.
  */
 
-import { GameRules, RECYCLERS_PER_CITIZEN } from '../core/GameRules';
+import { GameRules } from '../core/GameRules';
 import { Base } from '../core/Base';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 import { tObjects, getMenuForZone } from '../envobjects/EnvObjectData';
@@ -42,6 +42,18 @@ const HINTLOG_HIGHLIGHT = '#BCFFFF'; // Lua Gui.HINTLOG_HIGHLIGHT = {188/255,255
 // brightness(0) → black, then invert+sepia+saturate+hue-rotate to amber
 const ICON_FILTER_AMBER = 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);';
 const ICON_FILTER_BLACK = 'filter:brightness(0);';
+const ICON_FILTER_RED = 'filter:brightness(0) invert(22%) sepia(95%) saturate(7420%) hue-rotate(358deg) brightness(97%) contrast(108%);';
+const ICON_FILTER_ORANGE = 'filter:brightness(0) invert(48%) sepia(88%) saturate(2010%) hue-rotate(358deg) brightness(101%) contrast(101%);';
+const ICON_FILTER_AMBERGREEN = 'filter:brightness(0) invert(70%) sepia(34%) saturate(622%) hue-rotate(69deg) brightness(96%) contrast(93%);';
+const ICON_FILTER_GREEN = 'filter:brightness(0) invert(60%) sepia(78%) saturate(647%) hue-rotate(82deg) brightness(95%) contrast(101%);';
+
+function getMoralePresentation(nTotalPercent: number): { iconName: string; iconFilter: string } {
+  if (nTotalPercent <= 10) return { iconName: 'ui_dialogicon_bigfrown', iconFilter: ICON_FILTER_RED };
+  if (nTotalPercent <= 50) return { iconName: 'ui_dialogicon_frown', iconFilter: ICON_FILTER_ORANGE };
+  if (nTotalPercent <= 70) return { iconName: 'ui_dialogicon_meh', iconFilter: ICON_FILTER_AMBER };
+  if (nTotalPercent <= 90) return { iconName: 'ui_dialogicon_smile', iconFilter: ICON_FILTER_AMBERGREEN };
+  return { iconName: 'ui_dialogicon_bigsmile', iconFilter: ICON_FILTER_GREEN };
+}
 
 /** Alert color mapping by category (covers all BASE_EVENT types) */
 const ALERT_COLORS: Record<string, string> = {
@@ -130,6 +142,8 @@ export class UIManager {
   private moraleText!: HTMLSpanElement;
   private moraleIcon!: HTMLImageElement;
   private machineHealthText!: HTMLSpanElement;
+  private capacityLabel!: HTMLSpanElement;
+  private capacityIcon!: HTMLImageElement;
   // O2 and Wall toggle button refs for selected state (Lua: setSelected per tick)
   private o2BtnInactive!: HTMLImageElement;
   private o2BtnActive!: HTMLImageElement;
@@ -174,6 +188,9 @@ export class UIManager {
   private tooltipEl!: HTMLDivElement;
 
   // Alert log
+  private alertStack!: HTMLDivElement;
+  private hintContainer!: HTMLDivElement;
+  private hintList!: HTMLDivElement;
   private alertContainer!: HTMLDivElement;
   private alertList!: HTMLDivElement;
   private alertMinimized = false;
@@ -388,12 +405,15 @@ export class UIManager {
     const hudTop = document.createElement('div');
     hudTop.style.cssText = `
       position:absolute;top:8px;right:10px;pointer-events:auto;
-      color:${AMBER};font-size:22px;display:flex;flex-direction:column;align-items:flex-end; /* Lua dosissemibold22 base */
+      color:${AMBER};font-size:22px;display:flex;flex-direction:column;align-items:flex-end;
+      padding:6px 10px 8px 14px;border-radius:0 0 0 12px;
+      background:linear-gradient(to left, rgba(0,0,0,0.58), rgba(0,0,0,0.28));
+      box-shadow:inset 0 0 0 1px rgba(223,162,0,0.1); /* Lua dosissemibold22 base */
     `;
 
     // ── Row 1: Matter + O2 Capacity ──
     const row1 = document.createElement('div');
-    row1.style.cssText = 'display:flex;align-items:center;gap:10px;';
+    row1.style.cssText = 'display:flex;align-items:center;gap:10px;text-shadow:0 1px 0 rgba(0,0,0,0.88);';
 
     // Matter icon + label + value
     const matterIcon = document.createElement('img');
@@ -417,7 +437,7 @@ export class UIManager {
     // People icon + label + value
     const peopleIcon = document.createElement('img');
     peopleIcon.src = 'assets/ui/hud/ui_hud_iconPeople.png';
-    peopleIcon.style.cssText = 'height:48px;width:auto;filter:sepia(1) saturate(5) hue-rotate(5deg);vertical-align:middle;margin-left:12px;';
+    peopleIcon.style.cssText = `height:48px;width:auto;${ICON_FILTER_AMBER}vertical-align:middle;margin-left:12px;`;
     row1.appendChild(peopleIcon);
 
     const capGroup = document.createElement('div');
@@ -437,6 +457,8 @@ export class UIManager {
     capValues.appendChild(this.capacityText);
     capGroup.appendChild(capLabel);
     capGroup.appendChild(capValues);
+    this.capacityIcon = peopleIcon;
+    this.capacityLabel = capLabel;
     row1.appendChild(capGroup);
     hudTop.appendChild(row1);
 
@@ -447,7 +469,7 @@ export class UIManager {
 
     // ── Row 2: Stardate + Speed buttons + ? ──
     const row2 = document.createElement('div');
-    row2.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    row2.style.cssText = 'display:flex;align-items:center;gap:8px;text-shadow:0 1px 0 rgba(0,0,0,0.88);';
 
     // Stardate (Lua: dosissemibold30 style, own row below divider)
     this.starDateText = document.createElement('span');
@@ -455,9 +477,17 @@ export class UIManager {
     this.starDateText.style.cssText = `font-size:30px;font-weight:600;color:${AMBER};font-family:'Dosis',sans-serif;`; // Lua dosissemibold30
     row2.appendChild(this.starDateText);
 
-    // Speed buttons (Lua: PauseButton at x=900, Speed1 at 956, Speed2 at 1012, Speed3 at 1068)
+    // Speed buttons sit inside the shipped time-scale frame art.
+    const speedPanel = document.createElement('div');
+    speedPanel.style.cssText = `
+      position:relative;width:182px;height:40px;margin-left:8px;flex:0 0 auto;
+      background:url('assets/ui/hud/ui_hud_containerTimeScale.png') center/100% 100% no-repeat;
+    `;
     const speedRow = document.createElement('div');
-    speedRow.style.cssText = 'display:flex;gap:2px;align-items:center;margin-left:8px;';
+    speedRow.style.cssText = `
+      position:absolute;left:6px;top:0;height:40px;
+      display:flex;gap:2px;align-items:center;
+    `;
     const speeds = [0, 1, 2, 4];
     const speedKeys = ['speed0', 'speed1', 'speed2', 'speed3'];
     for (let i = 0; i < 4; i++) {
@@ -485,8 +515,8 @@ export class UIManager {
 
       const idx = i;
       wrapper.addEventListener('click', () => {
-        // Lua: speed buttons gated by bTimeLocked (locked during construct menu)
-        if (GameRules.bTimeLocked) return;
+        // Lua StatusBar.onTimeButtonPressed also blocks changes during cutscenes.
+        if (GameRules.bTimeLocked || GameRules.bInCutscene) return;
         if (speeds[idx] === 0) { GameRules.togglePause(); }
         else { GameRules.setTimeScale(speeds[idx]); }
         SoundManager.playUI('UI_Select'); // Lua StatusBar.lua:349
@@ -497,35 +527,29 @@ export class UIManager {
       speedRow.appendChild(wrapper);
       this.speedImgs.push({ inactive: inactiveImg, active: activeImg });
     }
-    row2.appendChild(speedRow);
+    speedPanel.appendChild(speedRow);
+    row2.appendChild(speedPanel);
 
-    // Help "?" button (Lua: HelpButton)
+    // Help/history button uses the shipped HUD sprite instead of a generic DOM circle.
     const helpBtn = document.createElement('div');
     helpBtn.style.cssText = `
-      width:28px;height:28px;border-radius:50%;border:2px solid ${AMBER};
-      display:flex;align-items:center;justify-content:center;cursor:pointer;
-      font-size:22px;font-weight:bold;color:${AMBER};margin-left:6px; /* Lua dosissemibold22 */
+      position:relative;width:40px;height:40px;cursor:pointer;
+      margin-left:6px;flex:0 0 auto;
     `;
-    helpBtn.textContent = '?';
+    const helpImg = document.createElement('img');
+    helpImg.src = 'assets/ui/hud/ui_hud_buttonHistory.png';
+    helpImg.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      object-fit:contain;${ICON_FILTER_AMBER}
+      transition:opacity 0.12s ease, filter 0.12s ease;
+    `;
+    helpBtn.appendChild(helpImg);
     helpBtn.addEventListener('click', () => {
       Base.addAlert('hint', 'Keyboard shortcuts: C=Room, B=Floor, D=Door, X=Demolish, Z=Zone, P=Object, M=Mine, R=Roster, E=Research, G=Goals, O=O2 Overlay, 1/2/3=Speed');
     });
-    helpBtn.addEventListener('mouseenter', () => { helpBtn.style.background = AMBER; helpBtn.style.color = '#000'; });
-    helpBtn.addEventListener('mouseleave', () => { helpBtn.style.background = 'transparent'; helpBtn.style.color = AMBER; });
+    helpBtn.addEventListener('mouseenter', () => { helpImg.style.opacity = '0.7'; });
+    helpBtn.addEventListener('mouseleave', () => { helpImg.style.opacity = '1'; });
     row2.appendChild(helpBtn);
-
-    // U-17: Quit button — reloads page to return to start menu
-    const quitBtn = document.createElement('div');
-    quitBtn.style.cssText = `
-      padding:4px 10px;border:2px solid ${AMBER};border-radius:4px;
-      cursor:pointer;font-size:16px;font-weight:bold;color:${AMBER};
-      margin-left:6px;font-family:'Dosis',sans-serif;
-    `;
-    quitBtn.textContent = 'QUIT';
-    quitBtn.addEventListener('click', () => { window.location.reload(); });
-    quitBtn.addEventListener('mouseenter', () => { quitBtn.style.background = AMBER; quitBtn.style.color = '#000'; });
-    quitBtn.addEventListener('mouseleave', () => { quitBtn.style.background = 'transparent'; quitBtn.style.color = AMBER; });
-    row2.appendChild(quitBtn);
 
     hudTop.appendChild(row2);
     this.uiRoot.appendChild(hudTop);
@@ -534,7 +558,10 @@ export class UIManager {
     const hudBottom = document.createElement('div');
     hudBottom.style.cssText = `
       position:absolute;bottom:10px;right:10px;pointer-events:auto;
-      color:${AMBER};display:flex;align-items:center;gap:8px;font-size:22px; /* Lua dosissemibold22 */
+      color:${AMBER};display:flex;align-items:center;gap:8px;font-size:22px;
+      padding:6px 10px 6px 12px;border-radius:12px 0 0 12px;
+      background:linear-gradient(to left, rgba(0,0,0,0.58), rgba(0,0,0,0.24));
+      box-shadow:inset 0 0 0 1px rgba(223,162,0,0.1); /* Lua dosissemibold22 */
     `;
 
     // Dead Bodies icon + count (Lua: CoffinIcon + DeadBodiesAmt)
@@ -558,7 +585,7 @@ export class UIManager {
     // Happiness icon + % (Lua: HappyStatIcon + HappyStatPercent)
     this.moraleIcon = document.createElement('img');
     this.moraleIcon.src = 'assets/ui/hud/ui_dialogicon_meh.png';
-    this.moraleIcon.style.cssText = `width:26px;height:26px;filter:sepia(1) saturate(5) hue-rotate(5deg);`;
+    this.moraleIcon.style.cssText = `width:26px;height:26px;${ICON_FILTER_AMBER}`;
     hudBottom.appendChild(this.moraleIcon);
     this.moraleText = document.createElement('span');
     this.moraleText.style.cssText = `font-size:22px;color:${AMBER};min-width:30px;`; // Lua dosissemibold22
@@ -616,7 +643,9 @@ export class UIManager {
     this.tileTipEl = document.createElement('div');
     this.tileTipEl.style.cssText = `
       position:absolute;bottom:50px;right:10px;
-      color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif;font-weight:600; /* Lua dosissemibold22 */
+      color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif;font-weight:600;
+      background:rgba(0,0,0,0.62);padding:4px 10px;border-radius:10px 0 0 10px;
+      box-shadow:inset 0 0 0 1px rgba(223,162,0,0.14); /* Lua dosissemibold22 */
       pointer-events:none;display:none;
     `;
     this.uiRoot.appendChild(this.tileTipEl);
@@ -625,8 +654,9 @@ export class UIManager {
     this.tileInfoEl = document.createElement('div');
     this.tileInfoEl.style.cssText = `
       position:absolute;bottom:70px;left:120px;
-      color:${AMBER};font-size:18px;font-family:'Dosis',sans-serif;font-weight:600; /* Lua dosissemibold18 */
-      pointer-events:none;opacity:0.7;
+      color:${AMBER};font-size:18px;font-family:'Dosis',sans-serif;font-weight:600;
+      background:rgba(0,0,0,0.38);padding:2px 8px;border-radius:8px;
+      pointer-events:none;opacity:0.7; /* Lua dosissemibold18 */
     `;
     this.tileInfoEl.textContent = '';
     this.uiRoot.appendChild(this.tileInfoEl);
@@ -1660,19 +1690,29 @@ export class UIManager {
   // ── Alert Log ───────────────────────────────────────────────────
 
   private createAlertLog() {
-    // Lua AlertLayout.lua: right-aligned amber notification panel, newest alert on top
-    // Shows "!" icon, message text, and "Spacedate XXXX.XX" below
-    this.alertContainer = document.createElement('div');
-    this.alertContainer.id = 'alert-panel';
-    this.alertContainer.style.cssText = `
-      position:absolute;top:200px;right:10px;width:380px;
-      pointer-events:auto;font-size:22px; /* Lua dosissemibold22 */
+    // Lua GuiManager.lua keeps hints and alerts in separate stacked panes.
+    this.alertStack = document.createElement('div');
+    this.alertStack.id = 'alert-panel';
+    this.alertStack.style.cssText = `
+      position:absolute;top:188px;right:8px;width:332px;
+      pointer-events:auto;font-size:19px;display:flex;flex-direction:column;gap:3px;
     `;
+
+    this.hintContainer = document.createElement('div');
+    this.hintContainer.id = 'hint-panel';
+    this.hintContainer.style.cssText = `display:none;background:${HINTLOG_BG};`;
+    this.hintList = document.createElement('div');
+    this.hintList.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+    this.hintContainer.appendChild(this.hintList);
+    this.alertStack.appendChild(this.hintContainer);
+
+    this.alertContainer = document.createElement('div');
+    this.alertContainer.style.cssText = 'display:block;';
 
     // Base name header with crew emoticons (Lua community mod: StatusBar title)
     this.baseNameHeader = document.createElement('div');
     this.baseNameHeader.style.cssText = `
-      display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:6px;
+      display:flex;align-items:center;gap:5px;padding:3px 2px 4px 6px;margin-bottom:4px;
       font-family:'Dosis',sans-serif;
     `;
     const baseName = document.createElement('span');
@@ -1703,7 +1743,8 @@ export class UIManager {
     minRow.appendChild(minBtn);
     this.alertContainer.appendChild(minRow);
 
-    this.uiRoot.appendChild(this.alertContainer);
+    this.alertStack.appendChild(this.alertContainer);
+    this.uiRoot.appendChild(this.alertStack);
   }
 
   // ── Build Cost Overlay ─────────────────────────────────────
@@ -1756,16 +1797,81 @@ export class UIManager {
     this.jobRoster.toggle();
     if (!wasVisible) {
       // Hide alert pane when opening roster (Lua: hide alert/hint on open)
-      this.alertContainer.style.display = 'none';
+      this.alertStack.style.display = 'none';
     } else {
       // Restore alert pane when closing roster
-      this.alertContainer.style.display = '';
+      this.alertStack.style.display = '';
     }
   }
 
   /** Check if job roster is open. */
   isJobRosterOpen(): boolean {
     return this.jobRoster.isVisible();
+  }
+
+  private renderAlertCards(target: HTMLDivElement, alerts: ReturnType<typeof Base.getRecentAlerts>, isHintList: boolean) {
+    target.textContent = '';
+    const ALERTLOG_BG_COLOR = '#B57700';
+    const ALERTLOG_BG_ALT_COLOR = '#CA8400';
+    for (let ai = 0; ai < alerts.length; ai++) {
+      const alert = alerts[ai];
+      const isHint = alert.type === 'hint';
+      const cardBg = isHint
+        ? (ai % 2 === 0 ? HINTLOG_BG : HINTLOG_BG_ALT)
+        : (ai % 2 === 0 ? ALERTLOG_BG_COLOR : ALERTLOG_BG_ALT_COLOR);
+      const el = document.createElement('div');
+      el.style.cssText = `
+        position:relative;background:${cardBg};padding:5px 7px 6px 9px;
+        display:flex;gap:7px;align-items:flex-start;cursor:pointer;
+        border-top:1px solid rgba(255,230,150,0.2);
+        box-shadow:inset 0 0 0 1px rgba(0,0,0,0.18);
+        min-height:48px;
+      `;
+      el.addEventListener('click', () => {
+        this.onAlertClick?.(alert.type);
+        this.uiClickConsumed = true;
+      });
+      const accent = document.createElement('div');
+      accent.style.cssText = `
+        position:absolute;left:0;top:0;bottom:0;width:4px;
+        background:${isHint ? HINTLOG_HIGHLIGHT : '#5a3400'};
+        opacity:${isHint ? '0.75' : '0.45'};
+      `;
+      el.appendChild(accent);
+      const icon = document.createElement('div');
+      icon.textContent = isHint ? '?' : '!';
+      icon.style.cssText = `
+        font-size:16px;font-weight:bold;color:#000;
+        background:${isHint ? HINTLOG_HIGHLIGHT : '#dfa200'};border:2px solid #000;
+        width:22px;height:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+        margin-top:1px;margin-left:1px;
+      `;
+      const content = document.createElement('div');
+      content.style.cssText = 'flex:1;';
+      const msg = document.createElement('div');
+      msg.textContent = alert.message;
+      msg.style.cssText = `font-size:18px;color:${isHint ? HINTLOG_HIGHLIGHT : '#000'};font-family:'Dosis',sans-serif;font-weight:600;line-height:1.01;`;
+      const elapsed = GameRules.simTime - alert.time;
+      let timeLabel: string;
+      if (elapsed < 2) timeLabel = '1 second ago';
+      else if (elapsed < 60) timeLabel = `${Math.floor(elapsed)} seconds ago`;
+      else if (elapsed < 120) timeLabel = '1 minute ago';
+      else if (elapsed < 3600) timeLabel = `${Math.floor(elapsed / 60)} minutes ago`;
+      else timeLabel = `${line('HUDHUD004TEXT')} ${GameRules.getFullStarDateString(alert.time)}`;
+      const time = document.createElement('div');
+      time.textContent = timeLabel;
+      time.style.cssText = `font-size:14px;color:${isHint ? '#a0d0cc' : '#333'};font-family:'Dosis',sans-serif;margin-top:1px;line-height:1.01;`;
+      content.appendChild(msg);
+      content.appendChild(time);
+      el.appendChild(icon);
+      el.appendChild(content);
+      el.addEventListener('mouseenter', () => { el.style.filter = 'brightness(1.05)'; });
+      el.addEventListener('mouseleave', () => { el.style.filter = 'none'; });
+      target.appendChild(el);
+    }
+    if (isHintList) {
+      this.hintContainer.style.display = alerts.length > 0 ? 'block' : 'none';
+    }
   }
 
   /** Toggle research panel. Hides goals panel if open. */
@@ -1827,7 +1933,6 @@ export class UIManager {
 
   update() {
     const chars = this.getCharacters();
-    const envObjects = this.getEnvObjects();
 
     // ── HUD Matter (animated counter ticking toward real value) ──
     const currentMatter = GameRules.nMatter;
@@ -1889,22 +1994,14 @@ export class UIManager {
 
     // ── Capacity (Lua GameRules:getCapacity — OxygenRecycler count) ──
     const pop = this.getPopulation();
-    // Lua: capacity = sum of recyclers * RECYCLERS_PER_CITIZEN * level
-    let maxCap = 0;
-    for (const o of envObjects) {
-      if (!o.bBuilt) continue;
-      if (o.sName === 'OxygenRecycler') maxCap += RECYCLERS_PER_CITIZEN;
-      else if (o.sName === 'OxygenRecyclerLevel2') maxCap += RECYCLERS_PER_CITIZEN * 2;
-      else if (o.sName === 'OxygenRecyclerLevel3') maxCap += RECYCLERS_PER_CITIZEN * 3;
-      else if (o.sName === 'OxygenRecyclerLevel4') maxCap += RECYCLERS_PER_CITIZEN * 4;
-    }
+    const maxCap = GameRules.getCapacity();
     this.popText.textContent = String(pop);
     this.capacityText.textContent = `/${maxCap}`;
-    if (pop > maxCap) {
-      this.popText.style.color = '#FF3D00'; // Lua Gui.RED
-    } else {
-      this.popText.style.color = AMBER;
-    }
+    const capacityColor = pop > maxCap ? '#FF3D00' : AMBER;
+    this.popText.style.color = capacityColor;
+    this.capacityText.style.color = capacityColor;
+    this.capacityLabel.style.color = '#AF7F00';
+    this.capacityIcon.style.cssText = `height:48px;width:auto;${pop > maxCap ? ICON_FILTER_RED : ICON_FILTER_AMBER}vertical-align:middle;margin-left:12px;`;
 
     // ── Morale / Happiness (Lua: updateHappinessPercent) ──
     const aliveChars = chars.filter(c => c.isAlive());
@@ -1912,24 +2009,29 @@ export class UIManager {
       const avgMorale = aliveChars.reduce((sum, c) => sum + c.nMorale, 0) / aliveChars.length;
       const nTotalPercent = Math.floor(avgMorale);
       // Lua StatusBar: thresholds at 10/50/70/90 with per-threshold icon + color
-      let iconName: string;
-      if (nTotalPercent <= 10)       { iconName = 'ui_dialogicon_bigfrown'; }
-      else if (nTotalPercent <= 50)  { iconName = 'ui_dialogicon_frown'; }
-      else if (nTotalPercent <= 70)  { iconName = 'ui_dialogicon_meh'; }
-      else if (nTotalPercent <= 90)  { iconName = 'ui_dialogicon_smile'; }
-      else                           { iconName = 'ui_dialogicon_bigsmile'; }
-      this.moraleIcon.src = `assets/ui/hud/${iconName}.png`;
+      const presentation = getMoralePresentation(nTotalPercent);
+      this.moraleIcon.src = `assets/ui/hud/${presentation.iconName}.png`;
+      this.moraleIcon.style.cssText = `width:26px;height:26px;${presentation.iconFilter}`;
       this.moraleText.textContent = `${nTotalPercent}%`;
       this.moraleText.style.color = AMBER;
     } else {
       this.moraleIcon.src = 'assets/ui/hud/ui_dialogicon_meh.png';
+      this.moraleIcon.style.cssText = `width:26px;height:26px;${ICON_FILTER_AMBER}`;
       this.moraleText.textContent = '0%';
     }
 
     // ── Machine health (Lua: updateMachineDisrepairPercent) ──
-    const builtObjects = envObjects.filter(o => o.bBuilt);
-    if (builtObjects.length > 0) {
-      const avgCondition = builtObjects.reduce((sum, o) => sum + o.nCondition, 0) / builtObjects.length;
+    let machineCount = 0;
+    let totalCondition = 0;
+    for (const room of this.getRooms()) {
+      for (const obj of EnvObjectManager.getObjectsInRoom(room)) {
+        if (!obj.bBuilt) continue;
+        machineCount++;
+        totalCondition += obj.nCondition;
+      }
+    }
+    if (machineCount > 0) {
+      const avgCondition = totalCondition / machineCount;
       this.machineHealthText.textContent = `${Math.floor(avgCondition)}%`; // Lua: math.floor
       this.machineHealthText.style.color = AMBER;
     } else {
@@ -2171,65 +2273,13 @@ export class UIManager {
 
     // ── Alert log (Lua AlertLayout + HintPane: separate hint/alert colors) ──
     if (!this.alertMinimized) {
-      const alerts = Base.getRecentAlerts(3);
+      const recent = Base.getRecentAlerts(6);
+      const hints = recent.filter(alert => alert.type === 'hint').slice(0, 3);
+      const alerts = recent.filter(alert => alert.type !== 'hint').slice(0, 3);
+      this.renderAlertCards(this.hintList, hints, true);
+      this.renderAlertCards(this.alertList, alerts, false);
+    } else {
       this.alertList.textContent = '';
-      // Lua AlertLayout: ALERTLOG_BG=#B57700, ALERTLOG_BG_ALT=#CA8400
-      // Lua HintPane: HINTLOG_BG=#5D807A, HINTLOG_BG_ALT=#709B93, HINTLOG_HIGHLIGHT=#BCFFFF
-      const ALERTLOG_BG_COLOR = '#B57700';
-      const ALERTLOG_BG_ALT_COLOR = '#CA8400';
-      let alertIdx = 0;
-      let hintIdx = 0;
-      for (let ai = 0; ai < alerts.length; ai++) {
-        const alert = alerts[ai];
-        const isHint = alert.type === 'hint';
-        let cardBg: string;
-        if (isHint) {
-          cardBg = hintIdx % 2 === 0 ? HINTLOG_BG : HINTLOG_BG_ALT;
-          hintIdx++;
-        } else {
-          cardBg = alertIdx % 2 === 0 ? ALERTLOG_BG_COLOR : ALERTLOG_BG_ALT_COLOR;
-          alertIdx++;
-        }
-        const el = document.createElement('div');
-        el.style.cssText = `
-          background:${cardBg};padding:8px 10px;display:flex;gap:8px;align-items:flex-start;
-          cursor:pointer;
-        `;
-        el.addEventListener('click', () => {
-          this.onAlertClick?.(alert.type);
-          this.uiClickConsumed = true;
-        });
-        // Icon: "!" for alerts, "?" for hints (Lua uses different icon styles)
-        const icon = document.createElement('div');
-        icon.textContent = isHint ? '?' : '!';
-        icon.style.cssText = `
-          font-size:18px;font-weight:bold;color:#000;
-          background:${isHint ? HINTLOG_HIGHLIGHT : '#dfa200'};border:2px solid #000;
-          width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-        `;
-        // Content
-        const content = document.createElement('div');
-        content.style.cssText = 'flex:1;';
-        const msg = document.createElement('div');
-        msg.textContent = alert.message;
-        msg.style.cssText = `font-size:22px;color:${isHint ? HINTLOG_HIGHLIGHT : '#000'};font-family:'Dosis',sans-serif;font-weight:500;`; /* Lua dosissemibold22 */
-        // Lua: show relative time for recent alerts, absolute for older ones
-        const elapsed = GameRules.simTime - alert.time;
-        let timeLabel: string;
-        if (elapsed < 2) timeLabel = '1 second ago';
-        else if (elapsed < 60) timeLabel = `${Math.floor(elapsed)} seconds ago`;
-        else if (elapsed < 120) timeLabel = '1 minute ago';
-        else if (elapsed < 3600) timeLabel = `${Math.floor(elapsed / 60)} minutes ago`;
-        else timeLabel = `${line('HUDHUD004TEXT')} ${GameRules.getFullStarDateString(alert.time)}`;
-        const time = document.createElement('div');
-        time.textContent = timeLabel;
-        time.style.cssText = `font-size:18px;color:${isHint ? '#a0d0cc' : '#333'};font-family:'Dosis',sans-serif;margin-top:2px;`; /* Lua dosissemibold18 */
-        content.appendChild(msg);
-        content.appendChild(time);
-        el.appendChild(icon);
-        el.appendChild(content);
-        this.alertList.appendChild(el);
-      }
     }
 
     // ── Build cost overlay (Lua ConstructMenu:getMatterCostText) ─────

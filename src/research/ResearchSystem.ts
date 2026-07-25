@@ -14,41 +14,56 @@ export class ResearchSystem {
   /** Current active research. */
   private activeResearch: string | null = null;
 
-  /** Progress on active research (0 to cost). */
-  private progress = 0;
+  /** Global progress per research key, matching Base.tS.tResearch in Lua. */
+  private progressByKey = new Map<string, number>();
 
   /** Start researching a topic. Returns false if prerequisites not met. */
   startResearch(researchId: string): boolean {
-    const def = RESEARCH_DEFS[researchId];
-    if (!def) return false;
-    if (this.completed.has(researchId)) return false;
-
-    // Check prerequisites
-    for (const prereq of def.prerequisites) {
-      if (!this.completed.has(prereq)) return false;
-    }
-
+    if (!this.canResearch(researchId)) return false;
     this.activeResearch = researchId;
-    this.progress = 0;
     return true;
   }
 
-  /** Add research progress (called when scientists work). */
-  addProgress(amount: number) {
-    if (!this.activeResearch) return;
+  /** Whether a topic is currently available to research (Lua Base.canResearch). */
+  canResearch(researchId: string): boolean {
+    const def = RESEARCH_DEFS[researchId];
+    return !!def &&
+      !def.bDiscoverOnly &&
+      !this.completed.has(researchId) &&
+      def.prerequisites.every(prereq => this.completed.has(prereq));
+  }
 
-    this.progress += amount;
-    const def = RESEARCH_DEFS[this.activeResearch];
-    if (def && this.progress >= def.nCost) {
-      this.completeResearch(this.activeResearch);
+  /**
+   * Add global progress to a specific key, matching Base.addResearch(sKey, nAmount).
+   * The one-argument form remains for datacube/debug compatibility.
+   */
+  addProgress(researchId: string, amount: number): boolean;
+  addProgress(amount: number): boolean;
+  addProgress(researchIdOrAmount: string | number, maybeAmount?: number): boolean {
+    const researchId = typeof researchIdOrAmount === 'string'
+      ? researchIdOrAmount
+      : this.activeResearch;
+    const amount = typeof researchIdOrAmount === 'string'
+      ? (maybeAmount ?? 0)
+      : researchIdOrAmount;
+    if (!researchId || !this.canResearch(researchId)) return false;
+
+    const def = RESEARCH_DEFS[researchId];
+    const roundedAmount = Math.floor(amount + 0.5);
+    const progress = Math.min(def.nCost, (this.progressByKey.get(researchId) ?? 0) + roundedAmount);
+    this.progressByKey.set(researchId, progress);
+    if (progress >= def.nCost) {
+      this.completeResearch(researchId);
+      return true;
     }
+    return false;
   }
 
   private completeResearch(researchId: string) {
     this.completed.add(researchId);
     const def = RESEARCH_DEFS[researchId];
-    this.activeResearch = null;
-    this.progress = 0;
+    this.progressByKey.set(researchId, def?.nCost ?? this.progressByKey.get(researchId) ?? 0);
+    if (this.activeResearch === researchId) this.activeResearch = null;
     if (def?.bDiscoverOnly) {
       Base.addAlert('research', line('ALERTS019TEXT', { research: def.friendlyName }));
     } else {
@@ -98,15 +113,34 @@ export class ResearchSystem {
   }
 
   /** Restore research state from save data. */
-  loadSaveData(data: { active: string | null; progress: number; completed: string[] }) {
+  loadSaveData(data: {
+    active: string | null;
+    progress: number;
+    completed: string[];
+    progressByKey?: Record<string, number>;
+  }) {
     this.completed.clear();
+    this.progressByKey.clear();
     for (const id of data.completed) this.completed.add(id);
     this.activeResearch = data.active;
-    this.progress = data.progress;
+    if (data.progressByKey) {
+      for (const [id, progress] of Object.entries(data.progressByKey)) {
+        if (RESEARCH_DEFS[id] && Number.isFinite(progress) && progress >= 0) {
+          this.progressByKey.set(id, Math.min(progress, RESEARCH_DEFS[id].nCost));
+        }
+      }
+    } else if (data.active && RESEARCH_DEFS[data.active]) {
+      this.progressByKey.set(data.active, Math.min(Math.max(0, data.progress), RESEARCH_DEFS[data.active].nCost));
+    }
   }
 
   getActiveResearch(): string | null { return this.activeResearch; }
-  getProgress(): number { return this.progress; }
+  getProgress(researchId: string | null = this.activeResearch): number {
+    return researchId ? (this.progressByKey.get(researchId) ?? 0) : 0;
+  }
+  getProgressData(): Record<string, number> {
+    return Object.fromEntries(this.progressByKey);
+  }
   getCompletedCount(): number { return this.completed.size; }
   getCompletedList(): string[] { return Array.from(this.completed); }
 }

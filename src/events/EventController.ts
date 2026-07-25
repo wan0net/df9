@@ -49,6 +49,12 @@ export type DerelictExploreFn = (payload: {
   hostile: boolean;
 }) => void;
 
+export interface EventControllerDependencies {
+  random?: () => number;
+  elapsedTime?: () => number;
+  simTime?: () => number;
+}
+
 /** A scheduled event in the forecast. */
 interface ForecastEntry {
   def: EventDef;
@@ -60,6 +66,9 @@ interface ForecastEntry {
 }
 
 export class EventController implements TickableSystem {
+  private readonly random: () => number;
+  private readonly elapsedTime: () => number;
+  private readonly simTime: () => number;
   /** Currently executing event (Lua: single event at a time). */
   private currentEvent: Event | null = null;
   private currentEventEntry: ForecastEntry | null = null;
@@ -108,6 +117,12 @@ export class EventController implements TickableSystem {
   dialogSystem: DialogSystem | null = null;
   private derelictSystem: DerelictSystem | null = null;
 
+  constructor(dependencies: EventControllerDependencies = {}) {
+    this.random = dependencies.random ?? Math.random;
+    this.elapsedTime = dependencies.elapsedTime ?? (() => GameRules.elapsedTime);
+    this.simTime = dependencies.simTime ?? (() => GameRules.simTime);
+  }
+
   init(derelictSystem?: DerelictSystem) {
     if (derelictSystem) {
       this.derelictSystem = derelictSystem;
@@ -148,14 +163,14 @@ export class EventController implements TickableSystem {
 
   /** Current difficulty factor (0-1) using Lua-exact formula. */
   getDifficulty(): number {
-    return getDifficulty(GameRules.elapsedTime, this.population);
+    return getDifficulty(this.elapsedTime(), this.population);
   }
 
   /** Get raider count scaled by difficulty (Lua: math.random(1,3) tiered by difficulty). */
   getScaledRaiderCount(): number {
     const diff = this.getDifficulty();
-    if (diff > 0.4) return 1 + Math.floor(Math.random() * 3); // 1-3
-    if (diff > 0.2) return 1 + Math.floor(Math.random() * 2); // 1-2
+    if (diff > 0.4) return 1 + Math.floor(this.random() * 3); // 1-3
+    if (diff > 0.2) return 1 + Math.floor(this.random() * 2); // 1-2
     return 1;
   }
 
@@ -171,7 +186,7 @@ export class EventController implements TickableSystem {
     if (this.population <= 0) return;
 
     // Generate forecast on first tick after delay
-    if (!this.forecastGenerated && GameRules.elapsedTime >= FIRST_EVENT_TIME_MIN) {
+    if (!this.forecastGenerated && this.elapsedTime() >= FIRST_EVENT_TIME_MIN) {
       this.generateForecast();
       this.forecastGenerated = true;
     }
@@ -192,7 +207,7 @@ export class EventController implements TickableSystem {
     }
 
     // Check for compound event (final siege at 6 hours)
-    if (!this.compoundEventFired && GameRules.elapsedTime >= COMPOUND_EVENT_TIME && this.population >= 25) { // Lua CompoundEvent.lua:31 nMinPopulation=25
+    if (!this.compoundEventFired && this.elapsedTime() >= COMPOUND_EVENT_TIME && this.population >= 25) { // Lua CompoundEvent.lua:31 nMinPopulation=25
       this.fireCompoundEvent();
       this.compoundEventFired = true;
     }
@@ -212,7 +227,7 @@ export class EventController implements TickableSystem {
     if (entry) {
       this.prevEvents.push({
         sEventType: entry.def.sEventType,
-        nCompletionTime: GameRules.elapsedTime,
+        nCompletionTime: this.elapsedTime(),
       });
       while (this.prevEvents.length > PREV_EVENTS_COUNT) {
         this.prevEvents.shift();
@@ -235,10 +250,11 @@ export class EventController implements TickableSystem {
   private generateForecast() {
     this.forecast = [];
     // First event uses the specific Lua range
-    const firstDelay = FIRST_EVENT_TIME_MIN + Math.random() * (FIRST_EVENT_TIME_MAX - FIRST_EVENT_TIME_MIN);
-    let nextTime = Math.max(GameRules.elapsedTime + 10, firstDelay);
+    const now = this.elapsedTime();
+    const firstDelay = FIRST_EVENT_TIME_MIN + this.random() * (FIRST_EVENT_TIME_MAX - FIRST_EVENT_TIME_MIN);
+    let nextTime = Math.max(now + 10, firstDelay);
     if (this.forecastGenerated) {
-      nextTime = GameRules.elapsedTime + getNextEventTimeDelta(GameRules.elapsedTime, this.nTimeBetween);
+      nextTime = now + getNextEventTimeDelta(now, this.nTimeBetween, this.random);
     }
 
     let lastEventType = '';
@@ -248,7 +264,7 @@ export class EventController implements TickableSystem {
     for (let i = 0; i < FORECAST_SIZE; i++) {
       const def = this.pickWeightedEvent(nextTime, lastEventType, consecutiveCount, populationEstimate);
       if (def) {
-        const alertTime = nextTime - (FORECAST_ALERT_TIME + Math.random() * 10);
+        const alertTime = nextTime - (FORECAST_ALERT_TIME + this.random() * 10);
         this.forecast.push({
           def,
           scheduledTime: nextTime,
@@ -266,7 +282,7 @@ export class EventController implements TickableSystem {
         // Accumulate population delta estimate (Lua: nPopulationDeltaEstimate)
         populationEstimate += def.nPopulationDelta ?? 0;
       }
-      nextTime += getNextEventTimeDelta(nextTime, this.nTimeBetween);
+      nextTime += getNextEventTimeDelta(nextTime, this.nTimeBetween, this.random);
     }
   }
 
@@ -339,7 +355,7 @@ export class EventController implements TickableSystem {
       if (def.sEventType === 'breachingEvents') w = nExteriorRooms > 0 ? 10 : 16;
       return w;
     };
-    let pick = Math.random() * totalWeight;
+    let pick = this.random() * totalWeight;
     for (const def of eligible) {
       pick -= getWeight(def);
       if (pick <= 0) return def;
@@ -356,7 +372,7 @@ export class EventController implements TickableSystem {
       return;
     }
 
-    const now = GameRules.elapsedTime;
+    const now = this.elapsedTime();
 
     // Alert for upcoming events
     for (const entry of this.forecast) {
@@ -392,7 +408,7 @@ export class EventController implements TickableSystem {
     this.onPreEventSave?.();
 
     // Event created successfully — start execution
-    event.start(GameRules.simTime);
+    event.start(this.simTime());
     this.currentEvent = event;
     this.currentEventEntry = entry;
     Base.addAlert('event', line('ALERTS023TEXT'));
@@ -407,7 +423,7 @@ export class EventController implements TickableSystem {
       // Treat as completed to move on
       this.prevEvents.push({
         sEventType: entry.def.sEventType,
-        nCompletionTime: GameRules.elapsedTime,
+        nCompletionTime: this.elapsedTime(),
       });
       while (this.prevEvents.length > PREV_EVENTS_COUNT) {
         this.prevEvents.shift();
@@ -556,7 +572,7 @@ export class EventController implements TickableSystem {
         // Lua: population cap check for friendly docking
         if (this.population >= POPULATION_CAP) return null;
 
-        const count = 1 + Math.floor(Math.random() * 2);
+        const count = 1 + Math.floor(this.random() * 2);
         const dockEvent = new ImmigrationEvent();
         dockEvent.onCompleteCallback = () => {
           if (this.dialogSystem) {
@@ -638,7 +654,7 @@ export class EventController implements TickableSystem {
       const compound = new CompoundEvent();
       const diff = this.getDifficulty();
       const bMega = !this.bRanMegaEvent;
-      let nPoints = bMega ? 100 : diff * 40 * (0.7 + 0.3 * Math.random());
+      let nPoints = bMega ? 100 : diff * 40 * (0.7 + 0.3 * this.random());
       let bMeteorStrike = false;
 
       // Weighted choices: meteor=1, breach=4, hostileImmigration=5
@@ -657,7 +673,7 @@ export class EventController implements TickableSystem {
           // Weighted random from choices
           let totalW = 0;
           for (const w of Object.values(choices)) totalW += w;
-          let roll = Math.random() * totalW;
+          let roll = this.random() * totalW;
           sChoice = 'hostileImmigrationEvents'; // fallback
           for (const [key, w] of Object.entries(choices)) {
             roll -= w;
@@ -689,7 +705,7 @@ export class EventController implements TickableSystem {
         } else {
           // EV-5: hostileImmigrationEvents — deduct per-raider (Lua CompoundEvent.selectEvents:102-124)
           // Roll raiders using rollRandomRaiders (includes killbot chance)
-          const raiders = rollRandomRaiders(diff, true);
+          const raiders = rollRandomRaiders(diff, true, this.random);
 
           // Deduct points per individual raider based on challenge level / killbot
           for (const raider of raiders) {
@@ -715,7 +731,7 @@ export class EventController implements TickableSystem {
 
       // E-29: Lua sets bRanMegaEvent AFTER all sub-events complete, not before
       compound.onCompleteCallback = () => { this.bRanMegaEvent = true; };
-      compound.start(GameRules.simTime);
+      compound.start(this.simTime());
       this.currentEvent = compound;
       this.currentEventEntry = null;
       Base.addAlert('siege', line('ALERTS040TEXT'));
@@ -768,8 +784,28 @@ export class EventController implements TickableSystem {
       forecast: this.forecast.map(f => ({
         defName: Object.keys(EVENT_DEFS).find(k => EVENT_DEFS[k].name === f.def.name) ?? '',
         scheduledTime: f.scheduledTime,
+        alertTime: f.alertTime,
         alerted: f.alerted,
+        nFailures: f.nFailures,
+        bFailed: f.bFailed,
       })),
+      currentEvent: this.currentEvent ? {
+        defName: Object.keys(EVENT_DEFS).find(k =>
+          EVENT_DEFS[k] === this.currentEventEntry?.def ||
+          EVENT_DEFS[k].name === this.currentEvent?.name
+        ) ?? '',
+        status: this.currentEvent.status,
+        startTime: this.currentEvent.startTime,
+        elapsedTime: this.currentEvent.elapsedTime,
+        entry: this.currentEventEntry ? {
+          scheduledTime: this.currentEventEntry.scheduledTime,
+          alertTime: this.currentEventEntry.alertTime,
+          alerted: this.currentEventEntry.alerted,
+          nFailures: this.currentEventEntry.nFailures,
+          bFailed: this.currentEventEntry.bFailed,
+        } : null,
+      } : null,
+      prevEvents: this.prevEvents.map(event => ({ ...event })),
     };
   }
 
@@ -787,10 +823,50 @@ export class EventController implements TickableSystem {
     this.forecast = data.forecast.map(f => ({
       def: EVENT_DEFS[f.defName] ?? EVENT_DEFS['Immigration'],
       scheduledTime: f.scheduledTime,
-      alertTime: f.scheduledTime - FORECAST_ALERT_TIME,
+      alertTime: (f as typeof f & { alertTime?: number }).alertTime ?? f.scheduledTime - FORECAST_ALERT_TIME,
       alerted: f.alerted,
-      nFailures: 0,
-      bFailed: false,
+      nFailures: (f as typeof f & { nFailures?: number }).nFailures ?? 0,
+      bFailed: (f as typeof f & { bFailed?: boolean }).bFailed ?? false,
     }));
+    this.prevEvents = ((data as typeof data & {
+      prevEvents?: { sEventType: string; nCompletionTime: number }[];
+    }).prevEvents ?? []).map(event => ({ ...event }));
+
+    const current = (data as typeof data & {
+      currentEvent?: {
+        defName: string;
+        status: number;
+        startTime: number;
+        elapsedTime: number;
+        entry?: {
+          scheduledTime: number;
+          alertTime: number;
+          alerted: boolean;
+          nFailures: number;
+          bFailed: boolean;
+        } | null;
+      } | null;
+    }).currentEvent;
+    if (current) {
+      const def = EVENT_DEFS[current.defName];
+      const event = def ? this.createEvent(def) : null;
+      if (event) {
+        event.status = current.status;
+        event.startTime = current.startTime;
+        event.elapsedTime = current.elapsedTime;
+        this.currentEvent = event;
+        this.currentEventEntry = current.entry === null ? null : {
+          def,
+          scheduledTime: current.entry?.scheduledTime ?? current.startTime,
+          alertTime: current.entry?.alertTime ?? current.startTime,
+          alerted: current.entry?.alerted ?? true,
+          nFailures: current.entry?.nFailures ?? 0,
+          bFailed: current.entry?.bFailed ?? false,
+        };
+      }
+    } else {
+      this.currentEvent = null;
+      this.currentEventEntry = null;
+    }
   }
 }

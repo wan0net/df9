@@ -9,6 +9,7 @@ import { dialogueSystem } from '../characters/DialogueSystem';
 import {
   RACE_HUMAN, RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK,
   RACE_CHICKEN, RACE_SHAMON, RACE_MONSTER, RACE_MURDERFACE, RACE_KILLBOT,
+  RACE_TYPE, RIG_ALIEN,
 } from '../characters/CharacterConstants';
 
 /**
@@ -20,6 +21,7 @@ import {
  */
 
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
+const ALIEN_MODEL_PATH = 'assets/models/Citizen_Alien.glb';
 const SPACESUIT_PATH = 'assets/models/Spacesuit.glb';
 const BAD_ALIEN_PATH = 'assets/models/Bad_Alien.glb';
 const MURDER_ROBOT_PATH = 'assets/models/Murder_Robot.glb';
@@ -51,6 +53,9 @@ const SHADOW_W = 48;
 const SHADOW_H = 20;
 /** Y offset below character (Lua: setLoc(0, -25, -50)). */
 const SHADOW_OFFSET_Y = 25;
+const AURA_W = 86;
+const AURA_H = 112;
+const AURA_OFFSET_Y = 10;
 
 /** Generate a soft elliptical shadow texture procedurally. */
 function createBlobShadowTexture(): THREE.Texture {
@@ -79,6 +84,24 @@ let blobShadowTex: THREE.Texture | null = null;
 function getBlobShadowTexture(): THREE.Texture {
   if (!blobShadowTex) blobShadowTex = createBlobShadowTexture();
   return blobShadowTex;
+}
+
+let characterAuraTex: THREE.Texture | null = null;
+function getCharacterAuraTexture(): THREE.Texture {
+  if (characterAuraTex) return characterAuraTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createRadialGradient(64, 58, 4, 64, 58, 50);
+  grad.addColorStop(0, 'rgba(255,235,168,0.28)');
+  grad.addColorStop(0.45, 'rgba(223,162,0,0.14)');
+  grad.addColorStop(1, 'rgba(223,162,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  characterAuraTex = new THREE.CanvasTexture(canvas);
+  characterAuraTex.needsUpdate = true;
+  return characterAuraTex;
 }
 
 /**
@@ -336,7 +359,7 @@ function loadCharTexture(filename: string): THREE.Texture {
  * Apply textures and colors to a cloned character model.
  * Matches material names to texture files using multiple candidate patterns.
  */
-function applyModelTextures(group: THREE.Group, charId: number) {
+function applyModelTextures(group: THREE.Group, charId: number, textureOverrides?: Record<string, string>) {
   // R-2: Use all 5 skin tone variants (Lua cycles through _base_01 to _base_05)
   const toneIdx = (charId % 5) + 1;
 
@@ -359,11 +382,13 @@ function applyModelTextures(group: THREE.Group, charId: number) {
     //   2. Strip trailing digits + add tone: "Collar01" → "Collar_base_01"
     //   3. Exact matName (only for non-skin materials or when tone doesn't matter)
     const strippedBase = matName.replace(/_base_\d+$/, '');
+    const overrideBase = textureOverrides?.[matName];
     const candidates = [
+      overrideBase,
       `${strippedBase}_base_0${toneIdx}`,
       `${matName.replace(/\d+$/, '')}_base_0${toneIdx}`,
       matName,
-    ];
+    ].filter((name): name is string => !!name);
 
     let applied = false;
     for (const baseName of candidates) {
@@ -390,27 +415,36 @@ function applyModelTextures(group: THREE.Group, charId: number) {
 
     // Store base color so setCharacterTint can multiply rather than replace
     mat.userData.baseColor = (mat as THREE.MeshStandardMaterial).color.getHex();
+    if (mat instanceof THREE.MeshStandardMaterial) {
+      mat.emissive.copy(mat.color).multiplyScalar(0.06);
+      mat.emissiveIntensity = 1;
+    }
   });
 }
 
 /** Cached loaded GLTF data. */
 let cachedCitizen: THREE.Group | null = null;
+let cachedAlienCitizen: THREE.Group | null = null;
 let cachedSpacesuit: THREE.Group | null = null;
 let cachedBadAlien: THREE.Group | null = null;
 let cachedMurderRobot: THREE.Group | null = null;
 let citizenAnimClips: THREE.AnimationClip[] = [];
+let alienAnimClips: THREE.AnimationClip[] = [];
 let spacesuitAnimClips: THREE.AnimationClip[] = [];
 let badAlienAnimClips: THREE.AnimationClip[] = [];
 let murderRobotAnimClips: THREE.AnimationClip[] = [];
 let citizenHasSkeleton = false;
+let alienHasSkeleton = false;
 let spacesuitHasSkeleton = false;
 let badAlienHasSkeleton = false;
 let murderRobotHasSkeleton = false;
 let citizenLoadPromise: Promise<void> | null = null;
+let alienLoadPromise: Promise<void> | null = null;
 let spacesuitLoadPromise: Promise<void> | null = null;
 let badAlienLoadPromise: Promise<void> | null = null;
 let murderRobotLoadPromise: Promise<void> | null = null;
 let citizenLoadFailed = false;
+let alienLoadFailed = false;
 let spacesuitLoadFailed = false;
 let badAlienLoadFailed = false;
 let murderRobotLoadFailed = false;
@@ -455,6 +489,76 @@ function detectSkeleton(group: THREE.Group): boolean {
   return found;
 }
 
+function usesAlienRig(char: Character): boolean {
+  return !char.bSpacewalking &&
+    char.tStats.nRace !== RACE_MONSTER &&
+    char.tStats.nRace !== RACE_KILLBOT &&
+    RACE_TYPE[char.tStats.nRace]?.nRig === RIG_ALIEN;
+}
+
+function getAlienTextureOverrides(char: Character): Record<string, string> | undefined {
+  if (char.tStats.nRace === RACE_CHICKEN) {
+    const variant = (char.id % 4) + 1;
+    return {
+      Alien_Body01: `Chicken_Body01_base_0${variant}`,
+      Chicken_Head01: `Chicken_Head01_base_0${variant}`,
+    };
+  }
+  if (char.tStats.nRace === RACE_MURDERFACE) {
+    return {
+      Alien_Body01: 'Murder_Body01',
+      Murder_Head01: 'Murder_Head01',
+    };
+  }
+  return undefined;
+}
+
+function getAlienVisibleMaterials(char: Character): Set<string> {
+  const visible = new Set<string>(['Alien_Body01']);
+  switch (char.tStats.nRace) {
+    case RACE_TOBIAN:
+      visible.add('Alien_Head01');
+      visible.add(char.id % 2 === 0 ? 'Elephant01_Hair01' : 'Moustache01_Hair01');
+      break;
+    case RACE_CHICKEN:
+      visible.add('Chicken_Head01');
+      break;
+    case RACE_MURDERFACE:
+      visible.add('Murder_Head01');
+      break;
+    default:
+      visible.add('Alien_Head01');
+      break;
+  }
+
+  switch (char.getJob()) {
+    case 2:
+      visible.add('Builder01');
+      break;
+    case 3:
+      visible.add('Technician01');
+      break;
+    case 4:
+      visible.add('Miner01');
+      break;
+    case 5:
+      visible.add('Emergency03');
+      break;
+    case 6:
+      visible.add('Raider01');
+      break;
+    case 12:
+      visible.add('Doctor01');
+      break;
+    default:
+      visible.add('Tourist_Shirt_Male_01');
+      visible.add('Tourist_Shorts_Male_01');
+      break;
+  }
+
+  return visible;
+}
+
 function loadCitizenModel(): Promise<void> {
   if (citizenLoadPromise) return citizenLoadPromise;
   citizenLoadPromise = new Promise<void>((resolve) => {
@@ -477,6 +581,29 @@ function loadCitizenModel(): Promise<void> {
     });
   });
   return citizenLoadPromise;
+}
+
+function loadAlienModel(): Promise<void> {
+  if (alienLoadPromise) return alienLoadPromise;
+  alienLoadPromise = new Promise<void>((resolve) => {
+    const loader = new GLTFLoader();
+    loader.load(ALIEN_MODEL_PATH, (gltf) => {
+      cachedAlienCitizen = gltf.scene;
+      alienAnimClips = gltf.animations || [];
+      alienHasSkeleton = detectSkeleton(cachedAlienCitizen);
+      ensureDoubleSided(cachedAlienCitizen);
+
+      let mc = 0;
+      cachedAlienCitizen.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Citizen_Alien model loaded: ${mc} meshes, ${alienAnimClips.length} clips, skeleton=${alienHasSkeleton}`);
+      resolve();
+    }, undefined, (err) => {
+      console.warn('Failed to load alien citizen model:', err);
+      alienLoadFailed = true;
+      resolve();
+    });
+  });
+  return alienLoadPromise;
 }
 
 function loadSpacesuitModel(): Promise<void> {
@@ -549,6 +676,7 @@ function loadMurderRobotModel(): Promise<void> {
 
 // Start loading all models
 loadCitizenModel();
+loadAlienModel();
 loadSpacesuitModel();
 loadBadAlienModel();
 loadMurderRobotModel();
@@ -663,6 +791,7 @@ export interface CharacterRenderHandle {
   currentAnimState: string;
   /** Blob shadow mesh (Lua: rBlobShadow). */
   shadow: THREE.Mesh;
+  aura: THREE.Mesh;
   /** Thought bubble DOM + CSS2DObject. */
   thoughtEl: HTMLDivElement;
   thoughtTextSpan: HTMLSpanElement;
@@ -704,6 +833,10 @@ export class CharacterRenderer {
       object = this.createBoxPlaceholder(char);
       this.pendingUpgrade.push(char);
       loadSpacesuitModel().then(() => this.upgradePending());
+    } else if (usesAlienRig(char) && !cachedAlienCitizen && !alienLoadFailed) {
+      object = this.createBoxPlaceholder(char);
+      this.pendingUpgrade.push(char);
+      loadAlienModel().then(() => this.upgradePending());
     } else if (char.tStats.nRace === RACE_MONSTER && !cachedBadAlien && !badAlienLoadFailed) {
       // R-5: Monster model not loaded yet — placeholder until ready
       object = this.createBoxPlaceholder(char);
@@ -714,7 +847,7 @@ export class CharacterRenderer {
       object = this.createBoxPlaceholder(char);
       this.pendingUpgrade.push(char);
       loadMurderRobotModel().then(() => this.upgradePending());
-    } else if (cachedCitizen && !citizenLoadFailed) {
+    } else if ((usesAlienRig(char) ? cachedAlienCitizen && !alienLoadFailed : cachedCitizen && !citizenLoadFailed)) {
       const result = this.createModel(char, char.bSpacewalking);
       modelGroup = result.group;
       mixer = result.mixer;
@@ -723,11 +856,15 @@ export class CharacterRenderer {
     } else {
       object = this.createBoxPlaceholder(char);
       this.pendingUpgrade.push(char);
-      loadCitizenModel().then(() => this.upgradePending());
+      (usesAlienRig(char) ? loadAlienModel() : loadCitizenModel()).then(() => this.upgradePending());
     }
 
     this.positionCharacter(object, char);
     this.scene.add(object);
+
+    const aura = this.createAura();
+    this.positionAura(aura, char);
+    this.scene.add(aura);
 
     // Blob shadow (Lua: _setUpBlobShadow)
     const shadow = this.createBlobShadow();
@@ -770,6 +907,7 @@ export class CharacterRenderer {
       currentAction: null,
       currentAnimState: '',
       shadow,
+      aura,
       thoughtEl,
       thoughtTextSpan,
       thoughtTail,
@@ -838,6 +976,38 @@ export class CharacterRenderer {
 
       // Set up animation mixer if clips available
       if (spacesuitHasSkeleton && spacesuitAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
+    } else if (usesAlienRig(char) && cachedAlienCitizen && !alienLoadFailed) {
+      const clone = alienHasSkeleton
+        ? cloneSkeleton(cachedAlienCitizen) as THREE.Group
+        : cachedAlienCitizen.clone(true);
+      clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+      clone.rotation.x = 30 * (Math.PI / 180);
+      clone.rotation.y = 45 * (Math.PI / 180);
+
+      const showMats = getAlienVisibleMaterials(char);
+      const shown = new Map<string, number>();
+      clone.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
+          const matName = (child.material as THREE.Material)?.name ?? '';
+          if (showMats.has(matName) && (shown.get(matName) ?? 0) === 0) {
+            child.visible = true;
+            shown.set(matName, 1);
+          } else {
+            child.visible = false;
+          }
+        }
+      });
+
+      applyModelTextures(clone, char.id, getAlienTextureOverrides(char));
+      ensureDoubleSided(clone);
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
+      });
+      group.add(clone);
+
+      if (alienHasSkeleton && alienAnimClips.length > 0) {
         mixer = new THREE.AnimationMixer(clone);
       }
     } else if (char.tStats.nRace === RACE_MONSTER && cachedBadAlien && !badAlienLoadFailed) {
@@ -1068,6 +1238,26 @@ export class CharacterRenderer {
     return new THREE.Mesh(geo, mat);
   }
 
+  private createAura(): THREE.Mesh {
+    const geo = new THREE.PlaneGeometry(AURA_W, AURA_H);
+    const mat = new THREE.MeshBasicMaterial({
+      map: getCharacterAuraTexture(),
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  private positionAura(aura: THREE.Mesh, char: Character) {
+    aura.position.set(
+      char.screenX,
+      -(char.screenY - AURA_OFFSET_Y),
+      19998 + char.screenY,
+    );
+  }
+
   private positionShadow(shadow: THREE.Mesh, char: Character) {
     shadow.position.set(
       char.screenX,
@@ -1095,6 +1285,10 @@ export class CharacterRenderer {
         remaining.push(char);
         continue;
       }
+      if (usesAlienRig(char) && !cachedAlienCitizen && !alienLoadFailed) {
+        remaining.push(char);
+        continue;
+      }
       // R-5: If monster model not loaded yet, keep waiting
       if (char.tStats.nRace === RACE_MONSTER && !cachedBadAlien && !badAlienLoadFailed) {
         remaining.push(char);
@@ -1106,7 +1300,7 @@ export class CharacterRenderer {
         continue;
       }
       // If citizen model not loaded yet, keep waiting
-      if (!char.bSpacewalking && (!cachedCitizen || citizenLoadFailed)) {
+      if (!char.bSpacewalking && !usesAlienRig(char) && (!cachedCitizen || citizenLoadFailed)) {
         remaining.push(char);
         continue;
       }
@@ -1158,6 +1352,7 @@ export class CharacterRenderer {
 
     // Base position
     this.positionCharacter(handle.object, char);
+    this.positionAura(handle.aura, char);
     this.positionShadow(handle.shadow, char);
     this.positionNeedBars(handle.needBarsObj, char);
 
@@ -1240,6 +1435,7 @@ export class CharacterRenderer {
     let clips: THREE.AnimationClip[];
     if (race === RACE_MONSTER) clips = badAlienAnimClips;
     else if (race === RACE_KILLBOT) clips = murderRobotAnimClips;
+    else if (race !== undefined && RACE_TYPE[race]?.nRig === RIG_ALIEN) clips = alienAnimClips;
     else if (spacesuit) clips = spacesuitAnimClips;
     else clips = citizenAnimClips;
 
@@ -1417,7 +1613,10 @@ export class CharacterRenderer {
     handle.object.traverse((child) => {
       if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) child.geometry.dispose();
     });
-    // Remove blob shadow
+    // Remove aura + blob shadow
+    this.scene.remove(handle.aura);
+    handle.aura.geometry.dispose();
+    (handle.aura.material as THREE.Material).dispose();
     this.scene.remove(handle.shadow);
     handle.shadow.geometry.dispose();
     (handle.shadow.material as THREE.Material).dispose();
@@ -1472,6 +1671,9 @@ export class CharacterRenderer {
             mat.color.setHex(baseHex).multiply(tintColor);
           } else {
             mat.color.copy(tintColor);
+          }
+          if (mat instanceof THREE.MeshStandardMaterial) {
+            mat.emissive.set(mat.color).multiplyScalar(0.06);
           }
         }
       }

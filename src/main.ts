@@ -31,6 +31,7 @@ import { RoomManager } from './rooms/RoomManager';
 import type { Room } from './rooms/Room';
 import { OxygenSystem } from './oxygen/OxygenSystem';
 import { VacuumSystem } from './oxygen/VacuumSystem';
+import { Character } from './characters/Character';
 import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
@@ -47,7 +48,7 @@ import { EventController } from './events/EventController';
 import { MeteorEvent } from './events/MeteorEvent';
 import { Fire } from './hazards/Fire';
 import { ProjectileManager } from './hazards/Projectile';
-import { SaveLoadSystem } from './save/SaveLoad';
+import { SaveLoadSystem, type ObjSaveData } from './save/SaveLoad';
 import { researchSystem } from './research/ResearchSystem';
 import { GoalSystem } from './goals/GoalSystem';
 import { addLog, setElapsedTimeProvider, type LogEntry } from './characters/Log';
@@ -81,13 +82,13 @@ import {
 import { ITEM_TEMPLATES, TAGS, STUFF_NAMES } from './inventory/InventoryData';
 import { Malady } from './malady/Malady';
 import { DebugMenu } from './ui/DebugMenu';
-import { TutorialSystem } from './ui/TutorialSystem';
+import { TutorialSystem, type TutorialSaveState } from './ui/TutorialSystem';
 import { SaveSlotPanel } from './ui/SaveSlotPanel';
 import { EmergencyBeacon } from './combat/EmergencyBeacon';
 import { SquadList } from './combat/SquadList';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
-import { CAUSE_OF_DEATH, FACTION_BEHAVIOR, UNEMPLOYED, TEAM_ID_DEBUG_MONSTER, RACE_MONSTER } from './characters/CharacterConstants';
-import { setOnTileBuilt } from './utility/tasks/BuildTile';
+import { BUILDER, CAUSE_OF_DEATH, FACTION_BEHAVIOR, UNEMPLOYED, TEAM_ID_DEBUG_MONSTER, RACE_MONSTER } from './characters/CharacterConstants';
+import { BuildTile, setOnTileBuilt } from './utility/tasks/BuildTile';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
 import { DerelictSystem } from './events/DerelictSystem';
 import { DockingSystem } from './docking/DockingSystem';
@@ -191,12 +192,9 @@ function startGame() {
   });
 
   const newGameScreen = new NewGameScreenState({
-    onStartGame: (landingZone) => enterGameState(sceneManager, { landingZone }),
+    onStartGame: (landingZone, tutorial) => enterGameState(sceneManager, { landingZone, tutorial }),
     onBack: () => sceneManager.switchTo(startMenu),
   });
-
-  // Start at menu
-  sceneManager.switchTo(startMenu);
 
   // Scene manager drives the update loop for menu states
   let lastTime = performance.now();
@@ -208,12 +206,22 @@ function startGame() {
     sceneManager.update(dt);
     menuLoopId = requestAnimationFrame(menuLoop);
   }
-  menuLoopId = requestAnimationFrame(menuLoop);
-
   // Expose stop function so enterGameState can cancel the menu loop
   (sceneManager as SceneManager & { stopMenuLoop?: () => void }).stopMenuLoop = () => {
     cancelAnimationFrame(menuLoopId);
   };
+
+  // Development-only fast path used by isolated Playwright fixtures. This skips
+  // menu/deploy animation but enters the exact same production game state.
+  const directE2EStart =
+    (import.meta as ImportMeta & { env: { VITE_E2E?: string } }).env.VITE_E2E === 'true'
+    && new URLSearchParams(location.search).get('e2e') === '1';
+  if (directE2EStart) {
+    enterGameState(sceneManager, {});
+  } else {
+    sceneManager.switchTo(startMenu);
+    menuLoopId = requestAnimationFrame(menuLoop);
+  }
 }
 
 /**
@@ -249,12 +257,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Initialize game systems (unchanged logic) ─────────────
   GameRules.init();
+  GameRules.bTutorialMode = initData.tutorial === true;
   setElapsedTimeProvider(() => GameRules.elapsedTime);
   const grid = new TileGrid();
   const tileRenderer = new TileRenderer3D(threeRenderer.scene, grid);
   const wallAutoGen = new WallAutoGen(grid);
   const buildSystem = new BuildSystem(grid, wallAutoGen);
-  const buildCursor = new BuildCursor(threeRenderer.scene, grid);
+  const buildCursor = new BuildCursor(threeRenderer.scene, grid, (x, y) => buildSystem.canBuildWall(x, y));
   const roomManager = new RoomManager(grid);
   tileRenderer.setRoomManager(roomManager);
   buildSystem.setRoomManager(roomManager);
@@ -263,6 +272,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const oxygenSystem = new OxygenSystem(roomManager, grid);
   const vacuumSystem = new VacuumSystem(grid);
   const characterManager = new CharacterManager(grid, roomManager);
+  oxygenSystem.setCharacterProvider(() => characterManager.getAllCharacters());
   characterManager.setWallAutoGen(wallAutoGen);
   characterManager.setVacuumSystem(vacuumSystem);
   const objectPlacement = new ObjectPlacement(grid, roomManager);
@@ -389,6 +399,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     return room ? room.id : null;
   };
   EnvObjectManager.init(roomManager);
+  Door.tileTypeAt = (x, y) => grid.get(x, y);
+  Door.tileOxygenAt = (x, y) => grid.getO2(x, y);
+  Door.roomAtTile = (x, y) => roomManager.getRoomAt(x, y) ?? null;
+  Door.tileObstructionCheck = (x, y) => {
+    const tile = grid.get(x, y);
+    return tile === TileType.WALL || EnvObjectManager.getObjectAt(x, y)?.tData.bBlocksPathing === true;
+  };
 
   // Wire door sprite lookup for TileRenderer3D
   tileRenderer.getDoorSpriteAt = (x, y) => {
@@ -705,8 +722,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     spedUp: false, repairedBreach: false, zonedResidence: false,
     mineConfirm: false, assignedTechs: false, exploredDerelict: false,
   };
-  if (isTutorialMode) {
-    tutorialSystem.start(container, {
+  const createTutorialProviders = () => ({
       hasZoomed: () => tutorialFlags.zoomed,
       hasPanned: () => tutorialFlags.panned,
       hasSelected: () => tutorialFlags.selected,
@@ -725,7 +741,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       hasMineConfirmed: () => tutorialFlags.mineConfirm,
       hasAssignedTechs: () => tutorialFlags.assignedTechs || characterManager.getCharacters().some(c => c.getJob() === 4),
       hasExploredDerelict: () => tutorialFlags.exploredDerelict,
-    });
+  });
+  const startTutorialSystem = (savedState?: Partial<TutorialSaveState>, savedFlags?: Record<string, boolean>) => {
+    if (savedFlags) {
+      for (const [key, value] of Object.entries(savedFlags)) {
+        if (key in tutorialFlags) {
+          (tutorialFlags as Record<string, boolean>)[key] = value;
+        }
+      }
+    }
+    if (!tutorialSystem.isActive()) {
+      tutorialSystem.start(container, createTutorialProviders(), savedState);
+    } else if (savedState) {
+      tutorialSystem.restoreState(savedState);
+    }
+    GameRules.bTutorialMode = true;
+  };
+  if (isTutorialMode) {
+    startTutorialSystem();
   }
 
   // Wire save/load data providers
@@ -741,17 +774,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     needs: { ...c.needs },
     inventory: c.inventory.getAll().map(i => ({ sTemplate: i.sTemplate, sName: i.sName, nCount: i.nCount })),
   }));
-  saveLoadSystem.getObjectData = () => EnvObjectManager.getObjects().map(o => ({
-    name: o.sName, tileX: o.tileX, tileY: o.tileY,
-    built: o.bBuilt, condition: o.nCondition, hasPower: o.bHasPower,
-  }));
+  saveLoadSystem.getObjectData = () =>
+    EnvObjectManager.getObjects().map(o => o.getSaveData() as unknown as ObjSaveData);
   saveLoadSystem.getResearchData = () => ({
     active: researchSystem.getActiveResearch(),
     progress: researchSystem.getProgress(),
+    progressByKey: researchSystem.getProgressData(),
     completed: researchSystem.getCompletedList(),
   });
   saveLoadSystem.getEventData = () => eventController.getSaveData();
   saveLoadSystem.getTopicsData = () => getTopicsSaveData();
+  saveLoadSystem.getTutorialState = () => tutorialSystem.getSaveState();
+  saveLoadSystem.getTutorialFlags = () => ({ ...tutorialFlags });
 
   // Wire load callbacks
   saveLoadSystem.loadCharacterData = (chars) => {
@@ -781,6 +815,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         char.needs.amusement = cd.needs.amusement;
         char.needs.social = cd.needs.social;
         char.needs.oxygen = cd.needs.oxygen;
+        // Saves created before duty persistence default to the constructor's
+        // full duty need, matching the old load behavior.
+        char.needs.duty = cd.needs.duty ?? 100;
       }
       // Restore inventory
       if (cd.inventory) {
@@ -802,9 +839,35 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   saveLoadSystem.loadObjectData = (objs) => {
     EnvObjectManager.clearAll();
     for (const od of objs) {
-      const obj = EnvObjectManager.createObject(od.name, od.tileX, od.tileY, false, false, od.built);
+      const name = od.sName ?? od.name;
+      if (!name) continue;
+      const obj = EnvObjectManager.createObject(
+        name,
+        od.tileX,
+        od.tileY,
+        od.bFlipX ?? false,
+        od.bFlipY ?? false,
+        od.bBuilt ?? od.built ?? true,
+      );
       if (obj) {
-        obj.nCondition = od.condition;
+        obj.bActive = od.bActive ?? true;
+        obj.bHasPower = od.bHasPower ?? od.hasPower ?? false;
+        obj.nTempPowerLossEnd = od.nTempPowerLossEnd ?? -1;
+        obj.sUniqueName = od.sUniqueName ?? '';
+        obj.sBuilderName = od.sBuilderName ?? '';
+        obj.sBuildTime = od.sBuildTime ?? '';
+        obj.wallTileX = od.wallTileX ?? -1;
+        obj.wallTileY = od.wallTileY ?? -1;
+        obj.setCondition(od.nCondition ?? od.condition ?? 100);
+        if (obj instanceof Door) {
+          obj.bSmashedOpen = od.bSmashedOpen ?? false;
+          obj.secondTileX = od.secondTileX ?? -1;
+          obj.secondTileY = od.secondTileY ?? -1;
+          obj.setOperation(od.operation ?? obj.getOperation());
+          // Lua forces the saved operation during load, then normal ticking
+          // immediately derives broken/vacuum state from durable fields.
+          obj.onTick(0);
+        }
       }
     }
   };
@@ -816,6 +879,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   };
   saveLoadSystem.loadTopicsData = (data) => {
     topicsFromSaveData(data);
+  };
+  saveLoadSystem.loadTutorialFlags = (flags) => {
+    for (const [key, value] of Object.entries(flags)) {
+      if (key in tutorialFlags) {
+        (tutorialFlags as Record<string, boolean>)[key] = value;
+      }
+    }
+  };
+  saveLoadSystem.loadTutorialState = (state) => {
+    startTutorialSystem(state);
+  };
+  saveLoadSystem.loadTutorialStage = (stage) => {
+    startTutorialSystem({
+      active: true,
+      currentStage: stage,
+      stageTimer: 0,
+      completedConditions: [],
+    });
   };
   saveLoadSystem.getFireData = () => fire.getSaveData();
   saveLoadSystem.loadFireData = (data) => {
@@ -906,10 +987,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // Lua GameRules._resetCamera: zoom=1.0, center on seed pod / first character
   {
-    const spx = worldResult.seedPodX * TILE_W + TILE_HALF_W;
-    const spy = worldResult.seedPodY * TILE_HALF_H;
-    cameraController.zoom = 1.0;
-    cameraController.centerOnWorld(spx, spy);
+    const crewCenterX = worldResult.crewSpawns.reduce((sum, spawn) => sum + spawn.x, 0) / worldResult.crewSpawns.length;
+    const crewCenterY = worldResult.crewSpawns.reduce((sum, spawn) => sum + spawn.y, 0) / worldResult.crewSpawns.length;
+    const focusX = ((worldResult.seedPodX * 0.6) + (crewCenterX * 0.4)) * TILE_W + TILE_HALF_W;
+    const focusY = ((worldResult.seedPodY * 0.55) + (crewCenterY * 0.45)) * TILE_HALF_H + TILE_HALF_H * 1.5;
+    cameraController.zoom = 1.14;
+    cameraController.centerOnWorld(focusX, focusY);
   }
 
   // Lua GameRules.lua:686 — new game starts paused
@@ -921,7 +1004,6 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const inputManager = new InputManager(threeRenderer.getCanvas(), cameraController);
 
   let buildMode: BuildMode = 'none';
-  let showO2Overlay = false;
   let selectedZone: ZoneType = ZoneType.GARDEN;
   let selectedEntity: SelectedEntity = null;
   const prevCommandTiles = new Set<string>();
@@ -1042,7 +1124,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (GameRules.playerTimeScale === 0) GameRules.playerTimeScale = 1;
     }
   });
-  inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; tutorialFlags.vizModes = true; });
+  inputManager.onKeyPress('KeyO', () => { GameRules.cycleVisualizer(); tutorialFlags.vizModes = true; });
   inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
   inputManager.onKeyPress('KeyR', () => { uiManager.toggleJobRoster(); });
   inputManager.onKeyPress('Space', () => {
@@ -1217,7 +1299,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     onObjectSelected: (name) => { /* placeholder */ },
     getCharacters: () => characterManager.getCharacters(),
     getEnvObjects: () => EnvObjectManager.getObjects(),
-    toggleO2Overlay: () => { showO2Overlay = !showO2Overlay; },
+    toggleO2Overlay: () => { GameRules.cycleVisualizer(); },
     onZoomIn: () => { cameraController.addZoom(3); },
     onZoomOut: () => { cameraController.addZoom(-3); },
     toggleWalls: () => {
@@ -1493,7 +1575,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     SoundManager.setZoomDepth(Math.min(1, Math.max(0, (cameraController.zoom - 0.5) / 1.5)));
 
     // Room lighting tints (skip when O2 overlay is active — it has its own tinting)
-    if (!showO2Overlay) {
+    if (!GameRules.isOxygenGridEnabled()) {
       renderRoomLighting();
     }
 
@@ -1517,7 +1599,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     applyCharacterRoomLighting();
 
     // O2 overlay (overrides room lighting tints)
-    if (showO2Overlay) {
+    if (GameRules.isOxygenGridEnabled()) {
       renderO2Overlay();
     }
 
@@ -1528,7 +1610,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     tileRenderer.setCutaway(GameRules.isCutawayModeEnabled());
 
     // Sync O2 overlay button state
-    uiManager.o2OverlayActive = showO2Overlay;
+    uiManager.o2OverlayActive = GameRules.isOxygenGridEnabled();
 
     // UI
     uiManager.update();
@@ -1978,9 +2060,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     for (const id of currentHeld) activeHeldProps.add(id);
   }
 
-  // ── Expose game state for E2E test assertions ─────────────
-  (window as any).__df9 = {
+  // ── Expose game state for E2E test assertions in development only ─────────────
+  if ((import.meta as ImportMeta & { env: { VITE_E2E?: string } }).env.VITE_E2E === 'true') {
+    (window as any).__df9 = {
     _charMgr: characterManager,
+    _oxygenSystem: oxygenSystem,
     _envMgr: EnvObjectManager,
     _roomMgr: roomManager,
     _gameRules: GameRules,
@@ -1988,9 +2072,52 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     _cameraController: cameraController,
     _grid: grid,
     _buildSystem: buildSystem,
+    _buildCursor: buildCursor,
+    _fire: fire,
+    _projectileManager: projectileManager,
+    _projectileRenderer: projectileRenderer,
+    _characterRenderer: characterRenderer,
+    _envObjRenderer: envObjRenderer,
+    _objectPlacement: objectPlacement,
     _envObjectManager: EnvObjectManager,
     confirmBuild: () => confirmBuild(),
     cancelBuild: () => cancelBuild(),
+    stageRoomBuildForTest: (tiles: { x: number; y: number }[]) => {
+      saveTileStates(tiles);
+      const before = new Set(pendingSavedTiles.map(t => `${t.x},${t.y}`));
+      const cost = buildSystem.buildRoom(tiles, pendingAvailableMatter());
+      const changed: { x: number; y: number }[] = [];
+      for (let y = 0; y < grid.height; y++) {
+        for (let x = 0; x < grid.width; x++) {
+          if ((grid.get(x, y) === TileType.FLOOR_PENDING || grid.get(x, y) === TileType.WALL_PENDING)
+            && !before.has(`${x},${y}`)) {
+            changed.push({ x, y });
+          }
+        }
+      }
+      saveTileStates(changed);
+      pendingBuildCost += cost;
+      return cost;
+    },
+    getProjectedCapacity: (floorW: number, floorH: number) => getProjectedCapacity(floorW, floorH),
+    designateMineTiles: (tiles: { x: number; y: number }[]) => {
+      let count = 0;
+      for (const tile of tiles) {
+        if (grid.get(tile.x, tile.y) >= 1024
+          && !CommandQueue.getAllActive().some(c => c.tileX === tile.x && c.tileY === tile.y)) {
+          CommandQueue.addCommand('mine', tile.x, tile.y);
+          count++;
+        }
+      }
+      return count;
+    },
+    resetTransientTestState: () => {
+      GameRules.playerTimeScale = 1;
+      GameRules.bRunning = true;
+      buildMode = 'none';
+      cancelBuild();
+      fire.clearAll();
+    },
     hasPendingBuild: () => hasPendingBuild(),
     getPendingBuildCost: () => pendingTotalCost(),
     getPopulation: () => characterManager.getPopulation(),
@@ -2000,7 +2127,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getCharacters: () => characterManager.getCharacters().map(c => ({
       id: c.id, x: c.tileX, y: c.tileY, moving: c.moving, spacewalking: c.bSpacewalking,
       race: c.getRace(), job: c.getJob(), taskName: c.currentTask?.name ?? null,
-      hunger: c.needs.hunger, energy: c.needs.energy,
+      hunger: c.needs.hunger, energy: c.needs.energy, amusement: c.needs.amusement,
+      social: c.needs.social, oxygen: c.needs.oxygen, duty: c.needs.duty,
       morale: c.nMorale, anger: c.nAnger, rampaging: c.bRampaging,
       team: c.tStats.nTeam, hp: c.getHP(), alive: c.isAlive(),
     })),
@@ -2067,8 +2195,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
       return count;
     },
-    spawnCharacterAt: (tileX: number, tileY: number) => {
-      const char = characterManager.spawnCharacterAt(tileX, tileY);
+    spawnCharacterAt: (tileX: number, tileY: number, spacewalking = false, bImmigration = false) => {
+      const char = characterManager.spawnCharacterAt(tileX, tileY, spacewalking, bImmigration);
+      char.setJob(BUILDER);
+      // Test/debug helper: spawned builders should be immediately on duty so
+      // Lua-faithful WorkShift-gated build tasks are available right away.
+      char.nRemainingDutyTime = Character.SHIFT_DURATION;
       return char.id;
     },
     triggerImmigration: () => {
@@ -2243,6 +2375,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getHints: () => hintSystem.getShownHints(),
     saveGame: () => saveLoadSystem.saveToStorage('df9_test_save'),
     loadGame: () => saveLoadSystem.loadFromStorage('df9_test_save'),
+    getSaveData: () => saveLoadSystem.save(),
+    loadSaveData: (data: unknown) => saveLoadSystem.load(data),
+    loadSaveWithCharacterFailure: (data: unknown) => {
+      const original = saveLoadSystem.loadCharacterData;
+      let shouldThrow = true;
+      saveLoadSystem.loadCharacterData = (characters) => {
+        if (shouldThrow) {
+          shouldThrow = false;
+          throw new Error('Injected character-load failure');
+        }
+        original?.(characters);
+      };
+      try {
+        return saveLoadSystem.load(data);
+      } finally {
+        saveLoadSystem.loadCharacterData = original;
+      }
+    },
     hasSave: () => saveLoadSystem.hasSave('df9_test_save'),
     deleteSave: () => saveLoadSystem.deleteSave('df9_test_save'),
     exportSave: () => saveLoadSystem.exportToFile(),
@@ -2469,6 +2619,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       for (const cmd of CommandQueue.getAllActive()) {
         if (cmd.type === 'build_tile') CommandQueue.complete(cmd.id);
       }
+      // Clear any stale builder work so characters can pick up new jobs immediately.
+      for (const char of characterManager.getCharacters()) {
+        if (char.currentTask instanceof BuildTile) {
+          char.currentTask = null;
+          char.moving = false;
+          char.path = [];
+        }
+      }
       // Force room re-detection
       roomManager.markDirty([]);
       roomManager.update();
@@ -2501,6 +2659,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     },
     /** Check if wall can be placed at position (Lua: World.canBuildWall). */
     canBuildWall: (x: number, y: number) => buildSystem.canBuildWall(x, y),
+    /** Check if the build cursor would preview a placement as valid. */
+    canCursorPlace: (x: number, y: number, mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase' | 'mine') =>
+      buildCursor.canPlace(x, y, mode),
     /** Get tile HP at position. */
     getTileHP: (x: number, y: number) => grid.getTileHP(x, y),
     /** Set tile HP directly for testing. */
@@ -2692,7 +2853,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     showDialogue: (charId: number, text: string) => dialogueSystem.showBubble(charId, text),
     spawnExplosion: (x: number, y: number, intensity?: number) => explosionSystem.spawnExplosion(x, y, intensity ?? 1),
     spawnSparksEffect: (x: number, y: number, count?: number) => explosionSystem.spawnSparks(x, y, count ?? 10),
-  };
+    };
+  }
 
   requestAnimationFrame(gameLoop);
 }
@@ -2772,6 +2934,35 @@ function createSpaceBackground(threeRenderer: ThreeRenderer) {
 function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: number) {
   const pos = tileToScreen(tileX, tileY);
   const tex = getTexture('seedpod01');
+
+  const glowCanvas = document.createElement('canvas');
+  glowCanvas.width = 256;
+  glowCanvas.height = 256;
+  const glowCtx = glowCanvas.getContext('2d');
+  if (glowCtx) {
+    const grad = glowCtx.createRadialGradient(128, 128, 8, 128, 128, 108);
+    grad.addColorStop(0, 'rgba(255,230,150,0.42)');
+    grad.addColorStop(0.35, 'rgba(223,162,0,0.28)');
+    grad.addColorStop(1, 'rgba(223,162,0,0)');
+    glowCtx.fillStyle = grad;
+    glowCtx.fillRect(0, 0, 256, 256);
+  }
+  const glowTex = new THREE.CanvasTexture(glowCanvas);
+  const glowGeo = new THREE.PlaneGeometry(196, 196);
+  const glowMat = new THREE.MeshBasicMaterial({
+    map: glowTex,
+    transparent: true,
+    opacity: 0.88,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.position.set(
+    pos.x + TILE_HALF_W,
+    -(pos.y + TILE_HALF_H + 14),
+    14998 + pos.y,
+  );
+  threeRenderer.scene.add(glow);
 
   if (tex && tex.image) {
     // Use the actual seed pod sprite

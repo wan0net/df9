@@ -145,6 +145,16 @@ export class BuildSystem {
         }
 
         // Lua: check tPropPlacements (pending build_object commands)
+        for (const placement of room.getPropPlacements()) {
+          if (this._testWallPlacementIntersectsProp(
+            placement.sName, tx, ty, placement.tx, placement.ty, placement.bFlipX, placement.bFlipY
+          )) {
+            return false;
+          }
+        }
+
+        // Legacy fallback: queued build_object commands that have not yet been
+        // re-homed into room state.
         for (const cmd of CommandQueue.getAllActive()) {
           if (cmd.type === 'build_object' && cmd.status !== 'cancelled' && cmd.objectName) {
             const propRoom = this.roomManager.getRoomAt(cmd.tileX, cmd.tileY);

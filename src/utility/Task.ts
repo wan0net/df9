@@ -48,6 +48,9 @@ export abstract class Task {
   /** Target environment object (for reservation release on complete/fail). */
   rTargetObject?: EnvObject;
 
+  /** Whether pathfinding should stop adjacent to the target tile. */
+  pathToNearest = false;
+
   /** Called when the task starts. */
   start(character: Character) {
     this.character = character;
@@ -64,6 +67,7 @@ export abstract class Task {
 
   /** Complete the task successfully. */
   complete() {
+    if (this.status === TASK_STATUS.COMPLETE || this.status === TASK_STATUS.FAILED) return;
     this.status = TASK_STATUS.COMPLETE;
     this._releaseReservation();
     this.onComplete();
@@ -71,6 +75,7 @@ export abstract class Task {
 
   /** Fail the task. */
   fail() {
+    if (this.status === TASK_STATUS.COMPLETE || this.status === TASK_STATUS.FAILED) return;
     this.status = TASK_STATUS.FAILED;
     this._releaseReservation();
     this.onFail();
@@ -156,7 +161,7 @@ export abstract class Task {
   }
 
   /** Job experience granted on completion (override in subclasses). */
-  nJobExperience = 10;
+  nJobExperience = 0;
 
   /** Override: completion logic (apply need satisfaction + XP). */
   protected onComplete() {
@@ -164,7 +169,10 @@ export abstract class Task {
     for (const adv of this.getAdvertisedNeeds()) {
       this.character.needs.satisfy(adv.need, adv.amount);
     }
-    // Grant job XP
-    this.character.addJobExperience(this.nJobExperience);
+    // Lua Task:_addNeedReward only grants XP when OptionData explicitly
+    // supplies nJobExperience; zero is the TS representation of "absent".
+    if (this.nJobExperience > 0) {
+      this.character.addJobExperience(this.nJobExperience);
+    }
   }
 }

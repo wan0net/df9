@@ -9,6 +9,61 @@ import { playWarble, playWarbleFullscreen } from './WarbleEffect';
 
 const AMBER = '#dfa200';
 const BRIGHT_AMBER = '#FFE696'; // Lua Gui.BRIGHT_AMBER = rgba(255,230,150,1)
+const MOTD_CACHE_KEY = 'df9_startmenu_motd';
+const MOTD_URL = 'https://spacebasehub.net/motd.json';
+const MAX_MOTD_BYTES = 64 * 1024;
+const MAX_MOTD_PARAGRAPHS = 12;
+const MAX_MOTD_TEXT_LENGTH = 2_000;
+const MOTD_LINK_ORIGINS = new Set([
+  'https://spacebasehub.net',
+  'https://www.spacebasehub.net',
+  'https://spacebasedf9.com',
+  'https://www.spacebasedf9.com',
+]);
+type MotdData = {
+  body: Array<{ text: string; y?: number }>;
+  footer: { text: string; url: string };
+};
+const DEFAULT_MOTD = {
+  body: [
+    { text: 'Thank you for playing Spacebase DF-9 Unofficial v1.09!', y: 70 },
+    { text: 'This is the final patch from Skenners and the team at Derelict Games.\nNew features include:  Bug fixes, new objects and cleaned up functionality! Its not perfect but its a hoot!', y: 190 },
+  ],
+  footer: {
+    text: '>> Spacebase Hub: For all your Spacebase DF-9 needs!',
+    url: 'https://www.spacebasehub.net/',
+  },
+} satisfies MotdData;
+
+export function getAllowedMotdUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 2_048) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || !MOTD_LINK_ORIGINS.has(url.origin)) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+export function validateMotd(value: unknown): MotdData | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as { body?: unknown; footer?: unknown };
+  if (!Array.isArray(candidate.body) || candidate.body.length > MAX_MOTD_PARAGRAPHS) return null;
+  const body: MotdData['body'] = [];
+  for (const item of candidate.body) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const paragraph = item as { text?: unknown; y?: unknown };
+    if (typeof paragraph.text !== 'string' || paragraph.text.length > MAX_MOTD_TEXT_LENGTH) return null;
+    if (paragraph.y !== undefined && (!Number.isFinite(paragraph.y) || Math.abs(paragraph.y as number) > 100_000)) return null;
+    body.push({ text: paragraph.text, ...(paragraph.y === undefined ? {} : { y: paragraph.y as number }) });
+  }
+  if (!candidate.footer || typeof candidate.footer !== 'object' || Array.isArray(candidate.footer)) return null;
+  const footer = candidate.footer as { text?: unknown; url?: unknown };
+  const url = getAllowedMotdUrl(footer.url);
+  if (typeof footer.text !== 'string' || footer.text.length > MAX_MOTD_TEXT_LENGTH || !url) return null;
+  return { body, footer: { text: footer.text, url } };
+}
 
 /**
  * Start menu rendered as HTML overlay.
@@ -26,6 +81,9 @@ export class StartMenuState implements SceneState {
   private escHandler: ((e: KeyboardEvent) => void) | null = null;
   private audioUnlockHandler: (() => void) | null = null;
   private saveYesNoEl: HTMLDivElement | null = null;
+  private motdFooterUrl = DEFAULT_MOTD.footer.url;
+  private backgroundCanvas: HTMLCanvasElement | null = null;
+  private resizeHandler: (() => void) | null = null;
   private creditsScreen = new CreditsScreen();
   private settingsPanel = new SettingsPanel();
   private saveSlotPanel = new SaveSlotPanel();
@@ -109,17 +167,8 @@ export class StartMenuState implements SceneState {
     const spaceTex = getTexture('space_bg');
     if (spaceTex?.image) {
       const bgCanvas = document.createElement('canvas');
-      bgCanvas.width = window.innerWidth;
-      bgCanvas.height = window.innerHeight;
-      const bgCtx = bgCanvas.getContext('2d');
-      if (bgCtx && spaceTex.image instanceof HTMLImageElement) {
-        bgCtx.globalAlpha = 0.6;
-        for (let y = 0; y < bgCanvas.height; y += spaceTex.image.height) {
-          for (let x = 0; x < bgCanvas.width; x += spaceTex.image.width) {
-            bgCtx.drawImage(spaceTex.image, x, y);
-          }
-        }
-      }
+      this.backgroundCanvas = bgCanvas;
+      this.redrawBackground();
       bgCanvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
       this.overlay.appendChild(bgCanvas);
     }
@@ -149,45 +198,135 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(gradBottom);
 
-    // MOTD background panel — hidden by default (no content)
+    // MOTD dark band — mirrors the original full-width text strip behind the left
+    // column and menu stack, instead of separate floating cards.
+    const motdBand = document.createElement('div');
+    motdBand.style.cssText = `
+      position:absolute;left:0;top:175px;width:100%;height:625px;
+      background:linear-gradient(to right, rgba(0,0,0,0.68), rgba(0,0,0,0.52) 46%, rgba(0,0,0,0.56));
+      pointer-events:none;
+    `;
+    this.overlay.appendChild(motdBand);
+
+    const motdBandFadeTop = document.createElement('div');
+    motdBandFadeTop.style.cssText = `
+      position:absolute;left:0;top:111px;width:100%;height:64px;
+      background:linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.6));
+      pointer-events:none;
+    `;
+    this.overlay.appendChild(motdBandFadeTop);
+
+    const motdBandFadeBottom = document.createElement('div');
+    motdBandFadeBottom.style.cssText = `
+      position:absolute;left:0;top:800px;width:100%;height:64px;
+      background:linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0));
+      pointer-events:none;
+    `;
+    this.overlay.appendChild(motdBandFadeBottom);
+
+    // MOTD / SpaceBaseHub column — static offline approximation of the original
+    // network-fed left panel. Kept deliberately plain and amber-on-black.
     const motdBg = document.createElement('div');
     motdBg.style.cssText = `
-      position:absolute;top:0;left:0;width:55%;height:100%;
-      background:rgba(0,0,0,0.5);pointer-events:none;display:none;
+      position:absolute;left:42px;top:154px;width:min(980px, calc(100% - 940px));
+      height:calc(100% - 220px);box-sizing:border-box;
+      pointer-events:none;display:flex;flex-direction:column;gap:18px;
+      padding-top:0;
     `;
+    const motdTitle = document.createElement('div');
+    motdTitle.textContent = line('UIMISC022TEXT');
+    motdTitle.style.cssText = `
+      color:${AMBER};font-family:'Dosis',sans-serif;font-size:38px;
+      font-weight:600;letter-spacing:0.2px;line-height:1;
+    `;
+    motdBg.appendChild(motdTitle);
+
+    const motdBody = document.createElement('div');
+    motdBody.style.cssText = `
+      display:flex;flex-direction:column;gap:26px;max-width:940px;
+      color:${AMBER};font-family:'Dosis',sans-serif;font-size:32px;
+      font-weight:500;line-height:1.26;letter-spacing:0.05px;opacity:0.95;
+      white-space:pre-wrap;
+    `;
+    motdBg.appendChild(motdBody);
+
+    const motdFooter = document.createElement('div');
+    motdFooter.textContent = '>> Spacebase Hub: For all your Spacebase DF-9 needs!';
+    motdFooter.style.cssText = `
+      margin-top:auto;
+      color:${AMBER};font-family:'Dosis',sans-serif;font-size:19px;
+      font-weight:600;letter-spacing:0.3px;line-height:1.2;
+      max-width:740px;opacity:0.95;pointer-events:auto;cursor:pointer;
+      transition:color 0.12s ease, opacity 0.12s ease;
+      padding-bottom:14px;
+    `;
+    motdFooter.addEventListener('mouseenter', () => {
+      motdFooter.style.color = BRIGHT_AMBER;
+      motdFooter.style.opacity = '1';
+      SoundManager.playUI('UI_Hilight');
+    });
+    motdFooter.addEventListener('mouseleave', () => {
+      motdFooter.style.color = AMBER;
+      motdFooter.style.opacity = '0.95';
+    });
+    motdFooter.addEventListener('click', () => {
+      window.open(this.motdFooterUrl, '_blank', 'noopener,noreferrer');
+    });
+    motdBg.appendChild(motdFooter);
     this.overlay.appendChild(motdBg);
+    this.renderMotd(DEFAULT_MOTD, motdBody, motdFooter);
+    void this.loadMotd(motdBody, motdFooter);
 
     // Game logo — Lua StartMenuLayout: Logo element with hidden=false, scale 1.5
     const logoImg = document.createElement('img');
     logoImg.src = 'assets/ui/startmenu_logo.png';
     logoImg.style.cssText = `
-      position:absolute;top:20px;left:0px;
-      width:${1280 * 0.75}px;height:auto;
-      pointer-events:none;
+      position:absolute;top:-12px;left:-22px;
+      width:${1280 * 1.02}px;height:auto;
+      pointer-events:none;filter:drop-shadow(0 0 18px rgba(223,162,0,0.28));
     `;
     this.overlay.appendChild(logoImg);
 
-    // Subtitle — Lua WebsiteText: UIMISC016TEXT, dosismedium32, center-justified
+    // WebsiteText / ButtonWebsite — centered clickable subtitle beneath the logo.
+    const websiteRow = document.createElement('div');
+    websiteRow.style.cssText = `
+      position:absolute;top:286px;left:calc(50% - 490px);width:980px;height:70px;
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;pointer-events:auto;z-index:2;
+    `;
     const subtitle = document.createElement('div');
     subtitle.textContent = line('UIMISC016TEXT');
     subtitle.style.cssText = `
-      position:absolute;top:200px;left:40px;
       font-family:'Dosis',sans-serif;font-weight:500;
-      font-size:32px;color:${AMBER};opacity:0.8; /* Lua dosismedium32 */
-      letter-spacing:1px;
+      font-size:32px;color:${AMBER};opacity:0.82;text-align:center;
+      letter-spacing:0.8px;text-shadow:0 1px 0 rgba(0,0,0,0.9);
+      transition:color 0.12s ease, opacity 0.12s ease;
     `;
-    this.overlay.appendChild(subtitle);
+    websiteRow.appendChild(subtitle);
+    websiteRow.addEventListener('mouseenter', () => {
+      subtitle.style.color = BRIGHT_AMBER;
+      subtitle.style.opacity = '1';
+      SoundManager.playUI('UI_Hilight');
+    });
+    websiteRow.addEventListener('mouseleave', () => {
+      subtitle.style.color = AMBER;
+      subtitle.style.opacity = '0.82';
+    });
+    websiteRow.addEventListener('click', () => {
+      window.open('https://spacebasedf9.com/', '_blank', 'noopener,noreferrer');
+    });
+    this.overlay.appendChild(websiteRow);
 
     // Buttons panel — right side, right-aligned (mirrors Lua nMenuItemsX=100, RIGHT_JUSTIFY)
     const btnsPanel = document.createElement('div');
     btnsPanel.style.cssText = `
-      position:absolute;right:60px;top:50%;transform:translateY(-50%);
-      display:flex;flex-direction:column;align-items:flex-end;gap:0;
+      position:absolute;left:calc(50% + 56px);top:calc(50% - 138px);
+      width:760px;display:flex;flex-direction:column;align-items:stretch;gap:0;
       pointer-events:auto;
     `; // Lua: nMenuItemsX=100 from center, RIGHT_JUSTIFY
 
     // Lua StartMenu button order: Resume, New Game, Learn to Play, Load Base,
-    // Save Base, Settings, Credits, Quit (web: no Quit — can't close browser)
+    // Save Base, Settings, Credits, Quit
     const buttons: { label: string; action: () => void }[] = [];
     if (this.gameRunning && this.onResume) {
       buttons.push({ label: line('UIMISC023TEXT'), action: this.onResume });
@@ -221,29 +360,54 @@ export class StartMenuState implements SceneState {
       label: line('UIMISC026TEXT'),
       action: () => { this.creditsScreen.show(this.overlay, () => {}); },
     });
+    // Quit — web fallback returns to the start menu by reloading the page.
+    buttons.push({
+      label: line('UIMISC027TEXT'),
+      action: () => {
+        if (this.gameRunning && this.onSaveBase) {
+          this.showSaveYesNo();
+        } else {
+          window.location.reload();
+        }
+      },
+    });
 
     for (const btn of buttons) {
       const el = document.createElement('div');
-      el.textContent = btn.label;
+      const hitArea = document.createElement('div');
+      hitArea.textContent = btn.label;
       el.style.cssText = `
-        color: ${AMBER};
-        font-family: 'Orbitron', monospace;
-        font-size: 65px;
-        font-weight: 400;
-        height: 70px;
-        line-height: 70px;
-        margin-bottom: 10px;
-        cursor: pointer;
-        text-align: right;
-        letter-spacing: 3px;
-        min-width: 630px;
+        height: 76px;
+        display:flex;
+        justify-content:flex-end;
+        align-items:center;
+        cursor:pointer;
+        width:100%;
+        box-sizing:border-box;
       `; // Lua: orbitronWhite=65px, nLineHeight=80, button scale 630×70
+      hitArea.style.cssText = `
+        color:${AMBER};
+        font-family:'Orbitron',monospace;
+        font-size:60px;
+        font-weight:400;
+        height:70px;
+        line-height:70px;
+        text-align:right;
+        letter-spacing:2.3px;
+        width:630px;
+        padding-right:6px;
+        box-sizing:border-box;
+        transition:color 0.12s ease, background-color 0.12s ease;
+      `;
+      el.appendChild(hitArea);
       el.addEventListener('mouseenter', () => {
-        el.style.color = BRIGHT_AMBER;
+        hitArea.style.color = BRIGHT_AMBER;
+        hitArea.style.background = 'rgba(0,0,0,0.08)';
         SoundManager.playUI('UI_Hilight');
       });
       el.addEventListener('mouseleave', () => {
-        el.style.color = AMBER;
+        hitArea.style.color = AMBER;
+        hitArea.style.background = 'transparent';
       });
       el.addEventListener('click', () => {
         SoundManager.playUI('Intro_AcceptButton');
@@ -260,12 +424,16 @@ export class StartMenuState implements SceneState {
     version.textContent = 'Version 1.06'; // Lua original version
     version.style.cssText = `
       position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
-      color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif; /* Lua dosissemibold22 */
+      color:${AMBER};font-size:22px;font-family:'Dosis',sans-serif;
+      text-shadow:0 1px 0 rgba(0,0,0,0.9); /* Lua dosissemibold22 */
       pointer-events:none;
     `;
     this.overlay.appendChild(version);
 
     ctx.container.appendChild(this.overlay);
+    this.resizeHandler = () => this.applyLayout();
+    window.addEventListener('resize', this.resizeHandler);
+    this.applyLayout();
 
     // ESC to resume game if running
     if (this.gameRunning && this.onResume) {
@@ -277,6 +445,53 @@ export class StartMenuState implements SceneState {
         }
       };
       window.addEventListener('keydown', this.escHandler);
+    }
+  }
+
+  private renderMotd(
+    data: MotdData,
+    motdBody: HTMLDivElement,
+    motdFooter: HTMLDivElement,
+  ) {
+    motdBody.textContent = '';
+    const body = [...data.body].sort((a, b) => (a.y ?? 0) - (b.y ?? 0));
+    for (const paragraph of body) {
+      if (!paragraph.text) continue;
+      const p = document.createElement('div');
+      p.textContent = paragraph.text;
+      motdBody.appendChild(p);
+    }
+    this.motdFooterUrl = data.footer.url;
+    motdFooter.textContent = data.footer.text;
+  }
+
+  private async loadMotd(motdBody: HTMLDivElement, motdFooter: HTMLDivElement) {
+    const cached = localStorage.getItem(MOTD_CACHE_KEY);
+    if (cached) {
+      try {
+        const data = validateMotd(JSON.parse(cached));
+        if (!data) throw new Error('Invalid cached MOTD');
+        this.renderMotd(data, motdBody, motdFooter);
+      } catch {
+        localStorage.removeItem(MOTD_CACHE_KEY);
+      }
+    }
+    try {
+      const response = await fetch(MOTD_URL, {
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+      });
+      if (!response.ok) return;
+      const contentLength = Number(response.headers.get('content-length'));
+      if (Number.isFinite(contentLength) && contentLength > MAX_MOTD_BYTES) return;
+      const text = await response.text();
+      if (new Blob([text]).size > MAX_MOTD_BYTES) return;
+      const data = validateMotd(JSON.parse(text));
+      if (!data) return;
+      localStorage.setItem(MOTD_CACHE_KEY, JSON.stringify(data));
+      this.renderMotd(data, motdBody, motdFooter);
+    } catch {
+      // Keep cached/default content when offline or blocked.
     }
   }
 
@@ -357,6 +572,40 @@ export class StartMenuState implements SceneState {
 
   update(_dt: number) {}
 
+  private applyLayout() {
+    if (!this.overlay) return;
+    const uiScale = this.getUIScale();
+    if (uiScale === 1) {
+      this.overlay.style.transformOrigin = 'top left';
+      this.overlay.style.transform = '';
+      this.overlay.style.width = '100%';
+      this.overlay.style.height = '100%';
+    } else {
+      this.overlay.style.transformOrigin = 'top left';
+      this.overlay.style.transform = `scale(${uiScale})`;
+      this.overlay.style.width = `${100 / uiScale}%`;
+      this.overlay.style.height = `${100 / uiScale}%`;
+    }
+    this.redrawBackground();
+  }
+
+  private redrawBackground() {
+    const bgCanvas = this.backgroundCanvas;
+    if (!bgCanvas) return;
+    const spaceTex = getTexture('space_bg');
+    bgCanvas.width = window.innerWidth;
+    bgCanvas.height = window.innerHeight;
+    const bgCtx = bgCanvas.getContext('2d');
+    if (!bgCtx || !(spaceTex?.image instanceof HTMLImageElement)) return;
+    bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+    bgCtx.globalAlpha = 0.6;
+    for (let y = 0; y < bgCanvas.height; y += spaceTex.image.height) {
+      for (let x = 0; x < bgCanvas.width; x += spaceTex.image.width) {
+        bgCtx.drawImage(spaceTex.image, x, y);
+      }
+    }
+  }
+
   private getUIScale(): number {
     const stored = localStorage.getItem('df9_ui_scale');
     if (stored) {
@@ -377,6 +626,11 @@ export class StartMenuState implements SceneState {
       document.removeEventListener('keydown', this.audioUnlockHandler);
       this.audioUnlockHandler = null;
     }
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
+    this.backgroundCanvas = null;
     this.overlay?.remove();
   }
 }

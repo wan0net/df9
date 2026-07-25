@@ -12,6 +12,7 @@ import { ResearchZone } from '../zones/ResearchZone';
 import { FitnessZone } from '../zones/FitnessZone';
 import { GameRules } from '../core/GameRules';
 import { TEAM_ID_PLAYER } from '../characters/CharacterConstants';
+import type { PropPlacement } from './Room';
 
 /** Score an old room for identity-matching priority: zoned + owned rooms
  *  should be preferred when multiple old rooms compete for the same new room. */
@@ -24,7 +25,7 @@ function oldRoomScore(oldRoom: Room, overlap: number): number {
 
 /** Copy persistent state from an old room onto a new room. */
 function carryForwardState(dst: Room, src: Room): void {
-  dst.oxygen = src.oxygen;
+  dst.setOxygenStats(src.oxygen, src.getOxygenScore(), src.getTotalOxygen());
   dst.zone = src.zone;
   dst.uniqueZoneName = src.uniqueZoneName;
   dst.nTeam = src.nTeam;
@@ -57,6 +58,7 @@ function createZoneInstance(zoneType: ZoneType): Zone {
 export class RoomManager {
   private grid: TileGrid;
   private rooms: Room[] = [];
+  private spaceRoom: Room;
   private dirty = true;
   private tileToRoom: Map<string, Room> = new Map();
   /** Persisted zone assignments per tile — survives room re-detection */
@@ -66,6 +68,9 @@ export class RoomManager {
 
   constructor(grid: TileGrid) {
     this.grid = grid;
+    this.spaceRoom = new Room(-1);
+    this.spaceRoom.bSpaceRoom = true;
+    this.spaceRoom.nTeam = TEAM_ID_PLAYER;
   }
 
   /** Store zone for all tiles in a room (called when zone is assigned) */
@@ -121,6 +126,28 @@ export class RoomManager {
     return this.tileToRoom.get(`${x},${y}`);
   }
 
+  /** Exterior fallback room for space-buildable props. */
+  getSpaceRoom(): Room {
+    return this.spaceRoom;
+  }
+
+  /** All pending prop placements, optionally including the exterior space room. */
+  getAllPropPlacements(includeSpaceRoom = true): PropPlacement[] {
+    const placements: PropPlacement[] = [];
+    for (const room of this.rooms) {
+      placements.push(...room.getPropPlacements());
+    }
+    if (includeSpaceRoom) {
+      placements.push(...this.spaceRoom.getPropPlacements());
+    }
+    return placements;
+  }
+
+  /** Get a room at a tile, falling back to the exterior space room. */
+  getRoomAtOrSpace(x: number, y: number): Room {
+    return this.getRoomAt(x, y) ?? this.spaceRoom;
+  }
+
   /** Get rooms owned by a team (Lua Room.getRoomsOfTeam). */
   getRoomsOfTeam(nTeam: number, zoneName?: string): Room[] {
     return this.rooms.filter(r => {
@@ -152,7 +179,7 @@ export class RoomManager {
     for (let y = 0; y < this.grid.height; y++) {
       for (let x = 0; x < this.grid.width; x++) {
         const tileType = this.grid.get(x, y);
-        if (tileType !== TileType.FLOOR && tileType !== TileType.FLOOR_PENDING) continue;
+        if (tileType !== TileType.FLOOR) continue;
         const key = `${x},${y}`;
         if (visited.has(key)) continue;
 
@@ -182,7 +209,7 @@ export class RoomManager {
 
             if (visited.has(nKey)) continue;
 
-            if (nType === TileType.FLOOR || nType === TileType.FLOOR_PENDING) {
+            if (nType === TileType.FLOOR) {
               visited.add(nKey);
               queue.push(n);
             }
@@ -314,6 +341,35 @@ export class RoomManager {
       }
 
       this.assignZoneObj(room);
+    }
+
+    this.rehomePropPlacements(oldRooms);
+  }
+
+  /** Clear pending prop ghosts from all rooms. */
+  clearAllPropPlacements(): void {
+    for (const room of this.rooms) {
+      room.clearPropPlacements();
+    }
+    this.spaceRoom.clearPropPlacements();
+  }
+
+  /** Re-home prop ghosts after room detection changes. */
+  private rehomePropPlacements(oldRooms: Room[]): void {
+    const placements: PropPlacement[] = [];
+    for (const room of oldRooms) {
+      placements.push(...room.getPropPlacements());
+      room.clearPropPlacements();
+    }
+    placements.push(...this.spaceRoom.getPropPlacements());
+    this.spaceRoom.clearPropPlacements();
+
+    for (const placement of placements) {
+      const targetRoom = this.getRoomAt(placement.tx, placement.ty) ??
+        (placement.bCanBuildInSpace ? this.spaceRoom : null);
+      if (targetRoom) {
+        targetRoom.addPropPlacement(placement);
+      }
     }
   }
 

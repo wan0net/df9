@@ -59,7 +59,8 @@ class EnvObjectManagerClass implements TickableSystem {
 
     // Assign room
     if (this.roomManager) {
-      const room = this.roomManager.getRoomAt(tileX, tileY);
+      const room = this.roomManager.getRoomAt(tileX, tileY) ??
+        (data.bCanBuildInSpace ? this.roomManager.getSpaceRoom() : null);
       if (room) {
         obj.setRoom(room);
       }
@@ -80,6 +81,9 @@ class EnvObjectManagerClass implements TickableSystem {
   removeObject(obj: EnvObject) {
     for (const [id, o] of this.objects) {
       if (o === obj) {
+        if (!obj.bBuilt && obj.rRoom) {
+          obj.rRoom.removePropGhostAt(obj.tileX, obj.tileY);
+        }
         // G-7: Recheck hasBar when removing a Bar from Pub
         if (obj.sName === 'Bar' && obj.rRoom?.zoneObj instanceof Pub) {
           const pub = obj.rRoom.zoneObj as Pub;
@@ -254,13 +258,15 @@ class EnvObjectManagerClass implements TickableSystem {
     }
     this.objects.clear();
     this.nextId = 1;
+    this.roomManager?.clearAllPropPlacements();
   }
 
   /** Update room assignments after room re-detection. */
   updateRoomAssignments() {
     if (!this.roomManager) return;
     for (const obj of this.objects.values()) {
-      const room = this.roomManager.getRoomAt(obj.tileX, obj.tileY);
+      const room = this.roomManager.getRoomAt(obj.tileX, obj.tileY) ??
+        (obj.tData.bCanBuildInSpace ? this.roomManager.getSpaceRoom() : null);
       obj.setRoom(room ?? null);
     }
   }

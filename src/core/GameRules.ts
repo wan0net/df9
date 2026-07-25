@@ -3,6 +3,8 @@
  * Mirrors GameRules.lua: constants, mode system, time scaling, star dates, tick order.
  */
 
+import { EnvObjectManager } from '../envobjects/EnvObjectManager';
+
 // ── Matter economy ──────────────────────────────────────────────────────
 export const STARTING_MATTER = 2000;
 export const MAT_BUILD_FLOOR = 6;
@@ -102,6 +104,8 @@ class GameRulesClass {
 
   /** Sandbox mode — disables hostile events until 100+ population (Lua NewBase.lua sandbox). */
   bSandboxMode = false;
+  /** Tutorial mode flag used by the original quick-start landing zone flow. */
+  bTutorialMode = false;
   /** Disaster mode unlocked (Lua GameRules.bDisasterMode). */
   bDisasterMode = false;
   /** Game is in a cutscene (Lua GameRules.bInCutscene). */
@@ -118,6 +122,8 @@ class GameRulesClass {
   bProhibitSuffocation = false;
   /** Cutaway mode — hide back walls to show interior (Lua GameRules.cutawayMode). */
   cutawayMode = false;
+  /** Active analysis visualizer — mirrors Lua GameRules.currentVisualizer. */
+  currentVisualizer: 'oxygen' | null = null;
 
   sStarDate = '0.0';
   sStarTime = '00';
@@ -202,11 +208,13 @@ class GameRulesClass {
     // Reset flags
     this.matterMult = 1;
     // Note: bSandboxMode is NOT reset here — it's set before game start
+    this.bTutorialMode = false;
     this.bDisasterMode = false;
     this.bInCutscene = false;
     this.bTimeLocked = false;
     this.bProhibitSuffocation = false;
     this.cutawayMode = false;
+    this.currentVisualizer = null;
 
     // Start power holiday — 10 minute grace period (Lua GameRules.lua)
     this.bPowerHoliday = true;
@@ -253,11 +261,38 @@ class GameRulesClass {
     }
   }
 
+  /** Lua GameRules:getCapacity — count only functioning oxygen recyclers. */
+  getCapacity(): number {
+    let capacity = 0;
+    const workingCount = (sName: string): number =>
+      EnvObjectManager.getObjectsByType(sName).filter(obj => obj.isFunctioning()).length;
+
+    capacity += workingCount('OxygenRecycler') * RECYCLERS_PER_CITIZEN;
+    capacity += workingCount('OxygenRecyclerLevel2') * RECYCLERS_PER_CITIZEN * 2;
+    capacity += workingCount('OxygenRecyclerLevel3') * RECYCLERS_PER_CITIZEN * 3;
+    capacity += workingCount('OxygenRecyclerLevel4') * RECYCLERS_PER_CITIZEN * 4;
+    return capacity;
+  }
+
   // ── Cutaway mode (Lua GameRules.lua:1547-1559) ──────────────────
 
   /** Toggle cutaway mode (Lua GameRules.cycleCutawayMode). */
   cycleCutawayMode() {
     this.cutawayMode = !this.cutawayMode;
+  }
+
+  /**
+   * Cycle analysis visualizers.
+   * Lua rotates oxygen -> power (dev-only) -> off; the web port currently only
+   * implements the oxygen overlay, so shipped behavior here is oxygen/off.
+   */
+  cycleVisualizer() {
+    this.currentVisualizer = this.currentVisualizer === 'oxygen' ? null : 'oxygen';
+  }
+
+  /** Check if the oxygen analysis visualizer is active. */
+  isOxygenGridEnabled(): boolean {
+    return this.currentVisualizer === 'oxygen';
   }
 
   /** Enable or disable cutaway mode (Lua GameRules.enableCutawayMode). */

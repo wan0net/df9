@@ -70,16 +70,28 @@ async function startNewGame(page: Page) {
   await expect(page.locator('#hud-pop')).toBeVisible({ timeout: 15_000 });
 }
 
-test.describe.serial('Spacebase DF-9 E2E', () => {
+test.describe('Spacebase DF-9 E2E', () => {
+  test.describe.configure({ mode: 'parallel' });
   let page: Page;
 
-  test.beforeAll(async ({ browser }) => {
-    page = await browser.newPage();
-    await startNewGame(page);
-  });
+  test.beforeEach(async ({ page: isolatedPage }, testInfo) => {
+    page = isolatedPage;
+    await page.addInitScript(() => {
+      let state = 0xDF9;
+      Math.random = () => {
+        state |= 0; state = state + 0x6D2B79F5 | 0;
+        let value = Math.imul(state ^ state >>> 15, 1 | state);
+        value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value;
+        return ((value ^ value >>> 14) >>> 0) / 4294967296;
+      };
+    });
+    await page.goto('/?e2e=1');
+    await expect(page.locator('#hud-pop')).toBeVisible({ timeout: 30_000 });
 
-  test.afterAll(async () => {
-    await page.close();
+    await page.evaluate(() => (window as any).__df9.resetTransientTestState());
+    if (testInfo.annotations.some(a => a.type === 'baseline' && a.description === 'room')) {
+      await page.evaluate(() => (window as any).__df9.buildSealedRoom(128, 128, 3));
+    }
   });
 
   test('game starts with 3 crew and positive matter', async () => {
@@ -177,61 +189,15 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   test('mine command queues when clicking asteroid in M mode', async () => {
     const commandsBefore = await df9(page).commands();
     const mineCommandsBefore = commandsBefore.filter(c => c.type === 'mine').length;
-
-    // Enter mine mode
-    await page.keyboard.press('m');
-    expect(await df9(page).buildMode()).toBe('mine');
-
-    // Click several spots around the map edges where asteroids are likely to be
-    const canvas = page.locator('canvas').first();
-    const canvasBox = await canvas.boundingBox();
-    expect(canvasBox).toBeTruthy();
-
-    const cx = canvasBox!.x + canvasBox!.width / 2;
-    const cy = canvasBox!.y + canvasBox!.height / 2;
-
-    const offsets = [
-      { x: -250, y: 0 }, { x: 250, y: 0 },
-      { x: 0, y: -200 }, { x: 0, y: 200 },
-      { x: -200, y: -150 }, { x: 200, y: 150 },
-      { x: -200, y: 150 }, { x: 200, y: -150 },
-      { x: -300, y: 0 }, { x: 300, y: 0 },
-      { x: 0, y: -300 }, { x: 0, y: 300 },
-    ];
-
-    for (const offset of offsets) {
-      await page.mouse.click(cx + offset.x, cy + offset.y);
-      await page.waitForTimeout(100);
-
-      const commandsNow = await df9(page).commands();
-      const mineCommandsNow = commandsNow.filter(c => c.type === 'mine').length;
-      if (mineCommandsNow > mineCommandsBefore) {
-        // Successfully queued a mine command — exit mine mode and assert
-        await page.keyboard.press('Escape');
-        expect(mineCommandsNow).toBeGreaterThan(mineCommandsBefore);
-
-        // Speed up game to 4x and wait for a character to mine it
-        await page.keyboard.press('3'); // 4x speed
-
-        const matterBefore = await df9(page).matter();
-
-        // Wait for the mine command to be completed (matter increases)
-        await expect.poll(async () => {
-          return await df9(page).matter();
-        }, {
-          timeout: 60_000,
-          message: 'Expected matter to increase after character mines asteroid',
-        }).toBeGreaterThan(matterBefore);
-
-        // Reset to 1x speed
-        await page.keyboard.press('1');
-        return;
-      }
-    }
-
-    // If no asteroid was found, skip gracefully
-    await page.keyboard.press('Escape');
-    test.skip(true, 'No asteroid found at clicked positions (camera/placement dependent)');
+    const queued = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      d.placeAsteroid(6, 7);
+      return d.designateMineTiles([{ x: 6, y: 7 }]);
+    });
+    expect(queued).toBe(1);
+    const mineCommandsNow = (await df9(page).commands()).filter(c => c.type === 'mine');
+    expect(mineCommandsNow).toHaveLength(mineCommandsBefore + 1);
+    expect(mineCommandsNow).toContainEqual(expect.objectContaining({ tileX: 6, tileY: 7, status: 'pending' }));
   });
 
   test('command queue exposes data correctly', async () => {
@@ -395,7 +361,11 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   // ── Env Object Rendering (Milestone 4) ─────────────────────────
 
   test('env objects render with sprites (not just grey quads)', async () => {
-    // Verify objects exist (from previous tests: BulbousPlant + Generator + Fridge)
+    await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const tiles = d.buildSealedRoom(118, 118, 3);
+      d.createBuiltObject('BulbousPlant', tiles[0].x, tiles[0].y);
+    });
     const objects = await df9(page).envObjects();
     expect(objects.length).toBeGreaterThanOrEqual(1);
 
@@ -406,7 +376,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(plant!.condition).toBeGreaterThan(90);
   });
 
-  test('createBuiltObject with real sprite appears correctly', async () => {
+  test('createBuiltObject with real sprite appears correctly', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Create a ReactorGen3 (has real sprite sheet) on a floor tile
     const rooms = await df9(page).rooms();
     expect(rooms.length).toBeGreaterThan(0);
@@ -418,6 +388,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     const freeTile = tiles.find(t => !usedPositions.has(`${t.x},${t.y}`));
 
     if (freeTile) {
+      const generatorTile = tiles.find(t => t.x !== freeTile.x || t.y !== freeTile.y);
+      expect(generatorTile).toBeDefined();
+      await df9(page).createBuiltObject('Generator', generatorTile!.x, generatorTile!.y);
       const created = await df9(page).createBuiltObject('OxygenRecycler', freeTile.x, freeTile.y);
       expect(created).toBe(true);
 
@@ -432,7 +405,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // ── Character Death & Corpse (Milestone 5) ─────────────────────
 
-  test('character death creates corpse pickup', async () => {
+  test('character death creates corpse pickup', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Spawn a new character to sacrifice
     const rooms = await df9(page).rooms();
     expect(rooms.length).toBeGreaterThan(0);
@@ -453,12 +426,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     );
     expect(killed).toBe(true);
 
-    // Wait for death processing (next update tick)
-    await page.waitForTimeout(200);
-
-    // Population should decrease
-    const popAfter = await df9(page).population();
-    expect(popAfter).toBe(popBefore - 1);
+    await expect.poll(() => df9(page).population(), {
+      timeout: 5_000,
+      message: 'Expected dead character to be removed from population',
+    }).toBe(popBefore - 1);
 
     // Corpse pickup should exist
     const pickups = await page.evaluate(() => (window as any).__df9?.getPickups());
@@ -467,15 +438,15 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(corpse).toBeTruthy();
   });
 
-  test('immigration spawns new characters', async () => {
+  test('immigration spawns new characters', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const popBefore = await df9(page).population();
 
     // Use the triggerImmigration test API (spawns 1 character)
     await page.evaluate(() => (window as any).__df9?.triggerImmigration());
-    await page.waitForTimeout(200);
-
-    const popAfter = await df9(page).population();
-    expect(popAfter).toBe(popBefore + 1);
+    await expect.poll(() => df9(page).population(), {
+      timeout: 5_000,
+      message: 'Expected immigration to add one character',
+    }).toBe(popBefore + 1);
   });
 
   // ── Research System (Milestone 8) ──────────────────────────────
@@ -523,7 +494,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // ── Milestone 9: Events, Combat & Squads ─────────────────────
 
-  test('hostile spawn creates enemy characters', async () => {
+  test('hostile spawn creates enemy characters', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const popBefore = await df9(page).population();
 
     // Get rooms and spawn hostiles at a room tile
@@ -556,6 +527,12 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   test('combat system engages when hostile is near player character', async () => {
+    await page.evaluate(() => {
+      const d = (window as any).__df9;
+      d.buildSealedRoom(75, 75, 3);
+      d.spawnCharacterAt(75, 75);
+      d.spawnHostileAt(76, 75);
+    });
     // Speed up to 4x and wait for combat to engage
     await page.keyboard.press('3');
 
@@ -599,47 +576,47 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // ── Milestone 10: Fire, Disease & Inventory ──────────────────
 
-  test.skip('fire spreads to adjacent tiles', async () => {
-    const rooms = await df9(page).rooms();
-    expect(rooms.length).toBeGreaterThan(0);
-    const tile = rooms[0].tiles[0];
-
-    // Ensure room has high O2 so fire isn't immediately doused
-    await page.evaluate((roomId) => {
-      const df9 = (window as any).__df9;
-      const room = df9._roomMgr?.getRooms().find((r: any) => r.id === roomId);
-      if (room) room.oxygen = 255;
-    }, rooms[0].id);
-
-    // Start a fire
-    await page.evaluate(([x, y]) => (window as any).__df9?.startFire(x, y), [tile.x, tile.y] as const);
-
-    const fireCount = await page.evaluate(() => (window as any).__df9?.getFireCount());
-    expect(fireCount).toBeGreaterThanOrEqual(1);
-
-    // Speed up and wait for fire to spread
-    await page.keyboard.press('3');
-    await expect.poll(async () => {
-      return await page.evaluate(() => (window as any).__df9?.getFireCount());
-    }, {
-      timeout: 30_000,
-      message: 'Expected fire to spread to more tiles',
-    }).toBeGreaterThan(1);
-
-    await page.keyboard.press('1');
+  test('fire spreads to adjacent tiles', async () => {
+    const result = await page.evaluate(async () => {
+      const { Fire } = await import('/src/hazards/Fire.ts');
+      const fire = new Fire();
+      fire.tileCheck = () => 8;
+      fire.oxygenCheck = () => 65_535;
+      const originalRandom = Math.random;
+      Math.random = () => 0;
+      try {
+        fire.startFire(40, 40, 20);
+        fire.onTick(1);
+        return fire.getActiveFires();
+      } finally {
+        Math.random = originalRandom;
+        fire.clearAll();
+      }
+    });
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ x: 40, y: 40 }),
+      expect.objectContaining({ x: 39, y: 39 }),
+    ]));
   });
 
   test('fire damages characters on fire tiles', async () => {
-    // Characters on fire tiles should take damage
-    // Check that at least one character has HP < 100
-    const allChars = await page.evaluate(() => (window as any).__df9?.getAllCharacters());
-    // Some characters may have taken fire damage from the previous test
-    // Just verify fire system is functional
-    const fireCount = await page.evaluate(() => (window as any).__df9?.getFireCount());
-    expect(typeof fireCount).toBe('number');
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      d._grid.set(44, 44, 8);
+      const char = d._charMgr.spawnCharacterAt(44, 44);
+      char.currentTask = null;
+      char.moving = false;
+      const before = char.getHP();
+      d.startFire(44, 44);
+      d._charMgr.update(1);
+      return { before, after: char.getHP(), active: d._fire.isOnFire(44, 44) };
+    });
+    expect(result.active).toBe(true);
+    expect(result.after).toBeLessThan(result.before);
   });
 
-  test('disease infects character and progresses', async () => {
+  test('disease infects character and progresses', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Spawn a character and infect them
     const rooms = await df9(page).rooms();
     const tile = rooms[0].tiles[0];
@@ -788,7 +765,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // ── Milestone 14: 3D Spatial SFX ─────────────────────────────
 
-  test('door sound triggers without crash', async () => {
+  test('door sound triggers without crash', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const rooms = await df9(page).rooms();
     expect(rooms.length).toBeGreaterThan(0);
     const tile = rooms[0].tiles[0];
@@ -804,7 +781,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(pop).toBeGreaterThan(0);
   });
 
-  test('Jukebox toggle plays and stops', async () => {
+  test('Jukebox toggle plays and stops', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const rooms = await df9(page).rooms();
     const tile = rooms[0].tiles[0];
 
@@ -828,7 +805,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // ── Phase 1 Bug Fix Tests ──────────────────────────────────────
 
-  test('placed objects start as ghosts (bBuilt=false)', async () => {
+  test('placed objects start as ghosts (bBuilt=false)', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Get a room to place an object in
     const rooms = await df9(page).rooms();
     expect(rooms.length).toBeGreaterThan(0);
@@ -849,10 +826,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     }
   });
 
-  test('fire creates visual overlay on tiles', async () => {
+  test('fire creates visual overlay on tiles', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Get a floor tile in a room
     const rooms = await df9(page).rooms();
-    if (rooms.length === 0) return;
+    expect(rooms.length).toBeGreaterThan(0);
     const tile = rooms[0].tiles[0];
 
     // Start a fire at the tile
@@ -869,10 +846,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(ourFire.intensity).toBeGreaterThan(0);
   });
 
-  test('createBuiltObject produces functioning objects', async () => {
+  test('createBuiltObject produces functioning objects', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Test that createBuiltObject bypasses ghost state
     const rooms = await df9(page).rooms();
-    if (rooms.length === 0) return;
+    expect(rooms.length).toBeGreaterThan(0);
     const tile = rooms[0].tiles[1] || rooms[0].tiles[0];
 
     const result = await df9(page).createBuiltObject('Generator', tile.x, tile.y);
@@ -885,9 +862,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(gen!.condition).toBe(100);
   });
 
-  test.skip('characters eat when hungry and food is available', async () => {
-    // FIXME: Needs investigation — character AI changes (C-1/C-2/C-3) affect task assignment
-    // timing in serial test context. Passes standalone, fails in suite.
+  test('characters eat when hungry and food is available', async () => {
+    // AI selection is sensitive to accumulated characters/tasks from earlier scenarios.
+    // Start this subsystem scenario from a fresh game so only the hungry character competes.
+    await startNewGame(page);
     // Build a sealed room with full O2, power, and a Fridge — all in one atomic call
     const charId = await page.evaluate(() => {
       const d = (window as any).__df9;
@@ -1438,7 +1416,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(await page.evaluate(() => (window as any).__df9?.getGoalsPanelVisible())).toBe(false);
   });
 
-  test('Demolish object refunds matter', async () => {
+  test('Demolish object refunds matter', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const rooms = await df9(page).rooms();
     const tile = rooms[0].tiles[0];
 
@@ -1468,7 +1446,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(genAfter).toBeUndefined();
   });
 
-  test('Cuff character toggles bCuffed', async () => {
+  test('Cuff character toggles bCuffed', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const rooms = await df9(page).rooms();
     const tile = rooms[0].tiles[0];
     const charId = await page.evaluate(
@@ -1491,7 +1469,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(cuffed2).toBe(false); // toggled from true to false
   });
 
-  test('Character name can be edited', async () => {
+  test('Character name can be edited', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const rooms = await df9(page).rooms();
     const tile = rooms[0].tiles[0];
     const charId = await page.evaluate(
@@ -1521,7 +1499,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(newName).toBe('Test McTestface');
   });
 
-  test('Character personality traits are generated', async () => {
+  test('Character personality traits are generated', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const rooms = await df9(page).rooms();
     const tile = rooms[0].tiles[0];
     const charId = await page.evaluate(
@@ -1907,14 +1885,13 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       const before = research.active;
       // Pick a researchable item
       const available = research.available as string[];
-      if (available.length === 0) return { skipped: true, before, after: null };
+      if (available.length === 0) return { before, activeAfter: null, started: null };
       df9.startResearch(available[0]);
       const after = df9.getResearch();
-      return { skipped: false, before, activeAfter: after.active, started: available[0] };
+      return { before, activeAfter: after.active, started: available[0] };
     });
-    if (!result.skipped) {
-      expect(result.activeAfter).toBe(result.started);
-    }
+    expect(result.started).not.toBeNull();
+    expect(result.activeAfter).toBe(result.started);
   });
 
   test('Log system: addCharacterLog creates entries with tag scoring', async () => {
@@ -2162,18 +2139,18 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   test('Log triggers: JOINED log entry exists after spawn', async () => {
-    const result = await page.evaluate(() => {
+    const charId = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const chars = df9.getCharacters();
-      if (!chars || chars.length === 0) return null;
-      // Check if any character has a JOINED log entry
-      const charId = chars[0].id;
-      const log = df9.getCharacterLog(charId);
-      const hasJoined = log.some((e: any) => e.logType === 'JOINED');
-      return { logCount: log.length, hasJoined };
+      if (!chars?.[0]) throw new Error('Expected initial character');
+      return df9.spawnCharacterAt(chars[0].x, chars[0].y);
     });
-    expect(result).toBeTruthy();
-    expect(result!.hasJoined).toBe(true);
+    await expect.poll(
+      () => page.evaluate(id =>
+        (window as any).__df9.getCharacterLog(id).some((entry: any) => entry.logType === 'JOINED'),
+      charId),
+      { timeout: 5_000, message: 'Expected spawned character to post JOINED log' },
+    ).toBe(true);
   });
 
   // ── Batch 5-6 feature tests ──────────────────────────────────────
@@ -2224,30 +2201,30 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result!.completedAfter).toBe(true);
   });
 
-  test('Dead character tracking: kill records death', async () => {
+  test('Dead character tracking: kill records death', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const deadBefore = df9.getDeadCount();
-      // Spawn and kill a character
-      const charId = df9.spawnCharacterAt(130, 130);
+      const rooms = df9.getRooms();
+      if (!rooms?.[0]?.tiles?.[0]) throw new Error('Expected room baseline floor tile');
+      const tile = rooms[0].tiles[0];
+      const charId = df9.spawnCharacterAt(tile.x, tile.y);
       const isDeadBefore = df9.isDead(charId);
       df9.killCharacter(charId);
-      // Need a frame for processDeaths to run
       return { deadBefore, isDeadBefore, charId };
     });
-    expect(result).toBeTruthy();
-    expect(result!.isDeadBefore).toBe(false);
-    // After kill + processDeaths, dead count should increase
-    // Wait a frame for processDeaths
-    await page.waitForTimeout(100);
-    const deadAfter = await page.evaluate(() => {
-      const df9 = (window as any).__df9;
-      return df9.getDeadCount();
-    });
-    expect(deadAfter).toBeGreaterThan(0);
+    expect(result.isDeadBefore).toBe(false);
+    await expect.poll(
+      () => page.evaluate(() => (window as any).__df9.getDeadCount()),
+      { timeout: 5_000, message: 'Expected exactly one processed death' },
+    ).toBe(result.deadBefore + 1);
+    await expect.poll(
+      () => page.evaluate(id => (window as any).__df9.isDead(id), result.charId),
+      { timeout: 5_000, message: 'Expected killed character to be tracked as dead' },
+    ).toBe(true);
   });
 
-  test('O2 system: room oxygen is readable and settable', async () => {
+  test('O2 system: room oxygen is readable and settable', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const rooms = df9.getRooms();
@@ -2308,7 +2285,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(typeof result!.difficulty).toBe('number');
   });
 
-  test('Pathfinding: finds path in sealed room', async () => {
+  test('Pathfinding: finds path in sealed room', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const rooms = df9.getRooms();
@@ -2331,6 +2308,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       c.needs.hunger = -42;
       c.needs.energy = 77;
       c.needs.amusement = -10;
+      c.needs.social = 31;
+      c.needs.oxygen = 63;
+      c.needs.duty = -73;
       const charId = c.id;
       const beforeJob = c.getJob();
       // Save
@@ -2338,6 +2318,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       // Mutate to prove load restores
       c.needs.hunger = 99;
       c.needs.energy = 99;
+      c.needs.amusement = 99;
+      c.needs.social = 99;
+      c.needs.oxygen = 99;
+      c.needs.duty = 99;
       // Load
       df9.loadGame();
       // Check restored values via serialized API
@@ -2348,6 +2332,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
         found: true,
         hunger: restored.hunger,
         energy: restored.energy,
+        amusement: restored.amusement,
+        social: restored.social,
+        oxygen: restored.oxygen,
+        duty: restored.duty,
         job: restored.job,
         jobMatch: restored.job === beforeJob,
       };
@@ -2356,10 +2344,165 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result!.found).toBe(true);
     expect(result!.hunger).toBe(-42);
     expect(result!.energy).toBe(77);
+    expect(result!.amusement).toBe(-10);
+    expect(result!.social).toBe(31);
+    expect(result!.oxygen).toBe(63);
+    expect(result!.duty).toBe(-73);
     expect(result!.jobMatch).toBe(true);
   });
 
-  test('Save/Load round-trip preserves room oxygen', async () => {
+  test('Save/Load rejects malformed data before mutation and rolls back callback failures', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const baseline = df9.getSaveData();
+      const before = {
+        matter: df9.getMatter(),
+        population: df9.getPopulation(),
+        tile: df9._grid.get(0, 0),
+      };
+      const attempts: boolean[] = [];
+      const mutate = (fn: (save: any) => void) => {
+        const save = structuredClone(baseline);
+        fn(save);
+        attempts.push(df9.loadSaveData(save));
+      };
+      mutate(save => { save.version = -1; });
+      mutate(save => { save.gridData[0] = 999; });
+      mutate(save => { save.gridWidth = 513; });
+      mutate(save => { save.characters[0].tileX = -1; });
+      mutate(save => { save.objects = [{ sName: 'Door', tileX: -1, tileY: 0 }]; });
+
+      const callbackFailure = structuredClone(baseline);
+      callbackFailure.nMatter = before.matter + 12345;
+      const callbackResult = df9.loadSaveWithCharacterFailure(callbackFailure);
+      return {
+        attempts,
+        callbackResult,
+        after: {
+          matter: df9.getMatter(),
+          population: df9.getPopulation(),
+          tile: df9._grid.get(0, 0),
+        },
+        before,
+      };
+    });
+    expect(result.attempts).toEqual([false, false, false, false, false]);
+    expect(result.callbackResult).toBe(false);
+    expect(result.after).toEqual(result.before);
+  });
+
+  test('Save/Load preserves complete durable object and door state', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const manager = df9._envObjectManager;
+      const locked = manager.createObject('Door', 27, 27, true, false, true);
+      const forced = manager.createObject('Door', 28, 27, false, true, true);
+      const smashed = manager.createObject('Door', 29, 27, true, true, true);
+      const machine = manager.createObject('OxygenRecycler', 30, 27, true, false, true);
+      locked.bHasPower = true;
+      locked.setOperation(3);
+      forced.bHasPower = true;
+      forced.setOperation(1);
+      smashed.bSmashedOpen = true;
+      smashed.setCondition(0);
+      smashed.setOperation(2);
+      machine.bActive = false;
+      machine.bHasPower = true;
+      machine.setCondition(37);
+      df9.saveGame();
+
+      locked.setOperation(2);
+      forced.setOperation(2);
+      smashed.bSmashedOpen = false;
+      smashed.setCondition(100);
+      machine.bActive = true;
+      machine.setCondition(100);
+      df9.loadGame();
+
+      const byTile = (x: number) => manager.getObjects().find((obj: any) => obj.tileX === x && obj.tileY === 27);
+      const restoredLocked = byTile(27);
+      const restoredForced = byTile(28);
+      const restoredSmashed = byTile(29);
+      const restoredMachine = byTile(30);
+      return {
+        locked: { operation: restoredLocked.operation, flipX: restoredLocked.bFlipX },
+        forced: { operation: restoredForced.operation, flipY: restoredForced.bFlipY },
+        smashed: {
+          smashed: restoredSmashed.bSmashedOpen,
+          condition: restoredSmashed.nCondition,
+          open: restoredSmashed.isOpen(),
+          flipX: restoredSmashed.bFlipX,
+          flipY: restoredSmashed.bFlipY,
+        },
+        machine: {
+          active: restoredMachine.bActive,
+          condition: restoredMachine.nCondition,
+          hasPower: restoredMachine.bHasPower,
+          flipX: restoredMachine.bFlipX,
+        },
+      };
+    });
+    expect(result.locked).toEqual({ operation: 3, flipX: true });
+    expect(result.forced).toEqual({ operation: 1, flipY: true });
+    expect(result.smashed).toEqual({
+      smashed: true, condition: 0, open: true, flipX: true, flipY: true,
+    });
+    expect(result.machine).toEqual({
+      active: false, condition: 37, hasPower: true, flipX: true,
+    });
+  });
+
+  test('imported save strings render as text without executing markup', async () => {
+    const payload = '<img src=x onerror="globalThis.__saveXss=1">';
+    const loaded = await page.evaluate((maliciousName) => {
+      const df9 = (window as any).__df9;
+      const save = df9.getSaveData();
+      save.characters[0].inventory = [{
+        sTemplate: 'FoodBar',
+        sName: maliciousName,
+        nCount: 1,
+      }];
+      (globalThis as any).__saveXss = 0;
+      const ok = df9.loadSaveData(save);
+      const char = df9._charMgr.getCharacters()[0];
+      df9._uiManager.setSelectedEntity({ type: 'character', data: char });
+      return ok;
+    }, payload);
+    expect(loaded).toBe(true);
+    await page.locator('#inspector-panel').getByText(/Stats/i).first().click();
+    await expect(page.locator('#inspector-panel')).toContainText(payload);
+    expect(await page.evaluate(() => (globalThis as any).__saveXss)).toBe(0);
+    expect(await page.locator('#inspector-panel img[src="x"]').count()).toBe(0);
+  });
+
+  test('MOTD validation accepts only bounded HTTPS allowlisted content', async () => {
+    const result = await page.evaluate(async () => {
+      const module = await import('/src/ui/StartMenu.ts');
+      const valid = {
+        body: [{ text: 'Safe update', y: 10 }],
+        footer: { text: 'Spacebase Hub', url: 'https://spacebasehub.net/news' },
+      };
+      return {
+        valid: module.validateMotd(valid),
+        javascript: module.getAllowedMotdUrl('javascript:alert(1)'),
+        data: module.getAllowedMotdUrl('data:text/html,pwned'),
+        offAllowlist: module.getAllowedMotdUrl('https://example.com/'),
+        insecure: module.getAllowedMotdUrl('http://spacebasehub.net/'),
+        oversized: module.validateMotd({
+          ...valid,
+          body: [{ text: 'x'.repeat(2001) }],
+        }),
+      };
+    });
+    expect(result.valid?.footer.url).toBe('https://spacebasehub.net/news');
+    expect(result.javascript).toBeNull();
+    expect(result.data).toBeNull();
+    expect(result.offAllowlist).toBeNull();
+    expect(result.insecure).toBeNull();
+    expect(result.oversized).toBeNull();
+  });
+
+  test('Save/Load round-trip preserves room oxygen', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const rooms = df9.getRooms();
@@ -2391,7 +2534,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result!.laserCompleted).toBe(true);
   });
 
-  test('Save/Load round-trip preserves fire state', async () => {
+  test('Save/Load round-trip preserves fire state', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       // Start a fire, save, clear, load, check
@@ -2529,7 +2672,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(cap2).toBe(14);
   });
 
-  test('Room: canSuppressFire requires FirePanel or Emergency job', async () => {
+  test('Room: canSuppressFire requires FirePanel or Emergency job', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const rooms = df9._roomMgr?.getRooms() as any[];
@@ -2641,7 +2784,9 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       char.needs.amusement = -80;
       char.needs.social = -80;
       if (!char.isAlive()) return null;
-      const logCountBefore = char.tLog.length + char.tLogQueue.length;
+      char.tLogQueue.length = 0;
+      char.clearMemory('bLoggedMoraleRecently');
+      const logCountBefore = char.tLog.length;
       // Force morale tick: reset accumulator then pass enough time
       char.moraleTickAccum = 0;
       char.roomMoraleTickAccum = 0;
@@ -3002,30 +3147,65 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // ── Batch A: Door auto-open ─────────────────────────────────────
   test('door opens when character is adjacent', async () => {
-    const result = await page.evaluate(async () => {
+    const setup = await page.evaluate(async () => {
+      const { TileType } = await import('/src/world/TileTypes.ts');
       const df9 = (window as any).__df9;
-      // Build a sealed room with a generator for power
-      df9.buildSealedRoom(40, 40, 3);
-      df9.createBuiltObject('Generator', 38, 38);
-      // Place a door inside the room
-      df9.createBuiltObject('Door', 40, 42);
-      // Let power system tick and rooms settle
-      await new Promise(r => setTimeout(r, 500));
-      // Wire door's room references so hasPower() works
-      df9.setDoorRooms(40, 42);
-      // Get door state before character (should be closed)
-      const doorBefore = df9.getDoorState(40, 42);
-      // Spawn a character on the door tile
-      df9.spawnCharacterAt(40, 42);
-      // Advance frames to trigger door proximity check in CharacterManager
-      await new Promise(r => setTimeout(r, 1000));
-      const doorAfter = df9.getDoorState(40, 42);
-      return { doorBefore, doorAfter };
+      const characters = df9._charMgr.getAllCharacters();
+      let center: { x: number; y: number } | null = null;
+      for (let y = 8; y < df9._grid.height - 8 && !center; y++) {
+        for (let x = 8; x < df9._grid.width - 8 && !center; x++) {
+          const farFromCrew = characters.every((character: any) =>
+            Math.abs(character.tileX - x) + Math.abs(character.tileY - y) > 40);
+          let allSpace = farFromCrew;
+          for (let dy = -3; dy <= 3 && allSpace; dy++) {
+            for (let dx = -3; dx <= 3; dx++) {
+              if (df9._grid.get(x + dx, y + dy) !== TileType.SPACE) {
+                allSpace = false;
+                break;
+              }
+            }
+          }
+          if (allSpace) center = { x, y };
+        }
+      }
+      if (!center) throw new Error('Expected far empty patch for door room');
+      df9.buildSealedRoom(center.x, center.y, 3);
+      const room = df9._roomMgr.getRoomAt(center.x, center.y);
+      if (!room) throw new Error('Expected deterministic door room');
+      const doorTile = center;
+      df9.createBuiltObject('Door', doorTile.x, doorTile.y);
+      const door = df9._envMgr.getObjectAt(doorTile.x, doorTile.y);
+      if (!door) throw new Error('Expected door object');
+      room.nPowerOutput = 1;
+      room.nPowerSupply = 1;
+      door.updateSpaceStatus(room, room);
+      for (const character of characters) {
+        character.tileX = 1;
+        character.tileY = 1;
+      }
+      door.close();
+      return {
+        x: doorTile.x,
+        y: doorTile.y,
+        closedSnapshot: df9.getDoorState(doorTile.x, doorTile.y),
+      };
     });
-    expect(result.doorBefore).not.toBeNull();
-    expect(result.doorBefore!.open).toBe(false);
-    expect(result.doorAfter).not.toBeNull();
-    expect(result.doorAfter!.open).toBe(true);
+    expect(setup.closedSnapshot).not.toBeNull();
+    expect(setup.closedSnapshot!.hasPower).toBe(true);
+    expect(setup.closedSnapshot!.characterNearby).toBe(false);
+    expect(setup.closedSnapshot!.open).toBe(false);
+
+    await page.evaluate(
+      ({ x, y }) => (window as any).__df9.spawnCharacterAt(x, y),
+      { x: setup.x, y: setup.y },
+    );
+    await expect.poll(
+      () => page.evaluate(
+        ({ x, y }) => (window as any).__df9.getDoorState(x, y)?.open,
+        { x: setup.x, y: setup.y },
+      ),
+      { timeout: 5_000, message: 'Expected CharacterManager proximity to open door' },
+    ).toBe(true);
   });
 
   // ── Batch B: EnvObject rUser ─────────────────────────────────────
@@ -3182,12 +3362,24 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   // Batch 3: Voice category exists in audio cue data
   test('voice cues are registered in audio system', async () => {
-    const hasVoice = await page.evaluate(() => {
-      // Check that AudioCueData has voice entries
-      // Access through module system
-      return typeof (window as any).__df9?.getAudioState === 'function';
+    const voices = await page.evaluate(async () => {
+      const { AUDIO_CUES } = await import('/src/audio/AudioCueData.ts');
+      return Object.entries(AUDIO_CUES)
+        .filter(([name]) => name.startsWith('Voice_'))
+        .map(([name, cue]) => ({
+          name,
+          category: cue.category,
+          spatial: cue.spatial,
+          variants: cue.variants?.length ?? 0,
+          path: cue.path,
+        }));
     });
-    expect(hasVoice).toBe(true);
+    expect(voices.length).toBeGreaterThanOrEqual(10);
+    expect(voices.every(cue => cue.category === 'sfx' && cue.spatial)).toBe(true);
+    expect(voices).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'Voice_Male_Greeting', variants: 5 }),
+      expect.objectContaining({ name: 'Voice_Female_Panic', variants: 3 }),
+    ]));
   });
 
   // Batch 4: Orbitron font applied to game UI
@@ -3303,13 +3495,24 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     // but the system should exist without errors
   });
 
-  test('projectile renderer exists and returns beam count', async () => {
-    const count = await page.evaluate(() => {
-      const df9 = (window as any).__df9;
-      return df9.getProjectileBeamCount();
+  test('projectile renderer creates and removes beams with projectile lifecycle', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const manager = d._projectileManager;
+      const renderer = d._projectileRenderer;
+      manager.onTick(100);
+      renderer.update(manager.getActiveProjectiles());
+      const before = (renderer as any).beams.size;
+      manager.fire(10, 10, 14, 10, 0.5, 5);
+      renderer.update(manager.getActiveProjectiles());
+      const during = (renderer as any).beams.size;
+      manager.onTick(2);
+      renderer.update(manager.getActiveProjectiles());
+      const after = (renderer as any).beams.size;
+      renderer.dispose();
+      return { before, during, after };
     });
-    expect(typeof count).toBe('number');
-    expect(count).toBeGreaterThanOrEqual(0);
+    expect(result).toEqual({ before: 0, during: 1, after: 0 });
   });
 
   test('room lighting tint returns valid color for normal room', async () => {
@@ -3320,9 +3523,8 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       if (rooms.length === 0) return null;
       return df9.getRoomLightingTint(rooms[0].id);
     });
-    // Normal rooms return 0xffffff (white = no tint)
     expect(result).not.toBeNull();
-    expect(typeof result).toBe('number');
+    expect(result).toBe(0xffffff);
   });
 
   test('per-tile light map has gradient values for normal room', async () => {
@@ -3340,10 +3542,10 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
         allInRange: values.every((v: number) => v >= 0 && v <= 1),
       };
     });
-    if (result) {
-      expect(result.tileCount).toBeGreaterThan(0);
-      expect(result.allInRange).toBe(true);
-    }
+    expect(result).not.toBeNull();
+    expect(result!.tileCount).toBeGreaterThan(1);
+    expect(result!.allInRange).toBe(true);
+    expect(result!.hasVariation).toBe(true);
   });
 
   test('meteor trail effect spawns without errors', async () => {
@@ -3366,17 +3568,26 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   test('env object renderer supports tinting', async () => {
     const result = await page.evaluate(() => {
-      const df9 = (window as any).__df9;
-      // Build a room, place a generator, check it exists
-      df9.buildSealedRoom(70, 70, 2);
-      df9.createBuiltObject('Generator', 70, 70);
-      const objs = df9.getEnvObjects();
-      return objs.some((o: any) => o.name === 'Generator');
+      const d = (window as any).__df9;
+      d.buildSealedRoom(70, 70, 2);
+      d.createBuiltObject('Generator', 70, 70);
+      const obj = d._envObjectManager.getObjects().find((o: any) =>
+        o.sName === 'Generator' && o.tileX === 70 && o.tileY === 70);
+      const handle = obj && (d._envObjRenderer as any).objects.get(String(obj.id));
+      if (!obj || !handle) return null;
+      const before = handle.mesh.material.color.getHex();
+      d._envObjRenderer.setObjectTint(String(obj.id), 0x000000);
+      return { before, after: handle.mesh.material.color.getHex() };
     });
-    expect(result).toBe(true);
+    expect(result).not.toBeNull();
+    expect(result!.after).not.toBe(result!.before);
+    expect(result!.after).toBeGreaterThan(0);
+    expect(result!.after).toBeLessThan(0xffffff);
+    expect((result!.after >> 16) & 0xff).toBe((result!.after >> 8) & 0xff);
+    expect((result!.after >> 8) & 0xff).toBe(result!.after & 0xff);
   });
 
-  test('zone sprite config includes roomLights data', async () => {
+  test('zone sprite config includes roomLights data', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       // Check that ZONE_SPRITES has roomLights
       const mod = (window as any).__df9;
@@ -3389,27 +3600,36 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
 
   test('character renderer handles thought bubble creation', async () => {
     const result = await page.evaluate(() => {
-      const df9 = (window as any).__df9;
-      const chars = df9.getCharacters();
-      // All characters should have been created with thought bubbles
-      return { charCount: chars.length, hasChars: chars.length > 0 };
+      const d = (window as any).__df9;
+      const char = d._charMgr.spawnCharacterAt(72, 72);
+      const renderer = d._characterRenderer as any;
+      const handle = renderer.handles.get(char.id);
+      char.currentTask = { name: 'Mine' };
+      renderer.updateThoughtBubble(handle, char);
+      const shown = handle.thoughtEl.style.display;
+      const text = handle.thoughtTextSpan.textContent;
+      handle.thoughtShowTime = performance.now() / 1000 - 6;
+      renderer.updateThoughtBubble(handle, char);
+      const hidden = handle.thoughtEl.style.display;
+      char.currentTask = null;
+      return { shown, text, hidden };
     });
-    expect(result.hasChars).toBe(true);
+    expect(result.shown).toBe('block');
+    expect(result.text).toContain('Mining');
+    expect(result.hidden).toBe('none');
   });
 
-  test.skip('skeletal animations loaded from GLB models', async () => {
-    // FIXME: R-1 changes disabled stripSkinning, animation architecture changed
-    // Wait for GLB models to load (they load asynchronously)
-    await page.waitForTimeout(3000);
-    const info = await page.evaluate(() => {
-      return (window as any).__df9.getAnimationInfo();
-    });
+  test('skeletal animations loaded from GLB models', async () => {
+    await expect.poll(async () => {
+      const info = await page.evaluate(() => (window as any).__df9.getAnimationInfo());
+      return info.citizenClips > 50 && info.spacesuitClips > 5 && info.hasSkeleton;
+    }, { timeout: 15_000 }).toBe(true);
+    const info = await page.evaluate(() => (window as any).__df9.getAnimationInfo());
     // Citizen_Base.glb should have 140 animation clips embedded
     expect(info.citizenClips).toBeGreaterThan(50);
     // Spacesuit.glb should have 12 animation clips
     expect(info.spacesuitClips).toBeGreaterThan(5);
-    // Skinning stripped to avoid bind-pose rendering (procedural anims used instead)
-    expect(info.hasSkeleton).toBe(false);
+    expect(info.hasSkeleton).toBe(true);
   });
 
   test('door placement does not immediately convert wall to DOOR', async () => {
@@ -3483,13 +3703,13 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
         matter: text.includes('Matter'),
         o2: text.includes('O2 Capacity'),
         spacedate: text.includes('Spacedate'),
-        hasHelp: text.includes('?'),
+        hasHistoryButton: ui.querySelector('img[src*="ui_hud_buttonHistory"]') !== null,
       };
     });
     expect(result.matter).toBe(true);
     expect(result.o2).toBe(true);
     expect(result.spacedate).toBe(true);
-    expect(result.hasHelp).toBe(true);
+    expect(result.hasHistoryButton).toBe(true);
   });
 
   test('alert panel renders amber notification cards', async () => {
@@ -3742,33 +3962,19 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   test('initial crew has correct Lua flags and needs', async () => {
-    // Lua: SpacewalkingSettler: bBaseFounder=true, bImmuneToParasite=true
-    // NOTE: Prior serial tests may kill characters (removing from array).
-    // Spawn a fresh character and verify the flags are settable.
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
-      const rooms = df9.getRooms();
-      const room = rooms[0];
-      if (!room || !room.tiles.length) return { spawned: false };
-      const tile = room.tiles[0];
-      // spawnCharacterAt returns id; get the actual character from manager
-      const charId = df9.spawnCharacterAt(tile.x, tile.y);
-      const chars = df9._charMgr.getAllCharacters();
-      const char = chars.find((c: any) => c.id === charId);
-      if (!char) return { spawned: false };
-      char.bBaseFounder = true;
-      char.bImmuneToParasite = true;
-      return {
-        spawned: true,
+      return df9._charMgr.getCharacters().map((char: any) => ({
         bBaseFounder: char.bBaseFounder,
         bImmuneToParasite: char.bImmuneToParasite,
         hasCompetency: typeof char.tStats.tCompetency === 'object',
-      };
+        hunger: char.needs.hunger,
+        energy: char.needs.energy,
+      }));
     });
-    expect(result.spawned).toBe(true);
-    expect(result.bBaseFounder).toBe(true);
-    expect(result.bImmuneToParasite).toBe(true);
-    expect(result.hasCompetency).toBe(true);
+    expect(result).toHaveLength(3);
+    expect(result.every((c: any) => c.bBaseFounder && c.bImmuneToParasite && c.hasCompetency)).toBe(true);
+    expect(result.every((c: any) => typeof c.hunger === 'number' && typeof c.energy === 'number')).toBe(true);
   });
 
   test('characters have competency tracking for mining skill', async () => {
@@ -3852,27 +4058,38 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   test('BuildTile uses Lua-correct nJobExperience of 2', async () => {
-    const result = await page.evaluate(() => {
-      // Verify BuildTile.nJobExperience is 2 (Lua OptionData: BuildInside/BuildSpace)
-      const BuildTile = (window as any).__df9?._charMgr?.constructor;
-      // Access task class directly from imports isn't possible, so check via module
-      // Instead, verify the built-in task system has correct values
-      const df9 = (window as any).__df9;
-      const grid = df9._grid;
-      // The value is set as a class property, verified at type-check time
-      return { verified: true };
+    const experience = await page.evaluate(async () => {
+      const { BuildTile } = await import('/src/utility/tasks/BuildTile.ts');
+      const d = (window as any).__df9;
+      return new BuildTile(-1, d._grid).nJobExperience;
     });
-    expect(result.verified).toBe(true);
+    expect(experience).toBe(2);
   });
 
   test('DropOffRocks uses lerp yield formula not random', async () => {
-    // This is a verification of code structure rather than runtime behavior
-    // (DropOffRocks uses competency-based lerp for yield calculation)
-    const result = await page.evaluate(() => {
-      const df9 = (window as any).__df9;
-      return { verified: true };
+    const result = await page.evaluate(async () => {
+      const [{ DropOffRocks }, constants] = await Promise.all([
+        import('/src/utility/tasks/DropOffRocks.ts'),
+        import('/src/core/GameRules.ts'),
+      ]);
+      const d = (window as any).__df9;
+      const char = d._charMgr.spawnCharacterAt(51, 51);
+      char.setJob(4);
+      char.tStats.tCompetency[4] = 0.25;
+      char.heldItem = 'Rock';
+      const before = constants.GameRules.nMatter;
+      const task = new DropOffRocks('RefineryDropoff', 4);
+      task.start(char);
+      task.update(13);
+      return {
+        yield: constants.GameRules.nMatter - before,
+        expected: Math.floor(4 * (constants.MAT_MINE_ROCK_MIN
+          + 0.25 * (constants.MAT_MINE_ROCK_MAX - constants.MAT_MINE_ROCK_MIN))),
+        completed: task.isComplete(),
+      };
     });
-    expect(result.verified).toBe(true);
+    expect(result.completed).toBe(true);
+    expect(result.yield).toBe(result.expected);
   });
 
   test('demolish wall converts to FLOOR, vaporize floor converts to SPACE (Lua _demolishTile vs _vaporizeTile)', async () => {
@@ -3936,15 +4153,14 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       df9.buildRoomAt(cx, cy, 2);
       // Check a wall tile
       const wallTiles = df9.getWallTiles();
-      if (wallTiles.length === 0) return { skip: true };
+      if (wallTiles.length === 0) return null;
       const wt = wallTiles[0];
       // The wall should be type WALL (4), and door placement should work
       const tileType = df9.getTileType(wt.x, wt.y);
       return { tileType, isWall: tileType === 4 };
     });
-    if (!(result as any).skip) {
-      expect(result.isWall).toBe(true); // Wall tiles should be completed WALL type
-    }
+    expect(result).not.toBeNull();
+    expect(result!.isWall).toBe(true);
   });
 
   test('zone assignment requires completed floor tile', async () => {
@@ -4008,15 +4224,12 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.hostilesBefore).toBe(false);
   });
 
-  test('emergency alarm toggle makes room dangerous', async () => {
+  test('emergency alarm toggle makes room dangerous', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
-      // Build a sealed room so it's not dangerous by default
-      df9.buildSealedRoom(45, 45, 2);
       const rooms = df9.getRooms();
-      // Find the room at (45,45)
-      const room = rooms.find((r: any) => r.tiles.some((t: any) => t.x === 45 && t.y === 45));
-      if (!room) return { skip: true };
+      if (!rooms?.[0]) throw new Error('Expected room baseline');
+      const room = rooms[0];
       const tile = room.tiles[0];
       // Initially alarm should be off
       const alarmBefore = df9.getEmergencyAlarm(tile.x, tile.y);
@@ -4029,9 +4242,8 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       df9.setEmergencyAlarm(tile.x, tile.y, false);
       const alarmOff = df9.getEmergencyAlarm(tile.x, tile.y);
       const dangerOff = df9.isRoomDangerous(tile.x, tile.y);
-      return { skip: false, alarmBefore, dangerBefore, alarmAfter, dangerAfter, alarmOff, dangerOff };
+      return { alarmBefore, dangerBefore, alarmAfter, dangerAfter, alarmOff, dangerOff };
     });
-    if ((result as any).skip) return;
     expect(result.alarmBefore).toBe(false);
     expect(result.dangerBefore).toBe(false);
     expect(result.alarmAfter).toBe(true);
@@ -4040,11 +4252,11 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.dangerOff).toBe(false);
   });
 
-  test('room claim and unclaim changes team ownership', async () => {
+  test('room claim and unclaim changes team ownership', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const rooms = df9.getRooms();
-      if (!rooms || rooms.length === 0) return { skip: true };
+      if (!rooms || rooms.length === 0) return null;
       const room = rooms[0];
       const tile = room.tiles[0];
       const teamBefore = room.nTeam;
@@ -4058,39 +4270,63 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       const roomsReclaimed = df9.getRooms();
       const roomAfterClaim = roomsReclaimed.find((r: any) => r.id === room.id);
       const teamReclaimed = roomAfterClaim?.nTeam;
-      return { skip: false, teamBefore, teamUnclaimed, teamReclaimed };
+      return { teamBefore, teamUnclaimed, teamReclaimed };
     });
-    if ((result as any).skip) return;
-    expect(result.teamBefore).toBe(1); // TEAM_ID_PLAYER
-    expect(result.teamUnclaimed).toBe(3); // TEAM_ID_PLAYER_ABANDONED
-    expect(result.teamReclaimed).toBe(1); // TEAM_ID_PLAYER
+    expect(result).not.toBeNull();
+    expect(result!.teamBefore).toBe(1); // TEAM_ID_PLAYER
+    expect(result!.teamUnclaimed).toBe(3); // TEAM_ID_PLAYER_ABANDONED
+    expect(result!.teamReclaimed).toBe(1); // TEAM_ID_PLAYER
   });
 
   test('Puppet task exists and can be created', async () => {
-    const hasPuppetTask = await page.evaluate(() => {
-      // Verify import resolves by checking a task from the task list
+    const lifecycle = await page.evaluate(async () => {
+      const { Puppet } = await import('/src/utility/tasks/Puppet.ts');
       const df9 = (window as any).__df9;
-      const chars = df9.getCharacters();
-      if (!chars || chars.length === 0) return 'no-chars';
-      // Check character has forcePuppet/releasePuppet methods
-      const c = df9.getAllCharacters()[0];
-      return typeof c?.forcePuppet === 'function' && typeof c?.releasePuppet === 'function'
-        ? 'has-methods' : 'no-methods';
+      const character = df9._charMgr.getCharacters()[0];
+      if (!character) throw new Error('Expected initial character');
+      const task = new Puppet();
+      task.start(character);
+      const activeBefore = task.isActive();
+      task.update(86_400);
+      const activeAfter = task.isActive();
+      task.release();
+      return {
+        activeBefore,
+        activeAfter,
+        complete: task.isComplete(),
+        advertisedNeeds: task.getAdvertisedNeeds(),
+      };
     });
-    // forcePuppet/releasePuppet are on the Character class, not exposed via serialized data
-    // Just verify the task file compiled (tsc --noEmit passed) and character methods exist
-    expect(['has-methods', 'no-methods', 'no-chars']).toContain(hasPuppetTask);
+    expect(lifecycle).toEqual({
+      activeBefore: true,
+      activeAfter: true,
+      complete: true,
+      advertisedNeeds: [],
+    });
   });
 
   test('GetFieldScanned task exists as patient wait-state', async () => {
-    // Verify the task module compiles and is importable (covered by tsc --noEmit)
-    // Just check that CheckInToHospital still works (GetFieldScanned uses same pattern)
-    const result = await page.evaluate(() => {
+    const lifecycle = await page.evaluate(async () => {
+      const { GetFieldScanned } = await import('/src/utility/tasks/GetFieldScanned.ts');
       const df9 = (window as any).__df9;
-      const chars = df9.getCharacters();
-      return { charCount: chars?.length ?? 0 };
+      const character = df9._charMgr.getCharacters()[0];
+      if (!character) throw new Error('Expected initial character');
+      const task = new GetFieldScanned();
+      task.start(character);
+      const advertisedNeeds = task.getAdvertisedNeeds();
+      task.update(59);
+      const activeAt59 = task.isActive();
+      task.update(1);
+      return { advertisedNeeds, activeAt59, completeAt60: task.isComplete() };
     });
-    expect(result.charCount).toBeGreaterThanOrEqual(0);
+    expect(lifecycle).toEqual({
+      advertisedNeeds: [
+        { need: 'duty', amount: 3 },
+        { need: 'social', amount: 3 },
+      ],
+      activeAt59: true,
+      completeAt60: true,
+    });
   });
 
   test('mine submenu replaces sidebar buttons', async () => {
@@ -4488,7 +4724,6 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const grid = df9._grid;
-      const bs = df9._buildSystem;
       const matterBefore = df9.getMatter();
 
       // Build a room using buildRoom (places PENDING tiles)
@@ -4498,7 +4733,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
           tiles.push({ x: 15 + dx, y: 15 + dy });
         }
       }
-      const cost = bs.buildRoom(tiles, matterBefore);
+      const cost = df9.stageRoomBuildForTest(tiles);
 
       // Matter should NOT be deducted yet (pending)
       const matterAfter = df9.getMatter();
@@ -4508,16 +4743,15 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
       // (12,13) is a cardinal neighbor of (13,13) that's outside the drag area
       const wallType = grid.get(12, 13);
 
-      // Cancel: restore all pending tiles (floor + auto-generated walls)
-      for (let cy = 10; cy <= 20; cy++) {
-        for (let cx = 10; cx <= 20; cx++) {
-          const tt = grid.get(cx, cy);
-          if (tt === 9 || tt === 10) grid.set(cx, cy, 1);
-        }
-      }
+      const pendingCommands = df9.getCommands().filter((c: any) => c.type === 'build_tile').length;
+      df9.cancelBuild();
 
       const centerRestored = grid.get(15, 15);
-      return { cost, matterBefore, matterAfter, centerType, edgeType, wallType, centerRestored };
+      const o2Restored = grid.getO2(15, 15);
+      const remainingCommands = df9.getCommands().filter((c: any) =>
+        c.type === 'build_tile' && c.tileX >= 10 && c.tileX <= 20 && c.tileY >= 10 && c.tileY <= 20).length;
+      return { cost, matterBefore, matterAfter, centerType, edgeType, wallType,
+        centerRestored, o2Restored, pendingCommands, remainingCommands };
     });
     expect(result.cost).toBeGreaterThan(0);
     expect(result.centerType).toBe(9);
@@ -4525,27 +4759,50 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.edgeType).toBe(9);
     expect(result.wallType).toBe(10);
     expect(result.centerRestored).toBe(1);
+    expect(result.o2Restored).toBe(0);
+    expect(result.pendingCommands).toBeGreaterThan(0);
+    expect(result.remainingCommands).toBe(0);
+    expect(result.matterAfter).toBe(result.matterBefore);
+  });
+
+  test('build cursor validity matches floor and wall build rules', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+
+      df9._grid.set(22, 22, 6); // WALL_DESTROYED
+      df9._grid.set(23, 23, 8); // FLOOR
+      df9._grid.set(24, 24, 1); // SPACE
+      df9._grid.set(25, 25, 4); // WALL
+
+      return {
+        floorOnDestroyedWall: df9.canCursorPlace(22, 22, 'floor'),
+        wallOnFloor: df9.canCursorPlace(23, 23, 'wall'),
+        wallOnSpace: df9.canCursorPlace(24, 24, 'wall'),
+        wallOnExistingWall: df9.canCursorPlace(25, 25, 'wall'),
+        wallCursorMatchesBuildSystem: df9.canCursorPlace(23, 23, 'wall') === df9.canBuildWall(23, 23),
+      };
+    });
+
+    expect(result.floorOnDestroyedWall).toBe(true);
+    expect(result.wallOnFloor).toBe(true);
+    expect(result.wallOnSpace).toBe(true);
+    expect(result.wallOnExistingWall).toBe(false);
+    expect(result.wallCursorMatchesBuildSystem).toBe(true);
   });
 
   test('projected capacity calculation returns valid results for room mode', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
-      // Test getObjectData availability
-      const bedData = df9.getObjectDef('Bed');
-      const genData = df9.getObjectDef('Generator');
       return {
-        bedExists: !!bedData,
-        bedWidth: bedData?.width,
-        bedHeight: bedData?.height,
-        bedMargin: bedData?.margin,
-        bedZone: bedData?.zoneName,
-        genExists: !!genData,
+        small: df9.getProjectedCapacity(1, 1),
+        large: df9.getProjectedCapacity(12, 12),
       };
     });
-    expect(result.bedExists).toBe(true);
-    expect(result.bedWidth).toBeGreaterThan(0);
-    expect(result.bedZone).toBeTruthy();
-    expect(result.genExists).toBe(true);
+    expect(result.large.length).toBeGreaterThan(result.small.length);
+    expect(result.large).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^RESIDENCE: \d+ /),
+      expect.stringMatching(/^LIFESUPPORT: \d+ /),
+    ]));
   });
 
   test('wall-mounted object removed when vaporizing adjacent wall', async () => {
@@ -4565,22 +4822,26 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
           }
         }
       }
-      // Place an againstWall object (e.g., AirlockLocker) near a wall
-      // This is a structural test — verify that vaporize logic handles wall objects
-      const objCountBefore = df9.getEnvObjects().length;
-
-      // Vaporize a wall tile
-      if (wallTiles.length > 0) {
-        df9.vaporizeTiles([wallTiles[0]]);
-      }
+      if (wallTiles.length === 0) return { hadWalls: false };
+      const wall = wallTiles[0];
+      const cost = df9._objectPlacement.placeObject('FirePanel', wall.x, wall.y);
+      const mounted = df9._envObjectManager.getObjects().find((obj: any) =>
+        obj.sName === 'FirePanel' && obj.wallTileX === wall.x && obj.wallTileY === wall.y);
+      df9.vaporizeTiles([wall]);
       const wallType = wallTiles.length > 0 ? grid.get(wallTiles[0].x, wallTiles[0].y) : -1;
 
       return {
         hadWalls: wallTiles.length > 0,
+        placed: cost > 0 && !!mounted,
+        removed: mounted
+          ? !df9._envObjectManager.getObjects().some((obj: any) => obj.id === mounted.id)
+          : false,
         wallVaporized: wallType === 1, // SPACE
       };
     });
     expect(result.hadWalls).toBe(true);
+    expect(result.placed).toBe(true);
+    expect(result.removed).toBe(true);
     expect(result.wallVaporized).toBe(true);
   });
 
@@ -4619,22 +4880,18 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
   });
 
   test('mine mode is a drag mode matching Lua isBuildMode', async () => {
-    // Verify mine mode is included in build modes that support drag selection
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
-      const grid = df9._grid;
-      // Set tiles to asteroid
-      grid.set(40, 40, 16); // ASTEROID1
-      grid.set(41, 40, 16);
-      // Verify the build mode enum includes 'mine'
-      const mode = 'mine';
-      const isDragMode = mode === 'room' || mode === 'floor' ||
-        mode === 'wall' || mode === 'demolish' || mode === 'vaporize' ||
-        mode === 'erase' || mode === 'mine';
-      return { isDragMode, isAsteroid: grid.get(40, 40) === 16 };
+      const tiles = [{ x: 40, y: 40 }, { x: 41, y: 40 }, { x: 42, y: 40 }];
+      for (const tile of tiles) df9.placeAsteroid(tile.x, tile.y);
+      const queued = df9.designateMineTiles(tiles);
+      const commands = df9.getCommands().filter((c: any) =>
+        c.type === 'mine' && tiles.some(t => t.x === c.tileX && t.y === c.tileY));
+      return { queued, commands };
     });
-    expect(result.isDragMode).toBe(true);
-    expect(result.isAsteroid).toBe(true);
+    expect(result.queued).toBe(3);
+    expect(result.commands).toHaveLength(3);
+    expect(result.commands.every((c: any) => c.status === 'pending')).toBe(true);
   });
 
   test('demolish door converts tile back to WALL (Lua Door:remove)', async () => {
@@ -5078,7 +5335,7 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     expect(result.traderArrived).toBe('A trader has arrived!');
   });
 
-  test('wall rendering: wall tiles have correct type after room build', async () => {
+  test('wall rendering: wall tiles have correct type after room build', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     const walls = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const wallTiles = df9.getWallTiles();
@@ -5108,5 +5365,207 @@ test.describe.serial('Spacebase DF-9 E2E', () => {
     });
     expect(result.enabled).toBe(true);
     expect(result.disabled).toBe(true);
+  });
+
+  test('Lua oxygen consumption is room-wide and excludes non-breathing races', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(180, 180, 2);
+      const room = df9._roomMgr.getRoomAt(180, 180);
+      const oxygen = df9._oxygenSystem;
+      if (!room || !oxygen) return null;
+
+      room.tContiguousRooms = [];
+      room.nFireTiles = 1;
+      oxygen.setRoomO2(room, 1000 * 255 / 65535);
+      const before = room.tiles.map((t: any) => df9._grid.getO2(t.x, t.y));
+      const fakeCharacters = [
+        { tileX: 180, tileY: 180, isAlive: () => true, doesBreathe: () => true },
+        { tileX: 181, tileY: 180, isAlive: () => true, doesBreathe: () => true },
+        { tileX: 180, tileY: 181, isAlive: () => true, doesBreathe: () => false },
+        { tileX: 181, tileY: 181, isAlive: () => true, doesBreathe: () => false },
+      ];
+      oxygen.setCharacterProvider(() => fakeCharacters);
+      oxygen.update(1000);
+      const after = room.tiles.map((t: any) => df9._grid.getO2(t.x, t.y));
+      oxygen.setCharacterProvider(() => df9._charMgr.getAllCharacters());
+      room.nFireTiles = 0;
+
+      const decreases = after.map((value: number, i: number) => before[i] - value);
+      return {
+        tileCount: room.tiles.length,
+        decreases,
+        expected: Math.floor((2 * 200 + 1 * 200) / room.tiles.length),
+      };
+    });
+
+    expect(result).not.toBeNull();
+    expect(new Set(result!.decreases).size).toBe(1);
+    expect(result!.decreases[0]).toBe(result!.expected);
+  });
+
+  test('Lua oxygen generation is tile-local, dt-scaled, and frame-partition invariant', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(190, 180, 2);
+      const room = df9._roomMgr.getRoomAt(190, 180);
+      const oxygen = df9._oxygenSystem;
+      if (!room || !oxygen) return null;
+
+      room.tContiguousRooms = [];
+      df9.createBuiltObject('OxygenRecycler', 190, 180);
+      const recycler = df9._envMgr.getObjects().find(
+        (obj: any) => obj.sName === 'OxygenRecycler' && obj.tileX === 190 && obj.tileY === 180,
+      );
+      if (!recycler) return null;
+      recycler.bHasPower = true;
+      recycler.bGeneratingOxygen = true;
+
+      oxygen.setCharacterProvider(() => []);
+      oxygen.setRoomO2(room, 0);
+      for (let i = 0; i < 10; i++) oxygen.update(100);
+      const tenBy100 = df9._grid.getO2(190, 180);
+      const otherAfterTen = df9._grid.getO2(room.tiles.find((t: any) => t.x !== 190 || t.y !== 180).x,
+        room.tiles.find((t: any) => t.x !== 190 || t.y !== 180).y);
+
+      oxygen.setRoomO2(room, 0);
+      for (let i = 0; i < 4; i++) oxygen.update(250);
+      const fourBy250 = df9._grid.getO2(190, 180);
+
+      df9.buildSealedRoom(200, 180, 2);
+      df9.buildSealedRoom(210, 180, 2);
+      const source = df9._roomMgr.getRoomAt(200, 180);
+      const sink = df9._roomMgr.getRoomAt(210, 180);
+      if (!source || !sink) return null;
+      source.tContiguousRooms = [sink];
+      sink.tContiguousRooms = [];
+      oxygen.setRoomO2(source, 1000 * 255 / 65535);
+      oxygen.setRoomO2(sink, 0);
+      const totalBeforeShare = source.tiles.reduce((sum: number, t: any) => sum + df9._grid.getO2(t.x, t.y), 0);
+      (oxygen as any).shareOxygen(1);
+      const sourceAverage = source.tiles.reduce((sum: number, t: any) => sum + df9._grid.getO2(t.x, t.y), 0) / source.tiles.length;
+      const sinkAverage = sink.tiles.reduce((sum: number, t: any) => sum + df9._grid.getO2(t.x, t.y), 0) / sink.tiles.length;
+      const totalAfterShare = [...source.tiles, ...sink.tiles]
+        .reduce((sum: number, t: any) => sum + df9._grid.getO2(t.x, t.y), 0);
+
+      oxygen.setRoomO2(source, 1 * 255 / 65535);
+      oxygen.setRoomO2(sink, 0);
+      (oxygen as any).shareOxygen(1);
+      const justAboveCutoffReceived = sink.tiles
+        .reduce((sum: number, t: any) => sum + df9._grid.getO2(t.x, t.y), 0);
+      oxygen.setCharacterProvider(() => df9._charMgr.getAllCharacters());
+
+      return {
+        tenBy100,
+        fourBy250,
+        otherAfterTen,
+        sourceAverage,
+        sinkAverage,
+        totalBeforeShare,
+        totalAfterShare,
+        justAboveCutoffReceived,
+      };
+    });
+
+    expect(result).toMatchObject({
+      tenBy100: 50,
+      fourBy250: 50,
+      otherAfterTen: 0,
+      sourceAverage: 950,
+      sinkAverage: 50,
+    });
+    expect(result!.totalAfterShare).toBe(result!.totalBeforeShare);
+    expect(result!.justAboveCutoffReceived).toBeGreaterThan(10);
+  });
+
+  test('Lua door vacuum refresh and character vacuum physiology match source', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.buildSealedRoom(180, 195, 2);
+      df9.buildSealedRoom(190, 195, 2);
+      const west = df9._roomMgr.getRoomAt(180, 195);
+      const east = df9._roomMgr.getRoomAt(190, 195);
+      if (!west || !east) return null;
+
+      west.nPowerSupply = 1;
+      east.nPowerSupply = 1;
+      df9.createBuiltObject('Door', 185, 195);
+      const door = df9._envMgr.getObjects().find(
+        (obj: any) => obj.sName === 'Door' && obj.tileX === 185 && obj.tileY === 195,
+      );
+      if (!door) return null;
+      door.updateSpaceStatus(west, east);
+      const initiallyLocked = door.isLocked();
+      df9._oxygenSystem.setRoomO2(east, 0);
+      door.onTick(0.1);
+      const lockedAfterVacuum = door.isLocked();
+      df9._oxygenSystem.setRoomO2(east, 255);
+      door.onTick(0.1);
+      const unlockedAfterRestore = !door.isLocked();
+
+      const monster = df9._charMgr.spawnCharacterAt(205, 205);
+      monster.tStats.nRace = 7;
+      monster.bSpacesuit = false;
+      monster.oxygenTimer = 0;
+      const killbot = df9._charMgr.spawnCharacterAt(206, 205);
+      killbot.tStats.nRace = 10;
+      killbot.bSpacesuit = false;
+      killbot.oxygenTimer = 0;
+      df9._grid.set(205, 205, 1);
+      df9._grid.set(206, 205, 1);
+      df9._charMgr.update(1);
+
+      const indoorMonster = df9._charMgr.spawnCharacterAt(180, 195);
+      indoorMonster.tStats.nRace = 7;
+      indoorMonster.bSpacesuit = false;
+      indoorMonster.oxygenTimer = 0;
+      df9._oxygenSystem.setRoomO2(west, 0);
+      df9._charMgr.update(1);
+
+      const suited = df9._charMgr.spawnCharacterAt(181, 195);
+      suited.bSpacesuit = true;
+      suited.nSuitOxygen = 12000;
+      suited.oxygenTimer = 0;
+      df9._charMgr.update(1);
+
+      const sealedDeath = df9._charMgr.spawnCharacterAt(182, 195);
+      sealedDeath.oxygenTimer = 1;
+      sealedDeath.suffocationTime = 60;
+      df9._charMgr.update(1);
+
+      const wallDeath = df9._charMgr.spawnCharacterAt(210, 210);
+      df9._grid.set(210, 210, 6);
+      df9._grid.set(210, 208, 1);
+      wallDeath.oxygenTimer = 1;
+      wallDeath.suffocationTime = 60;
+      df9._charMgr.update(1);
+
+      return {
+        initiallyLocked,
+        lockedAfterVacuum,
+        unlockedAfterRestore,
+        monsterSpaceCause: monster.nCauseOfDeath,
+        killbotAlive: killbot.isAlive(),
+        indoorMonsterAlive: indoorMonster.isAlive(),
+        indoorMonsterSuffocation: indoorMonster.suffocationTime,
+        suitLow: suited.bLowOxygen,
+        suitSuffocation: suited.suffocationTime,
+        sealedCause: sealedDeath.nCauseOfDeath,
+        wallCause: wallDeath.nCauseOfDeath,
+      };
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.initiallyLocked).toBe(false);
+    expect(result!.lockedAfterVacuum).toBe(true);
+    expect(result!.unlockedAfterRestore).toBe(true);
+    expect(result!.monsterSpaceCause).toBe(7);
+    expect(result!.killbotAlive).toBe(true);
+    expect(result!.indoorMonsterAlive).toBe(true);
+    expect(result!.indoorMonsterSuffocation).toBe(0);
+    expect(result!.suitLow).toBe(true);
+    expect(result!.suitSuffocation).toBeGreaterThan(0);
+    expect(result!.sealedCause).toBe(3);
+    expect(result!.wallCause).toBe(7);
   });
 });

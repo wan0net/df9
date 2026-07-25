@@ -321,8 +321,13 @@ export class ResearchPanel {
 
   private renderTechTab(container: HTMLDivElement) {
     const allResearch = researchSystem.getAllResearch();
-    const activeId = researchSystem.getActiveResearch();
-    const progress = researchSystem.getProgress();
+    const legacyActiveId = researchSystem.getActiveResearch();
+    const assignedIds = new Set(
+      this.getResearchZones()
+        .map(zone => zone.sProjectID)
+        .filter((id): id is string => id !== null),
+    );
+    if (legacyActiveId) assignedIds.add(legacyActiveId);
 
     const active: [string, typeof allResearch[string]][] = [];
     const available: [string, typeof allResearch[string]][] = [];
@@ -330,7 +335,7 @@ export class ResearchPanel {
 
     for (const [id, def] of Object.entries(allResearch)) {
       if (def.bDiscoverOnly) continue;
-      if (id === activeId) active.push([id, def]);
+      if (assignedIds.has(id)) active.push([id, def]);
       else if (def.completed) completed.push([id, def]);
       else if (def.available) available.push([id, def]);
     }
@@ -343,7 +348,7 @@ export class ResearchPanel {
       for (const [id, def] of active) {
         const icon = this.getResearchIcon(def.sName);
         const entry = this.makeResearchEntry(
-          def.friendlyName, def.description, icon, progress, def.nCost, false,
+          def.friendlyName, def.description, icon, researchSystem.getProgress(id), def.nCost, false,
         );
         if (bInSelectionMode) {
           this.addAssignButton(entry, id);
@@ -358,11 +363,11 @@ export class ResearchPanel {
       for (const [id, def] of available) {
         const icon = this.getResearchIcon(id);
         const entry = this.makeResearchEntry(
-          def.friendlyName, def.description, icon, 0, def.nCost, false,
+          def.friendlyName, def.description, icon, researchSystem.getProgress(id), def.nCost, false,
         );
         if (bInSelectionMode) {
           this.addAssignButton(entry, id);
-        } else if (!activeId) {
+        } else if (assignedIds.size === 0) {
           // Legacy behavior: click to start global research when no zone selected
           entry.addEventListener('click', () => {
             researchSystem.startResearch(id);

@@ -387,13 +387,20 @@ export class EnvObject implements TaggableObject {
 
   getSaveData(): Record<string, unknown> {
     return {
+      schemaVersion: 1,
+      kind: 'object',
       sName: this.sName,
       tileX: this.tileX,
       tileY: this.tileY,
       bFlipX: this.bFlipX,
       bFlipY: this.bFlipY,
+      wallTileX: this.wallTileX,
+      wallTileY: this.wallTileY,
+      bBuilt: this.bBuilt,
       nCondition: this.nCondition,
       bActive: this.bActive,
+      bHasPower: this.bHasPower,
+      nTempPowerLossEnd: this.nTempPowerLossEnd,
       sUniqueName: this.sUniqueName,
       sBuilderName: this.sBuilderName,
       sBuildTime: this.sBuildTime,
@@ -410,6 +417,11 @@ export class EnvObject implements TaggableObject {
     );
     obj.nCondition = (data.nCondition as number) ?? 100;
     obj.bActive = (data.bActive as boolean) ?? true;
+    obj.wallTileX = (data.wallTileX as number) ?? -1;
+    obj.wallTileY = (data.wallTileY as number) ?? -1;
+    obj.bBuilt = (data.bBuilt as boolean) ?? true;
+    obj.bHasPower = (data.bHasPower as boolean) ?? false;
+    obj.nTempPowerLossEnd = (data.nTempPowerLossEnd as number) ?? -1;
     obj.sUniqueName = (data.sUniqueName as string) ?? '';
     obj.sBuilderName = (data.sBuilderName as string) ?? '';
     obj.sBuildTime = (data.sBuildTime as string) ?? '';
