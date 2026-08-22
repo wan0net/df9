@@ -262,39 +262,23 @@ export class InspectorPanel {
     return wrapper;
   }
 
-  /** Build a CSS-only object portrait: condition-colored box with object type. */
+  /** Build the original object portrait from UI/Portraits. */
   private buildObjectPortrait(obj: EnvObject): HTMLDivElement {
     const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px;';
+    wrapper.dataset.testid = 'object-portrait';
+    wrapper.style.cssText = `position:absolute;left:30px;top:-19px;width:110px;height:124px;overflow:hidden;background:${AMBER};`;
 
-    // Condition → border color
-    let borderColor = '#4f4'; // good
-    if (obj.nCondition <= 0) borderColor = '#f44';        // destroyed
-    else if (obj.nCondition <= 25) borderColor = '#f44';   // critical
-    else if (obj.nCondition <= 50) borderColor = '#ff8800'; // damaged (amber)
-    else if (obj.nCondition <= 75) borderColor = '#dfa200'; // worn
-
-    const box = document.createElement('div');
-    box.style.cssText = `
-      width:64px;height:64px;
-      border:3px solid ${borderColor};
-      background:rgba(255,255,255,0.05);
-      display:flex;align-items:center;justify-content:center;
-      font-size:12px;color:${borderColor};text-align:center;
-      font-family:'Dosis',sans-serif;font-weight:600;
-      padding:4px;line-height:1.2;flex-shrink:0;
-      word-break:break-word;
-    `;
-    // Show abbreviated sprite/type name inside box
-    const spriteName = obj.tData.spriteName ?? obj.sName;
-    box.textContent = spriteName.length > 12 ? spriteName.slice(0, 11) + '\u2026' : spriteName;
-    wrapper.appendChild(box);
-
-    // Condition text beside portrait
-    const condLabel = document.createElement('div');
-    condLabel.style.cssText = `font-size:16px;color:${borderColor};`;
-    condLabel.textContent = `${obj.getConditionUIString()} (${Math.round(obj.nCondition)}%)`;
-    wrapper.appendChild(condLabel);
+    const portrait = document.createElement('img');
+    const portraitName = obj.tData.portrait ?? 'portrait_generic';
+    portrait.src = `/assets/ui/portraits/${portraitName}.png`;
+    portrait.alt = obj.tData.friendlyName;
+    portrait.style.cssText = 'position:absolute;left:3px;top:1px;width:105px;height:120px;object-fit:contain;image-rendering:auto;';
+    portrait.addEventListener('error', () => {
+      if (!portrait.src.endsWith('/portrait_generic.png')) {
+        portrait.src = '/assets/ui/portraits/portrait_generic.png';
+      }
+    });
+    wrapper.appendChild(portrait);
 
     return wrapper;
   }
@@ -823,31 +807,74 @@ export class InspectorPanel {
   }
 
   private renderObject(obj: EnvObject) {
-    // Portrait (U-2): condition-colored box with object type
-    this.contentEl.appendChild(this.buildObjectPortrait(obj));
-
-    // ── Header area (always shown, Lua ObjectInspector main view) ──
-    const header = this.makeSection();
     const condStr = obj.getConditionUIString();
     const emergencyStr = obj.getEmergencyString();
+    // Lua EnvObject.tConditionColors, evaluated from broadest to narrowest.
+    const conditionColor = obj.nCondition < 1 ? '#b30000'
+      : obj.nCondition < 25 ? '#994000'
+      : obj.nCondition < 50 ? '#b38000'
+      : obj.nCondition < 75 ? '#668000'
+      : '#009900';
 
-    header.innerHTML = `
-      <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
-        ${obj.tData.friendlyName}
-        ${emergencyStr ? `<span style="color:#f44;font-size:20px;margin-left:8px;">[${emergencyStr}]</span>` : ''}
-      </div>
-      <div style="margin-bottom:6px;">
-        ${this.bar(line('INSPEC054TEXT').replace(':', ''), Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}
-      </div>
-      <div style="margin-bottom:4px;">${line('INSPEC054TEXT')} <span style="color:${obj.nCondition < 50 ? '#f44' : '#4f4'};">${condStr} (${Math.round(obj.nCondition)}%)</span></div>
-      ${obj instanceof Door ? `<div style="margin-bottom:4px;">${line('PROPSX055TEXT')} ${this.getDoorStatusText(obj)}</div>` : ''}
-      <div style="margin-bottom:4px;background:#3B2600;padding:4px 8px;color:${AMBER};font-size:20px;">${obj.tData.description ?? ''}</div>
-    `;
-    this.contentEl.appendChild(header);
+    // Lua ObjectInspectorLayout: 418×106 amber summary band, portrait at
+    // (33, -145), name at (145, -174), and condition strip at (140, -218).
+    const summary = document.createElement('div');
+    summary.dataset.testid = 'object-summary';
+    summary.style.cssText = `position:relative;width:${PANEL_W}px;height:106px;background:${AMBER};box-sizing:border-box;`;
+    summary.appendChild(this.buildObjectPortrait(obj));
+
+    const name = document.createElement('div');
+    name.textContent = obj.tData.friendlyName;
+    name.style.cssText = 'position:absolute;left:145px;top:8px;width:268px;height:35px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:26px;line-height:35px;font-weight:600;color:#000;';
+    summary.appendChild(name);
+
+    const condition = document.createElement('div');
+    condition.dataset.testid = 'object-condition';
+    condition.style.cssText = `position:absolute;left:140px;top:55px;width:273px;height:30px;box-sizing:border-box;background:${conditionColor};color:#000;display:flex;align-items:center;padding-left:5px;overflow:hidden;`;
+    const conditionLabel = document.createElement('span');
+    conditionLabel.textContent = `${line('INSPEC054TEXT')} `;
+    conditionLabel.style.cssText = 'font-size:24px;line-height:30px;font-weight:600;white-space:nowrap;';
+    const conditionValue = document.createElement('span');
+    conditionValue.textContent = `${condStr} (${Math.floor(obj.nCondition)}%)`;
+    conditionValue.style.cssText = 'font-size:24px;line-height:30px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    condition.append(conditionLabel, conditionValue);
+    summary.appendChild(condition);
+
+    if (emergencyStr) {
+      const emergency = document.createElement('div');
+      emergency.dataset.testid = 'object-emergency';
+      emergency.textContent = emergencyStr;
+      emergency.style.cssText = 'position:absolute;left:140px;top:-30px;width:278px;height:30px;box-sizing:border-box;background:#f00;color:#fff;font-size:24px;line-height:30px;font-weight:600;padding-left:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      summary.appendChild(emergency);
+    }
+    this.contentEl.appendChild(summary);
+
+    // Lua StatsBG: fixed 152px description field before the folder tabs.
+    const info = document.createElement('div');
+    info.dataset.testid = 'object-info-summary';
+    info.style.cssText = `position:relative;width:${PANEL_W}px;height:152px;background:${AMBER_OPAQUE};box-sizing:border-box;color:${AMBER};overflow:hidden;`;
+    const description = document.createElement('div');
+    description.textContent = obj.tData.description ?? '';
+    description.style.cssText = 'position:absolute;left:20px;top:8px;width:380px;max-height:64px;overflow:hidden;font-size:26px;line-height:30px;font-weight:600;';
+    info.appendChild(description);
+    if (obj instanceof Door) {
+      const doorStatus = document.createElement('div');
+      doorStatus.style.cssText = 'position:absolute;left:16px;top:82px;width:386px;height:36px;display:flex;align-items:center;overflow:hidden;font-size:26px;line-height:32px;';
+      const doorLabel = document.createElement('span');
+      doorLabel.textContent = `${line('PROPSX055TEXT')} `;
+      doorLabel.style.fontWeight = '400';
+      const doorValue = document.createElement('span');
+      doorValue.innerHTML = this.getDoorStatusText(obj);
+      doorValue.style.cssText = 'font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      doorStatus.append(doorLabel, doorValue);
+      info.appendChild(doorStatus);
+    }
+    this.contentEl.appendChild(info);
 
     // ── Tab bar: Stats | Action | About (Lua ObjectInspector 3 tabs) ──
     const tabRow = document.createElement('div');
-    tabRow.style.cssText = 'display:flex;border-top:1px solid #333;border-bottom:1px solid #333;';
+    tabRow.dataset.testid = 'object-tabs';
+    tabRow.style.cssText = `width:${PANEL_W}px;height:50px;display:flex;align-items:flex-start;box-sizing:border-box;background:${AMBER_OPAQUE};border-bottom:3px solid ${AMBER};`;
     const objTabs: { key: ObjectTab; label: string }[] = [
       { key: 'stats', label: line('INSPEC017TEXT') || 'Stats' },
       { key: 'action', label: line('INSPUI005TEXT') || 'Action' },
@@ -862,22 +889,21 @@ export class InspectorPanel {
       const btn = document.createElement('div');
       const isActive = this.objectTab === t.key;
       const iconSrc = objTabIcons[t.key];
+      btn.dataset.objectTab = t.key;
+      btn.title = t.label;
       btn.style.cssText = `
-        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px;
+        width:83px;height:47px;box-sizing:border-box;cursor:pointer;
         display:flex;align-items:center;justify-content:center;
         background-image:url('${isActive ? 'assets/ui/inspector/ui_inspector_folderActive.png' : 'assets/ui/inspector/ui_inspector_folderInactive.png'}');
         background-size:100% 100%;background-repeat:no-repeat;
-        color:${isActive ? '#000' : AMBER};
       `;
       if (iconSrc) {
         const img = document.createElement('img');
         img.src = iconSrc;
-        img.style.cssText = 'width:20px;height:20px;margin-right:4px;vertical-align:middle;image-rendering:pixelated;';
+        img.alt = t.label;
+        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);'}`;
         btn.appendChild(img);
       }
-      const span = document.createElement('span');
-      span.textContent = t.label;
-      btn.appendChild(span);
       btn.addEventListener('click', () => { this.objectTab = t.key; this.refresh(); });
       tabRow.appendChild(btn);
     }
@@ -891,8 +917,6 @@ export class InspectorPanel {
       case 'about': this.renderObjectAboutTab(body, obj); break;
     }
     this.contentEl.appendChild(body);
-
-    this.addCloseButton();
   }
 
   /** Object Stats tab — power, oxygen, condition details. */

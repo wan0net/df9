@@ -5437,6 +5437,69 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.panelText).not.toContain('[X] Close');
   });
 
+  test('object inspector uses the original portrait, condition strip, and folder geometry', async () => {
+    await page.evaluate(() => {
+      const d = (window as any).__df9;
+      d.createBuiltObject('Bed', 216, 216);
+      const bed = d._envMgr.getObjects().find(
+        (obj: any) => obj.sName === 'Bed' && obj.tileX === 216 && obj.tileY === 216,
+      );
+      d._uiManager.setSelectedEntity({ type: 'object', data: bed });
+    });
+    await expect(page.locator('[data-testid="object-summary"]')).toBeVisible();
+    await expect(page.locator('[data-testid="object-portrait"] img')).toHaveCount(1);
+
+    const result = await page.evaluate(() => {
+      const panel = document.getElementById('inspector-panel')!;
+      const summary = panel.querySelector('[data-testid="object-summary"]') as HTMLElement;
+      const portrait = panel.querySelector('[data-testid="object-portrait"]') as HTMLElement;
+      const portraitImage = portrait.querySelector('img') as HTMLImageElement;
+      const condition = panel.querySelector('[data-testid="object-condition"]') as HTMLElement;
+      const info = panel.querySelector('[data-testid="object-info-summary"]') as HTMLElement;
+      const tabRow = panel.querySelector('[data-testid="object-tabs"]') as HTMLElement;
+      const tabs = [...panel.querySelectorAll('[data-object-tab]')] as HTMLElement[];
+      return {
+        panelText: panel.textContent ?? '',
+        summaryHeight: summary.style.height,
+        summaryColor: getComputedStyle(summary).backgroundColor,
+        portrait: { left: portrait.style.left, top: portrait.style.top, width: portrait.style.width, height: portrait.style.height },
+        portraitImage: { src: portraitImage.src, loaded: portraitImage.naturalWidth > 0 },
+        condition: {
+          left: condition.style.left,
+          top: condition.style.top,
+          width: condition.style.width,
+          height: condition.style.height,
+          color: getComputedStyle(condition).backgroundColor,
+        },
+        infoHeight: info.style.height,
+        tabRowHeight: tabRow.style.height,
+        tabs: tabs.map(tab => ({
+          tab: tab.dataset.objectTab,
+          width: tab.style.width,
+          height: tab.style.height,
+          text: tab.textContent ?? '',
+          icon: (tab.querySelector('img') as HTMLImageElement | null)?.src ?? '',
+        })),
+      };
+    });
+
+    expect(result.summaryHeight).toBe('106px');
+    expect(result.summaryColor).toBe('rgb(223, 162, 0)');
+    expect(result.portrait).toEqual({ left: '30px', top: '-19px', width: '110px', height: '124px' });
+    expect(result.portraitImage.loaded).toBe(true);
+    expect(result.portraitImage.src).toContain('/assets/ui/portraits/Env_Bed.png');
+    expect(result.condition).toEqual({
+      left: '140px', top: '55px', width: '273px', height: '30px', color: 'rgb(0, 153, 0)',
+    });
+    expect(result.infoHeight).toBe('152px');
+    expect(result.tabRowHeight).toBe('50px');
+    expect(result.tabs).toHaveLength(3);
+    expect(result.tabs.every(tab => tab.width === '83px' && tab.height === '47px' && tab.text === '')).toBe(true);
+    expect(result.tabs.map(tab => tab.tab)).toEqual(['stats', 'action', 'about']);
+    expect(result.tabs[1].icon).toContain('/assets/ui/inspector/ui_icon_activity.png');
+    expect(result.panelText).not.toContain('[X] Close');
+  });
+
   test('construct submenu matches screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase', async () => {
     // Screenshot 20.32.27: icon + label + lowercase hotkey on right
     // No Door/Airlock button in the original game screenshot
