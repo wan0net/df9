@@ -6,6 +6,7 @@ import { CreditsScreen } from './CreditsScreen';
 import { SettingsPanel, type SettingsCallbacks } from './SettingsPanel';
 import { SaveSlotPanel } from './SaveSlotPanel';
 import { playWarble, playWarbleFullscreen } from './WarbleEffect';
+import { getStoredOrAutoUIScale } from './UIScale';
 
 const AMBER = '#dfa200';
 const BRIGHT_AMBER = '#FFE696'; // Lua Gui.BRIGHT_AMBER = rgba(255,230,150,1)
@@ -618,12 +619,7 @@ export class StartMenuState implements SceneState {
   }
 
   private getUIScale(): number {
-    const stored = localStorage.getItem('df9_ui_scale');
-    if (stored) {
-      const v = parseFloat(stored);
-      if (v > 0 && v <= 2) return v;
-    }
-    return Math.min(1, window.innerWidth / 1920);
+    return getStoredOrAutoUIScale();
   }
 
   exit() {

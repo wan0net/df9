@@ -2500,7 +2500,7 @@ test.describe('Spacebase DF-9 E2E', () => {
     // Inspector live data refresh replaces its tab DOM every 500 ms. Dispatch
     // synchronously inside the page so Playwright actionability waiting cannot
     // race that intentional rebuild under parallel WebGL load.
-    await page.locator('#inspector-panel').getByText(/Stats/i).first().evaluate((el) => {
+    await page.locator('#inspector-panel [data-tab="stats"]').evaluate((el) => {
       (el as HTMLElement).click();
     });
     await expect(page.locator('#inspector-panel')).toContainText(payload);
@@ -3518,14 +3518,21 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('selection highlight uses the original character_selected sprite', async () => {
-    const src = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
       const d = (window as any).__df9;
       const char = d._charMgr.getCharacters()[0];
       const highlight = d._selectionHighlight as any;
       highlight.update({ type: 'character', data: char });
-      return highlight.mat?.map?.image?.currentSrc || highlight.mat?.map?.image?.src || '';
+      return {
+        src: highlight.mat?.map?.image?.currentSrc || highlight.mat?.map?.image?.src || '',
+        color: highlight.mat?.color?.getHex(),
+        roomColor: highlight.roomMat?.color?.getHex(),
+      };
     });
-    expect(src).toContain('/assets/ui/misc/character_selected.png');
+    expect(result.src).toContain('/assets/ui/misc/character_selected.png');
+    // GuiManager.createSelectionProp(): prop:setColor(GuiManager.AMBER).
+    expect(result.color).toBe(0xdfa200);
+    expect(result.roomColor).toBe(0xdfa200);
   });
 
   test('held prop renderer textures source models and replaces changed equipment', async () => {
@@ -3856,6 +3863,58 @@ test.describe('Spacebase DF-9 E2E', () => {
       walking: 'Spacewalk_Walk',
       building: 'Spacewalk_Build',
     });
+  });
+
+  test('changing character race remounts the matching original rig', async () => {
+    await expect.poll(async () => page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      const handle = char ? d._characterRenderer.handles.get(char.id) : null;
+      return Boolean(handle?.mixer);
+    }), { timeout: 15_000 }).toBe(true);
+
+    const result = await page.evaluate(async () => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      const renderer = d._characterRenderer as any;
+
+      char.bSpacewalking = false;
+      renderer.updateCharacter(char);
+      const citizenObject = renderer.handles.get(char.id).object;
+      char.tStats.nRace = 7; // RACE_MONSTER / Bad_Alien rig
+
+      const deadline = performance.now() + 10_000;
+      while (renderer.handles.get(char.id).modelRace !== 7 && performance.now() < deadline) {
+        renderer.updateCharacter(char);
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      renderer.updateCharacter(char);
+      const handle = renderer.handles.get(char.id);
+      handle.mixer?.update(1 / 60);
+      const nodeNames: string[] = [];
+      handle.object.traverse((node: any) => nodeNames.push(node.name));
+      const clip = handle.currentAction?.getClip();
+      const bindingState = (handle.mixer?._bindings ?? []).map((binding: any) => ({
+        path: binding.binding?.path,
+        nodeName: binding.binding?.parsedPath?.nodeName,
+        node: binding.binding?.node?.name ?? null,
+      }));
+      return {
+        modelRace: handle.modelRace,
+        objectReplaced: handle.object !== citizenObject,
+        hasMonsterLegJoint: nodeNames.some(name => name.includes('Lf_Fr_LegA')),
+        clip: clip?.name ?? null,
+        bindingState,
+      };
+    });
+
+    expect(result.modelRace).toBe(7);
+    expect(result.objectReplaced).toBe(true);
+    expect(result.hasMonsterLegJoint).toBe(true);
+    expect(result.clip).toBe('BadAlien_Idle');
+    expect(result.bindingState.length).toBeGreaterThan(0);
+    expect(result.bindingState.every((binding: any) => binding.node !== null)).toBe(true);
+    expect(result.bindingState.every((binding: any) => !binding.path.startsWith('Lf_'))).toBe(true);
   });
 
   test('character renderer uses extracted race textures and job outfits', async () => {
@@ -5325,6 +5384,59 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result!.width).toBe('418px'); // Lua: nButtonWidth=418
   });
 
+  test('character inspector matches the original portrait, stats, and tab geometry', async () => {
+    await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      d._uiManager.setSelectedEntity({ type: 'character', data: char });
+    });
+    await expect(page.locator('[data-testid="character-summary"]')).toBeVisible();
+    await expect(page.locator('[data-testid="character-portrait"] img')).toHaveCount(2);
+
+    const result = await page.evaluate(() => {
+      const panel = document.getElementById('inspector-panel')!;
+      const summary = panel.querySelector('[data-testid="character-summary"]') as HTMLElement;
+      const stats = panel.querySelector('[data-testid="character-stats-summary"]') as HTMLElement;
+      const portrait = panel.querySelector('[data-testid="character-portrait"]') as HTMLElement;
+      const portraitImages = [...portrait.querySelectorAll('img')] as HTMLImageElement[];
+      const tabs = [...panel.querySelectorAll('[data-tab]')] as HTMLElement[];
+      const name = summary.querySelector('span') as HTMLElement;
+      return {
+        panelTop: panel.style.top,
+        panelText: panel.textContent ?? '',
+        summaryHeight: summary.style.height,
+        summaryColor: getComputedStyle(summary).backgroundColor,
+        portrait: { left: portrait.style.left, top: portrait.style.top, width: portrait.style.width, height: portrait.style.height },
+        portraitImages: portraitImages.map(img => ({ src: img.src, loaded: img.naturalWidth > 0 })),
+        nameFont: getComputedStyle(name).fontSize,
+        statsHeight: stats.style.height,
+        rowHeights: [...stats.children].map(row => (row as HTMLElement).style.height),
+        tabs: tabs.map(tab => ({
+          tab: tab.dataset.tab,
+          width: tab.style.width,
+          height: tab.style.height,
+          icon: (tab.querySelector('img') as HTMLImageElement | null)?.src ?? '',
+          text: tab.textContent ?? '',
+        })),
+      };
+    });
+
+    expect(result.panelTop).toBe('81px');
+    expect(result.summaryHeight).toBe('106px');
+    expect(result.summaryColor).toBe('rgb(223, 162, 0)');
+    expect(result.portrait).toEqual({ left: '30px', top: '-19px', width: '110px', height: '124px' });
+    expect(result.portraitImages.every(image => image.loaded)).toBe(true);
+    expect(result.portraitImages[0].src).toContain('/assets/ui/portraits/Background_01.png');
+    expect(result.nameFont).toBe('26px');
+    expect(result.statsHeight).toBe('152px');
+    expect(result.rowHeights).toEqual(['36px', '36px', '36px', '36px']);
+    expect(result.tabs).toHaveLength(5);
+    expect(result.tabs.every(tab => tab.width === '83px' && tab.height === '47px' && tab.text === '')).toBe(true);
+    expect(result.tabs[4].icon).toContain('/assets/ui/inspector/ui_icon_duty.png');
+    expect(result.panelText).not.toContain('HPMORROOMACTCAM');
+    expect(result.panelText).not.toContain('[X] Close');
+  });
+
   test('construct submenu matches screenshot order: Room, Wall, Floor, Object, Tear Down, Vaporize, Erase', async () => {
     // Screenshot 20.32.27: icon + label + lowercase hotkey on right
     // No Door/Airlock button in the original game screenshot
@@ -5438,6 +5550,21 @@ test.describe('Spacebase DF-9 E2E', () => {
     // Auto-scale should be between 0.3 and 1.5 based on viewport vs 1920
     expect(scale).toBeGreaterThanOrEqual(0.3);
     expect(scale).toBeLessThanOrEqual(1.5);
+  });
+
+  test('UI scale: narrow windows retain the original 1280-wide minimum presentation', async () => {
+    await page.setViewportSize({ width: 545, height: 863 });
+    const result = await page.evaluate(() => {
+      localStorage.removeItem('df9_ui_scale');
+      const mgr = (window as any).__df9._uiManager;
+      mgr.applyUIScale();
+      return {
+        scale: mgr.constructor.getUIScale(),
+        transform: document.getElementById('game-ui')?.style.transform ?? '',
+      };
+    });
+    expect(result.scale).toBeCloseTo(1280 / 1920, 6);
+    expect(result.transform).toBe('scale(0.666667)');
   });
 
   test('start menu keeps Lua reference regions separated at 1280x720', async () => {

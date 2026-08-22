@@ -4,6 +4,7 @@ import { SoundManager } from '../audio/SoundManager';
 import { line } from '../localization/Localization';
 import { playWarbleFullscreen } from './WarbleEffect';
 import { GameRules } from '../core/GameRules';
+import { getStoredOrAutoUIScale } from './UIScale';
 
 const AMBER_HEX = '#dfa200';
 const GREEN_HEX = '#a5d318';
@@ -1141,12 +1142,7 @@ export class NewGameScreenState implements SceneState {
   }
 
   private getUIScale(): number {
-    const stored = localStorage.getItem('df9_ui_scale');
-    if (stored) {
-      const v = parseFloat(stored);
-      if (v > 0 && v <= 2) return v;
-    }
-    return Math.min(1, window.innerWidth / 1920);
+    return getStoredOrAutoUIScale();
   }
 
   exit() {

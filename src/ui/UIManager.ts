@@ -22,6 +22,7 @@ import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { SoundManager } from '../audio/SoundManager';
 import { line } from '../localization/Localization';
 import { playWarble } from './WarbleEffect';
+import { getStoredOrAutoUIScale } from './UIScale';
 
 const AMBER = '#dfa200';
 const BRIGHT_AMBER = '#FFE696';
@@ -927,6 +928,7 @@ export class UIManager {
     inspBackEl.addEventListener('click', () => {
       SoundManager.playSfx('degauss');
       this.inspectSubActive = false;
+      this.inspectorPanel.setEntity(null);
     });
     inspBackEl.addEventListener('mouseenter', () => { inspBackEl.style.background = `rgba(223,162,0,0.2)`; });
     inspBackEl.addEventListener('mouseleave', () => { inspBackEl.style.background = 'transparent'; });
@@ -1759,7 +1761,12 @@ export class UIManager {
 
   /** Set the selected entity to show in the inspector panel. */
   setSelectedEntity(entity: SelectedEntity) {
-    if (entity) this.hideActivePanel();
+    if (entity) {
+      this.hideActivePanel();
+      this.inspectSubActive = true;
+    } else {
+      this.inspectSubActive = false;
+    }
     this.inspectorPanel.setEntity(entity);
   }
 
@@ -2350,9 +2357,8 @@ export class UIManager {
 
   /**
    * Apply CSS transform scale to the entire UI root.
-   * The Lua game targets 1920×1152; on smaller screens, font sizes
-   * appear oversized. This scales the UI container uniformly.
-   * Default auto-calculates from viewport width vs 1920.
+   * The Lua game targets a 1920-wide canvas and defaults to 1280×720.
+   * Auto scaling preserves that original minimum presentation size.
    */
   applyUIScale() {
     const scale = UIManager.getUIScale();
@@ -2371,13 +2377,7 @@ export class UIManager {
 
   /** Get current UI scale (0.5–2.0). 0 = auto (viewport-based). */
   static getUIScale(): number {
-    const stored = localStorage.getItem('df9_ui_scale');
-    if (stored) {
-      const v = parseFloat(stored);
-      if (v > 0 && v <= 2) return v;
-    }
-    // Auto: scale to match Lua's 1920×1080 target resolution
-    return Math.min(1, window.innerWidth / 1920);
+    return getStoredOrAutoUIScale();
   }
 
   static setUIScale(scale: number) {

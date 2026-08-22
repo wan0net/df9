@@ -41,7 +41,21 @@ function getDeathCauseName(cause: number): string {
 }
 
 const AMBER = '#dfa200';
+const AMBER_OPAQUE = '#3b2600';
 const PANEL_W = 418; // Lua CitizenInspectorLayout.lua: nButtonWidth=418
+
+const CHARACTER_PORTRAITS: Record<number, string> = {
+  [RACE_HUMAN]: 'Human_Male_White_01.png',
+  [RACE_JELLY]: 'Jelly_Female_Blue_01.png',
+  [RACE_TOBIAN]: 'TobianDongHead_Male_Blue_01.png',
+  [RACE_CAT]: 'Cat_male_black_01.png',
+  [RACE_BIRDSHARK]: 'Birdshark_Male_White_01.png',
+  [RACE_CHICKEN]: 'Chicken_Male_White_01.png',
+  [RACE_MONSTER]: 'Monster_01.png',
+  [RACE_SHAMON]: 'Shamon_Male_White_01.png',
+  [RACE_MURDERFACE]: 'MurderFace_Male_Green_01.png',
+  [RACE_KILLBOT]: 'Murder_Robot_01.png',
+};
 
 /** Morale value → text label (Lua CharacterConstants.lua morale thresholds). */
 function getMoraleText(morale: number): string {
@@ -126,9 +140,9 @@ export class InspectorPanel {
     this.el = document.createElement('div');
     this.el.id = 'inspector-panel';
     this.el.style.cssText = `
-      position:absolute;left:0;top:0;width:${PANEL_W}px;height:100%;
-      background:rgba(0,0,0,0.85);
-      color:#ccc;font-family:'nevis','Dosis',sans-serif;font-size:20px; /* Lua nevisBody=20 */
+      position:absolute;left:0;top:81px;width:${PANEL_W}px;height:calc(100% - 81px);
+      background:rgba(0,0,0,0.96);
+      color:#ccc;font-family:'Dosis',sans-serif;font-size:20px;
       display:none;pointer-events:auto;z-index:16;overflow-y:auto;
     `;
 
@@ -203,24 +217,11 @@ export class InspectorPanel {
 
     this.contentEl.textContent = '';
 
-    // Back button + ">> Inspect" header (Lua: CitizenInspector top bar)
-    const topBar = document.createElement('div');
-    topBar.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:6px 10px;`;
-    const backBtn = document.createElement('div');
-    backBtn.textContent = 'Back';
-    backBtn.style.cssText = `font-size:22px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
-    backBtn.addEventListener('click', () => this.setEntity(null));
-    const closeBtn = document.createElement('div');
-    closeBtn.textContent = 'X';
-    closeBtn.style.cssText = `font-size:22px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
-    closeBtn.addEventListener('click', () => this.setEntity(null));
-    topBar.appendChild(backBtn);
-    topBar.appendChild(closeBtn);
-    this.contentEl.appendChild(topBar);
-
+    // InspectMenu occupies the first 81px. This title band brings the citizen
+    // portrait to source y=163 without duplicating Back/Close controls.
     const inspLabel = document.createElement('div');
     inspLabel.textContent = `>> ${line('HUDHUD005TEXT')}`;
-    inspLabel.style.cssText = `font-size:22px;color:${AMBER};padding:0 10px 4px;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
+    inspLabel.style.cssText = `height:82px;display:flex;align-items:center;padding:0 12px;box-sizing:border-box;font-size:40px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;`;
     this.contentEl.appendChild(inspLabel);
 
     switch (this.entity.type) {
@@ -238,48 +239,25 @@ export class InspectorPanel {
 
   // ── Portraits ──────────────────────────────────────────
 
-  /** Race → background color for the procedural portrait avatar. */
-  private static RACE_PORTRAIT_COLORS: Record<number, string> = {
-    [RACE_HUMAN]:      '#7a5c3a', // warm brown
-    [RACE_TOBIAN]:     '#4a6e4a', // greenish
-    [RACE_JELLY]:      '#3a5c8a', // blue
-    [RACE_CAT]:        '#b87333', // orange-copper
-    [RACE_BIRDSHARK]:  '#6a4a7a', // purple
-    [RACE_CHICKEN]:    '#8a7a3a', // olive-gold
-    [RACE_SHAMON]:     '#3a7a7a', // teal
-    [RACE_MONSTER]:    '#7a2a2a', // dark red
-    [RACE_MURDERFACE]: '#5a1a1a', // darker red
-    [RACE_KILLBOT]:    '#4a4a5a', // steel grey
-  };
-
-  /** Build a CSS-only character portrait: colored circle with initials. */
+  /** Build the source portrait stack from UI/Portraits. */
   private buildCharacterPortrait(char: Character): HTMLDivElement {
     const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'display:flex;align-items:center;gap:12px;padding:8px;';
+    wrapper.dataset.testid = 'character-portrait';
+    wrapper.title = 'Center Camera';
+    wrapper.style.cssText = `position:absolute;left:30px;top:-19px;width:110px;height:124px;overflow:hidden;background:${AMBER};cursor:pointer;`;
 
-    const circle = document.createElement('div');
-    const bgColor = InspectorPanel.RACE_PORTRAIT_COLORS[char.tStats.nRace] ?? '#555';
-    const isDead = !char.isAlive();
-    const initial = char.getName().charAt(0).toUpperCase() || '?';
-    circle.style.cssText = `
-      width:64px;height:64px;border-radius:50%;
-      background:${isDead ? '#333' : bgColor};
-      border:3px solid ${isDead ? '#666' : AMBER};
-      display:flex;align-items:center;justify-content:center;
-      font-size:28px;font-weight:bold;color:#fff;
-      font-family:'Orbitron','Dosis',sans-serif;
-      flex-shrink:0;
-      ${isDead ? 'opacity:0.6;' : ''}
-    `;
-    circle.textContent = initial;
-    wrapper.appendChild(circle);
+    const bg = document.createElement('img');
+    bg.src = '/assets/ui/portraits/Background_01.png';
+    bg.alt = '';
+    bg.style.cssText = 'position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;';
+    wrapper.appendChild(bg);
 
-    // Race label beside avatar
-    const raceDef = char.getRaceDef();
-    const raceLabel = document.createElement('div');
-    raceLabel.style.cssText = `font-size:16px;color:#888;text-transform:capitalize;`;
-    raceLabel.textContent = raceDef.sName;
-    wrapper.appendChild(raceLabel);
+    const portrait = document.createElement('img');
+    portrait.src = `/assets/ui/portraits/${CHARACTER_PORTRAITS[char.tStats.nRace] ?? CHARACTER_PORTRAITS[RACE_HUMAN]}`;
+    portrait.alt = char.getRaceDef().sName;
+    portrait.style.cssText = `position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;${char.isAlive() ? '' : 'filter:grayscale(1);opacity:0.65;'}`;
+    wrapper.appendChild(portrait);
+    wrapper.addEventListener('click', () => this.onCenterCamera?.(char));
 
     return wrapper;
   }
@@ -327,22 +305,20 @@ export class InspectorPanel {
     const isDead = !char.isAlive();
     const isPlayer = char.tStats.nTeam === 1; // TEAM_ID_PLAYER
 
-    // Portrait (U-1): colored circle with initial + race label
-    this.contentEl.appendChild(this.buildCharacterPortrait(char));
-
-    // Header with editable name
-    const header = this.makeSection();
-    const nameRow = document.createElement('div');
-    nameRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    // Lua PictureLargeBG / NameEditBG: a single 418×106 amber summary band.
+    const summary = document.createElement('div');
+    summary.dataset.testid = 'character-summary';
+    summary.style.cssText = `position:relative;width:${PANEL_W}px;height:106px;background:${AMBER};box-sizing:border-box;`;
+    summary.appendChild(this.buildCharacterPortrait(char));
 
     if (this.editingName) {
       const input = document.createElement('input');
       input.type = 'text';
       input.value = char.getName();
       input.style.cssText = `
-        font-size:26px;font-weight:600;color:${AMBER};background:#111; /* Lua NameLabel=dosissemibold26 */
-        border:1px solid ${AMBER};outline:none;font-family:'nevis','Dosis',sans-serif;
-        width:180px;padding:1px 4px;
+        position:absolute;left:150px;top:8px;width:245px;height:35px;box-sizing:border-box;
+        font-size:26px;font-weight:600;color:${AMBER};background:#000;
+        border:1px solid #000;outline:none;font-family:'Dosis',sans-serif;padding:1px 4px;
       `;
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -360,114 +336,90 @@ export class InspectorPanel {
         if (trimmed) char.tStats.sName = trimmed;
         this.editingName = false;
       });
-      nameRow.appendChild(input);
+      summary.appendChild(input);
       // Focus on next frame
       setTimeout(() => input.focus(), 0);
     } else {
       const nameSpan = document.createElement('span');
       nameSpan.textContent = char.getName();
-      nameSpan.style.cssText = `font-size:26px;font-weight:600;color:${AMBER};cursor:pointer; /* Lua NameLabel=dosissemibold26 */`;
+      nameSpan.style.cssText = `position:absolute;left:150px;top:8px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:26px;line-height:35px;font-weight:600;color:#000;cursor:pointer;`;
       nameSpan.title = 'Click to edit name';
       nameSpan.addEventListener('click', () => {
         this.editingName = true;
         this.refresh();
       });
-      nameRow.appendChild(nameSpan);
+      summary.appendChild(nameSpan);
     }
 
-    header.appendChild(nameRow);
-
-    // Job title — separate line below name (Lua TitleLabel at pos {150, -216}, dosisregular26)
     const jobLine = document.createElement('div');
     const dutyStr = char.isAlive() && char.onDuty() ? ` ${line('DUTIES015TEXT')}` : '';
     jobLine.textContent = `${char.getJobName()}${dutyStr}`;
-    jobLine.style.cssText = `font-size:26px;color:#888;font-weight:400;`; // Lua dosisregular26
-    header.appendChild(jobLine);
+    jobLine.style.cssText = `position:absolute;left:150px;top:50px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:26px;line-height:35px;color:#000;font-weight:400;`;
+    summary.appendChild(jobLine);
+    this.contentEl.appendChild(summary);
 
-    // Structured info rows (Lua CitizenInspector: Diagnosis, Morale, Location, Activity)
-    // Lua StatsBG: amber opaque panel behind stat rows
+    // Lua StatsBG: four 36px source rows with the original inspector icons.
     const infoSection = document.createElement('div');
-    infoSection.style.cssText = `margin-top:6px;background:#3B2600;padding:4px 8px;`; // Lua Gui.AMBER_OPAQUE
+    infoSection.dataset.testid = 'character-stats-summary';
+    infoSection.style.cssText = `height:152px;background:${AMBER_OPAQUE};padding:4px 0;box-sizing:border-box;`;
 
-    // Diagnosis row
-    const diagRow = this.makeInfoRow(
+    infoSection.appendChild(this.makeCharacterInfoRow(
+      'ui_icon_health.png',
       line('INSPEC011TEXT'),
       getHealthStatusText(char),
-      isDead ? '#f44' : '#4f4',
-    );
-    infoSection.appendChild(diagRow);
+      isDead ? '#ff3d00' : AMBER,
+      () => { this.currentTab = 'stats'; this.refresh(); },
+    ));
 
-    // Morale row (or Cause of Death if dead)
     if (isDead) {
-      const deathRow = this.makeInfoRow(
-        line('INSPEC010TEXT') + ':',
+      infoSection.appendChild(this.makeCharacterInfoRow(
+        'ui_icon_enemy.png',
+        line('INSPEC106TEXT'),
         getDeathCauseName(char.nCauseOfDeath),
-        '#f44',
-      );
-      infoSection.appendChild(deathRow);
+        '#ff3d00',
+        () => { this.currentTab = 'stats'; this.refresh(); },
+      ));
     } else {
-      const moraleRow = this.makeInfoRow(
+      infoSection.appendChild(this.makeCharacterInfoRow(
+        'ui_icon_morale.png',
         line('INSPEC012TEXT'),
         getMoraleText(char.nMorale),
         AMBER,
-      );
-      infoSection.appendChild(moraleRow);
+        () => { this.currentTab = 'psych'; this.refresh(); },
+      ));
     }
 
-    // Location row
     let locationText = line('INSPUI036TEXT');
+    let characterRoom: Room | null = null;
     if (!char.bSpacewalking) {
-      const room = this.getRoomForChar?.(char);
-      if (room?.uniqueZoneName) locationText = room.uniqueZoneName;
-      else if (room) locationText = `Room ${room.id}`;
+      characterRoom = this.getRoomForChar?.(char) ?? null;
+      if (characterRoom?.uniqueZoneName) locationText = characterRoom.uniqueZoneName;
+      else if (characterRoom) locationText = `Room ${characterRoom.id}`;
       else locationText = `(${char.tileX}, ${char.tileY})`;
     }
-    const locRow = this.makeInfoRow(line('INSPEC013TEXT'), locationText, '#ccc');
-    infoSection.appendChild(locRow);
+    infoSection.appendChild(this.makeCharacterInfoRow(
+      'ui_icon_location.png',
+      line('INSPEC013TEXT'),
+      locationText,
+      AMBER,
+      () => { if (characterRoom && this.onSelectRoom) this.onSelectRoom(characterRoom); },
+    ));
 
-    // Activity row
     const taskName = char.currentTask?.name ?? (isDead ? line('INSPEC010TEXT') : line('UITASK029TEXT'));
-    const actRow = this.makeInfoRow(line('INSPEC014TEXT'), taskName, '#ccc');
-    infoSection.appendChild(actRow);
-
-    header.appendChild(infoSection);
-
-    // Shortcut buttons (Lua: HealthStatButton, MoraleButton, RoomButton, ActivityButton, CamCenterButton)
-    if (isPlayer && !isDead) {
-      const shortcuts = document.createElement('div');
-      shortcuts.style.cssText = 'display:flex;gap:4px;margin-top:4px;padding:0 8px;';
-      const shortcutDefs: { label: string; title: string; action: () => void }[] = [
-        { label: 'HP', title: 'View Stats', action: () => { this.currentTab = 'stats'; this.refresh(); } },
-        { label: 'MOR', title: 'View Morale/Psych', action: () => { this.currentTab = 'psych'; this.refresh(); } },
-        { label: 'ROOM', title: 'View Room', action: () => {
-          const room = this.getRoomForChar?.(char);
-          if (room && this.onSelectRoom) this.onSelectRoom(room);
-        }},
-        { label: 'ACT', title: 'View Actions', action: () => { this.currentTab = 'actions'; this.refresh(); } },
-        { label: 'CAM', title: 'Center Camera', action: () => { this.onCenterCamera?.(char); } },
-      ];
-      for (const sd of shortcutDefs) {
-        const btn = document.createElement('div');
-        btn.textContent = sd.label;
-        btn.title = sd.title;
-        btn.style.cssText = `
-          font-size:18px;color:${AMBER};border:1px solid ${AMBER}; /* Lua dosissemibold18 */
-          padding:2px 5px;cursor:pointer;
-        `;
-        btn.addEventListener('click', sd.action);
-        btn.addEventListener('mouseenter', () => { btn.style.background = `rgba(223,162,0,0.2)`; });
-        btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
-        shortcuts.appendChild(btn);
-      }
-      this.contentEl.appendChild(shortcuts);
-    }
-
-    this.contentEl.appendChild(header);
+    infoSection.appendChild(this.makeCharacterInfoRow(
+      'ui_icon_bulletpoint.png',
+      line('INSPEC014TEXT'),
+      taskName,
+      AMBER,
+      () => { this.currentTab = 'actions'; this.refresh(); },
+    ));
+    this.contentEl.appendChild(infoSection);
 
     // Tab row
     const tabRow = document.createElement('div');
     tabRow.style.cssText = `
-      display:flex;border-top:1px solid #333;border-bottom:1px solid #333;
+      width:${PANEL_W}px;height:50px;display:flex;align-items:flex-start;
+      box-sizing:border-box;background:${AMBER_OPAQUE};border-bottom:3px solid ${AMBER};
     `;
     // Lua CitizenInspector: 5 tabs (Duty, Stats, Psych, Spaceface, Action)
     const tabs: { label: string; tab: InspectorTab }[] = isPlayer
@@ -483,11 +435,12 @@ export class InspectorPanel {
           { label: 'Spaceface', tab: 'log' },
         ];
     const charTabIcons: Record<string, string> = {
-      duty: 'assets/ui/inspector/ui_icon_duty.png',
-      stats: 'assets/ui/inspector/ui_icon_stats.png',
-      psych: 'assets/ui/inspector/ui_icon_psych.png',
-      log: 'assets/ui/inspector/ui_icon_spaceface.png',
-      actions: 'assets/ui/inspector/ui_icon_activity.png',
+      duty: '/assets/ui/inspector/ui_icon_duty.png',
+      stats: '/assets/ui/inspector/ui_icon_stats.png',
+      psych: '/assets/ui/inspector/ui_icon_psych.png',
+      log: '/assets/ui/inspector/ui_icon_spaceface.png',
+      // CitizenInspector.lua deliberately reuses the duty icon for Action.
+      actions: '/assets/ui/inspector/ui_icon_duty.png',
     };
     const charTabCount = tabs.length;
     const charFolderActive = charTabCount >= 5
@@ -500,22 +453,21 @@ export class InspectorPanel {
       const btn = document.createElement('div');
       const isActive = this.currentTab === t.tab;
       const iconSrc = charTabIcons[t.tab];
+      btn.title = t.label;
+      btn.dataset.tab = t.tab;
       btn.style.cssText = `
-        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px; /* Lua dosissemibold20 */
+        width:83px;height:47px;box-sizing:border-box;cursor:pointer;
         display:flex;align-items:center;justify-content:center;
         background-image:url('${isActive ? charFolderActive : charFolderInactive}');
         background-size:100% 100%;background-repeat:no-repeat;
-        color:${isActive ? '#000' : AMBER};
       `;
       if (iconSrc) {
         const img = document.createElement('img');
         img.src = iconSrc;
-        img.style.cssText = 'width:20px;height:20px;margin-right:4px;vertical-align:middle;image-rendering:pixelated;';
+        img.alt = t.label;
+        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);'}`;
         btn.appendChild(img);
       }
-      const span = document.createElement('span');
-      span.textContent = t.label;
-      btn.appendChild(span);
       btn.addEventListener('click', () => {
         this.currentTab = t.tab;
         this.refresh();
@@ -545,8 +497,6 @@ export class InspectorPanel {
     }
     this.contentEl.appendChild(body);
 
-    // Close button
-    this.addCloseButton();
   }
 
   private renderDutyTab(container: HTMLDivElement, char: Character) {
@@ -1301,6 +1251,38 @@ export class InspectorPanel {
   }
 
   // ── Helpers ─────────────────────────────────────────────
+
+  private makeCharacterInfoRow(
+    iconName: string,
+    label: string,
+    value: string,
+    valueColor: string,
+    onClick: () => void,
+  ): HTMLDivElement {
+    const row = document.createElement('div');
+    row.style.cssText = `height:36px;display:flex;align-items:center;box-sizing:border-box;padding:0 10px;cursor:pointer;color:${AMBER};font-family:'Dosis',sans-serif;overflow:hidden;`;
+
+    const icon = document.createElement('img');
+    icon.src = `/assets/ui/inspector/${iconName}`;
+    icon.alt = '';
+    icon.style.cssText = 'width:24px;height:24px;object-fit:contain;margin-right:6px;flex:0 0 24px;filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);';
+    row.appendChild(icon);
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = `${label} `;
+    labelSpan.style.cssText = 'font-size:26px;line-height:32px;font-weight:400;white-space:nowrap;';
+    row.appendChild(labelSpan);
+
+    const valueSpan = document.createElement('span');
+    valueSpan.textContent = value;
+    valueSpan.style.cssText = `font-size:26px;line-height:32px;font-weight:600;color:${valueColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+    row.appendChild(valueSpan);
+
+    row.addEventListener('click', onClick);
+    row.addEventListener('mouseenter', () => { row.style.background = 'rgba(223,162,0,0.12)'; });
+    row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
+    return row;
+  }
 
   /** Structured "Label: Value" info row matching Lua CitizenInspector layout. */
   private makeInfoRow(label: string, value: string, valueColor: string): HTMLDivElement {

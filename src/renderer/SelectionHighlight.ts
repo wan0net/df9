@@ -72,6 +72,7 @@ export class SelectionHighlight {
     const geo = new THREE.PlaneGeometry(TILE_W, TILE_H);
     this.mat = new THREE.MeshBasicMaterial({
       map: getDiamondTexture(),
+      color: 0xdfa200,
       transparent: true,
       depthWrite: false,
       opacity: 0.8,
@@ -82,6 +83,7 @@ export class SelectionHighlight {
 
     this.roomMat = new THREE.MeshBasicMaterial({
       map: getDiamondTexture(),
+      color: 0xdfa200,
       transparent: true,
       depthWrite: false,
       opacity: 0.15,

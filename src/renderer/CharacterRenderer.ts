@@ -682,6 +682,15 @@ loadSpacesuitModel();
 loadBadAlienModel();
 loadMurderRobotModel();
 
+/** Whether createModel can mount the requested rig instead of a fallback. */
+function isTargetModelReady(char: Character, spacesuit: boolean): boolean {
+  if (spacesuit) return Boolean(cachedSpacesuit) || spacesuitLoadFailed;
+  if (char.tStats.nRace === RACE_MONSTER) return Boolean(cachedBadAlien) || badAlienLoadFailed;
+  if (char.tStats.nRace === RACE_KILLBOT) return Boolean(cachedMurderRobot) || murderRobotLoadFailed;
+  if (usesAlienRig(char)) return Boolean(cachedAlienCitizen) || alienLoadFailed;
+  return Boolean(cachedCitizen) || citizenLoadFailed;
+}
+
 // ── Thought bubble (Lua Task:showEmoticon / Character:setEmoticon) ────
 /** Duration to show thought bubble text (Lua EMOTICON_INITIAL_DURATION=5). */
 const THOUGHT_DURATION = 5;
@@ -766,6 +775,8 @@ export interface CharacterRenderHandle {
   is3D: boolean;
   /** Whether currently showing spacesuit model. */
   showingSpacesuit: boolean;
+  /** Race whose skeleton/model is currently mounted. */
+  modelRace: number;
   /** Animation phase (unique per character for variety). */
   animPhase: number;
   /** AnimationMixer for skeletal clips (null if no clips). */
@@ -774,6 +785,8 @@ export interface CharacterRenderHandle {
   currentAction: THREE.AnimationAction | null;
   /** Current animation state key. */
   currentAnimState: string;
+  /** Clips retargeted to this clone's node UUIDs. */
+  boundClips: Map<string, THREE.AnimationClip>;
   /** Blob shadow mesh (Lua: rBlobShadow). */
   shadow: THREE.Mesh;
   /** Thought bubble DOM + CSS2DObject. */
@@ -896,10 +909,12 @@ export class CharacterRenderer {
     const handle: CharacterRenderHandle = {
       object, modelGroup, needBarsEl, needBarsObj, is3D,
       showingSpacesuit: char.bSpacewalking,
+      modelRace: char.tStats.nRace,
       animPhase: Math.random() * Math.PI * 2,
       mixer,
       currentAction: null,
       currentAnimState: '',
+      boundClips: new Map(),
       shadow,
       thoughtEl,
       thoughtBg,
@@ -1245,6 +1260,7 @@ export class CharacterRenderer {
       handle.mixer = result.mixer;
       handle.is3D = true;
       handle.showingSpacesuit = char.bSpacewalking;
+      handle.modelRace = char.tStats.nRace;
     }
     this.pendingUpgrade = remaining;
   }
@@ -1260,12 +1276,16 @@ export class CharacterRenderer {
       this.lastFrameTime = now;
     }
 
-    // Switch model if spacesuit state changed
-    if (handle.is3D && handle.showingSpacesuit !== char.bSpacewalking) {
+    // Switch model if suit state or the underlying race rig changed. Save-load
+    // and conversion paths can replace tStats after the handle was created;
+    // playing the new race's clips on the old skeleton produces malformed poses.
+    const raceModelChanged = !char.bSpacewalking && handle.modelRace !== char.tStats.nRace;
+    const modelChanged = handle.showingSpacesuit !== char.bSpacewalking || raceModelChanged;
+    if (handle.is3D && modelChanged && isTargetModelReady(char, char.bSpacewalking)) {
       this.scene.remove(handle.object);
-      handle.object.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) child.geometry.dispose();
-      });
+      // SkeletonUtils.clone shares immutable geometry with the cached model and
+      // other citizens. Do not dispose it while remounting one character.
+      handle.mixer?.stopAllAction();
 
       const result = this.createModel(char, char.bSpacewalking);
       this.scene.add(result.group);
@@ -1274,7 +1294,9 @@ export class CharacterRenderer {
       handle.mixer = result.mixer;
       handle.currentAction = null;
       handle.currentAnimState = '';
+      handle.boundClips.clear();
       handle.showingSpacesuit = char.bSpacewalking;
+      handle.modelRace = char.tStats.nRace;
     }
 
     // Base position
@@ -1324,7 +1346,7 @@ export class CharacterRenderer {
     // procedural motion as the fallback for models/states without a matching
     // original clip.
     const clip = handle.mixer
-      ? this.findClip(this.getAnimState(char), handle.showingSpacesuit, char.tStats.nRace)
+      ? this.findClip(this.getAnimState(char), handle.showingSpacesuit, handle.modelRace)
       : null;
     if (handle.mixer && clip) this.updateSkeletalAnim(handle, char);
     else this.applyProceduralAnim(handle, char);
@@ -1414,12 +1436,30 @@ export class CharacterRenderer {
     if (state !== handle.currentAnimState) {
       handle.currentAnimState = state;
 
-      const clip = this.findClip(state, handle.showingSpacesuit, char.tStats.nRace);
+      const clip = this.findClip(state, handle.showingSpacesuit, handle.modelRace);
       if (clip && handle.mixer) {
         if (handle.currentAction) {
           handle.currentAction.fadeOut(0.2);
         }
-        const action = handle.mixer.clipAction(clip);
+        // Converted GLB clips retain source node names. Retarget to this
+        // SkeletonUtils clone's UUIDs so Three never binds a special-race clip
+        // to a same-named node on a stale/parallel rig.
+        let boundClip = handle.boundClips.get(clip.uuid);
+        if (!boundClip) {
+          const root = handle.mixer.getRoot() as THREE.Object3D;
+          boundClip = clip.clone();
+          boundClip.tracks = clip.tracks.map((sourceTrack) => {
+            const separator = sourceTrack.name.indexOf('.');
+            if (separator <= 0) return sourceTrack.clone();
+            const nodeName = sourceTrack.name.slice(0, separator);
+            const node = root.getObjectByName(nodeName);
+            const track = sourceTrack.clone();
+            if (node) track.name = `${node.uuid}${sourceTrack.name.slice(separator)}`;
+            return track;
+          });
+          handle.boundClips.set(clip.uuid, boundClip);
+        }
+        const action = handle.mixer.clipAction(boundClip);
         action.reset().fadeIn(0.2).play();
         handle.currentAction = action;
       }

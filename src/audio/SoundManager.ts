@@ -218,7 +218,7 @@ class SoundManagerClass {
     const cue = AUDIO_CUES[cueName];
     if (!cue) return null;
 
-    const promise = this.loadBuffer(cueName, `assets/audio/${cue.path}`);
+    const promise = this.loadBuffer(cueName, `/assets/audio/${cue.path}`);
     const wrapped = promise.then(ok => ok ? (this.bufferCache.get(cueName) ?? null) : null);
     this.loadingPromises.set(cueName, wrapped);
     wrapped.finally(() => this.loadingPromises.delete(cueName));
@@ -228,7 +228,7 @@ class SoundManagerClass {
       for (const vPath of cue.variants) {
         const vKey = `${cueName}__${vPath}`;
         if (!this.bufferCache.has(vKey) && !this.loadingPromises.has(vKey)) {
-          this.loadBuffer(vKey, `assets/audio/${vPath}`);
+          this.loadBuffer(vKey, `/assets/audio/${vPath}`);
         }
       }
     }
@@ -397,15 +397,24 @@ class SoundManagerClass {
     if (!this.ctx) return false;
     if (this.bufferCache.has(name)) return true;
 
+    // Navigation can tear down a page while large original WAV files are still
+    // decoding. Abort those obsolete requests without reporting false missing-
+    // asset diagnostics in the next scene or in automated play-throughs.
+    const controller = new AbortController();
+    const abortOnPageHide = () => controller.abort();
+    window.addEventListener('pagehide', abortOnPageHide, { once: true });
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
       this.bufferCache.set(name, audioBuffer);
       return true;
     } catch (e) {
-      console.warn(`Failed to load audio: ${name}`, e);
+      if (!controller.signal.aborted) console.warn(`Failed to load audio: ${name}`, e);
       return false;
+    } finally {
+      window.removeEventListener('pagehide', abortOnPageHide);
     }
   }
 
