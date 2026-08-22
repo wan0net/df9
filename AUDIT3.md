@@ -32,6 +32,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-07 | **Fixed + tested** | Public hand-prop models/textures and Lua task/equipment state | Held props now load available source textures, replace stale models when equipment changes, show build/mine/maintenance tools for their tasks, and only draw weapons during attack tasks. | `held prop renderer textures source models and replaces changed equipment` |
 | GFX-08 | **Fixed + tested** | `Room.lua` lighting plus environment-object damage/vaporize presentation | Room lighting is now multiplied with the object's visual state. It no longer overwrites red damage or translucent vaporize tint on the following frame. | `room lighting preserves object damage and vaporize tints` |
 | GFX-09 | **Fixed + tested** | `Character.lua` thought/dialog construction around lines 3167 and 4536 | Replaced the generic black emoji pill with source bubble/end-cap/tail assets, amber Dosis text, dialog/thought variants, and hover-only task bubbles. | `character renderer handles thought bubble creation` |
+| GFX-10 | **Fixed + tested** | `Character.lua:_setSpacesuitRigActive`, per-rig animation tables, and the extracted opaque character textures | Spacesuit animation selection now follows Lua's active-rig precedence even for monster/killbot races. Character body, outfit, and suit textures now write depth as opaque surfaces, preventing rear subsets from bleeding through the visible model. | `changing character race remounts the matching original rig`; `character renderer uses extracted race textures and job outfits` |
 
 ## Gameplay and timing findings found during the same review
 
@@ -82,7 +83,7 @@ The implementation should be called **source-complete for the fixes in this docu
 |---|---|
 | Production build (`tsc` + Vite) | **PASS** |
 | Unit suite | **PASS — 87/87** |
-| Complete Playwright E2E suite | **PASS — 274/274 in 4.7 minutes** |
+| Complete Playwright E2E suite | **PASS — 278/278 in 4.6 minutes** |
 | Independent-order Playwright shards | **PASS — 135/135 + 135/135** with the configured two workers |
 | Timing-race stress checks | **PASS — 10/10 injury-timing runs and 10/10 imported-save safety runs** |
 | Focused graphics/timing scenarios | **PASS — 11/11**, then included in the complete run |

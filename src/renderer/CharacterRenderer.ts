@@ -284,6 +284,7 @@ function loadCharTexture(filename: string): THREE.Texture {
               m.map = null;
               m.alphaTest = 0;
               m.transparent = false;
+              m.depthWrite = true;
               m.needsUpdate = true;
             }
           }
@@ -338,9 +339,12 @@ function applyModelTextures(group: THREE.Group, charId: number, textureOverrides
       if (CHAR_TEXTURES.has(baseName)) {
         const tex = loadCharTexture(`${baseName}.png`);
         mat.map = tex;
-        mat.transparent = true;
-        mat.alphaTest = 0.01;
-        mat.depthWrite = false;
+        // The extracted DF-9 character sheets are opaque (their alpha channel,
+        // when present, is 255 throughout). Keep normal depth writes so rear
+        // limbs and outfit subsets cannot render through the front of the rig.
+        mat.transparent = false;
+        mat.alphaTest = 0;
+        mat.depthWrite = true;
         mat.needsUpdate = true;
         trackTextureUser(tex, mat);
         mat.userData.textureName = baseName;
@@ -1399,15 +1403,17 @@ export class CharacterRenderer {
     // R-5: Select clip pool based on model type
     let clips: THREE.AnimationClip[];
     let candidates: string[];
-    if (race === RACE_MONSTER) {
+    // Lua Character:_setSpacesuitRigActive makes the spacesuit rCurrentRig,
+    // so its animation set takes precedence over the character's race rig.
+    if (spacesuit) {
+      clips = spacesuitAnimClips;
+      candidates = SPACESUIT_STATE_CLIP_MAP[state] || [];
+    } else if (race === RACE_MONSTER) {
       clips = badAlienAnimClips;
       candidates = MONSTER_STATE_CLIP_MAP[state] || [];
     } else if (race === RACE_KILLBOT) {
       clips = murderRobotAnimClips;
       candidates = KILLBOT_STATE_CLIP_MAP[state] || [];
-    } else if (spacesuit) {
-      clips = spacesuitAnimClips;
-      candidates = SPACESUIT_STATE_CLIP_MAP[state] || [];
     } else if (race !== undefined && RACE_TYPE[race]?.nRig === RIG_ALIEN) {
       clips = alienAnimClips;
       candidates = STATE_CLIP_MAP[state] || [];

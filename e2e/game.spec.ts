@@ -3873,48 +3873,69 @@ test.describe('Spacebase DF-9 E2E', () => {
       return Boolean(handle?.mixer);
     }), { timeout: 15_000 }).toBe(true);
 
-    const result = await page.evaluate(async () => {
-      const d = (window as any).__df9;
-      const char = d._charMgr.getCharacters()[0];
-      const renderer = d._characterRenderer as any;
-
-      char.bSpacewalking = false;
-      renderer.updateCharacter(char);
-      const citizenObject = renderer.handles.get(char.id).object;
-      char.tStats.nRace = 7; // RACE_MONSTER / Bad_Alien rig
-
-      const deadline = performance.now() + 10_000;
-      while (renderer.handles.get(char.id).modelRace !== 7 && performance.now() < deadline) {
-        renderer.updateCharacter(char);
-        await new Promise(resolve => setTimeout(resolve, 25));
+    const bindingWarnings: string[] = [];
+    const captureBindingWarning = (message: { type(): string; text(): string }) => {
+      if (message.type() === 'warning' && message.text().includes('THREE.PropertyBinding')) {
+        bindingWarnings.push(message.text());
       }
-      renderer.updateCharacter(char);
-      const handle = renderer.handles.get(char.id);
-      handle.mixer?.update(1 / 60);
-      const nodeNames: string[] = [];
-      handle.object.traverse((node: any) => nodeNames.push(node.name));
-      const clip = handle.currentAction?.getClip();
-      const bindingState = (handle.mixer?._bindings ?? []).map((binding: any) => ({
-        path: binding.binding?.path,
-        nodeName: binding.binding?.parsedPath?.nodeName,
-        node: binding.binding?.node?.name ?? null,
-      }));
-      return {
-        modelRace: handle.modelRace,
-        objectReplaced: handle.object !== citizenObject,
-        hasMonsterLegJoint: nodeNames.some(name => name.includes('Lf_Fr_LegA')),
-        clip: clip?.name ?? null,
-        bindingState,
-      };
-    });
+    };
+    page.on('console', captureBindingWarning);
 
-    expect(result.modelRace).toBe(7);
-    expect(result.objectReplaced).toBe(true);
-    expect(result.hasMonsterLegJoint).toBe(true);
-    expect(result.clip).toBe('BadAlien_Idle');
-    expect(result.bindingState.length).toBeGreaterThan(0);
-    expect(result.bindingState.every((binding: any) => binding.node !== null)).toBe(true);
-    expect(result.bindingState.every((binding: any) => !binding.path.startsWith('Lf_'))).toBe(true);
+    try {
+      const result = await page.evaluate(async () => {
+        const d = (window as any).__df9;
+        const char = d._charMgr.getCharacters()[0];
+        const renderer = d._characterRenderer as any;
+
+        char.bSpacewalking = true;
+        renderer.updateCharacter(char);
+        char.tStats.nRace = 7; // RACE_MONSTER / Bad_Alien rig
+        char.moving = true;
+        renderer.updateCharacter(char);
+        const suitedHandle = renderer.handles.get(char.id);
+        const suitedClip = suitedHandle.currentAction?.getClip().name ?? null;
+        const suitedObject = suitedHandle.object;
+
+        char.moving = false;
+        char.bSpacewalking = false;
+        const deadline = performance.now() + 10_000;
+        while (renderer.handles.get(char.id).showingSpacesuit && performance.now() < deadline) {
+          renderer.updateCharacter(char);
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        renderer.updateCharacter(char);
+        const handle = renderer.handles.get(char.id);
+        handle.mixer?.update(1 / 60);
+        const nodeNames: string[] = [];
+        handle.object.traverse((node: any) => nodeNames.push(node.name));
+        const clip = handle.currentAction?.getClip();
+        const bindingState = (handle.mixer?._bindings ?? []).map((binding: any) => ({
+          path: binding.binding?.path,
+          nodeName: binding.binding?.parsedPath?.nodeName,
+          node: binding.binding?.node?.name ?? null,
+        }));
+        return {
+          modelRace: handle.modelRace,
+          objectReplaced: handle.object !== suitedObject,
+          suitedClip,
+          hasMonsterLegJoint: nodeNames.some(name => name.includes('Lf_Fr_LegA')),
+          clip: clip?.name ?? null,
+          bindingState,
+        };
+      });
+
+      expect(result.modelRace).toBe(7);
+      expect(result.objectReplaced).toBe(true);
+      expect(result.suitedClip).toBe('Spacewalk_Walk');
+      expect(result.hasMonsterLegJoint).toBe(true);
+      expect(result.clip).toBe('BadAlien_Idle');
+      expect(result.bindingState.length).toBeGreaterThan(0);
+      expect(result.bindingState.every((binding: any) => binding.node !== null)).toBe(true);
+      expect(result.bindingState.every((binding: any) => !binding.path.startsWith('Lf_'))).toBe(true);
+      expect(bindingWarnings).toEqual([]);
+    } finally {
+      page.off('console', captureBindingWarning);
+    }
   });
 
   test('character renderer uses extracted race textures and job outfits', async () => {
@@ -3932,13 +3953,20 @@ test.describe('Spacebase DF-9 E2E', () => {
       renderer.destroyCharacter(char.id);
       const handle = renderer.createCharacter(char);
 
-      const visible: Array<{ material: string; texture: string | null }> = [];
+      const visible: Array<{
+        material: string;
+        texture: string | null;
+        transparent: boolean;
+        depthWrite: boolean;
+      }> = [];
       handle.object.traverse((child: any) => {
         if (!child.isMesh && !child.isSkinnedMesh) return;
         if (!child.visible) return;
         visible.push({
           material: child.material?.name ?? '',
           texture: child.material?.userData?.textureName ?? null,
+          transparent: child.material?.transparent ?? true,
+          depthWrite: child.material?.depthWrite ?? false,
         });
       });
       return visible;
@@ -3946,7 +3974,13 @@ test.describe('Spacebase DF-9 E2E', () => {
 
     expect(result.some(v => v.texture?.startsWith('Cat_Body_'))).toBe(true);
     expect(result.some(v => v.texture?.startsWith('Cat_Head_'))).toBe(true);
-    expect(result).toContainEqual({ material: 'Doctor01', texture: 'Scientist01' });
+    expect(result).toContainEqual({
+      material: 'Doctor01',
+      texture: 'Scientist01',
+      transparent: false,
+      depthWrite: true,
+    });
+    expect(result.filter(v => v.texture).every(v => !v.transparent && v.depthWrite)).toBe(true);
   });
 
   test('door placement does not immediately convert wall to DOOR', async () => {
