@@ -40,7 +40,7 @@ export class ResearchPanel {
   /** Currently selected zone for project assignment (Lua rSelectedZoneEntry). */
   private selectedZoneId: number | null = null;
 
-  constructor(parent: HTMLElement, getRooms: () => Room[]) {
+  constructor(parent: HTMLElement, getRooms: () => Room[], onClose: () => void) {
     this.getRooms = getRooms;
 
     // Full-screen overlay (matching original ResearchAssignment.lua)
@@ -54,6 +54,7 @@ export class ResearchPanel {
 
     // Back button (Lua: BackButton + BackLabel + BackHotkey)
     const backBtn = document.createElement('div');
+    backBtn.dataset.testid = 'research-back';
     backBtn.style.cssText = `
       position:absolute;top:0;left:0;width:286px;height:98px;
       background:#000;cursor:pointer;display:flex;align-items:center;
@@ -77,7 +78,7 @@ export class ResearchPanel {
       backLabel.style.color = AMBER;
       backHotkey.style.color = AMBER;
     });
-    backBtn.addEventListener('click', () => this.hide());
+    backBtn.addEventListener('click', onClose);
     this.el.appendChild(backBtn);
 
     // Title

@@ -392,7 +392,7 @@ export class RoomManager {
     }
 
     for (const r of notifyRooms) {
-      r.nLastCombatAlert = Date.now() / 1000; // approximate elapsed time
+      r.nLastCombatAlert = GameRules.elapsedTime;
       for (const charId of r.tCharacters) {
         if (charId !== attackerId) {
           onAlert(charId);

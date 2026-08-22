@@ -28,6 +28,10 @@ interface RenderedObject {
   bActive: boolean;
   /** Whether this object requires power (nPowerDraw > 0). */
   bNeedsPower: boolean;
+  /** Visual-state tint before room lighting is composed. */
+  stateColor: number;
+  /** Current room-light tint. */
+  lightTint: number;
 }
 
 export class EnvObjectRenderer {
@@ -111,7 +115,11 @@ export class EnvObjectRenderer {
       }
     }
 
-    this.objects.set(id, { mesh, spriteName, powerIcon, bHasPower: true, bActive: true, bNeedsPower });
+    this.objects.set(id, {
+      mesh, spriteName, powerIcon, bHasPower: true, bActive: true, bNeedsPower,
+      stateColor: 0xffffff,
+      lightTint: 0xffffff,
+    });
   }
 
   /** Update an object's visual state based on built status and condition. */
@@ -125,20 +133,21 @@ export class EnvObjectRenderer {
     // R-11: Slated for vaporize — red tint (Lua pendingVaporizeColor = Gui.RED)
     if (bSlatedForVaporize) {
       mat.opacity = 0.8;
-      mat.color.setHex(0xff2222);
+      obj.stateColor = 0xff2222;
     } else if (!built) {
       mat.opacity = 0.3;
-      mat.color.setHex(0xffffff);
+      obj.stateColor = 0xffffff;
     } else if (condition <= 0) {
       mat.opacity = 0.5;
-      mat.color.setHex(0x444444);
+      obj.stateColor = 0x444444;
     } else if (condition < DAMAGED_CONDITION) {
       mat.opacity = 0.8;
-      mat.color.setHex(0xff6666);
+      obj.stateColor = 0xff6666;
     } else {
       mat.opacity = 1.0;
-      mat.color.setHex(0xffffff);
+      obj.stateColor = 0xffffff;
     }
+    this.applyComposedTint(obj);
 
     // If sprite name changed (condition variant or interact sprite), swap the texture frame
     if (spriteName && spriteName !== obj.spriteName) {
@@ -188,12 +197,28 @@ export class EnvObjectRenderer {
   setObjectTint(id: string, tint: number) {
     const obj = this.objects.get(id);
     if (!obj) return;
+    obj.lightTint = tint;
+    this.applyComposedTint(obj);
+  }
+
+  private applyComposedTint(obj: RenderedObject) {
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
-    // R-24: Lua boosts object color by +0.3 over ambient (Lighting.setRoomTileLightInfo)
-    const r = Math.min(1, ((tint >> 16) & 0xFF) / 255 + 0.3);
-    const g = Math.min(1, ((tint >> 8) & 0xFF) / 255 + 0.3);
-    const b = Math.min(1, (tint & 0xFF) / 255 + 0.3);
-    mat.color.setRGB(r, g, b);
+    // Lua boosts object lighting by +0.3, then the state tint still applies.
+    const lr = Math.min(1, ((obj.lightTint >> 16) & 0xFF) / 255 + 0.3);
+    const lg = Math.min(1, ((obj.lightTint >> 8) & 0xFF) / 255 + 0.3);
+    const lb = Math.min(1, (obj.lightTint & 0xFF) / 255 + 0.3);
+    const sr = ((obj.stateColor >> 16) & 0xFF) / 255;
+    const sg = ((obj.stateColor >> 8) & 0xFF) / 255;
+    const sb = (obj.stateColor & 0xFF) / 255;
+    mat.color.setRGB(lr * sr, lg * sg, lb * sb);
+  }
+
+  /** Test/debug view of the final composed visual state. */
+  getDebugInfo(id: string): { color: number; opacity: number; spriteName: string } | null {
+    const obj = this.objects.get(id);
+    if (!obj) return null;
+    const mat = obj.mesh.material as THREE.MeshBasicMaterial;
+    return { color: mat.color.getHex(), opacity: mat.opacity, spriteName: obj.spriteName };
   }
 
   removeObject(id: string) {

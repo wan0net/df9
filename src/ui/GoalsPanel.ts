@@ -30,7 +30,7 @@ export class GoalsPanel {
   private sortCompleteBtn!: HTMLDivElement;
   private sortUncompleteBtn!: HTMLDivElement;
 
-  constructor(parent: HTMLElement, goalSystem: GoalSystem) {
+  constructor(parent: HTMLElement, goalSystem: GoalSystem, onClose: () => void) {
     this.goalSystem = goalSystem;
 
     // Full-screen overlay (GoalsListLayout.lua: LargeBar = viewport size)
@@ -44,6 +44,7 @@ export class GoalsPanel {
 
     // Back button (Lua: BackButton 286x98, BackLabel dosisregular40, BackHotkey dosissemibold22)
     const backBtn = document.createElement('div');
+    backBtn.dataset.testid = 'goals-back';
     backBtn.style.cssText = `
       position:absolute;top:0;left:0;width:286px;height:98px;
       background:#000;cursor:pointer;display:flex;align-items:center;
@@ -67,7 +68,7 @@ export class GoalsPanel {
       backLabel.style.color = AMBER;
       backHotkey.style.color = AMBER;
     });
-    backBtn.addEventListener('click', () => this.hide());
+    backBtn.addEventListener('click', onClose);
     this.el.appendChild(backBtn);
 
     // Title (GoalsListLayout.lua: GoalLabel pos(380,-20) dosismedium44)

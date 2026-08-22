@@ -1236,6 +1236,27 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(strains['Rhinovirus'].length).toBeGreaterThanOrEqual(2);
   });
 
+  test('first disease alert uses the generated strain friendly name', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      const before = new Set(d.getRecentAlerts().map((a: any) => a.message));
+      char.infectWith('Rhinovirus');
+      const malady = char.maladies[char.maladies.length - 1];
+      malady.nSymptomStart = d.getMaladyElapsedTime() - 1;
+      d.tickCharacterMaladies(char.id, 0);
+      const alert = d.getRecentAlerts().find((a: any) => !before.has(a.message) && a.type === 'disease')
+        ?? d.getRecentAlerts().find((a: any) => a.type === 'disease');
+      return {
+        internalName: malady.sMaladyName,
+        friendlyName: d.getMaladyFriendlyName(malady.sMaladyName),
+        message: alert?.message ?? '',
+      };
+    });
+    expect(result.message).toContain(result.friendlyName);
+    expect(result.message).not.toContain(result.internalName);
+  });
+
   test('injuries are non-contagious with proper types', async () => {
     // Build a fresh sealed room so the character isn't spacewalking
     await page.evaluate(() => (window as any).__df9?.buildSealedRoom(50, 50, 2));
@@ -1259,16 +1280,23 @@ test.describe('Spacebase DF-9 E2E', () => {
     // Injuries are non-contagious
     expect(maladies[0].contagious).toBe(false);
 
-    // Tick game loop to trigger symptomatic flag (BrokenLeg has no delay)
-    await page.keyboard.press('3');
-    await page.waitForTimeout(2000);
-    await page.keyboard.press('1');
-
-    const incap = await page.evaluate(
-      ([id]) => (window as any).__df9?.isIncapacitated(id),
+    // BrokenLeg has no symptom delay. Advance and tick the malady explicitly so
+    // the assertion does not depend on render-loop scheduling under parallel load.
+    const injuryState = await page.evaluate(
+      ([id]) => {
+        const d = (window as any).__df9;
+        const char = d._charMgr.getAllCharacters().find((candidate: any) => candidate.id === id);
+        char.bSpacewalking = false;
+        d.advanceMaladyTime(1);
+        d.tickCharacterMaladies(id, 1);
+        return {
+          symptomatic: char.maladies[0]?.bSymptomatic ?? false,
+          incapacitated: d.isIncapacitated(id),
+        };
+      },
       [charId] as const,
     );
-    expect(incap).toBe(true);
+    expect(injuryState).toEqual({ symptomatic: true, incapacitated: true });
   });
 
   test('disease speed modifiers match Lua definitions', async () => {
@@ -1777,7 +1805,7 @@ test.describe('Spacebase DF-9 E2E', () => {
     // Doors: base (key) + HeavyDoor (sFunctionality='Door')
     expect(result.doors).toEqual(['Door', 'HeavyDoor']);
     // Refineries
-    expect(result.refineries).toEqual(['refinery_level2']);
+    expect(result.refineries).toEqual(['RefineryDropoff', 'RefineryDropoffLevel2']);
   });
 
   test('Job requirements: Fridge=BUILDER, HydroPlant=BOTANIST, space_tree=BOTANIST', async () => {
@@ -2469,7 +2497,12 @@ test.describe('Spacebase DF-9 E2E', () => {
       return ok;
     }, payload);
     expect(loaded).toBe(true);
-    await page.locator('#inspector-panel').getByText(/Stats/i).first().click();
+    // Inspector live data refresh replaces its tab DOM every 500 ms. Dispatch
+    // synchronously inside the page so Playwright actionability waiting cannot
+    // race that intentional rebuild under parallel WebGL load.
+    await page.locator('#inspector-panel').getByText(/Stats/i).first().evaluate((el) => {
+      (el as HTMLElement).click();
+    });
     await expect(page.locator('#inspector-panel')).toContainText(payload);
     expect(await page.evaluate(() => (globalThis as any).__saveXss)).toBe(0);
     expect(await page.locator('#inspector-panel img[src="x"]').count()).toBe(0);
@@ -3392,19 +3425,43 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(fontFamily).toContain('Dosis');
   });
 
-  // Batch 4: Coordinate display exists
-  test('coordinate display element exists in UI', async () => {
+  // Lua only shows WorldToolTip for a real hover target; it has no persistent
+  // coordinate/type readout for empty space.
+  test('empty space has no persistent coordinate display', async () => {
     const hasCoordDisplay = await page.evaluate(() => {
       const ui = document.getElementById('game-ui');
       if (!ui) return false;
-      // The tileInfoEl sits below the top HUD bar
       const divs = ui.querySelectorAll('div');
       for (const d of divs) {
         if (d.style.left === '120px' && d.style.pointerEvents === 'none' && d.style.opacity === '0.7') return true;
       }
       return false;
     });
-    expect(hasCoordDisplay).toBe(true);
+    expect(hasCoordDisplay).toBe(false);
+  });
+
+  test('starting Base Seed is a real six-tile environment object', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const seed = d._envObjectManager.getObjects().find((o: any) => o.sName === 'BaseSeed');
+      if (!seed) return null;
+      const occupied: string[] = [];
+      for (let y = seed.tileY - 4; y <= seed.tileY + 4; y++) {
+        for (let x = seed.tileX - 4; x <= seed.tileX + 4; x++) {
+          if (d._envObjectManager.getObjectAt(x, y) === seed) occupied.push(`${x},${y}`);
+        }
+      }
+      return {
+        built: seed.bBuilt,
+        width: seed.tData.width,
+        height: seed.tData.height,
+        blocks: seed.tData.bBlocksPathing,
+        power: seed.tData.nPowerOutput,
+        occupied,
+      };
+    });
+    expect(result).toMatchObject({ built: true, width: 2, height: 3, blocks: true, power: 500 });
+    expect(result!.occupied).toHaveLength(6);
   });
 
   test('sidebar buttons use icon sprites from Shared.png', async () => {
@@ -3423,18 +3480,30 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(iconCount).toBe(16);
   });
 
-  // P1.2: CharacterRenderer creates shadow meshes for characters
-  test('character renderer creates blob shadow handles', async () => {
+  // Lua Character:_setUpBlobShadow: original sprite, exact dimensions, no extra aura.
+  test('character renderer uses the original blob shadow without an invented aura', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const charId = df9.spawnCharacterAt(91, 91);
-      // The character was spawned — renderer should have created shadow mesh
       const chars = df9.getAllCharacters();
       const spawned = chars.find((c: any) => c.id === charId);
-      return { charId, found: !!spawned };
+      const handle = df9._characterRenderer.handles.get(charId);
+      const geometry = handle?.shadow?.geometry;
+      return {
+        charId,
+        found: !!spawned,
+        hasAura: handle ? 'aura' in handle : true,
+        shadowWidth: geometry?.parameters?.width,
+        shadowHeight: geometry?.parameters?.height,
+        hasOriginalTexture: Boolean(handle?.shadow?.material?.map),
+      };
     });
     expect(result.charId).toBeGreaterThan(0);
     expect(result.found).toBe(true);
+    expect(result.hasAura).toBe(false);
+    expect(result.shadowWidth).toBe(238);
+    expect(result.shadowHeight).toBe(128);
+    expect(result.hasOriginalTexture).toBe(true);
   });
 
   // P1.3: Selection highlight renderer exists
@@ -3446,6 +3515,110 @@ test.describe('Spacebase DF-9 E2E', () => {
       return { charCount: chars.length, hasChars: chars.length > 0 };
     });
     expect(result.hasChars).toBe(true);
+  });
+
+  test('selection highlight uses the original character_selected sprite', async () => {
+    const src = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      const highlight = d._selectionHighlight as any;
+      highlight.update({ type: 'character', data: char });
+      return highlight.mat?.map?.image?.currentSrc || highlight.mat?.map?.image?.src || '';
+    });
+    expect(src).toContain('/assets/ui/misc/character_selected.png');
+  });
+
+  test('held prop renderer textures source models and replaces changed equipment', async () => {
+    await page.evaluate(() => {
+      const props = (window as any).__df9._propRenderer;
+      props.ensureProp('test-held-prop', 'Pistol', 90, 90, 20);
+    });
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__df9._propRenderer.getDebugInfo('test-held-prop'),
+    ), { timeout: 10_000 }).toEqual({ modelName: 'Pistol', textures: ['Rifle'] });
+
+    await page.evaluate(() => {
+      const props = (window as any).__df9._propRenderer;
+      props.ensureProp('test-held-prop', 'Builder', 90, 90, 20);
+    });
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__df9._propRenderer.getDebugInfo('test-held-prop'),
+    ), { timeout: 10_000 }).toEqual({ modelName: 'Builder', textures: ['Builder01'] });
+  });
+
+  test('room lighting preserves object damage and vaporize tints', async () => {
+    const info = await page.evaluate(() => {
+      const renderer = (window as any).__df9._envObjRenderer;
+      renderer.addObject('test-object-tint', 90, 90, 'Generator', true);
+      renderer.updateObject('test-object-tint', true, 100, undefined, true, true, true);
+      renderer.setObjectTint('test-object-tint', 0x404040);
+      const result = renderer.getDebugInfo('test-object-tint');
+      renderer.removeObject('test-object-tint');
+      return result;
+    });
+    expect(info).not.toBeNull();
+    const red = (info!.color >> 16) & 0xff;
+    const green = (info!.color >> 8) & 0xff;
+    const blue = info!.color & 0xff;
+    expect(red).toBeGreaterThan(green * 2);
+    expect(red).toBeGreaterThan(blue * 2);
+    expect(info!.opacity).toBe(0.8);
+  });
+
+  test('room combat awareness uses game elapsed time', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const roomInfo = d.buildSealedRoom(84, 84, 3);
+      const room = d._roomMgr.getRoomAt(roomInfo[0].x, roomInfo[0].y);
+      const initial = room.nLastCombatAlert;
+      d._gameRules.elapsedTime = 123.5;
+      d._roomMgr.spreadCombatAwareness(-1, roomInfo[0].x, roomInfo[0].y, () => {});
+      return { initial, after: room.nLastCombatAlert };
+    });
+    expect(result.initial).toBe(-9999);
+    expect(result.after).toBe(123.5);
+  });
+
+  test('raider conversion decrements once per survival evaluation and preserves brig state', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getAllCharacters()[0];
+      char.tStats.nTeam = -2;
+      char.tStats.nJob = 6;
+      char.tStats.sName = 'Raider';
+      char.nTimeToConvert = 1;
+      char.nAnger = 0;
+      char.tImprisonedIn = 777;
+      char.tAssignedToBrig = 777;
+
+      const getRoomAt = d._roomMgr.getRoomAt.bind(d._roomMgr);
+      d._roomMgr.getRoomAt = () => ({ nLastVisibility: 2 });
+
+      d._charMgr.tickRaiderConversion(char);
+      const afterFirstTick = char.nTimeToConvert;
+      d._charMgr.tickRaiderConversion(char);
+      d._roomMgr.getRoomAt = getRoomAt;
+
+      return {
+        afterFirstTick,
+        converted: char.nTimeToConvert === null,
+        team: char.tStats.nTeam,
+        job: char.tStats.nJob,
+        renamed: char.tStats.sName !== 'Raider',
+        imprisonedIn: char.tImprisonedIn,
+        assignedToBrig: char.tAssignedToBrig,
+        roomId: 777,
+      };
+    });
+    expect(result).toMatchObject({
+      afterFirstTick: 0,
+      converted: true,
+      team: 1,
+      job: 1,
+      renamed: true,
+      imprisonedIn: result.roomId,
+      assignedToBrig: result.roomId,
+    });
   });
 
   // P1.1: Space background elements texture loads
@@ -3599,24 +3772,34 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('character renderer handles thought bubble creation', async () => {
+    await expect.poll(async () => page.locator('.thought-bubble').evaluateAll(
+      bubbles => bubbles.length > 0 && bubbles.every(b => getComputedStyle(b).display === 'none'),
+    )).toBe(true);
+
     const result = await page.evaluate(() => {
       const d = (window as any).__df9;
       const char = d._charMgr.spawnCharacterAt(72, 72);
       const renderer = d._characterRenderer as any;
       const handle = renderer.handles.get(char.id);
+      const oldScale = d._gameRules.playerTimeScale;
+      d._gameRules.playerTimeScale = 0;
+      renderer.setHoveredCharacter(char.id);
       char.currentTask = { name: 'Mine' };
       renderer.updateThoughtBubble(handle, char);
       const shown = handle.thoughtEl.style.display;
       const text = handle.thoughtTextSpan.textContent;
+      const mask = handle.thoughtBg.style.webkitMaskImage || handle.thoughtBg.style.maskImage;
       handle.thoughtShowTime = performance.now() / 1000 - 6;
       renderer.updateThoughtBubble(handle, char);
       const hidden = handle.thoughtEl.style.display;
       char.currentTask = null;
-      return { shown, text, hidden };
+      d._gameRules.playerTimeScale = oldScale;
+      return { shown, text, hidden, mask };
     });
-    expect(result.shown).toBe('block');
-    expect(result.text).toContain('Mining');
+    expect(result.shown).toBe('flex');
+    expect(result.text).toBe('Mining');
     expect(result.hidden).toBe('none');
+    expect(result.mask).toContain('ui_dialog_thought_bubblebg.png');
   });
 
   test('skeletal animations loaded from GLB models', async () => {
@@ -3630,6 +3813,81 @@ test.describe('Spacebase DF-9 E2E', () => {
     // Spacesuit.glb should have 12 animation clips
     expect(info.spacesuitClips).toBeGreaterThan(5);
     expect(info.hasSkeleton).toBe(true);
+  });
+
+  test('character renderer plays rig-specific original animation clips', async () => {
+    await expect.poll(async () => page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      const handle = char ? d._characterRenderer.handles.get(char.id) : null;
+      return Boolean(handle?.mixer);
+    }), { timeout: 15_000 }).toBe(true);
+
+    const clips = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      const renderer = d._characterRenderer as any;
+      const handle = renderer.handles.get(char.id);
+      const oldScale = d._gameRules.playerTimeScale;
+      d._gameRules.playerTimeScale = 0;
+
+      char.currentTask = null;
+      char.moving = false;
+      renderer.updateCharacter(char);
+      const idle = handle.currentAction?.getClip().name ?? null;
+
+      char.moving = true;
+      renderer.updateCharacter(char);
+      const walking = handle.currentAction?.getClip().name ?? null;
+
+      char.moving = false;
+      char.currentTask = { name: 'BuildTile' };
+      renderer.updateCharacter(char);
+      const building = handle.currentAction?.getClip().name ?? null;
+
+      char.currentTask = null;
+      char.moving = false;
+      d._gameRules.playerTimeScale = oldScale;
+      return { idle, walking, building };
+    });
+
+    expect(clips).toEqual({
+      idle: 'Spacewalk_Idle',
+      walking: 'Spacewalk_Walk',
+      building: 'Spacewalk_Build',
+    });
+  });
+
+  test('character renderer uses extracted race textures and job outfits', async () => {
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__df9.getAnimationInfo().citizenClips,
+    ), { timeout: 15_000 }).toBeGreaterThan(50);
+
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.getCharacters()[0];
+      const renderer = d._characterRenderer as any;
+      char.bSpacewalking = false;
+      char.tStats.nRace = 4; // CharacterConstants.RACE_CAT
+      char.setJob(9); // SCIENTIST
+      renderer.destroyCharacter(char.id);
+      const handle = renderer.createCharacter(char);
+
+      const visible: Array<{ material: string; texture: string | null }> = [];
+      handle.object.traverse((child: any) => {
+        if (!child.isMesh && !child.isSkinnedMesh) return;
+        if (!child.visible) return;
+        visible.push({
+          material: child.material?.name ?? '',
+          texture: child.material?.userData?.textureName ?? null,
+        });
+      });
+      return visible;
+    });
+
+    expect(result.some(v => v.texture?.startsWith('Cat_Body_'))).toBe(true);
+    expect(result.some(v => v.texture?.startsWith('Cat_Head_'))).toBe(true);
+    expect(result).toContainEqual({ material: 'Doctor01', texture: 'Scientist01' });
   });
 
   test('door placement does not immediately convert wall to DOOR', async () => {
@@ -3846,7 +4104,8 @@ test.describe('Spacebase DF-9 E2E', () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       // Create an object and check its condition UI string
-      const obj = df9.createBuiltObject?.('Reactor', 5, 5);
+      if (!df9.createBuiltObject?.('Generator', 5, 5)) return { hasObj: false };
+      const obj = df9._envObjectManager.getObjectAt(5, 5);
       if (!obj) return { hasObj: false };
       const condStr = obj.getConditionUIString?.();
       return { hasObj: true, condStr, condition: obj.nCondition };
@@ -3879,7 +4138,12 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('research panel is full-screen overlay with tabs', async () => {
-    await page.evaluate(() => (window as any).__df9._uiManager.toggleResearchPanel());
+    await page.evaluate(() => {
+      const d = (window as any).__df9;
+      d._gameRules.bRunning = true;
+      d._gameRules.playerTimeScale = 2;
+      d._uiManager.toggleResearchPanel();
+    });
     const panel = page.locator('#research-panel');
     await expect(panel).toBeVisible({ timeout: 3_000 });
     const text = await panel.textContent();
@@ -3890,13 +4154,20 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(text).toContain('ESC');
     // Has research items (active or available sections)
     expect(text).toMatch(/ACTIVE|AVAILABLE|COMPLETED/);
-    // ESC closes it
-    await page.keyboard.press('Escape');
+    expect(await page.evaluate(() => (window as any).__df9._gameRules.playerTimeScale)).toBe(0);
+    // The visible Back control must use UIManager's close path so pause restores.
+    await page.locator('[data-testid="research-back"]').click();
     await expect(panel).toBeHidden({ timeout: 3_000 });
+    expect(await page.evaluate(() => (window as any).__df9._gameRules.playerTimeScale)).toBe(2);
   });
 
   test('goals panel is full-screen overlay with progress', async () => {
-    await page.evaluate(() => (window as any).__df9._uiManager.toggleGoalsPanel());
+    await page.evaluate(() => {
+      const d = (window as any).__df9;
+      d._gameRules.bRunning = true;
+      d._gameRules.playerTimeScale = 1;
+      d._uiManager.toggleGoalsPanel();
+    });
     const panel = page.locator('#goals-panel');
     await expect(panel).toBeVisible({ timeout: 3_000 });
     const text = await panel.textContent();
@@ -3911,9 +4182,10 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(text).toContain('Incomplete First');
     // Has numeric progress format "X / Y" (GoalEntry.lua)
     expect(text).toMatch(/\d+ \/ \d+/);
-    // ESC closes it
-    await page.keyboard.press('Escape');
+    expect(await page.evaluate(() => (window as any).__df9._gameRules.playerTimeScale)).toBe(0);
+    await page.locator('[data-testid="goals-back"]').click();
     await expect(panel).toBeHidden({ timeout: 3_000 });
+    expect(await page.evaluate(() => (window as any).__df9._gameRules.playerTimeScale)).toBe(1);
   });
 
   test('asteroid mining uses decay levels before removal', async () => {
@@ -4522,6 +4794,38 @@ test.describe('Spacebase DF-9 E2E', () => {
       expect(result[key]).toBeTruthy();
       expect(result[key].length).toBeGreaterThan(10);
     }
+  });
+
+  test('tutorial starts from the original Box module with five indoor settlers', async () => {
+    await page.goto('/?e2e=1&tutorial=1');
+    await expect(page.locator('#hud-pop')).toBeVisible({ timeout: 30_000 });
+
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const objects = d.getEnvObjects();
+      return {
+        active: d.isTutorialActive(),
+        stage: d.getTutorialStage(),
+        conditions: d.getTutorialConditions(),
+        zoom: d.getCameraZoom(),
+        characters: d.getCharacters(),
+        roomZones: d.getRooms().map((r: any) => r.zone),
+        objects,
+        refinery: objects.find((o: any) => o.name === 'RefineryDropoff'),
+      };
+    });
+
+    expect(result.active).toBe(true);
+    expect(result.stage).toBe(0);
+    expect(result.conditions).not.toContain('zoomed');
+    expect(result.conditions).not.toContain('panned');
+    expect(result.zoom).toBe(1);
+    expect(result.characters).toHaveLength(5);
+    expect(result.characters.every((c: any) => !c.spacewalking)).toBe(true);
+    expect(result.roomZones).toEqual(expect.arrayContaining(['LIFESUPPORT', 'POWER', 'AIRLOCK', 'REFINERY']));
+    expect(result.objects.filter((o: any) => o.name === 'BaseSeed')).toHaveLength(1);
+    expect(result.objects.filter((o: any) => o.name === 'Door')).toHaveLength(6);
+    expect(result.refinery?.condition).toBe(20);
   });
 
   test('volume getters return valid values', async () => {
@@ -5134,6 +5438,92 @@ test.describe('Spacebase DF-9 E2E', () => {
     // Auto-scale should be between 0.3 and 1.5 based on viewport vs 1920
     expect(scale).toBeGreaterThanOrEqual(0.3);
     expect(scale).toBeLessThanOrEqual(1.5);
+  });
+
+  test('start menu keeps Lua reference regions separated at 1280x720', async () => {
+    await page.goto('/');
+    await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
+
+    const regions = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const el = document.querySelector(selector);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width };
+      };
+      return {
+        website: rect('[data-testid="start-menu-website"]'),
+        motd: rect('[data-testid="start-menu-motd"]'),
+        buttons: rect('[data-testid="start-menu-buttons"]'),
+      };
+    });
+
+    expect(regions.website).not.toBeNull();
+    expect(regions.motd).not.toBeNull();
+    expect(regions.buttons).not.toBeNull();
+    expect(regions.website!.bottom).toBeLessThanOrEqual(regions.motd!.top);
+    expect(regions.motd!.right).toBeLessThan(regions.buttons!.left);
+    expect(regions.buttons!.bottom).toBeLessThanOrEqual(720);
+    expect(regions.buttons!.width).toBeCloseTo(800 * (1280 / 1920), 0);
+  });
+
+  test('new-base map and consoles use the Lua native layout at 1280x720', async () => {
+    await page.goto('/');
+    await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
+    await page.getByText('NEW BASE', { exact: true }).click();
+    await expect(page.locator('#new-game')).toBeVisible({ timeout: 5_000 });
+
+    const layout = await page.evaluate(() => {
+      const rect = (selector: string) => {
+        const el = document.querySelector(selector);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width };
+      };
+      const telemetry = document.querySelector('[data-testid="new-game-telemetry"]');
+      const map = document.querySelector('[data-testid="new-game-map"]') as HTMLCanvasElement | null;
+      return {
+        left: rect('[data-testid="new-game-left-sidebar"]'),
+        right: rect('[data-testid="new-game-right-sidebar"]'),
+        mapLeft: Number(map?.dataset.mapLeft),
+        mapWidth: Number(map?.dataset.mapWidth),
+        telemetry: rect('[data-testid="new-game-telemetry"]'),
+        telemetryFont: telemetry ? parseFloat(getComputedStyle(telemetry).fontSize) : 0,
+      };
+    });
+
+    const scale = 1280 / 1920;
+    expect(layout.left!.width).toBeCloseTo(405 * scale, 0);
+    expect(layout.right!.width).toBeCloseTo(158 * scale, 0);
+    expect(layout.mapLeft).toBe(250);
+    expect(layout.mapWidth).toBe(1920 - 250 - 146);
+    expect(layout.telemetry!.width).toBeCloseTo(550 * scale, 0);
+    expect(layout.telemetryFont).toBe(28);
+  });
+
+  test('deployment ETA and years remain separated at 1280x720', async () => {
+    await page.goto('/');
+    await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
+    await page.getByText('NEW BASE', { exact: true }).click();
+    const newGame = page.locator('#new-game');
+    await expect(newGame).toBeVisible({ timeout: 5_000 });
+    const box = await newGame.boundingBox();
+    expect(box).toBeTruthy();
+    await newGame.click({ position: { x: box!.width / 2, y: box!.height / 2 } });
+    await page.getByRole('button', { name: 'Confirm' }).click();
+    await page.locator('img[src*="launchbutton_active"]').click({ force: true });
+
+    await expect(page.locator('[data-testid="deploy-years"]')).toHaveText(/Years/, { timeout: 8_000 });
+    const layout = await page.evaluate(() => {
+      const eta = document.querySelector('[data-testid="deploy-eta"]')!.getBoundingClientRect();
+      const years = document.querySelector('[data-testid="deploy-years"]')!.getBoundingClientRect();
+      return {
+        eta: { left: eta.left, right: eta.right, top: eta.top, bottom: eta.bottom },
+        years: { left: years.left, right: years.right, top: years.top, bottom: years.bottom },
+      };
+    });
+    expect(layout.eta.right).toBeLessThan(layout.years.left);
+    expect(Math.abs(layout.eta.top - layout.years.top)).toBeLessThan(2);
   });
 
   test('UI scale: setUIScale persists and applies', async () => {

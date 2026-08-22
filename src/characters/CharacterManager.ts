@@ -1,5 +1,6 @@
 import { Character } from './Character';
 import { addLog } from './Log';
+import { generateName } from './CitizenNames';
 import { line } from '../localization/Localization';
 import {
   MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
@@ -247,14 +248,13 @@ export class CharacterManager {
    * Spawn the initial crew at given positions (from WorldGen).
    * Original: 3 SpacewalkingSettlers in open space near the seed pod.
    */
-  spawnInitialCrew(spawns: CrewSpawnPoint[]) {
+  spawnInitialCrew(spawns: CrewSpawnPoint[], spacewalking = true) {
     for (const spawn of spawns) {
       const char = new Character(this.nextId++, spawn.x, spawn.y);
-      char.bSpacewalking = true; // Initial crew starts spacewalking
-      // Lua: SpacewalkingSettler template (ModuleData.lua:85-100)
-      char.bSpacesuit = true;
-      char.nSuitOxygen = SPACESUIT_MAX_OXYGEN;
-      char.setJob(BUILDER); // Starting crew are all builders
+      char.bSpacewalking = spacewalking;
+      // Lua: SpacewalkingSettler has bSpacewalking; tutorial Settler does not.
+      char.bSpacesuit = spacewalking;
+      char.nSuitOxygen = spacewalking ? SPACESUIT_MAX_OXYGEN : 0;
       // Lua: tStatus={bBaseFounder=true, bImmuneToParasite=true, nMorale=50}
       char.nMorale = 50;
       char.bBaseFounder = true;
@@ -566,47 +566,17 @@ export class CharacterManager {
     // C-3: Survival threat preemption (Lua Character:_testSurvivalThreats)
     for (const char of this.characters) {
       if (!char.isAlive()) continue;
-      if (char.tStats.nTeam !== TEAM_ID_PLAYER) continue;
-      if (char.survivalTimer === undefined) {
+      if (char.survivalTimer !== undefined) char.survivalTimer -= dtSec;
+      // Lua evaluates survival threats immediately on the first AI update, then
+      // resets the timer to a randomized half-to-one-and-a-half tick interval.
+      if (char.survivalTimer === undefined || char.survivalTimer < dtSec) {
         char.survivalTimer = 0.5 * SURVIVAL_TICK + Math.random() * SURVIVAL_TICK;
-      }
-      char.survivalTimer -= dtSec;
-      if (char.survivalTimer <= 0) {
-        char.survivalTimer = 0.5 * SURVIVAL_TICK + Math.random() * SURVIVAL_TICK;
+
+        // Lua Character:updateAI decrements conversion once per survival tick,
+        // not continuously every rendered frame.
+        this.tickRaiderConversion(char);
+
         this.testSurvivalThreats(char);
-      }
-    }
-
-    // C-25: Raider conversion (Lua Character.lua:2337-2341)
-    // Raiders with nTimeToConvert count down while imprisoned in a visible room with low anger.
-    // When nTimeToConvert reaches 0, they become citizens.
-    for (const char of this.characters) {
-      if (!char.isAlive()) continue;
-      if (char.nTimeToConvert === null) continue;
-      if (!char.inPrison()) continue;
-      const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
-      if (!charRoom || charRoom.nLastVisibility !== VISIBILITY_FULL) continue;
-      if (char.nAnger >= 0.7 * ANGER_MAX) continue;
-
-      // Decrement once per survival tick interval (~1s)
-      // Lua decrements by 1 per survival tick; we approximate by decrementing each frame scaled by dt
-      char.nTimeToConvert -= dtSec;
-      if (char.nTimeToConvert < 0) {
-        // Convert raider to citizen (Lua Character:_convert)
-        char.nTimeToConvert = null;
-        char.tStats.nTeam = TEAM_ID_PLAYER;
-        char.tStats.nJob = UNEMPLOYED;
-        char.tStats.sName = `Citizen ${char.id}`;
-        // Release from brig
-        if (char.tImprisonedIn !== null) {
-          char.tImprisonedIn = null;
-        }
-        if (char.tAssignedToBrig !== null) {
-          char.tAssignedToBrig = null;
-        }
-        Base.incrementStat('nRaidersConverted');
-        Base.addAlert('immigration', `${char.tStats.sName} has been converted to a citizen.`);
-        addLog('JOINED', char);
       }
     }
 
@@ -629,6 +599,26 @@ export class CharacterManager {
       this.aiTickAccum -= this.aiTickInterval;
       this.runAI();
     }
+  }
+
+  /** One Lua Character:updateAI survival evaluation for raider conversion. */
+  private tickRaiderConversion(char: Character) {
+    if (char.nTimeToConvert === null || !char.inPrison()) return;
+    const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
+    if (charRoom?.nLastVisibility !== VISIBILITY_FULL || char.nAnger >= 0.7 * ANGER_MAX) return;
+    char.nTimeToConvert -= 1;
+    if (char.nTimeToConvert < 0) this.convertRaider(char);
+  }
+
+  /** Lua Character:_convert. */
+  private convertRaider(char: Character) {
+    char.nTimeToConvert = null;
+    char.tStats.nTeam = TEAM_ID_PLAYER;
+    // Character:setTeam calls _factionSetup in Lua; its citizen branch changes
+    // the Raider job to Unemployed. TS has no equivalent faction hook.
+    char.tStats.nJob = UNEMPLOYED;
+    char.tStats.sName = generateName();
+    Base.incrementStat('nRaidersConverted');
   }
 
   /** Lua World.isDestroyedWallAdjacentToSpace + Character death selection. */

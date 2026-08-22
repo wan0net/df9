@@ -501,7 +501,7 @@ export class Room {
   }
 
   /** Last combat alert timestamp. */
-  nLastCombatAlert = 0;
+  nLastCombatAlert = -9999;
 
   // ── Hover highlight — mirrors Room.lua:hover/unHover ──────────────────────
 

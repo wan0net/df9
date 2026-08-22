@@ -6,6 +6,7 @@ import { TileType } from '../world/TileTypes';
 import type { Character } from '../characters/Character';
 import type { TileGrid } from '../world/TileGrid';
 import { dialogueSystem } from '../characters/DialogueSystem';
+import { getTexture } from './AssetLoader';
 import {
   RACE_HUMAN, RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK,
   RACE_CHICKEN, RACE_SHAMON, RACE_MONSTER, RACE_MURDERFACE, RACE_KILLBOT,
@@ -48,14 +49,11 @@ const WORK_BOB_AMPLITUDE = 3;
 const WORK_LEAN = 0.12;
 
 // ── Blob shadow (Lua: Character:_setUpBlobShadow) ──────────────────
-/** Shadow ellipse dimensions. */
-const SHADOW_W = 48;
-const SHADOW_H = 20;
+/** Original UIMisc/blobshadow sprite dimensions. */
+const SHADOW_W = 238;
+const SHADOW_H = 128;
 /** Y offset below character (Lua: setLoc(0, -25, -50)). */
 const SHADOW_OFFSET_Y = 25;
-const AURA_W = 86;
-const AURA_H = 112;
-const AURA_OFFSET_Y = 10;
 
 /** Generate a soft elliptical shadow texture procedurally. */
 function createBlobShadowTexture(): THREE.Texture {
@@ -82,64 +80,9 @@ function createBlobShadowTexture(): THREE.Texture {
 
 let blobShadowTex: THREE.Texture | null = null;
 function getBlobShadowTexture(): THREE.Texture {
-  if (!blobShadowTex) blobShadowTex = createBlobShadowTexture();
+  if (!blobShadowTex) blobShadowTex = getTexture('ui_blobshadow') ?? createBlobShadowTexture();
   return blobShadowTex;
 }
-
-let characterAuraTex: THREE.Texture | null = null;
-function getCharacterAuraTexture(): THREE.Texture {
-  if (characterAuraTex) return characterAuraTex;
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d')!;
-  const grad = ctx.createRadialGradient(64, 58, 4, 64, 58, 50);
-  grad.addColorStop(0, 'rgba(255,235,168,0.28)');
-  grad.addColorStop(0.45, 'rgba(223,162,0,0.14)');
-  grad.addColorStop(1, 'rgba(223,162,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 128, 128);
-  characterAuraTex = new THREE.CanvasTexture(canvas);
-  characterAuraTex.needsUpdate = true;
-  return characterAuraTex;
-}
-
-/**
- * Subset indices from .brig (Citizen_Base) by category.
- */
-// GLB primitive indices verified from Citizen_Base.glb material names:
-// [0] Builder01, [1] Bird_Head, [2] Cat_Head, [3-8] Human_Head variants,
-// [5] Jelly_Head, [9] Shamon_Head, [10-11] Female_Body, [12-15] Male_Body,
-// [16] Cat_Head_variant, [17-25] Hair, [26+] Accessories, [60+] Job equipment
-const SUBSETS = {
-  heads: {
-    male:       [3],   // Human_Head_Male01
-    female:     [4],   // Human_Head_Male01 (same mesh, different texture)
-    bird:       [1],   // Bird_Head_Male01
-    cat:        [2],   // Cat_Head_Male01
-    jelly:      [5],   // Jelly_Head_Female01
-    shamon:     [9],   // Shamon_Head01
-  },
-  bodies: {
-    male:       [12],  // Human_Body_Male01
-    female:     [10],  // Human_Body_Female01
-    shamon:     [14],  // Human_Body_Male01_base_03
-  },
-  hair: [17, 18, 19, 20, 21, 22, 23, 24, 25],
-};
-
-/** R-3: Race-specific tint colors to visually distinguish alien races. */
-const RACE_TINT: Record<number, number> = {
-  [RACE_CAT]:       0xffaa44,  // warm orange
-  [RACE_JELLY]:     0x6688ff,  // blue translucent
-  [RACE_TOBIAN]:    0x44cc66,  // green
-  [RACE_BIRDSHARK]: 0xaa44ff,  // purple
-  [RACE_CHICKEN]:   0xffdd44,  // yellow
-  [RACE_SHAMON]:    0x44ddcc,  // teal
-  [RACE_MONSTER]:   0xff2222,  // hostile red
-  [RACE_MURDERFACE]:0xcc4444,  // dark red
-  [RACE_KILLBOT]:   0x884444,  // dark metallic red
-};
 
 const JOB_COLORS: Record<number, number> = {
   2: 0xffcc44,   // BUILDER - yellow
@@ -400,6 +343,7 @@ function applyModelTextures(group: THREE.Group, charId: number, textureOverrides
         mat.depthWrite = false;
         mat.needsUpdate = true;
         trackTextureUser(tex, mat);
+        mat.userData.textureName = baseName;
         applied = true;
         break;
       }
@@ -468,6 +412,34 @@ const STATE_CLIP_MAP: Record<string, string[]> = {
   healing: ['Citizen_Doctor_Heal', 'Citizen_DoctorScan'],
   researching: ['Citizen_ConsolePushButtons', 'Citizen_ConsolePonder'],
   spacewalk: ['Spacewalk_Idle', 'Spacewalk_Walk'],
+};
+
+const SPACESUIT_STATE_CLIP_MAP: Record<string, string[]> = {
+  walking: ['Spacewalk_Walk'],
+  running: ['Spacewalk_Walk'],
+  idle: ['Spacewalk_Idle'],
+  building: ['Spacewalk_Build'],
+  mining: ['Spacewalk_Mining'],
+  fighting_melee: ['Spacewalk_Punch'],
+  fighting_ranged: ['Spacewalk_Shoot', 'Spacewalk_FireGun'],
+  dead: ['Spacewalk_Death', 'Spacewalk_KillDeath'],
+};
+
+const MONSTER_STATE_CLIP_MAP: Record<string, string[]> = {
+  walking: ['BadAlien_Walk'],
+  running: ['BadAlien_Walk'],
+  idle: ['BadAlien_Idle'],
+  fighting_melee: ['BadAlien_Attack'],
+  dead: ['BadAlien_DeadPose', 'BadAlien_Death'],
+};
+
+const KILLBOT_STATE_CLIP_MAP: Record<string, string[]> = {
+  walking: ['MurderRobot_Walk', 'Combat_Walk'],
+  running: ['MurderRobot_Walk', 'Combat_Walk'],
+  idle: ['MurderRobot_Idle'],
+  fighting_melee: ['MurderRobot_Attack'],
+  fighting_ranged: ['MurderRobot_Attack'],
+  dead: ['MurderRobot_DeadPose', 'MurderRobot_Death'],
 };
 
 /** Ensure all mesh materials are double-sided (works for both Mesh and SkinnedMesh). */
@@ -557,6 +529,35 @@ function getAlienVisibleMaterials(char: Character): Set<string> {
   }
 
   return visible;
+}
+
+/** Use the extracted race/job textures selected by CharacterConstants.lua. */
+function getCitizenTextureOverrides(char: Character, isMale: boolean): Record<string, string> | undefined {
+  const overrides: Record<string, string> = {};
+  const twoVariant = (char.id % 2) + 1;
+  const fourVariant = (char.id % 4) + 1;
+  const bodyMaterial = isMale ? 'Human_Body_Male01' : 'Human_Body_Female01';
+
+  switch (char.tStats.nRace) {
+    case RACE_CAT:
+      overrides[bodyMaterial] = `Cat_Body_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
+      overrides.Cat_Head_Male01_base_02 = `Cat_Head_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
+      break;
+    case RACE_BIRDSHARK:
+      overrides[bodyMaterial] = `Bird_Body_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
+      overrides.Bird_Head_Male01_base_01 = `Bird_Head_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
+      break;
+    case RACE_JELLY:
+      overrides.Human_Body_Female01 = `Jelly_Body_Female01_base_0${fourVariant}`;
+      overrides.Jelly_Head_Female01_base_04 = `Jelly_Head_Female01_base_0${fourVariant}`;
+      break;
+    case RACE_SHAMON:
+      overrides.Human_Body_Male01_base_03 = 'Shamon_Body';
+      break;
+  }
+
+  if (char.getJob() === 9) overrides.Doctor01 = 'Scientist01';
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
 
 function loadCitizenModel(): Promise<void> {
@@ -685,22 +686,6 @@ loadMurderRobotModel();
 /** Duration to show thought bubble text (Lua EMOTICON_INITIAL_DURATION=5). */
 const THOUGHT_DURATION = 5;
 
-/** R-8: Emoji icons for common task types (prepended to thought bubble text). */
-const TASK_EMOJI: Record<string, string> = {
-  Eat: '\u{1F354}',
-  EatAtTable: '\u{1F354}',
-  EatAtFoodReplicator: '\u{1F354}',
-  EatPlant: '\u{1F354}',
-  SleepInBed: '\u{1F4A4}',
-  SleepOnFloor: '\u{1F4A4}',
-  BuildTile: '\u{1F527}',
-  BuildEnvObject: '\u{1F527}',
-  MaintainEnvObject: '\u{1F527}',
-  AttackEnemy: '\u2694\uFE0F',
-  Brawl: '\u2694\uFE0F',
-  ResearchInLab: '\u{1F52C}',
-};
-
 /** Friendly display names for internal task names (Lua OptionData.UIText). */
 const TASK_DISPLAY_NAMES: Record<string, string> = {
   Idle: 'Idle',
@@ -791,9 +776,11 @@ export interface CharacterRenderHandle {
   currentAnimState: string;
   /** Blob shadow mesh (Lua: rBlobShadow). */
   shadow: THREE.Mesh;
-  aura: THREE.Mesh;
   /** Thought bubble DOM + CSS2DObject. */
   thoughtEl: HTMLDivElement;
+  thoughtBg: HTMLDivElement;
+  thoughtLeft: HTMLDivElement;
+  thoughtRight: HTMLDivElement;
   thoughtTextSpan: HTMLSpanElement;
   thoughtTail: HTMLElement;
   thoughtObj: CSS2DObject;
@@ -811,6 +798,7 @@ export class CharacterRenderer {
   private lastFrameTime = 0;
   private frameDt = 1 / 60;
   private grid: TileGrid | null = null;
+  private hoveredCharacterId: number | null = null;
 
   constructor(scene: THREE.Scene, overlayScene: THREE.Scene) {
     this.scene = scene;
@@ -820,6 +808,11 @@ export class CharacterRenderer {
   /** Set tile grid for shadow visibility checks. */
   setGrid(grid: TileGrid) {
     this.grid = grid;
+  }
+
+  /** Lua Character:hover shows task text only while the rig is hovered. */
+  setHoveredCharacter(charId: number | null) {
+    this.hoveredCharacterId = charId;
   }
 
   createCharacter(char: Character): CharacterRenderHandle {
@@ -862,10 +855,6 @@ export class CharacterRenderer {
     this.positionCharacter(object, char);
     this.scene.add(object);
 
-    const aura = this.createAura();
-    this.positionAura(aura, char);
-    this.scene.add(aura);
-
     // Blob shadow (Lua: _setUpBlobShadow)
     const shadow = this.createBlobShadow();
     this.positionShadow(shadow, char);
@@ -883,20 +872,25 @@ export class CharacterRenderer {
     const thoughtEl = document.createElement('div');
     thoughtEl.className = 'thought-bubble';
     thoughtEl.style.cssText =
-      'pointer-events:none;font-family:"Dosis",sans-serif;font-size:9px;color:#fff;' +
-      'background:rgba(0,0,0,0.7);border-radius:4px;' +
-      'padding:4px 8px;white-space:nowrap;text-align:center;display:none;' +
-      'width:fit-content;';
+      'pointer-events:none;position:relative;height:70px;min-width:60px;' +
+      'font-family:"Dosis",sans-serif;font-size:30px;font-weight:600;color:#dfa200;' +
+      'padding:0 16px;white-space:nowrap;text-align:left;display:none;align-items:center;' +
+      'width:fit-content;box-sizing:border-box;';
+    const thoughtBg = document.createElement('div');
+    const thoughtLeft = document.createElement('div');
+    const thoughtRight = document.createElement('div');
     const thoughtTextSpan = document.createElement('span');
-    thoughtEl.appendChild(thoughtTextSpan);
+    thoughtTextSpan.style.cssText = 'position:relative;z-index:2;line-height:70px;';
     const thoughtTail = document.createElement('div');
-    thoughtTail.style.cssText =
-      'position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);' +
-      'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;' +
-      'border-top:6px solid rgba(0,0,0,0.7);';
-    thoughtEl.appendChild(thoughtTail);
-    const thoughtObj = new CSS2DObject(thoughtEl);
-    thoughtObj.position.set(char.screenX, -(char.screenY - 60), 20002 + char.screenY);
+    thoughtEl.append(thoughtBg, thoughtLeft, thoughtRight, thoughtTail, thoughtTextSpan);
+    // CSS2DRenderer owns the root element's display property. Keep the bubble
+    // in a stable anchor so its own display:none survives renderer frames.
+    const thoughtAnchor = document.createElement('div');
+    thoughtAnchor.className = 'thought-bubble-anchor';
+    thoughtAnchor.style.cssText = 'pointer-events:none;position:relative;';
+    thoughtAnchor.appendChild(thoughtEl);
+    const thoughtObj = new CSS2DObject(thoughtAnchor);
+    thoughtObj.position.set(char.screenX, -(char.screenY - 165), 20002 + char.screenY);
     this.overlayScene.add(thoughtObj);
 
     const handle: CharacterRenderHandle = {
@@ -907,14 +901,17 @@ export class CharacterRenderer {
       currentAction: null,
       currentAnimState: '',
       shadow,
-      aura,
       thoughtEl,
+      thoughtBg,
+      thoughtLeft,
+      thoughtRight,
       thoughtTextSpan,
       thoughtTail,
       thoughtObj,
       lastTaskName: '',
       thoughtShowTime: 0,
     };
+    this.setBubbleKind(handle, 'thought');
     this.handles.set(char.id, handle);
     return handle;
   }
@@ -1075,6 +1072,7 @@ export class CharacterRenderer {
 
         // Body — male or female
         if (race === RACE_JELLY) showMats.add('Human_Body_Female01'); // Jelly always female body
+        else if (race === RACE_SHAMON) showMats.add('Human_Body_Male01_base_03');
         else if (isMale) showMats.add('Human_Body_Male01');
         else showMats.add('Human_Body_Female01');
 
@@ -1082,6 +1080,33 @@ export class CharacterRenderer {
         const hasHair = race === RACE_HUMAN || race === RACE_CAT ||
           race === RACE_BIRDSHARK || race === RACE_CHICKEN || race === RACE_MURDERFACE;
         if (hasHair) showMats.add('Hair01');
+
+        // Job outfit meshes from CharacterConstants.tJobOutfits.
+        switch (char.getJob()) {
+          case 2:
+            showMats.add('Builder01');
+            break;
+          case 3:
+            showMats.add('Technician01');
+            break;
+          case 4:
+            showMats.add('Miner01');
+            break;
+          case 5:
+            showMats.add('Emergency01');
+            break;
+          case 6:
+            showMats.add('Raider01');
+            break;
+          case 9: // Scientist shares the doctor mesh with Scientist01 texture.
+          case 12:
+            showMats.add('Doctor01');
+            break;
+          default:
+            showMats.add(isMale ? 'Tourist_Shirt_Male_01' : 'Tourist_Shirt_Female_01');
+            showMats.add(isMale ? 'Tourist_Shorts_Male_01' : 'Tourist_Shorts_Female_01');
+            break;
+        }
 
         // Apply: hide everything, show only matching materials.
         // For materials with multiple primitives (e.g. 5 head variants), show only ONE.
@@ -1115,23 +1140,9 @@ export class CharacterRenderer {
       }
 
       // Apply textures and default colors
-      applyModelTextures(clone, char.id);
+      const isMale = char.id % 2 === 0;
+      applyModelTextures(clone, char.id, getCitizenTextureOverrides(char, isMale));
       ensureDoubleSided(clone);
-
-      // R-3: Apply race tint to visually distinguish alien races
-      const raceTint = RACE_TINT[char.tStats.nRace];
-      if (raceTint !== undefined) {
-        const tintColor = new THREE.Color(raceTint);
-        clone.traverse((child) => {
-          if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-            const mat = child.material;
-            if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshBasicMaterial) {
-              mat.color.multiply(tintColor);
-              mat.userData.baseColor = mat.color.getHex();
-            }
-          }
-        });
-      }
 
       // Reset skeleton bind pose after clone so meshes render correctly
       clone.traverse((child) => {
@@ -1142,8 +1153,9 @@ export class CharacterRenderer {
 
       group.add(clone);
 
-      // Skeletal animation disabled — GLB bone mapping causes artifacts.
-      // Using procedural animation (walk bob, idle breathe, death pose) instead.
+      if (citizenHasSkeleton && citizenAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
     } else {
       // Fallback box
       const color = JOB_COLORS[char.getJob()] ?? 0xcccccc;
@@ -1153,71 +1165,6 @@ export class CharacterRenderer {
     }
 
     return { group, mixer };
-  }
-
-  private getVisibleSubsets(char: Character): Set<number> {
-    const visible = new Set<number>();
-    // R-3: Use nRace to determine gender-like body type, not just char.id % 2
-    const isMale = char.id % 2 === 0;
-    const race = char.tStats.nRace;
-
-    // Race-specific heads and bodies (Lua Character:_setBody / _setHead per RACE_TYPE.tBodies)
-    switch (race) {
-      case RACE_CAT:
-        visible.add(SUBSETS.heads.cat[0]);
-        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
-        break;
-      case RACE_JELLY:
-        visible.add(SUBSETS.heads.jelly[0]);
-        visible.add(isMale ? SUBSETS.bodies.female[0] : SUBSETS.bodies.female[0]); // Jelly uses female body (Lua: all jelly are female body type)
-        break;
-      case RACE_BIRDSHARK:
-        visible.add(SUBSETS.heads.bird[0]);
-        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
-        break;
-      case RACE_SHAMON:
-        visible.add(SUBSETS.heads.shamon[0]);
-        visible.add(SUBSETS.bodies.shamon[0]);
-        break;
-      case RACE_CHICKEN:
-        // Chicken uses bird head (closest available), male/female body
-        visible.add(SUBSETS.heads.bird[0]);
-        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
-        break;
-      case RACE_TOBIAN:
-        // Tobian is alien rig but our Citizen_Base has no dedicated tobian head;
-        // use jelly head as closest approximation with distinct tint
-        visible.add(SUBSETS.heads.jelly[0]);
-        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
-        break;
-      case RACE_MURDERFACE:
-        // Murderface uses alien rig in Lua; use male head + body as base, tinted
-        visible.add(isMale ? SUBSETS.heads.male[0] : SUBSETS.heads.female[0]);
-        visible.add(isMale ? SUBSETS.bodies.male[0] : SUBSETS.bodies.female[0]);
-        break;
-      default:
-        // RACE_HUMAN and fallback
-        if (isMale) {
-          visible.add(SUBSETS.heads.male[0]);
-          visible.add(SUBSETS.bodies.male[0]);
-        } else {
-          visible.add(SUBSETS.heads.female[0]);
-          visible.add(SUBSETS.bodies.female[0]);
-        }
-        break;
-    }
-
-    // Hair — only for human-like races
-    const hasHair = race === RACE_HUMAN || race === RACE_MURDERFACE ||
-      race === RACE_CAT || race === RACE_BIRDSHARK || race === RACE_CHICKEN;
-    if (hasHair && SUBSETS.hair.length > 0) {
-      const hairIdx = char.id % SUBSETS.hair.length;
-      visible.add(SUBSETS.hair[hairIdx]);
-    }
-
-    // Skip accessory/job subsets — their GLB indices need re-verification
-    // Characters display cleanly with head + body + hair for now
-    return visible;
   }
 
   private positionCharacter(object: THREE.Object3D, char: Character) {
@@ -1236,26 +1183,6 @@ export class CharacterRenderer {
       depthWrite: false,
     });
     return new THREE.Mesh(geo, mat);
-  }
-
-  private createAura(): THREE.Mesh {
-    const geo = new THREE.PlaneGeometry(AURA_W, AURA_H);
-    const mat = new THREE.MeshBasicMaterial({
-      map: getCharacterAuraTexture(),
-      transparent: true,
-      opacity: 0.42,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    return new THREE.Mesh(geo, mat);
-  }
-
-  private positionAura(aura: THREE.Mesh, char: Character) {
-    aura.position.set(
-      char.screenX,
-      -(char.screenY - AURA_OFFSET_Y),
-      19998 + char.screenY,
-    );
   }
 
   private positionShadow(shadow: THREE.Mesh, char: Character) {
@@ -1352,7 +1279,6 @@ export class CharacterRenderer {
 
     // Base position
     this.positionCharacter(handle.object, char);
-    this.positionAura(handle.aura, char);
     this.positionShadow(handle.shadow, char);
     this.positionNeedBars(handle.needBarsObj, char);
 
@@ -1394,10 +1320,14 @@ export class CharacterRenderer {
       }
     }
 
-    // Animation: procedural only — skeletal clips cause "clock swinging" artifacts
-    // because the GLB bone structure doesn't map correctly to Three.js AnimationMixer.
-    // The mixer is created but not used for playback.
-    this.applyProceduralAnim(handle, char);
+    // Prefer the original skeletal clips embedded from the .banim files. Keep
+    // procedural motion as the fallback for models/states without a matching
+    // original clip.
+    const clip = handle.mixer
+      ? this.findClip(this.getAnimState(char), handle.showingSpacesuit, char.tStats.nRace)
+      : null;
+    if (handle.mixer && clip) this.updateSkeletalAnim(handle, char);
+    else this.applyProceduralAnim(handle, char);
 
     // Thought bubble (Lua Task:showEmoticon — show for EMOTICON_INITIAL_DURATION on task change)
     this.updateThoughtBubble(handle, char);
@@ -1412,32 +1342,57 @@ export class CharacterRenderer {
   /** Get the animation state key for a character. */
   private getAnimState(char: Character): string {
     if (!char.isAlive()) return 'dead';
-    if (char.moving) return 'walking';
     const taskName = char.currentTask?.name;
+    if (char.moving && (
+      taskName === 'RunTo' || taskName === 'PanicFire' || taskName === 'PanicOnFire' ||
+      taskName === 'PanicOxygen' || taskName === 'PanicThreat' ||
+      taskName === 'FireFleeArea' || taskName === 'OxygenFleeArea' ||
+      taskName === 'FleeThreat' || taskName === 'FleeTemperTantrum' ||
+      taskName === 'RaiderFleeThreat'
+    )) return 'running';
+    if (char.moving) return 'walking';
     if (taskName === 'SleepInBed' || taskName === 'SleepOnFloor') return 'sleeping';
     if (taskName === 'BuildEnvObject' || taskName === 'BuildTile') return 'building';
-    if (taskName === 'Eat' || taskName === 'GetDrink') return 'eating';
+    if (taskName === 'Eat' || taskName === 'EatAtTable' ||
+        taskName === 'EatAtFoodReplicator' || taskName === 'EatPlant' ||
+        taskName === 'GetDrink') return 'eating';
     if (taskName === 'AttackEnemy' && char.weapon) return 'fighting_ranged';
-    if (taskName === 'AttackEnemy') return 'fighting_melee';
+    if (taskName === 'AttackEnemy' || taskName === 'Brawl' ||
+        taskName === 'MonsterAttackEquipment') return 'fighting_melee';
     if (taskName === 'Mine') return 'mining';
-    if (taskName === 'Chat' || taskName === 'Socialize') return 'chatting';
-    if (taskName === 'ExtinguishFire') return 'firefighting';
-    if (taskName === 'HealCharacter') return 'healing';
-    if (taskName === 'Research') return 'researching';
-    if (taskName === 'GoToSafety') return 'panicking';
+    if (taskName === 'Chat' || taskName === 'ChatPartner') return 'chatting';
+    if (taskName === 'ExtinguishFireBareHanded' ||
+        taskName === 'ExtinguishFireWithTool') return 'firefighting';
+    if (taskName === 'FieldScanAndHeal' || taskName === 'BedHeal' ||
+        taskName === 'CheckInToHospital') return 'healing';
+    if (taskName === 'ResearchInLab' || taskName === 'TearDownEnvObjectForResearch' ||
+        taskName === 'DeliverResearchDatacube') return 'researching';
+    if (taskName === 'PanicFire' || taskName === 'PanicOnFire' ||
+        taskName === 'PanicOxygen' || taskName === 'PanicThreat') return 'panicking';
     return 'idle';
   }
 
   /** Find the best matching animation clip for a state. */
   private findClip(state: string, spacesuit: boolean, race?: number): THREE.AnimationClip | null {
-    const candidates = STATE_CLIP_MAP[state] || [];
     // R-5: Select clip pool based on model type
     let clips: THREE.AnimationClip[];
-    if (race === RACE_MONSTER) clips = badAlienAnimClips;
-    else if (race === RACE_KILLBOT) clips = murderRobotAnimClips;
-    else if (race !== undefined && RACE_TYPE[race]?.nRig === RIG_ALIEN) clips = alienAnimClips;
-    else if (spacesuit) clips = spacesuitAnimClips;
-    else clips = citizenAnimClips;
+    let candidates: string[];
+    if (race === RACE_MONSTER) {
+      clips = badAlienAnimClips;
+      candidates = MONSTER_STATE_CLIP_MAP[state] || [];
+    } else if (race === RACE_KILLBOT) {
+      clips = murderRobotAnimClips;
+      candidates = KILLBOT_STATE_CLIP_MAP[state] || [];
+    } else if (spacesuit) {
+      clips = spacesuitAnimClips;
+      candidates = SPACESUIT_STATE_CLIP_MAP[state] || [];
+    } else if (race !== undefined && RACE_TYPE[race]?.nRig === RIG_ALIEN) {
+      clips = alienAnimClips;
+      candidates = STATE_CLIP_MAP[state] || [];
+    } else {
+      clips = citizenAnimClips;
+      candidates = STATE_CLIP_MAP[state] || [];
+    }
 
     for (const name of candidates) {
       const clip = clips.find(c => c.name === name);
@@ -1529,24 +1484,25 @@ export class CharacterRenderer {
     // Position thought bubble above character
     handle.thoughtObj.position.set(
       char.screenX,
-      -(char.screenY - 60),
+      -(char.screenY - 165),
       20002 + char.screenY,
     );
 
+    if (this.hoveredCharacterId !== char.id) {
+      handle.thoughtEl.style.display = 'none';
+      return;
+    }
+
     // Detect task change — show bubble
-    if (taskName && taskName !== handle.lastTaskName) {
+    if (taskName && (taskName !== handle.lastTaskName || handle.thoughtEl.style.display === 'none')) {
       handle.lastTaskName = taskName;
       handle.thoughtShowTime = now;
-      // Map internal task names to friendly display text, with emoji prefix (R-8)
+      // Lua Task:showEmoticon uses the advertised activity text. No icon is
+      // supplied by the base Task implementation.
       const label = TASK_DISPLAY_NAMES[taskName] ?? taskName;
-      const emoji = TASK_EMOJI[taskName] ?? '';
-      handle.thoughtTextSpan.textContent = emoji ? `${emoji} ${label}` : label;
-      handle.thoughtEl.style.cssText =
-        'pointer-events:none;font-family:"Dosis",sans-serif;font-size:9px;color:#fff;' +
-        'background:rgba(0,0,0,0.7);border-radius:4px;' +
-        'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
-        'width:fit-content;';
-      handle.thoughtTail.style.borderTopColor = 'rgba(0,0,0,0.7)';
+      handle.thoughtTextSpan.textContent = label;
+      this.setBubbleKind(handle, 'thought');
+      handle.thoughtEl.style.display = 'flex';
     }
 
     // Dismiss after THOUGHT_DURATION
@@ -1563,18 +1519,31 @@ export class CharacterRenderer {
   private updateSpeechBubble(handle: CharacterRenderHandle, char: Character) {
     const bubbleText = dialogueSystem.getBubbleText(char.id);
     
-    if (bubbleText && handle.thoughtEl.style.display === 'none') {
+    if (bubbleText) {
       handle.thoughtTextSpan.textContent = bubbleText;
-      handle.thoughtEl.style.cssText =
-        'pointer-events:none;font-family:"Orbitron",monospace;font-size:11px;color:#000;' +
-        'background:rgba(255,255,255,0.85);border-radius:4px;' +
-        'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
-        'width:fit-content;';
-      handle.thoughtTail.style.borderTopColor = 'rgba(255,255,255,0.85)';
-    } else if (!bubbleText && handle.thoughtEl.style.display !== 'none') {
-      // Hide speech/thought bubble when there's nothing to show
+      this.setBubbleKind(handle, 'dialog');
+      handle.thoughtEl.style.display = 'flex';
+    } else if (handle.thoughtEl.dataset.kind === 'dialog') {
+      // Dialogue ended. Task-hover rendering can take over on the next update.
       handle.thoughtEl.style.display = 'none';
     }
+  }
+
+  private setBubbleKind(handle: CharacterRenderHandle, kind: 'thought' | 'dialog') {
+    handle.thoughtEl.dataset.kind = kind;
+    const base = `/assets/ui/dialog/ui_dialog_${kind}_`;
+    const mask = (url: string, repeat: string) =>
+      `background:#dfa200;position:absolute;pointer-events:none;` +
+      `-webkit-mask:url('${url}') ${repeat};mask:url('${url}') ${repeat};` +
+      `-webkit-mask-size:auto 70px;mask-size:auto 70px;`;
+    handle.thoughtBg.style.cssText =
+      mask(`${base}bubblebg.png`, 'repeat-x') + 'left:10px;right:10px;top:0;height:70px;z-index:0;';
+    handle.thoughtLeft.style.cssText =
+      mask(`${base}endcap.png`, 'no-repeat') + 'left:0;top:0;width:10px;height:70px;z-index:1;transform:scaleX(-1);';
+    handle.thoughtRight.style.cssText =
+      mask(`${base}endcap.png`, 'no-repeat') + 'right:0;top:0;width:10px;height:70px;z-index:1;';
+    handle.thoughtTail.style.cssText =
+      mask(`${base}bubbletail.png`, 'no-repeat') + 'left:10px;top:0;width:40px;height:70px;z-index:1;';
   }
 
   private drawNeedBars(el: HTMLDivElement, char: Character) {
@@ -1613,10 +1582,7 @@ export class CharacterRenderer {
     handle.object.traverse((child) => {
       if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) child.geometry.dispose();
     });
-    // Remove aura + blob shadow
-    this.scene.remove(handle.aura);
-    handle.aura.geometry.dispose();
-    (handle.aura.material as THREE.Material).dispose();
+    // Remove blob shadow
     this.scene.remove(handle.shadow);
     handle.shadow.geometry.dispose();
     (handle.shadow.material as THREE.Material).dispose();
@@ -1625,7 +1591,7 @@ export class CharacterRenderer {
     handle.needBarsEl.remove();
     // Remove thought bubble
     this.overlayScene.remove(handle.thoughtObj);
-    handle.thoughtEl.remove();
+    handle.thoughtObj.element.remove();
     this.handles.delete(charId);
   }
 

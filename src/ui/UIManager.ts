@@ -177,7 +177,6 @@ export class UIManager {
 
   // Tile tip text (Lua: StatusBar.tileTipText — shows last-clicked tile info)
   private tileTipEl!: HTMLDivElement;
-  private tileInfoEl!: HTMLDivElement;
   private tileTipClearTimer = 0;
   private readonly TILE_TIP_DURATION = 5; // seconds before auto-clear
 
@@ -381,10 +380,10 @@ export class UIManager {
     });
 
     // Research panel
-    this.researchPanel = new ResearchPanel(this.uiRoot, this.getRooms);
+    this.researchPanel = new ResearchPanel(this.uiRoot, this.getRooms, () => this.hideActivePanel());
 
     // Goals panel
-    this.goalsPanel = new GoalsPanel(this.uiRoot, callbacks.goalSystem);
+    this.goalsPanel = new GoalsPanel(this.uiRoot, callbacks.goalSystem, () => this.hideActivePanel());
 
     // Job roster
     this.jobRoster = new JobRoster(this.container, {
@@ -649,17 +648,6 @@ export class UIManager {
       pointer-events:none;display:none;
     `;
     this.uiRoot.appendChild(this.tileTipEl);
-
-    // Persistent coordinate display — below the top HUD bar
-    this.tileInfoEl = document.createElement('div');
-    this.tileInfoEl.style.cssText = `
-      position:absolute;bottom:70px;left:120px;
-      color:${AMBER};font-size:18px;font-family:'Dosis',sans-serif;font-weight:600;
-      background:rgba(0,0,0,0.38);padding:2px 8px;border-radius:8px;
-      pointer-events:none;opacity:0.7; /* Lua dosissemibold18 */
-    `;
-    this.tileInfoEl.textContent = '';
-    this.uiRoot.appendChild(this.tileInfoEl);
 
     // Flip button — Lua StatusBar.rFlipButton, bottom-left, visible in object placement mode
     this.flipBtnEl = document.createElement('div');
@@ -1670,6 +1658,7 @@ export class UIManager {
     this.tooltipEl.style.cssText = `
       position:fixed;width:280px;z-index:999;
       background:rgba(0,0,0,0.8);color:#ccc;font-size:22px; /* Lua dosissemibold22 */
+      font-family:'Dosis',sans-serif;font-weight:600;
       padding:8px;line-height:1.6;white-space:pre-wrap;
       display:none;pointer-events:none;
     `;
@@ -1784,11 +1773,6 @@ export class UIManager {
     this.tileTipEl.textContent = `${line('HUDHUD001TEXT')} ${text}`;
     this.tileTipEl.style.display = 'block';
     this.tileTipClearTimer = this.TILE_TIP_DURATION;
-  }
-
-  /** Update persistent coordinate display with hovered tile info. */
-  updateTileInfo(tileX: number, tileY: number, typeName: string) {
-    this.tileInfoEl.textContent = `(${tileX}, ${tileY}) ${typeName}`;
   }
 
   /** Toggle job roster visibility. Hides alert/hint pane when opening (Lua). */
@@ -1931,7 +1915,7 @@ export class UIManager {
 
   // ── Update Loop ─────────────────────────────────────────────────
 
-  update() {
+  update(dt = 1 / 60) {
     const chars = this.getCharacters();
 
     // ── HUD Matter (animated counter ticking toward real value) ──
@@ -2264,7 +2248,10 @@ export class UIManager {
 
     // ── Tooltip ───────────────────────────────────────────
     const info = this.getHoveredInfo();
-    if (info) {
+    const tooltipSuppressed = this.activePanel !== 'none'
+      || this.jobRoster.isVisible()
+      || this.inspectorPanel.hasEntity();
+    if (info && !tooltipSuppressed) {
       this.tooltipEl.textContent = info;
       this.tooltipEl.style.display = 'block';
     } else {
@@ -2340,7 +2327,7 @@ export class UIManager {
 
     // ── Tile tip text auto-clear (Lua: checkTileTipTime) ──
     if (this.tileTipClearTimer > 0) {
-      this.tileTipClearTimer -= 1 / 60; // approximate dt at 60fps
+      this.tileTipClearTimer -= dt;
       if (this.tileTipClearTimer <= 0) {
         this.tileTipEl.style.display = 'none';
       }

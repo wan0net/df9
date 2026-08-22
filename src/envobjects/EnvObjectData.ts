@@ -582,6 +582,14 @@ export const tObjects: Record<string, EnvObjectDef> = {
   }),
 };
 
+// Lua object IDs are canonical gameplay identities. Keep the legacy lowercase
+// sprite/menu keys as aliases, but ensure AI, hints, research and saved modules
+// all see the original RefineryDropoff names.
+tObjects.RefineryDropoff = tObjects.refinery;
+tObjects.RefineryDropoffLevel2 = tObjects.refinery_level2;
+delete tObjects.refinery;
+delete tObjects.refinery_level2;
+
 // ── Wire description linecodes (Lua EnvObjectData.lua description field) ────
 const DESC_LCS: Record<string, string> = {
   Door: 'PROPSX020TEXT', HeavyDoor: 'PROPSX065TEXT', Airlock: 'PROPSX022TEXT',
@@ -597,7 +605,7 @@ const DESC_LCS: Record<string, string> = {
   Bar: 'ZONEUI066TEXT', Fridge: 'PROPSX034TEXT', FridgeLvl2: 'PROPSX068TEXT',
   Stove: 'PROPSX029TEXT', StandingTable: 'PROPSX032TEXT', Jukebox: 'JUKEX002TEXT',
   BurgerSign: 'PROPSX008TEXT', PizzaSign: 'PROPSX012TEXT', FriesSign: 'PROPSX010TEXT',
-  refinery: 'ZONEUI055TEXT', refinery_level2: 'PROPSX067TEXT',
+  RefineryDropoff: 'ZONEUI055TEXT', RefineryDropoffLevel2: 'PROPSX067TEXT',
   WeightBench: 'PROPSX047TEXT', ResearchDesk: 'PROPSX061TEXT',
   HospitalBed: 'PROPSX077TEXT', AirlockLocker: 'ZONEUI053TEXT',
   FirePanel: 'PROPSX002TEXT', EmergencyAlarm: 'PROPSX041TEXT',
@@ -612,6 +620,8 @@ for (const [key, lc] of Object.entries(DESC_LCS)) {
 
 // ── Alias system (matches EnvObjectData.lua tAliases) ───────────
 export const tAliases: Record<string, string> = {
+  refinery: 'RefineryDropoff',
+  refinery_level2: 'RefineryDropoffLevel2',
   Fridge_level2: 'FridgeLvl2',
   FridgeLevel2: 'FridgeLvl2',
   tvScreen1: 'TVScreen1',
@@ -654,7 +664,7 @@ export const tMenus: Record<string, string[]> = {
   GARDEN: ['space_tree'],
   PUB: ['Bar', 'Fridge', 'FridgeLvl2', 'Stove', 'StandingTable', 'BurgerSign', 'PizzaSign', 'FriesSign'],
   AIRLOCK: [],
-  REFINERY: ['refinery', 'refinery_level2'],
+  REFINERY: ['RefineryDropoff', 'RefineryDropoffLevel2'],
   FITNESS: [],
   INFIRMARY: [],
   RESEARCH: [],

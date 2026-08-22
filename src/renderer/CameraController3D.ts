@@ -20,6 +20,10 @@ export class CameraController3D {
   private keysDown: Set<string> = new Set();
   private dragStart: { x: number; y: number; scrollX: number; scrollY: number } | null = null;
 
+  /** User-action hooks used by the Lua tutorial conditions. */
+  onUserZoom: (() => void) | null = null;
+  onUserPan: (() => void) | null = null;
+
   // ── Smooth zoom (Lua: zoomBuffer + ZOOM_RATE) ──────────────
   private zoomBuffer = 0;
   private zoomMouseX = 0;
@@ -70,6 +74,7 @@ export class CameraController3D {
       e.preventDefault();
       const delta = -Math.sign(e.deltaY) * ZOOM_STEP;
       this.zoomBuffer += delta;
+      this.onUserZoom?.();
       // Store mouse position for zoom-toward-cursor
       const rect = canvas.getBoundingClientRect();
       this.zoomMouseX = e.clientX - rect.left;
@@ -92,6 +97,7 @@ export class CameraController3D {
       if (this.dragStart) {
         const dx = e.clientX - this.dragStart.x;
         const dy = e.clientY - this.dragStart.y;
+        if (dx !== 0 || dy !== 0) this.onUserPan?.();
         this.scrollX = this.dragStart.scrollX - dx / this.zoom;
         this.scrollY = this.dragStart.scrollY - dy / this.zoom;
       }
@@ -110,6 +116,9 @@ export class CameraController3D {
   update() {
     const speed = PAN_SPEED / this.zoom;
 
+    const keyboardPanning = this.keysDown.has('ArrowLeft') || this.keysDown.has('ArrowRight')
+      || this.keysDown.has('ArrowUp') || this.keysDown.has('ArrowDown');
+    if (keyboardPanning) this.onUserPan?.();
     if (this.keysDown.has('ArrowLeft')) this.scrollX -= speed;
     if (this.keysDown.has('ArrowRight')) this.scrollX += speed;
     if (this.keysDown.has('ArrowUp')) this.scrollY -= speed;
@@ -157,6 +166,7 @@ export class CameraController3D {
   /** Add zoom increment (Lua GameRules.AddZoom, called by zoom buttons). */
   addZoom(steps: number) {
     this.zoomBuffer += steps * ZOOM_STEP;
+    this.onUserZoom?.();
     // Center zoom on screen center
     this.zoomMouseX = window.innerWidth / 2;
     this.zoomMouseY = window.innerHeight / 2;

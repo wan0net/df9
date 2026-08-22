@@ -26,11 +26,15 @@ const TUTORIAL_Y = 34;
 
 /**
  * Sidebar widths — native Lua pixel sizes.
- * Left sidebar sprite: 295px wide.
- * Right sidebar positioned at W/2 - 156 in Lua (156px from right edge).
+ * Extracted NewGame sprites keep their native Lua dimensions.
  */
-const LEFT_SIDEBAR_W = 295;
-const RIGHT_SIDEBAR_W = 156;
+const LEFT_SIDEBAR_W = 405;
+const LEFT_SIDEBAR_TILE_W = 340;
+const RIGHT_SIDEBAR_W = 158;
+const RIGHT_SIDEBAR_TILE_W = 128;
+/** Lua NewBase:setMapLoc(): map begins at tile width - 90 and ends 146px from the right. */
+const MAP_LEFT = LEFT_SIDEBAR_TILE_W - 90;
+const MAP_RIGHT = 146;
 
 type GameState = 'Initial' | 'SelectedLandingZone' | 'ConfirmedLandingZone' | 'Deploying' | 'Deployed';
 
@@ -171,7 +175,8 @@ export class NewGameScreenState implements SceneState {
   private selectedZone: LandingZone | null = null;
   private deployTime = 0;
 
-  private mapSize = 0;
+  private mapW = 0;
+  private mapH = 0;
   private mapX = 0;
   private mapY = 0;
   private hoverGx = -1;
@@ -198,8 +203,6 @@ export class NewGameScreenState implements SceneState {
   private flavorB!: HTMLDivElement;
   private tutorialLabel!: HTMLDivElement;
   private inspectorPreviewWrap!: HTMLDivElement;
-  private inspectorPreview!: HTMLCanvasElement;
-  private inspectorPreviewCtx!: CanvasRenderingContext2D;
   private telemetryPanel!: HTMLDivElement;
   private telemetryDensity!: HTMLDivElement;
   private telemetryDistance!: HTMLDivElement;
@@ -272,6 +275,7 @@ export class NewGameScreenState implements SceneState {
     this.overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;font-family:'Orbitron',monospace;overflow:hidden;${scaleStyles}`;
 
     this.canvas = document.createElement('canvas');
+    this.canvas.dataset.testid = 'new-game-map';
     this.canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
     this.canvasCtx = this.canvas.getContext('2d')!;
     this.overlay.appendChild(this.canvas);
@@ -294,11 +298,11 @@ export class NewGameScreenState implements SceneState {
     // Flavor text — Lua: FlavorTextALabel (NEWBAS021TEXT) + FlavorTextBLabel (NEWBAS022TEXT)
     // Positioned at 314px from left edge (just right of left sidebar)
     this.flavorA = this.el('div',
-      `position:absolute;top:26px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:6;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.18;letter-spacing:0.2px;text-shadow:0 1px 0 rgba(0,0,0,0.8);max-width:620px;` /* Lua dosissemibold26 */,
+      `position:absolute;top:26px;left:314px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:6;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.18;letter-spacing:0.2px;text-shadow:0 1px 0 rgba(0,0,0,0.8);max-width:1000px;` /* Lua dosissemibold26 */,
       line('NEWBAS021TEXT')) as HTMLDivElement;
     this.overlay.appendChild(this.flavorA);
     this.flavorB = this.el('div',
-      `position:absolute;top:126px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:18px;z-index:6;font-family:'Dosis',sans-serif;font-style:italic;line-height:1.1;letter-spacing:0.05px;text-shadow:0 1px 0 rgba(0,0,0,0.8);` /* Lua dosissemibold18 */,
+      `position:absolute;top:126px;left:314px;color:${AMBER_HEX};font-size:18px;z-index:6;font-family:'Dosis',sans-serif;font-style:italic;line-height:1.1;letter-spacing:0.05px;text-shadow:0 1px 0 rgba(0,0,0,0.8);` /* Lua dosissemibold18 */,
       line('NEWBAS022TEXT')) as HTMLDivElement;
     this.overlay.appendChild(this.flavorB);
 
@@ -358,11 +362,12 @@ export class NewGameScreenState implements SceneState {
     // ── Left sidebar ──────────────────────────────────────────────────
     // Lua: top piece at left edge, tiles repeat, bottom piece at -(H/2)+350.
     this.leftSidebar = document.createElement('div');
+    this.leftSidebar.dataset.testid = 'new-game-left-sidebar';
     this.leftSidebar.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
 
     // Tile background — fills the entire height seamlessly via CSS repeat
     const lTileBg = document.createElement('div');
-    lTileBg.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png') left top repeat-y;background-size:${LEFT_SIDEBAR_W}px auto;`;
+    lTileBg.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_TILE_W}px;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png') left top repeat-y;background-size:${LEFT_SIDEBAR_TILE_W}px auto;`;
     this.leftSidebar.appendChild(lTileBg);
 
     // Top piece — overlays the tile background at the top
@@ -384,6 +389,7 @@ export class NewGameScreenState implements SceneState {
     // Lua: top piece at W/2 - 156, tiles at W/2 - 126, bottom at W/2 - 146.
     // Container is 156px wide (matching the rightmost position offset).
     this.rightSidebar = document.createElement('div');
+    this.rightSidebar.dataset.testid = 'new-game-right-sidebar';
     this.rightSidebar.style.cssText = `position:absolute;right:0;top:0;width:${RIGHT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
 
     // Tile background — Lua: tiles at W/2 - 126 (30px inset from container left)
@@ -391,7 +397,7 @@ export class NewGameScreenState implements SceneState {
     rTileBg.style.cssText = `position:absolute;left:30px;top:0;width:calc(100% - 30px);height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png') left top repeat-y;background-size:auto;`;
     this.rightSidebar.appendChild(rTileBg);
 
-    // Top piece — flush with container left (sprite is 145px wide)
+    // Top piece — flush with container left at its extracted native width.
     const rTop = document.createElement('img');
     rTop.src = '/assets/ui/newgame/ui_newgame_sidebarRight.png';
     rTop.style.cssText = `position:absolute;left:0;top:0;width:${RIGHT_SIDEBAR_W}px;`;
@@ -409,16 +415,17 @@ export class NewGameScreenState implements SceneState {
 
   private buildTelemetryPanel() {
     this.telemetryPanel = document.createElement('div');
+    this.telemetryPanel.dataset.testid = 'new-game-telemetry';
     this.telemetryPanel.style.cssText = `
-      position:absolute;left:20px;top:120px;width:112px;padding:2px 0;
-      z-index:4;color:${AMBER_HEX};font-size:12px;line-height:1.35;
+      position:absolute;right:15px;top:18px;width:550px;padding:0;
+      z-index:4;color:${AMBER_HEX};font-size:28px;line-height:1.25;
       font-family:'Dosis',sans-serif;pointer-events:none;box-sizing:border-box;
       text-shadow:0 1px 0 rgba(0,0,0,0.75);
     `;
 
     const makeRow = () => {
       const row = document.createElement('div');
-      row.style.cssText = 'margin-bottom:6px;white-space:normal;';
+      row.style.cssText = 'height:35px;white-space:nowrap;';
       return row;
     };
 
@@ -433,7 +440,7 @@ export class NewGameScreenState implements SceneState {
       this.telemetryInterference,
     );
 
-    this.rightSidebar.appendChild(this.telemetryPanel);
+    this.overlay.appendChild(this.telemetryPanel);
     this.updateTelemetry(null);
   }
 
@@ -444,41 +451,42 @@ export class NewGameScreenState implements SceneState {
     this.canvas.width = w;
     this.canvas.height = h;
 
-    const availW = w - LEFT_SIDEBAR_W - RIGHT_SIDEBAR_W + 52;
-    const availH = h - 74;
-    this.mapSize = Math.min(availW, availH);
-    this.mapX = LEFT_SIDEBAR_W + (availW - this.mapSize) / 2 - 14;
-    this.mapY = 28;
+    this.mapX = MAP_LEFT;
+    this.mapY = 0;
+    this.mapW = Math.max(1, w - MAP_LEFT - MAP_RIGHT);
+    this.mapH = h;
+    this.canvas.dataset.mapLeft = String(this.mapX);
+    this.canvas.dataset.mapWidth = String(this.mapW);
 
     if (this.leftSidebar) this.leftSidebar.style.height = `${h}px`;
     if (this.rightSidebar) this.rightSidebar.style.height = `${h}px`;
     if (this.tutorialLabel) {
-      this.tutorialLabel.style.left = `${this.mapX + 144}px`;
-      this.tutorialLabel.style.top = `${this.mapY + 396}px`;
+      this.tutorialLabel.style.left = `${this.mapX + (TUTORIAL_X / INFO_MAP_SIZE) * this.mapW + 20}px`;
+      this.tutorialLabel.style.top = `${this.mapY + (TUTORIAL_Y / INFO_MAP_SIZE) * this.mapH + 35}px`;
     }
     if (this.regionSelectionLabel) {
       this.regionSelectionLabel.style.left = `${this.mapX - 6}px`;
       this.regionSelectionLabel.style.top = '10px';
     }
     if (this.flavorA) {
-      this.flavorA.style.left = `${LEFT_SIDEBAR_W + 30}px`;
+      this.flavorA.style.left = '314px';
       this.flavorA.style.top = '24px';
-      this.flavorA.style.maxWidth = `${Math.max(440, this.mapX + this.mapSize - (LEFT_SIDEBAR_W + 48))}px`;
+      this.flavorA.style.maxWidth = '1000px';
     }
     if (this.flavorB) {
-      this.flavorB.style.left = `${LEFT_SIDEBAR_W + 30}px`;
+      this.flavorB.style.left = '314px';
       this.flavorB.style.top = '114px';
     }
     if (this.helpText) {
-      this.helpText.style.left = `${LEFT_SIDEBAR_W + 108}px`;
+      this.helpText.style.left = '436px';
     }
   }
 
   private buildInfoPanel() {
     // Inspector panel on right side — NewBaseInspectorLayout.lua
     // Panel: 550px wide, positioned right of galaxy map, left of right sidebar
-    const panelW = 470; // Keep the inspector present, but let the map dominate more like the original screen.
-    const panelRight = RIGHT_SIDEBAR_W + 6;
+    const panelW = 550;
+    const panelRight = 120;
     this.infoPanel = document.createElement('div');
     this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:0;width:${panelW}px;color:${AMBER_HEX};font-size:26px;z-index:5;display:none;font-family:'Dosis',sans-serif;pointer-events:none;`; /* Lua dosissemibold26, pointer-events:none so hover preview doesn't block canvas clicks */
 
@@ -487,32 +495,19 @@ export class NewGameScreenState implements SceneState {
     blackBg.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:0;`;
     this.infoPanel.appendChild(blackBg);
 
-    // Zoomed map preview — approximate the original inspector art block using the galaxy texture.
+    // Zoomed map preview — original NewGame/galaxy_zoom01 sprite, amber-multiplied like MOAI.
     const previewWrap = this.inspectorPreviewWrap = document.createElement('div');
     previewWrap.style.cssText = `
-      position:absolute;top:0;left:0;width:100%;height:224px;overflow:hidden;
-      z-index:1;pointer-events:none;transform-origin:center center;
+      position:absolute;top:0;left:0;width:100%;height:215px;overflow:hidden;
+      z-index:1;pointer-events:none;transform-origin:center center;background:${AMBER_HEX};
     `;
     const previewImg = document.createElement('img');
     previewImg.src = '/assets/ui/newgame/galaxy_zoom01.png';
     previewImg.style.cssText = `
       position:absolute;top:0;left:0;width:100%;height:100%;
-      object-fit:cover;opacity:0.72;display:block;
+      object-fit:fill;opacity:1;display:block;mix-blend-mode:multiply;
     `;
     previewWrap.appendChild(previewImg);
-    const previewShade = document.createElement('div');
-    previewShade.style.cssText = `
-      position:absolute;inset:0;
-      background:linear-gradient(to bottom, rgba(0,0,0,0.06), rgba(0,0,0,0.24) 56%, rgba(0,0,0,0.58));
-      z-index:1;
-    `;
-    previewWrap.appendChild(previewShade);
-    this.inspectorPreview = document.createElement('canvas');
-    this.inspectorPreview.width = panelW;
-    this.inspectorPreview.height = 224;
-    this.inspectorPreview.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.92;display:block;z-index:2;';
-    this.inspectorPreviewCtx = this.inspectorPreview.getContext('2d')!;
-    previewWrap.appendChild(this.inspectorPreview);
     this.infoPanel.appendChild(previewWrap);
 
     // Content container (relative, on top of bg)
@@ -521,7 +516,7 @@ export class NewGameScreenState implements SceneState {
 
     // Amber header with region name — Lua: HeaderBG (amber) + LabelName (black text)
     const header = document.createElement('div');
-    header.style.cssText = `background:${AMBER_HEX};padding:10px 13px 8px;margin-top:140px;`;
+    header.style.cssText = `background:${AMBER_HEX};padding:10px 13px 8px;margin-top:215px;`;
     this.panelName = document.createElement('div');
     this.panelName.style.cssText = `color:#000;font-weight:500;font-size:38px;font-family:'Dosis',sans-serif;line-height:1.02;`; /* Lua dosisregular52 */
     this.panelAge = document.createElement('div');
@@ -580,10 +575,10 @@ export class NewGameScreenState implements SceneState {
   private buildConfirmDecline() {
     // Confirm and Decline buttons — ON the left sidebar panel
     // Lua: pos = { '-W/2 + 50', 'H/2 - 90' }, scale = { 154, 154 }
-    const btnLeft = 24;
-    const btnTop = 18;
+    const btnLeft = 50;
+    const btnTop = 90;
     const btnSize = 154;
-    const labelStyle = `color:${AMBER_HEX};font-size:35px;line-height:1.1;text-align:left;margin-top:10px;letter-spacing:0px;font-family:'Dosis',sans-serif;font-weight:400;width:220px;text-shadow:0 1px 0 rgba(0,0,0,0.7);`;
+    const labelStyle = `color:#000;font-size:35px;line-height:1.1;text-align:left;margin-top:10px;letter-spacing:0px;font-family:'Dosis',sans-serif;font-weight:400;width:220px;`;
 
     // Confirm button
     this.confirmBtnEl = document.createElement('div');
@@ -591,7 +586,7 @@ export class NewGameScreenState implements SceneState {
     this.confirmBtnEl.setAttribute('aria-label', 'Confirm');
     this.confirmBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${btnTop}px;width:${btnSize}px;height:${btnSize + 60}px;cursor:pointer;z-index:5;`;
     const confirmImg = this.confirmImg = document.createElement('img');
-    confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png';
+    confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
     confirmImg.style.cssText = `width:${btnSize}px;height:${btnSize}px;display:block;image-rendering:auto;transition:filter 0.15s ease;`;
     this.confirmBtnEl.appendChild(confirmImg);
 
@@ -612,10 +607,10 @@ export class NewGameScreenState implements SceneState {
     // Decline button — below confirm
     this.declineBtnEl = document.createElement('div');
     // Lua: pos = { '-W/2 + 50', 'H/2 - 300' }
-    const declineTop = 176;
+    const declineTop = 300;
     this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize + 60}px;cursor:pointer;z-index:5;`;
     const declineImg = this.declineImg = document.createElement('img');
-    declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png';
+    declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
     declineImg.style.cssText = `width:${btnSize}px;height:${btnSize}px;display:block;image-rendering:auto;transition:filter 0.15s ease;`;
     this.declineBtnEl.appendChild(declineImg);
 
@@ -689,7 +684,8 @@ export class NewGameScreenState implements SceneState {
     // Help text bar — Lua: SelectRegionHelpTextBG at -(H/2)+78 (78px from bottom)
     // Width 570, height 50, amber bg with icon + text
     this.helpText = document.createElement('div') as HTMLDivElement;
-    this.helpText.style.cssText = `position:absolute;bottom:78px;left:${LEFT_SIDEBAR_W + 108}px;color:#000;font-size:25px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:8px 14px 8px 12px;font-family:'Dosis',sans-serif;letter-spacing:0.7px;display:flex;align-items:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.22), 0 1px 0 rgba(0,0,0,0.4);`; /* Lua dosissemibold30 */
+    this.helpText.dataset.testid = 'new-game-help';
+    this.helpText.style.cssText = `position:absolute;bottom:78px;left:436px;color:#000;font-size:25px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:8px 14px 8px 12px;font-family:'Dosis',sans-serif;letter-spacing:0.7px;display:flex;align-items:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.22), 0 1px 0 rgba(0,0,0,0.4);`; /* Lua dosissemibold30 */
     this.setHelpTextContent('idle', line('NEWBAS001TEXT'));
     this.overlay.appendChild(this.helpText);
   }
@@ -710,21 +706,25 @@ export class NewGameScreenState implements SceneState {
       pointer-events:none;
     `;
     this.deployEta = this.el('div',
-      `position:absolute;left:50%;top:calc(50% + 108px);transform:translateX(-24px);
-       font-size:52px;letter-spacing:0.5px;font-family:'Dosis',sans-serif;
+      `font-size:52px;letter-spacing:0.5px;font-family:'Dosis',sans-serif;
        font-weight:400;text-shadow:0 1px 0 rgba(0,0,0,0.85);`,
       line('NEWBAS018TEXT')) as HTMLDivElement;
     this.deployYears = this.el('div',
-      `position:absolute;left:50%;top:calc(50% + 108px);transform:translateX(-100%);
-       width:180px;text-align:right;font-size:52px;letter-spacing:0.5px;
+      `font-size:52px;letter-spacing:0.5px;
        font-family:'Dosis',sans-serif;font-weight:400;text-shadow:0 1px 0 rgba(0,0,0,0.85);`) as HTMLDivElement;
     this.deployMsg = this.el('div',
       `position:absolute;left:50%;top:calc(50% + 308px);transform:translateX(-50%);
        width:min(1100px, 92%);text-align:center;font-size:52px;letter-spacing:0.4px;
        font-family:'Dosis',sans-serif;font-weight:400;text-shadow:0 1px 0 rgba(0,0,0,0.85);`) as HTMLDivElement;
     this.deployArrivalRow = document.createElement('div');
-    this.deployArrivalRow.style.cssText = 'position:absolute;inset:0;';
-    this.deployArrivalRow.append(this.deployYears, this.deployEta);
+    this.deployArrivalRow.dataset.testid = 'deploy-arrival-row';
+    this.deployEta.dataset.testid = 'deploy-eta';
+    this.deployYears.dataset.testid = 'deploy-years';
+    this.deployArrivalRow.style.cssText = `
+      position:absolute;left:50%;top:calc(50% + 108px);transform:translateX(-50%);
+      display:flex;align-items:baseline;justify-content:center;gap:14px;white-space:nowrap;
+    `;
+    this.deployArrivalRow.append(this.deployEta, this.deployYears);
     this.deployTextWrap.append(this.deployArrivalRow, this.deployMsg);
     this.deployOverlay.append(this.deployTextWrap);
     this.overlay.appendChild(this.deployOverlay);
@@ -755,8 +755,6 @@ export class NewGameScreenState implements SceneState {
     // Header — black text on amber bg (Lua: LabelName, LabelAge with Gui.BLACK)
     this.panelName.textContent = getRegionName(x, y);
     this.panelAge.textContent  = `${line('NEWBAS008TEXT')} ${getAge(x)} ${line('NEWBAS009TEXT')}`;
-    this.drawInspectorPreview(zone);
-
     // Stats — colored values
     setColored(this.panelDensity,      line('NEWBAS020TEXT'), severityText(density),      densityColor(density));
     setColored(this.panelDistance,     line('NEWBAS010TEXT'), distanceText(distance),     AMBER_HEX);
@@ -805,9 +803,10 @@ export class NewGameScreenState implements SceneState {
     if (this.state !== 'Initial') return;
     const rect = this.canvas.getBoundingClientRect();
     const uiScale = this.getUIScale();
-    const cellSize = this.mapSize / INFO_MAP_SIZE;
-    const gx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellSize);
-    const gy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellSize);
+    const cellW = this.mapW / INFO_MAP_SIZE;
+    const cellH = this.mapH / INFO_MAP_SIZE;
+    const gx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellW);
+    const gy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellH);
     if (gx < 0 || gx >= INFO_MAP_SIZE || gy < 0 || gy >= INFO_MAP_SIZE) return;
 
     this.selectedZone = this.makeLandingZone(gx, gy);
@@ -826,9 +825,10 @@ export class NewGameScreenState implements SceneState {
   private onMouseMove(e: MouseEvent) {
     const rect = this.canvas.getBoundingClientRect();
     const uiScale = this.getUIScale();
-    const cellSize = this.mapSize / INFO_MAP_SIZE;
-    this.hoverGx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellSize);
-    this.hoverGy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellSize);
+    const cellW = this.mapW / INFO_MAP_SIZE;
+    const cellH = this.mapH / INFO_MAP_SIZE;
+    this.hoverGx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellW);
+    this.hoverGy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellH);
     if (this.state === 'Initial') {
       GameRules.bTutorialMode =
         this.hoverGx >= 0 &&
@@ -1032,35 +1032,36 @@ export class NewGameScreenState implements SceneState {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (this.galaxyImg) {
-      ctx.drawImage(this.galaxyImg, this.mapX, this.mapY, this.mapSize, this.mapSize);
+      ctx.drawImage(this.galaxyImg, this.mapX, this.mapY, this.mapW, this.mapH);
     }
 
     const vignette = ctx.createRadialGradient(
-      this.mapX + this.mapSize * 0.5,
-      this.mapY + this.mapSize * 0.48,
-      this.mapSize * 0.18,
-      this.mapX + this.mapSize * 0.5,
-      this.mapY + this.mapSize * 0.5,
-      this.mapSize * 0.72,
+      this.mapX + this.mapW * 0.5,
+      this.mapY + this.mapH * 0.48,
+      Math.min(this.mapW, this.mapH) * 0.18,
+      this.mapX + this.mapW * 0.5,
+      this.mapY + this.mapH * 0.5,
+      Math.max(this.mapW, this.mapH) * 0.72,
     );
     vignette.addColorStop(0, 'rgba(0,0,0,0)');
     vignette.addColorStop(1, 'rgba(0,0,0,0.3)');
     ctx.fillStyle = vignette;
-    ctx.fillRect(this.mapX, this.mapY, this.mapSize, this.mapSize);
+    ctx.fillRect(this.mapX, this.mapY, this.mapW, this.mapH);
 
     // Grid lines
-    const cellSize = this.mapSize / INFO_MAP_SIZE;
+    const cellW = this.mapW / INFO_MAP_SIZE;
+    const cellH = this.mapH / INFO_MAP_SIZE;
     ctx.strokeStyle = 'rgba(223,162,0,0.1)';
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= INFO_MAP_SIZE; i++) {
-      ctx.beginPath(); ctx.moveTo(this.mapX + i * cellSize, this.mapY); ctx.lineTo(this.mapX + i * cellSize, this.mapY + this.mapSize); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(this.mapX, this.mapY + i * cellSize); ctx.lineTo(this.mapX + this.mapSize, this.mapY + i * cellSize); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.mapX + i * cellW, this.mapY); ctx.lineTo(this.mapX + i * cellW, this.mapY + this.mapH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.mapX, this.mapY + i * cellH); ctx.lineTo(this.mapX + this.mapW, this.mapY + i * cellH); ctx.stroke();
     }
 
     // Tutorial marker at (12, 34) — Lua: small radio_pressed icon + label beside it
     if (this.state !== 'Deploying') {
-      const tx = this.mapX + TUTORIAL_X * cellSize + cellSize * 0.5;
-      const ty = this.mapY + TUTORIAL_Y * cellSize + cellSize * 0.5;
+      const tx = this.mapX + TUTORIAL_X * cellW + cellW * 0.5;
+      const ty = this.mapY + TUTORIAL_Y * cellH + cellH * 0.5;
       ctx.strokeStyle = AMBER_HEX;
       ctx.lineWidth = 2;
       ctx.strokeRect(tx - 8, ty - 8, 16, 16);
@@ -1068,22 +1069,22 @@ export class NewGameScreenState implements SceneState {
       ctx.fillRect(tx - 8, ty - 8, 16, 16);
       ctx.fillStyle = GREEN_HEX;
       ctx.beginPath();
-      ctx.arc(tx, ty, Math.max(3, cellSize * 0.3), 0, Math.PI * 2);
+      ctx.arc(tx, ty, Math.max(3, Math.min(cellW, cellH) * 0.3), 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Hover crosshair — mirrors NewBaseLayout CursorLineHorizontal/Vertical
     if (this.state === 'Initial' && this.hoverGx >= 0 && this.hoverGx < INFO_MAP_SIZE) {
-      const hx = this.mapX + (this.hoverGx + 0.5) * cellSize;
-      const hy = this.mapY + (this.hoverGy + 0.5) * cellSize;
+      const hx = this.mapX + (this.hoverGx + 0.5) * cellW;
+      const hy = this.mapY + (this.hoverGy + 0.5) * cellH;
 
       // Full-width crosshair lines (amber)
       ctx.strokeStyle = 'rgba(223,162,0,0.35)';
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(this.mapX, hy); ctx.lineTo(this.mapX + this.mapSize, hy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(hx, this.mapY); ctx.lineTo(hx, this.mapY + this.mapSize); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.mapX, hy); ctx.lineTo(this.mapX + this.mapW, hy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx, this.mapY); ctx.lineTo(hx, this.mapY + this.mapH); ctx.stroke();
 
-      const cursorSize = Math.max(10, cellSize * 0.75);
+      const cursorSize = Math.max(10, Math.min(cellW, cellH) * 0.75);
       ctx.save();
       ctx.translate(hx, hy);
       ctx.rotate(Math.PI / 4);
@@ -1108,72 +1109,18 @@ export class NewGameScreenState implements SceneState {
 
     // Selection marker
     if (this.selectedZone) {
-      const sx = this.mapX + this.selectedZone.x * cellSize;
-      const sy = this.mapY + this.selectedZone.y * cellSize;
+      const sx = this.mapX + this.selectedZone.x * cellW;
+      const sy = this.mapY + this.selectedZone.y * cellH;
       ctx.fillStyle   = 'rgba(223,162,0,0.25)';
       ctx.strokeStyle = AMBER_HEX;
       ctx.lineWidth   = 2;
-      ctx.fillRect(sx, sy, cellSize, cellSize);
-      ctx.strokeRect(sx, sy, cellSize, cellSize);
+      ctx.fillRect(sx, sy, cellW, cellH);
+      ctx.strokeRect(sx, sy, cellW, cellH);
     }
 
     ctx.strokeStyle = 'rgba(223,162,0,0.22)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(this.mapX + 0.5, this.mapY + 0.5, this.mapSize - 1, this.mapSize - 1);
-  }
-
-  private drawInspectorPreview(zone: LandingZone) {
-    const canvas = this.inspectorPreview;
-    const ctx = this.inspectorPreviewCtx;
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, w, h);
-
-    if (this.galaxyImg) {
-      const img = this.galaxyImg;
-      const sw = img.width * 0.34;
-      const sh = img.height * 0.34;
-      const cx = ((zone.x + 0.5) / INFO_MAP_SIZE) * img.width;
-      const cy = ((zone.y + 0.5) / INFO_MAP_SIZE) * img.height;
-      const sx = Math.max(0, Math.min(img.width - sw, cx - sw / 2));
-      const sy = Math.max(0, Math.min(img.height - sh, cy - sh / 2));
-      ctx.globalAlpha = 0.9;
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
-      ctx.globalAlpha = 1;
-    }
-
-    const gridStep = 8;
-    ctx.strokeStyle = 'rgba(223,162,0,0.12)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= gridStep; i++) {
-      const px = (i / gridStep) * w;
-      const py = (i / gridStep) * h;
-      ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke();
-    }
-
-    const markerX = ((zone.x + 0.5) / INFO_MAP_SIZE) * w;
-    const markerY = ((zone.y + 0.5) / INFO_MAP_SIZE) * h;
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = AMBER_HEX;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(markerX - 6, markerY - 6, 12, 12);
-    ctx.fillStyle = 'rgba(223,162,0,0.18)';
-    ctx.fillRect(markerX - 8, markerY - 8, 16, 16);
-
-    const glow = ctx.createRadialGradient(markerX, markerY, 0, markerX, markerY, 110);
-    glow.addColorStop(0, 'rgba(223,162,0,0.24)');
-    glow.addColorStop(1, 'rgba(223,162,0,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    ctx.strokeRect(this.mapX + 0.5, this.mapY + 0.5, this.mapW - 1, this.mapH - 1);
   }
 
   private setHelpTextContent(mode: 'idle' | 'selected', text: string) {

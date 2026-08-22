@@ -373,7 +373,7 @@ export const Malady = {
     // Fire alert on first encounter (Lua: Base.EVENTS.MaladyEncountered)
     if (nTeam === TEAM_ID_PLAYER && !tS.tResearch[key].bEncountered) {
       if (!Malady.isInjury(key)) {
-        const friendlyName = tMalady.sFriendlyName ?? key;
+        const friendlyName = Malady.getFriendlyName(key);
         Base.addAlert('disease', line('ALERTS021TEXT', { name: friendlyName }));
       }
       tS.tResearch[key].bEncountered = true;

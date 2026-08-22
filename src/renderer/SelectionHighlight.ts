@@ -3,6 +3,7 @@ import { tileToScreen } from '../world/IsometricUtils';
 import { TILE_W, TILE_H, TILE_HALF_W, TILE_HALF_H } from '../config';
 import type { SelectedEntity } from '../ui/InspectorPanel';
 import type { Character } from '../characters/Character';
+import { getTexture } from './AssetLoader';
 
 /**
  * Renders an amber pulsing highlight on the selected entity.
@@ -13,7 +14,6 @@ import type { Character } from '../characters/Character';
  * For rooms: brightens all room tiles (Lua: Lighting.setRoomHighlight 0.3).
  */
 
-const AMBER = 0xdfa200;
 const MAX_ROOM_HIGHLIGHT_TILES = 300;
 
 /** Create a diamond-shaped highlight texture. */
@@ -52,7 +52,7 @@ function createDiamondTexture(): THREE.Texture {
 
 let diamondTex: THREE.Texture | null = null;
 function getDiamondTexture(): THREE.Texture {
-  if (!diamondTex) diamondTex = createDiamondTexture();
+  if (!diamondTex) diamondTex = getTexture('ui_character_selected') ?? createDiamondTexture();
   return diamondTex;
 }
 

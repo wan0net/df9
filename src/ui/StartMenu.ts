@@ -198,11 +198,14 @@ export class StartMenuState implements SceneState {
     `;
     this.overlay.appendChild(gradBottom);
 
-    // MOTD dark band — mirrors the original full-width text strip behind the left
-    // column and menu stack, instead of separate floating cards.
+    // MOTD dark band — StartMenuLayout.lua positions everything in a
+    // 1920x1152, centre-origin coordinate system.  Keep the original offsets
+    // expressed relative to the viewport centre so the layout also tracks the
+    // original at non-reference aspect ratios.
     const motdBand = document.createElement('div');
     motdBand.style.cssText = `
-      position:absolute;left:0;top:175px;width:100%;height:625px;
+      position:absolute;left:calc(50% - 1024px);top:calc(50% - 175px);
+      width:2568px;height:625px;
       background:linear-gradient(to right, rgba(0,0,0,0.68), rgba(0,0,0,0.52) 46%, rgba(0,0,0,0.56));
       pointer-events:none;
     `;
@@ -210,7 +213,8 @@ export class StartMenuState implements SceneState {
 
     const motdBandFadeTop = document.createElement('div');
     motdBandFadeTop.style.cssText = `
-      position:absolute;left:0;top:111px;width:100%;height:64px;
+      position:absolute;left:calc(50% - 1024px);top:calc(50% - 239px);
+      width:2568px;height:64px;
       background:linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.6));
       pointer-events:none;
     `;
@@ -218,7 +222,8 @@ export class StartMenuState implements SceneState {
 
     const motdBandFadeBottom = document.createElement('div');
     motdBandFadeBottom.style.cssText = `
-      position:absolute;left:0;top:800px;width:100%;height:64px;
+      position:absolute;left:calc(50% - 1024px);top:calc(50% + 514px);
+      width:2568px;height:64px;
       background:linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0));
       pointer-events:none;
     `;
@@ -227,9 +232,10 @@ export class StartMenuState implements SceneState {
     // MOTD / SpaceBaseHub column — static offline approximation of the original
     // network-fed left panel. Kept deliberately plain and amber-on-black.
     const motdBg = document.createElement('div');
+    motdBg.dataset.testid = 'start-menu-motd';
     motdBg.style.cssText = `
-      position:absolute;left:42px;top:154px;width:min(980px, calc(100% - 940px));
-      height:calc(100% - 220px);box-sizing:border-box;
+      position:absolute;left:calc(50% - 900px);top:calc(50% - 150px);
+      width:940px;height:650px;box-sizing:border-box;
       pointer-events:none;display:flex;flex-direction:column;gap:18px;
       padding-top:0;
     `;
@@ -280,17 +286,20 @@ export class StartMenuState implements SceneState {
     // Game logo — Lua StartMenuLayout: Logo element with hidden=false, scale 1.5
     const logoImg = document.createElement('img');
     logoImg.src = 'assets/ui/startmenu_logo.png';
+    logoImg.dataset.testid = 'start-menu-logo';
     logoImg.style.cssText = `
-      position:absolute;top:-12px;left:-22px;
-      width:${1280 * 1.02}px;height:auto;
+      position:absolute;top:calc(50% - 626px);left:calc(50% - 960px);
+      width:${1280 * 1.5}px;height:auto;
       pointer-events:none;filter:drop-shadow(0 0 18px rgba(223,162,0,0.28));
     `;
     this.overlay.appendChild(logoImg);
 
     // WebsiteText / ButtonWebsite — centered clickable subtitle beneath the logo.
     const websiteRow = document.createElement('div');
+    websiteRow.dataset.testid = 'start-menu-website';
     websiteRow.style.cssText = `
-      position:absolute;top:286px;left:calc(50% - 490px);width:980px;height:70px;
+      position:absolute;top:calc(50% - 260px);left:calc(50% - 400px);
+      width:800px;height:70px;
       display:flex;align-items:center;justify-content:center;
       cursor:pointer;pointer-events:auto;z-index:2;
     `;
@@ -319,9 +328,11 @@ export class StartMenuState implements SceneState {
 
     // Buttons panel — right side, right-aligned (mirrors Lua nMenuItemsX=100, RIGHT_JUSTIFY)
     const btnsPanel = document.createElement('div');
+    btnsPanel.dataset.testid = 'start-menu-buttons';
+    const firstButtonY = this.gameRunning && this.onResume ? 120 : 40;
     btnsPanel.style.cssText = `
-      position:absolute;left:calc(50% + 56px);top:calc(50% - 138px);
-      width:760px;display:flex;flex-direction:column;align-items:stretch;gap:0;
+      position:absolute;left:calc(50% + 100px);top:calc(50% - ${firstButtonY}px);
+      width:800px;display:flex;flex-direction:column;align-items:stretch;gap:10px;
       pointer-events:auto;
     `; // Lua: nMenuItemsX=100 from center, RIGHT_JUSTIFY
 
@@ -377,7 +388,7 @@ export class StartMenuState implements SceneState {
       const hitArea = document.createElement('div');
       hitArea.textContent = btn.label;
       el.style.cssText = `
-        height: 76px;
+        height: 70px;
         display:flex;
         justify-content:flex-end;
         align-items:center;

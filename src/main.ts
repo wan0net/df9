@@ -63,7 +63,7 @@ import { AutoSave } from './save/AutoSave';
 import { SoundManager } from './audio/SoundManager';
 import { MusicSystem } from './audio/MusicSystem';
 import { SpatialAudio } from './audio/SpatialAudio';
-import { generateWorld } from './world/WorldGen';
+import { generateTutorialWorld, generateWorld } from './world/WorldGen';
 import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
 import { tileToScreen, getDiamondFootprint } from './world/IsometricUtils';
@@ -217,7 +217,8 @@ function startGame() {
     (import.meta as ImportMeta & { env: { VITE_E2E?: string } }).env.VITE_E2E === 'true'
     && new URLSearchParams(location.search).get('e2e') === '1';
   if (directE2EStart) {
-    enterGameState(sceneManager, {});
+    const params = new URLSearchParams(location.search);
+    enterGameState(sceneManager, { tutorial: params.get('tutorial') === '1' });
   } else {
     sceneManager.switchTo(startMenu);
     menuLoopId = requestAnimationFrame(menuLoop);
@@ -932,7 +933,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Generate world ────────────────────────────────────────
   const landingZone = initData.landingZone as { x: number; y: number; density: number; threat: number; distance: number; interference: number } | undefined;
-  const worldResult = generateWorld(grid, wallAutoGen, landingZone);
+  const worldResult = isTutorialMode
+    ? generateTutorialWorld(grid, wallAutoGen, landingZone)
+    : generateWorld(grid, wallAutoGen, landingZone);
 
   // Wire galaxy position into event system difficulty
   if (landingZone) {
@@ -949,6 +952,28 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   roomManager.markDirty([]);
   roomManager.update();
 
+  // Box.sav stores its zone type in each logical floor value. TS stores all
+  // walkable floors as FLOOR, so restore each detected room by majority vote.
+  if (worldResult.initialZones.size > 0) {
+    for (const room of roomManager.getRooms()) {
+      const counts = new Map<ZoneType, number>();
+      for (const tile of room.tiles) {
+        const zone = worldResult.initialZones.get(`${tile.x},${tile.y}`);
+        if (zone) counts.set(zone, (counts.get(zone) ?? 0) + 1);
+      }
+      let selected = ZoneType.PLAIN;
+      let selectedCount = -1;
+      for (const [zone, count] of counts) {
+        if (count > selectedCount) {
+          selected = zone;
+          selectedCount = count;
+        }
+      }
+      room.zone = selected;
+      roomManager.persistZone(room);
+    }
+  }
+
   // Initialize Topics system (Lua Topics.initializeTopicList)
   setCharacterProvider(
     () => characterManager.getCharacters(),
@@ -960,6 +985,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const isLoadSave = initData.loadSave === true;
   const saveSlotName = (initData.saveSlot as string | undefined) ?? 'SpacebaseDF9AutoSave';
 
+  let createInitialState = !isLoadSave;
   if (isLoadSave) {
     const loaded = saveLoadSystem.loadFromStorage(saveSlotName);
     if (loaded) {
@@ -968,21 +994,25 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       roomManager.update();
       tileRenderer.renderRegion(0, 0, grid.width - 1, grid.height - 1);
     } else {
-      // Load failed — fall back to spawning a new crew
-      characterManager.spawnInitialCrew(worldResult.crewSpawns);
+      // Load failed — fall back to the selected starting module.
+      createInitialState = true;
+      characterManager.spawnInitialCrew(worldResult.crewSpawns, worldResult.crewSpacewalking);
     }
   } else {
-    // Spawn the initial 3 spacewalking settlers
-    characterManager.spawnInitialCrew(worldResult.crewSpawns);
+    characterManager.spawnInitialCrew(worldResult.crewSpawns, worldResult.crewSpacewalking);
   }
 
   const cx = Math.floor(grid.width / 2);
   const cy = Math.floor(grid.height / 2);
   tileRenderer.renderRegion(cx - 20, cy - 20, cx + 20, cy + 20);
 
-  // Place the seed pod (BaseSeed) at center — a visible marker
-  if (!isLoadSave) {
-    createSeedPod(threeRenderer, worldResult.seedPodX, worldResult.seedPodY);
+  // Starting-module objects are real EnvObjects, including BaseSeed's 2x3
+  // footprint and the Box tutorial's damaged refinery/equipment.
+  if (createInitialState) {
+    for (const initial of worldResult.initialObjects) {
+      const obj = EnvObjectManager.createObject(initial.sName, initial.x, initial.y, initial.bFlipX ?? false);
+      if (obj && initial.condition !== undefined) obj.setCondition(initial.condition);
+    }
   }
 
   // Lua GameRules._resetCamera: zoom=1.0, center on seed pod / first character
@@ -991,7 +1021,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     const crewCenterY = worldResult.crewSpawns.reduce((sum, spawn) => sum + spawn.y, 0) / worldResult.crewSpawns.length;
     const focusX = ((worldResult.seedPodX * 0.6) + (crewCenterX * 0.4)) * TILE_W + TILE_HALF_W;
     const focusY = ((worldResult.seedPodY * 0.55) + (crewCenterY * 0.45)) * TILE_HALF_H + TILE_HALF_H * 1.5;
-    cameraController.zoom = 1.14;
+    cameraController.zoom = 1;
     cameraController.centerOnWorld(focusX, focusY);
   }
 
@@ -1002,6 +1032,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Input system ──────────────────────────────────────────
   const inputManager = new InputManager(threeRenderer.getCanvas(), cameraController);
+  cameraController.onUserZoom = () => { tutorialFlags.zoomed = true; };
+  cameraController.onUserPan = () => { tutorialFlags.panned = true; };
 
   let buildMode: BuildMode = 'none';
   let selectedZone: ZoneType = ZoneType.GARDEN;
@@ -1258,34 +1290,35 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getHoveredInfo: () => {
       const hovered = buildCursor.hoveredTile;
       if (!hovered) return '';
-      const tile = grid.get(hovered.x, hovered.y);
       const room = roomManager.getRoomAt(hovered.x, hovered.y);
-      let info = `(${hovered.x}, ${hovered.y})  ${tileName(tile)}`;
+      const info: string[] = [];
       if (room) {
-        info += `\nRoom #${room.id}  ${room.size} tiles  Zone: ${ZONE_SPRITES[room.zone].name}`;
-        info += `\nO2: ${room.oxygen}/255  ${room.sealed ? 'Sealed' : 'BREACHED'}`;
-        info += `  Power: +${room.nPowerOutput}/-${room.nPowerDraw}`;
+        info.push(`Room #${room.id}  ${room.size} tiles  Zone: ${ZONE_SPRITES[room.zone].name}`);
+        info.push(`O2: ${room.oxygen}/255  ${room.sealed ? 'Sealed' : 'BREACHED'}`);
+        info.push(`Power: +${room.nPowerOutput}/-${room.nPowerDraw}`);
       }
       // Env objects at tile (Lua tooltip: "Name · Condition: Good (100%)")
-      for (const obj of EnvObjectManager.getObjects()) {
-        if (obj.tileX === hovered.x && obj.tileY === hovered.y) {
-          info += `\n\n${obj.tData.friendlyName} \u00b7 ${obj.getConditionUIString()} (${Math.round(obj.nCondition)}%)`;
-          if (!obj.bBuilt) info += ` [Building]`;
-        }
+      const obj = EnvObjectManager.getObjectAt(hovered.x, hovered.y);
+      if (obj) {
+        let objectInfo = `${obj.tData.friendlyName} \u00b7 ${obj.getConditionUIString()} (${Math.round(obj.nCondition)}%)`;
+        if (!obj.bBuilt) objectInfo += ` [Building]`;
+        info.push(objectInfo);
       }
       // Characters at tile (Lua tooltip: "Name\nActivity (time)")
       for (const char of characterManager.getCharacters()) {
         if (char.tileX === hovered.x && char.tileY === hovered.y) {
-          info += `\n\n${char.getName()}\n${char.currentTask?.name ?? 'Idle'}`;
+          info.push(`${char.getName()}\n${char.currentTask?.name ?? 'Idle'}`);
         }
       }
       // Pending commands at tile
       for (const cmd of CommandQueue.getAllActive()) {
         if (cmd.tileX === hovered.x && cmd.tileY === hovered.y) {
-          info += `\n[${cmd.type} command pending]`;
+          info.push(`[${cmd.type} command pending]`);
         }
       }
-      return info;
+      // Lua only opens WorldToolTip for an actual hover target. Empty space,
+      // walls and unzoned floor do not advertise their coordinates or type.
+      return info.join('\n\n');
     },
     onSave: () => {
       saveLoadSystem.saveToStorage();
@@ -1451,18 +1484,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Build input
     handleBuildInput();
 
-    // Update coordinate display
+    // Lua Character:hover: show the advertised task bubble only for the
+    // character under the cursor. Dialogue bubbles remain independently driven.
     {
-      const hov = buildCursor.hoveredTile;
-      if (hov) {
-        const tileVal = grid.get(hov.x, hov.y);
-        const names: Record<number, string> = {
-          [TileType.SPACE]: 'Space', [TileType.WALL]: 'Wall', [TileType.DOOR]: 'Door',
-          [TileType.WALL_DESTROYED]: 'Destroyed Wall', [TileType.FLOOR]: 'Floor',
-          [TileType.FLOOR_PENDING]: 'Floor (Pending)', [TileType.WALL_PENDING]: 'Wall (Pending)',
-        };
-        uiManager.updateTileInfo(hov.x, hov.y, names[tileVal] ?? 'Unknown');
-      }
+      const hovered = buildCursor.hoveredTile;
+      const hoveredChar = hovered
+        ? characterManager.getAllCharacters().find(c => c.tileX === hovered.x && c.tileY === hovered.y && c.isAlive())
+        : undefined;
+      characterRenderer.setHoveredCharacter(hoveredChar?.id ?? null);
     }
 
     // Tile visibility culling
@@ -1562,10 +1591,6 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     } catch (e) {
       console.error('ExplosionSystem error:', e);
     }
-    if (isTutorialMode && tutorialSystem.isActive()) {
-      if (cameraController.zoom !== 1) tutorialFlags.zoomed = true;
-      if (cameraController.scrollX !== 0 || cameraController.scrollY !== 0) tutorialFlags.panned = true;
-    }
     tutorialSystem.update(gameDt);
     autoSave.onTick(delta / 1000);
     musicSystem.update(delta / 1000);
@@ -1613,7 +1638,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     uiManager.o2OverlayActive = GameRules.isOxygenGridEnabled();
 
     // UI
-    uiManager.update();
+    uiManager.update(delta / 1000);
 
     // End-of-frame input state
     inputManager.endFrame();
@@ -1738,9 +1763,6 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           uiManager.setSelectedEntity(null);
         }
         if (found) tutorialFlags.selected = true;
-        // Tile tip text (Lua: StatusBar:setTileTipText)
-        const tileType = grid.get(tile.x, tile.y);
-        uiManager.setTileTip(`(${tile.x}, ${tile.y}) ${tileName(tileType)}`);
       } else if (buildMode === 'zone') {
         const tileType = grid.get(tile.x, tile.y);
         if (tileType !== TileType.FLOOR) {
@@ -2000,17 +2022,33 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const WEAPON_MODELS: Record<string, string> = {
     LaserPistol: 'Pistol',
     Pistol: 'Pistol',
+    RedPistol: 'Pistol',
+    AutoPistol: 'Pistol',
+    Stunner: 'Pistol',
     Rifle: 'Rifle',
+    LaserRifle: 'Rifle',
+    RedLaserRifle: 'Rifle',
+    PlasmaRifle: 'Rifle',
+    SniperRifle: 'Rifle',
+    KillbotRifle: 'Rifle',
     SpaceGun: 'SpaceGun',
     PlasmaCannon: 'PlasmaCannon',
     Wand: 'Wand',
   };
   const TASK_MODELS: Record<string, string> = {
     BuildTile: 'Builder',
+    BuildBase: 'Builder',
     BuildEnvObject: 'Builder',
     Mine: 'Weldammer',
     MaintainEnvObject: 'Weldammer',
     ExtinguishFire: 'FireExtinguisher',
+  };
+  const HELD_ITEM_MODELS: Record<string, string> = {
+    Rock: 'AsteroidChunk',
+    Debris: 'AsteroidChunk',
+    Corpse: 'BodyBag',
+    Food: 'FoodBar',
+    ResearchDatacube: 'Cube',
   };
 
   const activePickupProps = new Set<string>();
@@ -2041,15 +2079,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (!char.isAlive()) continue;
       const taskName = char.currentTask?.name ?? '';
       const toolModel = TASK_MODELS[taskName];
-      const weaponModel = char.weapon ? WEAPON_MODELS[char.weapon] : null;
-      const modelName = toolModel ?? weaponModel;
+      const weaponModel = taskName === 'AttackEnemy' && char.weapon ? WEAPON_MODELS[char.weapon] : null;
+      const heldModel = char.heldItem ? HELD_ITEM_MODELS[char.heldItem] : null;
+      const modelName = toolModel ?? weaponModel ?? heldModel;
       if (!modelName) continue;
 
       const propId = `held_${char.id}`;
       currentHeld.add(propId);
-      if (!activeHeldProps.has(propId)) {
-        propRenderer.addProp(propId, modelName, char.tileX, char.tileY, 20);
-      }
+      propRenderer.ensureProp(propId, modelName, char.tileX, char.tileY, 20);
       // Follow the character
       propRenderer.updatePropPosition(propId, char.screenX, char.screenY - 15);
     }
@@ -2077,6 +2114,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     _projectileManager: projectileManager,
     _projectileRenderer: projectileRenderer,
     _characterRenderer: characterRenderer,
+    _selectionHighlight: selectionHighlight,
+    _propRenderer: propRenderer,
     _envObjRenderer: envObjRenderer,
     _objectPlacement: objectPlacement,
     _envObjectManager: EnvObjectManager,
@@ -2282,8 +2321,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getMaladyByTier: (tier: number) => getMaladyByTier(tier),
     getMaladyResearch: () => Malady.getResearch(),
     getMaladyStrains: () => Malady.getAllStrains(),
+    getMaladyFriendlyName: (name: string) => Malady.getFriendlyName(name),
+    getRecentAlerts: () => Base.getRecentAlerts(20),
     getMaladyElapsedTime: () => Malady.getElapsedTime(),
     advanceMaladyTime: (dt: number) => Malady.updateElapsedTime(dt),
+    tickCharacterMaladies: (charId: number, dt = 0) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      Malady.tickMaladies(char, dt);
+      return true;
+    },
     createMaladyInstance: (type: string) => {
       try { return Malady.createNewMaladyInstance(type); } catch { return null; }
     },
@@ -2929,93 +2976,4 @@ function createSpaceBackground(threeRenderer: ThreeRenderer) {
       threeRenderer.scene.add(mesh);
     }
   }
-}
-
-function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: number) {
-  const pos = tileToScreen(tileX, tileY);
-  const tex = getTexture('seedpod01');
-
-  const glowCanvas = document.createElement('canvas');
-  glowCanvas.width = 256;
-  glowCanvas.height = 256;
-  const glowCtx = glowCanvas.getContext('2d');
-  if (glowCtx) {
-    const grad = glowCtx.createRadialGradient(128, 128, 8, 128, 128, 108);
-    grad.addColorStop(0, 'rgba(255,230,150,0.42)');
-    grad.addColorStop(0.35, 'rgba(223,162,0,0.28)');
-    grad.addColorStop(1, 'rgba(223,162,0,0)');
-    glowCtx.fillStyle = grad;
-    glowCtx.fillRect(0, 0, 256, 256);
-  }
-  const glowTex = new THREE.CanvasTexture(glowCanvas);
-  const glowGeo = new THREE.PlaneGeometry(196, 196);
-  const glowMat = new THREE.MeshBasicMaterial({
-    map: glowTex,
-    transparent: true,
-    opacity: 0.88,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const glow = new THREE.Mesh(glowGeo, glowMat);
-  glow.position.set(
-    pos.x + TILE_HALF_W,
-    -(pos.y + TILE_HALF_H + 14),
-    14998 + pos.y,
-  );
-  threeRenderer.scene.add(glow);
-
-  if (tex && tex.image) {
-    // Use the actual seed pod sprite
-    const spriteW = tex.image.width || 128;
-    const spriteH = tex.image.height || 128;
-    const geo = new THREE.PlaneGeometry(spriteW, spriteH);
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.01,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(
-      pos.x + TILE_HALF_W,
-      -(pos.y + TILE_HALF_H),
-      15000 + pos.y,
-    );
-    threeRenderer.scene.add(mesh);
-  } else {
-    // Fallback: octahedron placeholder
-    const geo = new THREE.OctahedronGeometry(12, 0);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xdfa200 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(
-      pos.x + TILE_HALF_W,
-      -(pos.y + TILE_HALF_H),
-      15000 + pos.y,
-    );
-    threeRenderer.scene.add(mesh);
-  }
-
-  // Glow ring around the pod
-  const ringGeo = new THREE.RingGeometry(16, 20, 16);
-  const ringMat = new THREE.MeshBasicMaterial({
-    color: 0xdfa200,
-    transparent: true,
-    opacity: 0.4,
-    side: THREE.DoubleSide,
-  });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.position.set(
-    pos.x + TILE_HALF_W,
-    -(pos.y + TILE_HALF_H),
-    15000 + pos.y - 1,
-  );
-  threeRenderer.scene.add(ring);
-}
-
-function tileName(type: number): string {
-  const names: Record<number, string> = {
-    1: 'Space', 4: 'Wall', 5: 'Door', 6: 'Destroyed', 8: 'Floor',
-    9: 'Floor (building)', 10: 'Wall (building)',
-  };
-  return names[type] || 'Unknown';
 }
