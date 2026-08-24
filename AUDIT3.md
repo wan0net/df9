@@ -17,7 +17,7 @@ This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlie
 
 ## Outcome
 
-This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed seventeen graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, absent source colour grading/character outlines, and object damage tints being erased by room lighting.
+This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed eighteen graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, absent source colour grading/character outlines, invented research glyphs, and object damage tints being erased by room lighting.
 
 ## Graphics and UI findings
 
@@ -40,6 +40,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-15 | **Fixed + tested** | `World.lua:playExplosion`, `AnimatedSprite.lua`, and extracted `flame01`, `spark01`, and 32-frame `explode01_` assets | Replaced generated radial-gradient particle bitmaps and the square-point explosion burst with the original visible effect sheets. Explosions now play the 32 source frames at the source 30 FPS, random 1.65–1.95 scale, horizontal flip, and 40-pixel vertical offset. | `meteor trail effect uses the original spark01 particle sheet`; `explosion system plays the original 32-frame explode01 animation`; `explosion sparks use the original spark01 particle sheet` |
 | GFX-16 | **Fixed + tested** | `Data/Scripts/PostFX/Post.lua:ScenePlusUI`, `Post.SetPostColorLUT`, and extracted `Neutral2D_256`, `WarmSpace2D_256`, and `ColdSpace2D_256` sheets | Replaced the claim that colour grading had no reusable source asset with a source-LUT shader pass. The original neutral sheet is now the active default before bloom/output, and the two other publicly extracted presets can be selected through the source-compatible post-processing path. Missing magenta/green-punch sheets are not fabricated. | `postfx uses the source LUT and Lua amber character outlines` |
 | GFX-17 | **Fixed + tested** | `CharacterConstants.BACKGROUND_RENDER_LAYER = 'WorldOutlines'` and `Post.lua:OutlineFilter` | Restored the missing character-silhouette buffer. Every visible character rig now receives Lua's amber `{1.0, 0.7, 0.0, 0.2}` edge at the source two-pixel width, composited after colour grading. A half-resolution one-texel mask yields the same two-screen-pixel result without the full-resolution mask's unacceptable GPU cost. | `postfx uses the source LUT and Lua amber character outlines`; complete four-worker WebGL suite |
+| GFX-18 | **Fixed + tested** | `ResearchData.lua:sIcon`, `UI/ResearchProjectEntry.lua`, and extracted `UI/JobRoster` sprites | Removed Unicode research symbols and restored every Lua project-to-job-icon assignment. Projects without `sIcon` and available disease work use `ui_jobs_iconHelp`; completed technology/disease entries use the source `ui_jobs_icon_checkCircle`; hover tint follows the source amber/black button states. | `research panel is full-screen overlay with tabs` now verifies source-sprite-backed entries |
 
 ## Gameplay and timing findings found during the same review
 
@@ -59,7 +60,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | Combat, raids, factions | **Previously verified**, with room combat-awareness timing corrected in this pass. |
 | Events, goals, research, maladies | **Previously verified**; the 24-disease roster, active TraderEvent, and active HostilesFedToMonster goal remain **approved deviations**. |
 | Building, mining, object placement, zoning | **Previously verified**; all available source prop sheets, held tools, and object-state tint were rechecked here. |
-| Start/new-base/HUD/inspector UI | **Reviewed in this pass**; the two visually dominant pre-game screens received source-coordinate fixes. |
+| Start/new-base/HUD/inspector/research UI | **Reviewed in this pass**; the two visually dominant pre-game screens received source-coordinate fixes, and research project/status icons now use Lua's exact sprites. |
 | Character/environment rendering | **Reviewed in this pass**; original rig subsets, appearance, accessory, and face-layer textures, layered portraits, clips, shadow, selection, bubbles, props, visible effect sheets/animation, source colour grading, and light/tint composition are now used where assets exist. |
 | Audio, save/load, input | **Reviewed/previously verified**; character appearance persistence was added and exercised through load/remount, while the remaining paths retain their earlier coverage. |
 
@@ -147,4 +148,16 @@ The production build reports the existing large-bundle advisory for the 1.6 MB m
 | Four-parallel-render smoke | **PASS — 4/4** |
 | Complete fail-fast Playwright E2E suite | **PASS — 282/282 in 9.4 minutes** |
 | Full-resolution outline-mask trial | **REJECTED — functionally correct but too expensive; replaced by the verified half-resolution mask with the same two-screen-pixel edge** |
+| Diff whitespace validation | **PASS** |
+
+### Research-icon continuation — 2026-08-24
+
+| Gate | Result |
+|---|---|
+| TypeScript compilation | **PASS** |
+| Production build (`tsc` + Vite) | **PASS** |
+| Unit suite | **PASS — 95/95** |
+| Focused research-panel source-sprite scenario | **PASS — 1/1** |
+| Complete fail-fast Playwright E2E suite | **PASS — 282/282 in 9.5 minutes** |
+| Source-icon sweep | **PASS — all Lua `sIcon` assignments resolve to exact extracted 32×32 RGBA JobRoster sprites** |
 | Diff whitespace validation | **PASS** |

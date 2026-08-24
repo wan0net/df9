@@ -4340,6 +4340,13 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(text).toContain('ESC');
     // Has research items (active or available sections)
     expect(text).toMatch(/ACTIVE|AVAILABLE|COMPLETED/);
+    const sourceIcons = panel.locator('img[data-source-sprite^="ui_jobs_icon"]');
+    expect(await sourceIcons.count()).toBeGreaterThan(0);
+    const spriteNames = await sourceIcons.evaluateAll((icons) =>
+      icons.map((icon) => (icon as HTMLImageElement).dataset.sourceSprite),
+    );
+    expect(spriteNames.some((name) => name?.startsWith('ui_jobs_iconJob'))).toBe(true);
+    await expect(sourceIcons.first()).toHaveAttribute('src', /\/assets\/ui\/hud\/ui_jobs_icon/);
     expect(await page.evaluate(() => (window as any).__df9._gameRules.playerTimeScale)).toBe(0);
     // The visible Back control must use UIManager's close path so pause restores.
     await page.locator('[data-testid="research-back"]').click();

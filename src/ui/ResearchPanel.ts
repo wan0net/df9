@@ -19,6 +19,30 @@ import type { Room } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
 
 const AMBER = '#dfa200';
+const ICON_FILTER_AMBER = 'brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg)';
+
+/** Exact ResearchData.lua sIcon assignments; absent entries use Lua's help icon. */
+const RESEARCH_ICON_BY_ID: Record<string, string> = {
+  SpaceSuit2: 'ui_jobs_iconJobUnemployed',
+  VaporizeLevel2: 'ui_jobs_iconJobBuilder',
+  MaintenanceLevel2: 'ui_jobs_iconJobTechnician',
+  BuildLevel2: 'ui_jobs_iconJobBuilder',
+  PlantLevel2: 'ui_jobs_iconJobBotanist',
+  LaserRifles: 'ui_jobs_iconJobResponse',
+  ArmorLevel2: 'ui_jobs_iconJobResponse',
+  TeamTactics: 'ui_jobs_iconJobResponse',
+  OxygenRecyclerLevel2: 'ui_jobs_iconJobUnemployed',
+  OxygenRecyclerLevel3: 'ui_jobs_iconJobUnemployed',
+  OxygenRecyclerLevel4: 'ui_jobs_iconJobUnemployed',
+  GeneratorLevel2: 'ui_jobs_iconJobUnemployed',
+  GeneratorLevel3: 'ui_jobs_iconJobUnemployed',
+  GeneratorLevel4: 'ui_jobs_iconJobUnemployed',
+  AirScrubber: 'ui_jobs_iconJobDoctor',
+  HappyBot: 'ui_jobs_iconJobDoctor',
+  FridgeLevel2: 'ui_jobs_iconJobBarkeep',
+  RefineryDropoffLevel2: 'ui_jobs_iconJobMiner',
+  WallMountedTurret2: 'ui_jobs_iconJobResponse',
+};
 
 /** Data for a research zone entry (mirrors Lua getAllZoneItems). */
 interface ZoneItem {
@@ -347,7 +371,7 @@ export class ResearchPanel {
     if (active.length > 0) {
       this.sectionHeader(container, line('RSCHUI008TEXT'));
       for (const [id, def] of active) {
-        const icon = this.getResearchIcon(def.sName);
+        const icon = this.getResearchIcon(id);
         const entry = this.makeResearchEntry(
           def.friendlyName, def.description, icon, researchSystem.getProgress(id), def.nCost, false,
         );
@@ -383,9 +407,8 @@ export class ResearchPanel {
     if (completed.length > 0) {
       this.sectionHeader(container, line('RSCHUI010TEXT'));
       for (const [, def] of completed) {
-        const icon = this.getResearchIcon(def.sName);
         container.appendChild(this.makeResearchEntry(
-          def.friendlyName, def.description, '\u2713', def.nCost, def.nCost, true,
+          def.friendlyName, def.description, 'ui_jobs_icon_checkCircle', def.nCost, def.nCost, true,
         ));
       }
     }
@@ -407,7 +430,7 @@ export class ResearchPanel {
     for (const entry of availableResearch) {
       const desc = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
       const el = this.makeResearchEntry(
-        entry.sMaladyName, desc, '+',
+        entry.sMaladyName, desc, 'ui_jobs_iconHelp',
         entry.nCureProgress, entry.nResearchCure, false,
       );
       if (bInSelectionMode) {
@@ -419,7 +442,7 @@ export class ResearchPanel {
     for (const entry of completedResearch) {
       const desc = `${line('RSCHUI014TEXT')} ${entry.sMaladyType}`;
       const el = this.makeResearchEntry(
-        entry.sMaladyName, desc, '\u2713',
+        entry.sMaladyName, desc, 'ui_jobs_icon_checkCircle',
         entry.nResearchCure, entry.nResearchCure, true,
       );
       container.appendChild(el);
@@ -482,7 +505,7 @@ export class ResearchPanel {
    * Mirrors GoalEntry pattern from GoalEntryLayout.lua / ZoneResearchButtonLayout.lua.
    */
   private makeResearchEntry(
-    name: string, desc: string, icon: string,
+    name: string, desc: string, iconSprite: string,
     nProgress: number, nTotal: number, bCompleted: boolean,
   ): HTMLDivElement {
     const ENTRY_WIDTH = 700;
@@ -499,11 +522,13 @@ export class ResearchPanel {
     `;
 
     // Icon (Lua: ProjectIcon from UI/JobRoster)
-    const iconEl = document.createElement('span');
-    iconEl.textContent = icon;
+    const iconEl = document.createElement('img');
+    iconEl.src = `/assets/ui/hud/${iconSprite}.png`;
+    iconEl.alt = '';
+    iconEl.dataset.sourceSprite = iconSprite;
     iconEl.style.cssText = `
-      margin-left:20px;font-size:28px;min-width:36px;text-align:center;
-      color:${AMBER};
+      margin-left:20px;width:32px;height:32px;object-fit:contain;flex-shrink:0;
+      filter:${ICON_FILTER_AMBER};
     `;
     nameBar.appendChild(iconEl);
 
@@ -580,31 +605,22 @@ export class ResearchPanel {
     entry.addEventListener('mouseenter', () => {
       nameBar.style.background = AMBER;
       nameEl.style.color = '#000';
-      iconEl.style.color = '#000';
+      iconEl.style.filter = 'brightness(0)';
       descBox.style.background = 'rgba(223,162,0,0.25)';
     });
     entry.addEventListener('mouseleave', () => {
       nameBar.style.background = '#000';
       nameEl.style.color = AMBER;
-      iconEl.style.color = AMBER;
+      iconEl.style.filter = ICON_FILTER_AMBER;
       descBox.style.background = 'rgba(223,162,0,0.1)';
     });
 
     return entry;
   }
 
-  /** Map research ID to a simple icon character (Lua uses UI/JobRoster sprites). */
+  /** Lua ResearchProjectEntry uses sIcon or the JobRoster help sprite. */
   private getResearchIcon(id: string): string {
-    // Map by research type/unlocks — approximate the Lua sprite icons
-    if (id.includes('Reactor') || id.includes('Power') || id.includes('DarkMatter')) return '\u269B';
-    if (id.includes('Vaporize') || id.includes('Build')) return 'T';
-    if (id.includes('Green') || id.includes('Garden') || id.includes('Botani')) return '\u2665';
-    if (id.includes('Refinery') || id.includes('Matter')) return '\u25B6';
-    if (id.includes('Suit') || id.includes('Space')) return '\u25C9';
-    if (id.includes('Security') || id.includes('Turret')) return '\u2694';
-    if (id.includes('Medical') || id.includes('Hospital')) return '+';
-    if (id.includes('Fitness') || id.includes('Gym')) return '\u2605';
-    return '\u25C6';
+    return RESEARCH_ICON_BY_ID[id] ?? 'ui_jobs_iconHelp';
   }
 
   private sectionHeader(container: HTMLDivElement, text: string) {
