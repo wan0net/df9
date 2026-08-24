@@ -5544,13 +5544,52 @@ test.describe('Spacebase DF-9 E2E', () => {
       return visibleSubsets.sort((a, b) => a - b);
     });
 
-    expect(result).toEqual([8, 13, 24, 31, 50]);
+    expect(result).toEqual([8, 13, 24]);
     const layers = page.locator('[data-testid="character-portrait"] img');
     await expect(layers).toHaveCount(4);
     await expect(layers.nth(1)).toHaveAttribute('src', /Human_Large_Male_Black_02\.png$/);
     await expect(layers.nth(2)).toHaveAttribute('src', /Human_Large_Male_02_Beard_Gray_01\.png$/);
     await expect(layers.nth(3)).toHaveAttribute('src', /Human_Large_Male_02_Hair_Gray_01\.png$/);
     expect(await layers.evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
+  });
+
+  test('character appearance mounts Lua accessory subsets and respects job conflicts', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.spawnCharacterAt(222, 222);
+      char.bSpacewalking = false;
+      Object.assign(char.tStats, {
+        nRace: 1,
+        nBodyVariation: 1, nHeadVariation: 1,
+        nFaceTopVariation: 0, nFaceBottomVariation: 0, nHairVariation: 4,
+        nBottomAccessoryVariation: 1, nTopAccessoryVariation: 20,
+        sPortrait: 'Human_Male_Brown_01',
+        sPortraitFacialHair: undefined,
+        sPortraitHair: 'Human_Male_01_Hair_Yellow_01',
+      });
+      const renderer = d._characterRenderer as any;
+      const inspect = (job: number) => {
+        char.setJob(job);
+        renderer.destroyCharacter(char.id);
+        const handle = renderer.createCharacter(char);
+        const visible: Array<{ subset: number; texture: string | null }> = [];
+        handle.object.traverse((child: any) => {
+          if ((child.isMesh || child.isSkinnedMesh) && child.visible) {
+            visible.push({
+              subset: child.userData.sourceSubsetIndex,
+              texture: child.material?.userData?.textureName ?? null,
+            });
+          }
+        });
+        return visible.sort((a, b) => a.subset - b.subset);
+      };
+      return { offDuty: inspect(1), builder: inspect(2) };
+    });
+
+    expect(result.offDuty.map(item => item.subset)).toEqual([7, 12, 18, 33, 55]);
+    expect(result.offDuty.find(item => item.subset === 33)?.texture).toBe('straps_pouches');
+    expect(result.offDuty.find(item => item.subset === 55)?.texture).toBe('Arm_Gauntlet');
+    expect(result.builder.map(item => item.subset)).toEqual([7, 12, 55, 68, 83]);
   });
 
   test('object inspector uses the original portrait, condition strip, and folder geometry', async () => {

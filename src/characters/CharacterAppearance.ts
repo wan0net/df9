@@ -46,7 +46,125 @@ export interface ModelAppearance {
   hair?: HairAppearance;
 }
 
+interface AccessoryDef {
+  rig: 'base' | 'alien';
+  subset: number;
+  texture: string;
+  conflicts: readonly number[];
+}
+
+interface AccessoryPool {
+  bottom: readonly number[];
+  top: readonly number[];
+}
+
 const NO_REPLACE = 1_000_001;
+const STANDARD_ACCESSORY_CONFLICTS = [2, 3, 4, 5, 7, 8, 9, 12, 13, 14] as const;
+const STANDARD_ACCESSORY_CONFLICTS_NO_JANITOR = [2, 3, 4, 5, 7, 8, 9, 12, 14] as const;
+const ROBE_ACCESSORY_CONFLICTS = [4, 5, 7, 8, 9, 12, 13, 14] as const;
+const GAUNTLET_ACCESSORY_CONFLICTS = [4, 5] as const;
+const VISOR_ACCESSORY_CONFLICTS = [2, 3, 4, 5] as const;
+
+/** Lua BOTTOM_ACCESSORY_TYPE, mapped to Citizen_Base/Citizen_Alien .brig subset order. */
+const BOTTOM_ACCESSORIES: Record<number, AccessoryDef> = {
+  1: { rig: 'base', subset: 33, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  2: { rig: 'base', subset: 26, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  3: { rig: 'base', subset: 28, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  4: { rig: 'base', subset: 26, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  5: { rig: 'alien', subset: 23, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  6: { rig: 'alien', subset: 22, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  7: { rig: 'base', subset: 37, texture: 'Tourist_Shorts_Male_01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  8: { rig: 'base', subset: 36, texture: 'Tourist_Shorts_Female_01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  9: { rig: 'base', subset: 31, texture: 'Tourist_Shorts_Male_01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  10: { rig: 'base', subset: 32, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  11: { rig: 'base', subset: 27, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  12: { rig: 'base', subset: 30, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  13: { rig: 'base', subset: 29, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  // The source intentionally omits JANITOR from this one conflict list.
+  14: { rig: 'alien', subset: 24, texture: 'Tourist_Shorts_Male_01', conflicts: STANDARD_ACCESSORY_CONFLICTS_NO_JANITOR },
+  15: { rig: 'base', subset: 34, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  16: { rig: 'base', subset: 35, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+};
+
+/** Lua TOP_ACCESSORY_TYPE, mapped to Citizen_Base/Citizen_Alien .brig subset order. */
+const TOP_ACCESSORIES: Record<number, AccessoryDef> = {
+  1: { rig: 'base', subset: 52, texture: 'Collar01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  2: { rig: 'base', subset: 63, texture: 'AC_UpBody01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  3: { rig: 'base', subset: 44, texture: 'Collar01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  4: { rig: 'base', subset: 63, texture: 'AC_UpBody01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  5: { rig: 'alien', subset: 14, texture: 'Collar01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  6: { rig: 'alien', subset: 21, texture: 'AC_UpBody01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  7: { rig: 'base', subset: 54, texture: 'AC_UpBody03', conflicts: ROBE_ACCESSORY_CONFLICTS },
+  8: { rig: 'base', subset: 38, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  9: { rig: 'base', subset: 45, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  10: { rig: 'base', subset: 39, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  11: { rig: 'base', subset: 46, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  12: { rig: 'base', subset: 40, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  13: { rig: 'base', subset: 47, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  14: { rig: 'base', subset: 41, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  15: { rig: 'base', subset: 48, texture: 'straps_pouches', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  19: { rig: 'base', subset: 53, texture: 'Collar01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  20: { rig: 'base', subset: 55, texture: 'Arm_Gauntlet', conflicts: GAUNTLET_ACCESSORY_CONFLICTS },
+  21: { rig: 'base', subset: 56, texture: 'Arm_Gauntlet', conflicts: GAUNTLET_ACCESSORY_CONFLICTS },
+  22: { rig: 'alien', subset: 19, texture: 'AC_UpBody03', conflicts: ROBE_ACCESSORY_CONFLICTS },
+  26: { rig: 'base', subset: 50, texture: 'Tourist_Shirt_Male_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  27: { rig: 'base', subset: 50, texture: 'Tourist_Shirt_Male_03', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  28: { rig: 'base', subset: 63, texture: 'AC_UpBody02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  29: { rig: 'base', subset: 63, texture: 'AC_UpBody02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  30: { rig: 'alien', subset: 21, texture: 'AC_UpBody02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  31: { rig: 'base', subset: 57, texture: 'AC_UpBody03', conflicts: ROBE_ACCESSORY_CONFLICTS },
+  33: { rig: 'base', subset: 58, texture: 'Tourist_Shirt_Female_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  34: { rig: 'base', subset: 58, texture: 'Tourist_Shirt_Female_03', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  35: { rig: 'base', subset: 59, texture: 'AC_UpBody01', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  36: { rig: 'base', subset: 59, texture: 'AC_UpBody02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  37: { rig: 'base', subset: 51, texture: 'Visor01', conflicts: VISOR_ACCESSORY_CONFLICTS },
+  38: { rig: 'base', subset: 42, texture: 'Visor01', conflicts: VISOR_ACCESSORY_CONFLICTS },
+  39: { rig: 'base', subset: 43, texture: 'Visor01', conflicts: VISOR_ACCESSORY_CONFLICTS },
+  40: { rig: 'base', subset: 60, texture: 'Visor01', conflicts: VISOR_ACCESSORY_CONFLICTS },
+  41: { rig: 'base', subset: 62, texture: 'Tourist_Shirt_Male_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  42: { rig: 'base', subset: 62, texture: 'Tourist_Shirt_Male_03', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  43: { rig: 'base', subset: 62, texture: 'Tourist_Shirt_Male_04', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  // Lua intentionally points variation 05 at the Male02 texture.
+  44: { rig: 'base', subset: 62, texture: 'Tourist_Shirt_Male_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  45: { rig: 'base', subset: 61, texture: 'Tourist_Shirt_Female_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  46: { rig: 'base', subset: 61, texture: 'Tourist_Shirt_Female_03', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  47: { rig: 'base', subset: 61, texture: 'Tourist_Shirt_Female_04', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  48: { rig: 'base', subset: 61, texture: 'Tourist_Shirt_Female_05', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  49: { rig: 'base', subset: 49, texture: 'Tourist_Shirt_Female_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  50: { rig: 'base', subset: 49, texture: 'Tourist_Shirt_Female_03', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  51: { rig: 'base', subset: 49, texture: 'Tourist_Shirt_Female_04', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  52: { rig: 'base', subset: 49, texture: 'Tourist_Shirt_Female_05', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  53: { rig: 'base', subset: 58, texture: 'Tourist_Shirt_Female_04', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  54: { rig: 'base', subset: 58, texture: 'Tourist_Shirt_Female_05', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  55: { rig: 'base', subset: 50, texture: 'Tourist_Shirt_Male_04', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  // Lua intentionally points variation 05 at the Male02 texture.
+  56: { rig: 'base', subset: 50, texture: 'Tourist_Shirt_Male_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  57: { rig: 'alien', subset: 20, texture: 'Tourist_Shirt_Male_03', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  58: { rig: 'alien', subset: 20, texture: 'Tourist_Shirt_Male_04', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+  59: { rig: 'alien', subset: 20, texture: 'Tourist_Shirt_Male_02', conflicts: STANDARD_ACCESSORY_CONFLICTS },
+};
+
+function accessoryPoolForBody(body: number): AccessoryPool {
+  if (body >= 1 && body <= 5) return { bottom: [1, 2, 7], top: [2, 28, 7, 10, 14, 41, 42, 43, 44, 20, 21, 37] };
+  if (body >= 6 && body <= 10) return { bottom: [3, 4, 8], top: [4, 29, 8, 12, 45, 46, 47, 48, 20, 21, 37] };
+  if (body >= 11 && body <= 14) return { bottom: [3, 4, 8], top: [4, 29, 8, 12, 45, 46, 47, 48, 20, 21] };
+  if (body >= 15 && body <= 19) return { bottom: [6, 5, 14], top: [6, 30, 22, 57, 58, 59] };
+  if (body >= 20 && body <= 21) return { bottom: [1, 2, 7], top: [2, 28, 10, 14, 41, 42, 43, 44, 20, 21, 39] };
+  if (body >= 22 && body <= 23) return { bottom: [3, 4, 8], top: [4, 29, 8, 12, 45, 46, 47, 48, 20, 21, 39] };
+  if (body >= 24 && body <= 25) return { bottom: [1, 2, 7], top: [2, 28, 10, 14, 41, 42, 43, 44, 20, 21, 38] };
+  if (body >= 26 && body <= 27) return { bottom: [3, 4], top: [4, 29, 8, 12, 45, 46, 47, 48, 20, 21, 38] };
+  if (body >= 28 && body <= 31) return { bottom: [6, 5, 14], top: [6, 30, 22, 57, 58, 59] };
+  if (body >= 32 && body <= 36) return { bottom: [10, 12, 9], top: [2, 28, 11, 15, 26, 27, 55, 56, 20, 21, 37] };
+  if (body >= 37 && body <= 41) return { bottom: [11, 13], top: [4, 29, 9, 13, 20, 21, 37] };
+  if (body >= 42 && body <= 45) return { bottom: [3, 4, 8], top: [4, 29, 9, 13, 20, 21] };
+  if (body >= 46 && body <= 47) return { bottom: [10, 12, 9], top: [2, 28, 11, 15, 26, 27, 55, 56, 20, 21, 39] };
+  if (body >= 48 && body <= 49) return { bottom: [11, 13], top: [4, 29, 9, 13, 20, 21, 39] };
+  if (body >= 50 && body <= 51) return { bottom: [10, 12, 9], top: [2, 28, 11, 15, 26, 27, 55, 56, 20, 21, 38] };
+  if (body >= 52 && body <= 53) return { bottom: [3, 4], top: [4, 29, 9, 13, 20, 21, 38] };
+  if (body === 55) return { bottom: [16, 15], top: [35, 36, 31, 10, 33, 34, 53, 54, 20, 21, 40] };
+  if (body === 56) return { bottom: [6, 5, 14], top: [6, 30, 22] };
+  return { bottom: [], top: [] };
+}
 const BODY_BY_RACE: Record<number, readonly number[]> = {
   [RACE_HUMAN]: [...range(1, 10), ...range(32, 41)],
   [RACE_JELLY]: [...range(11, 14), ...range(42, 45)],
@@ -169,11 +287,11 @@ function humanHairAppearance(id: number): HairAppearance | undefined {
     { ids: [3, 46, 47, 48, 57, 58, 78], subset: 22, texture: 'Hair_Short03_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Red', 'Blue', 'Gray'] },
     { ids: [64, 65, 66, 67, 68, 69, 79], subset: 24, texture: 'Hair_Short03_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Red', 'Blue', 'Gray'] },
     { ids: [70, 71, 72, 73, 74, 75, 80], subset: 25, texture: 'Hair_Short03_Color', colors: ['Yellow', 'Red', 'Brown', 'Black', 'Red', 'Blue', 'Gray'] },
-    { ids: [4, 28, 29, 30, 49, 50, 81], subset: 17, texture: 'Hair_Long01_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Pink', 'Green', 'Gray'] },
-    { ids: [5, 25, 26, 27, 82], subset: 18, texture: 'Hair_Short02_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Gray'] },
+    { ids: [4, 28, 29, 30, 49, 50, 81], subset: 18, texture: 'Hair_Long01_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Pink', 'Green', 'Gray'] },
+    { ids: [5, 25, 26, 27, 82], subset: 19, texture: 'Hair_Short02_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Gray'] },
     { ids: [6, 31, 32, 33, 59, 60, 83], subset: 23, texture: 'Hair_Short03_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Red', 'Blue', 'Gray'] },
     { ids: [7, 34, 35, 36, 61, 62, 84], subset: 21, texture: 'Hair_Short03_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Red', 'Blue', 'Gray'] },
-    { ids: [8, 37, 38, 39, 51, 52, 85], subset: 16, texture: 'Hair_Long01_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Pink', 'Green', 'Gray'] },
+    { ids: [8, 37, 38, 39, 51, 52, 85], subset: 17, texture: 'Hair_Long01_Color', colors: ['Yellow', 'Orange', 'Brown', 'Black', 'Pink', 'Green', 'Gray'] },
   ];
   for (const group of groups) {
     const color = group.ids.indexOf(id);
@@ -317,24 +435,32 @@ export function generateCharacterAppearance(race: number, random: () => number =
   const nHeadVariation = headForBody(nBodyVariation);
   const nHairVariation = hairFor(nBodyVariation, random);
   const face = faceLayersFor(race, nBodyVariation, nHairVariation, random);
+  const accessoryPool = accessoryPoolForBody(nBodyVariation);
+  // Lua math.random(0, 100) is inclusive: values 0..59 select an accessory.
+  const selectAccessory = (pool: readonly number[]) =>
+    pool.length > 0 && Math.floor(random() * 101) < 60 ? pick(pool, random) : NO_REPLACE;
   const base = {
     nBodyVariation,
     nHeadVariation,
     nFaceTopVariation: face.top,
     nFaceBottomVariation: face.bottom,
     nHairVariation,
-    nBottomAccessoryVariation: NO_REPLACE,
-    nTopAccessoryVariation: NO_REPLACE,
+    nBottomAccessoryVariation: selectAccessory(accessoryPool.bottom),
+    nTopAccessoryVariation: selectAccessory(accessoryPool.top),
   };
   return { ...base, ...portraitFor({ nRace: race, ...base }, random) };
 }
 
 export function isAppearanceValidForRace(stats: Partial<AppearanceStats>): stats is AppearanceStats {
   const bodies = stats.nRace === undefined ? undefined : BODY_BY_RACE[stats.nRace];
+  const accessoryPool = typeof stats.nBodyVariation === 'number' ? accessoryPoolForBody(stats.nBodyVariation) : undefined;
   return !!bodies && typeof stats.nBodyVariation === 'number' && bodies.includes(stats.nBodyVariation) &&
     typeof stats.nHeadVariation === 'number' && typeof stats.nFaceTopVariation === 'number' &&
     typeof stats.nFaceBottomVariation === 'number' && typeof stats.nHairVariation === 'number' &&
-    typeof stats.nBottomAccessoryVariation === 'number' && typeof stats.nTopAccessoryVariation === 'number' &&
+    typeof stats.nBottomAccessoryVariation === 'number' &&
+    (stats.nBottomAccessoryVariation === NO_REPLACE || !!accessoryPool?.bottom.includes(stats.nBottomAccessoryVariation)) &&
+    typeof stats.nTopAccessoryVariation === 'number' &&
+    (stats.nTopAccessoryVariation === NO_REPLACE || !!accessoryPool?.top.includes(stats.nTopAccessoryVariation)) &&
     typeof stats.sPortrait === 'string' && stats.sPortrait.length > 0;
 }
 
@@ -379,16 +505,21 @@ export function getVisibleSubsets(stats: AppearanceStats, job: number): { indice
       if (helmet !== undefined && appearance.hair) indices.delete(appearance.hair.subset);
     } else if (job === 7) {
       add(appearance.fat ? (appearance.sex === 'M' ? 65 : 64) : (appearance.sex === 'M' ? 67 : 66));
-    } else {
-      add(appearance.fat ? (appearance.sex === 'M' ? 50 : 49) : (appearance.sex === 'M' ? 62 : 61));
-      add(appearance.fat ? 31 : (appearance.sex === 'M' ? 37 : 36));
     }
   } else if (appearance.rig === 'alien') {
-    const outfit = ({ 2: 8, 3: 13, 4: 11, 5: 10, 6: 12, 9: 9, 12: 9 } as Record<number, number>)[job] ?? 7;
+    const outfit = ({ 2: 8, 3: 13, 4: 11, 5: 10, 6: 12, 7: 7, 9: 9, 12: 9 } as Record<number, number>)[job];
     add(outfit, job === 9 ? 'Scientist01' : undefined);
     const helmet = ({ 4: 27, 5: 26 } as Record<number, number>)[job];
     add(helmet);
     if (helmet !== undefined && appearance.hair) indices.delete(appearance.hair.subset);
   }
+  const addAccessory = (id: number, definitions: Record<number, AccessoryDef>) => {
+    if (id === NO_REPLACE) return;
+    const accessory = definitions[id];
+    if (!accessory || accessory.rig !== appearance.rig || accessory.conflicts.includes(job)) return;
+    add(accessory.subset, accessory.texture);
+  };
+  addAccessory(stats.nBottomAccessoryVariation, BOTTOM_ACCESSORIES);
+  addAccessory(stats.nTopAccessoryVariation, TOP_ACCESSORIES);
   return { indices, textures };
 }

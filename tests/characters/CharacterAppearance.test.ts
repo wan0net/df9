@@ -30,12 +30,54 @@ describe('Lua character appearance parity', () => {
       rig: 'base', sex: 'F', fat: true,
       bodySubset: 11, bodyTexture: 'Human_Body_Female01_base_05',
       headSubset: 3, headTexture: 'Human_Head_Female01_base_05',
-      hair: { subset: 16, texture: 'Hair_Long01_Color_07', portraitColor: 'Gray' },
+      hair: { subset: 17, texture: 'Hair_Long01_Color_07', portraitColor: 'Gray' },
     });
     expect(getPortraitLayers({ nRace: RACE_HUMAN, ...appearance })).toEqual([
       'Human_Large_Female_Black_02.png',
       'Human_Large_Female_02_Hair_Gray_01.png',
     ]);
+  });
+
+  it('uses the exact Citizen_Base primitive order for all female hair silhouettes', () => {
+    const appearance = generateCharacterAppearance(RACE_HUMAN, () => 0.999999);
+    expect(getModelAppearance({ nRace: RACE_HUMAN, ...appearance, nHairVariation: 4 }).hair?.subset).toBe(18);
+    expect(getModelAppearance({ nRace: RACE_HUMAN, ...appearance, nHairVariation: 5 }).hair?.subset).toBe(19);
+    expect(getModelAppearance({ nRace: RACE_HUMAN, ...appearance, nHairVariation: 8 }).hair?.subset).toBe(17);
+  });
+
+  it('generates and mounts Lua accessory pools, textures, and job conflicts', () => {
+    const appearance = generateCharacterAppearance(RACE_HUMAN, () => 0);
+    expect(appearance).toMatchObject({
+      nBodyVariation: 1,
+      nBottomAccessoryVariation: 1,
+      nTopAccessoryVariation: 2,
+    });
+
+    const offDuty = getVisibleSubsets({ nRace: RACE_HUMAN, ...appearance }, 1);
+    expect(offDuty.indices.has(33)).toBe(true);
+    expect(offDuty.indices.has(63)).toBe(true);
+    expect(offDuty.textures.get(33)).toBe('straps_pouches');
+    expect(offDuty.textures.get(63)).toBe('AC_UpBody01');
+
+    const builder = getVisibleSubsets({ nRace: RACE_HUMAN, ...appearance }, BUILDER);
+    expect(builder.indices.has(33)).toBe(false);
+    expect(builder.indices.has(63)).toBe(false);
+    expect(builder.indices.has(68)).toBe(true);
+
+    const gauntlet = getVisibleSubsets({
+      nRace: RACE_HUMAN,
+      ...appearance,
+      nTopAccessoryVariation: 20,
+    }, BUILDER);
+    expect(gauntlet.indices.has(55)).toBe(true);
+    expect(gauntlet.textures.get(55)).toBe('Arm_Gauntlet');
+  });
+
+  it('does not invent tourist clothing when Lua selected no accessories', () => {
+    const appearance = generateCharacterAppearance(RACE_HUMAN, () => 0.999999);
+    const visible = getVisibleSubsets({ nRace: RACE_HUMAN, ...appearance }, 1);
+    expect(visible.indices.has(49)).toBe(false);
+    expect(visible.indices.has(31)).toBe(false);
   });
 
   it('selects the original Tobian primitive and texture variants', () => {
