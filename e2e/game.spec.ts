@@ -834,7 +834,7 @@ test.describe('Spacebase DF-9 E2E', () => {
 
   // ── Phase 1 Bug Fix Tests ──────────────────────────────────────
 
-  test('placed objects start as ghosts (bBuilt=false)', { annotation: { type: 'baseline', description: 'room' } }, async () => {
+  test('placed-object ghosts use original object and door textures', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Get a room to place an object in
     const rooms = await df9(page).rooms();
     expect(rooms.length).toBeGreaterThan(0);
@@ -852,7 +852,31 @@ test.describe('Spacebase DF-9 E2E', () => {
       const table = objects.find(o => o.name === 'StandingTable' && o.tileX === tile.x && o.tileY === tile.y);
       expect(table).toBeDefined();
       expect(table!.built).toBe(false);
+      const source = await page.evaluate(() => {
+        const renderer = (window as any).__df9._envObjRenderer as any;
+        const handle = Array.from(renderer.objects.values() as Iterable<any>)
+          .find((candidate: any) => candidate.spriteName === 'StandingTable');
+        return handle?.mesh.userData.visualSource;
+      });
+      expect(source).toBe('sprite:StandingTable');
     }
+
+    const doorSources = await page.evaluate(() => {
+      const renderer = (window as any).__df9._envObjRenderer;
+      const types = ['Door', 'HeavyDoor', 'Airlock'];
+      return types.map((type, index) => {
+        const id = `source-ghost-${type}`;
+        renderer.addObject(id, 210 + index, 210, type, false);
+        const info = renderer.getDebugInfo(id);
+        renderer.removeObject(id);
+        return info?.visualSource;
+      });
+    });
+    expect(doorSources).toEqual([
+      'tile:door_closed',
+      'tile:door_heavy_closed',
+      'tile:airlock_door_closed',
+    ]);
   });
 
   test('fire creates visual overlay on tiles', { annotation: { type: 'baseline', description: 'room' } }, async () => {

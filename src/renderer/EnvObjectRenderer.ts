@@ -55,9 +55,11 @@ export class EnvObjectRenderer {
     // Ghost (unbuilt) doors still need a visible sprite so the player can see the placement.
     if (objDef?.door && built) return;
     const spriteName = objDef?.spriteName ?? objectType;
-    const spriteKey = built ? spriteName : `tile_${spriteName}`; // ghost uses tile-prefixed sprite
 
-    const mesh = this.createSpriteMesh(spriteKey, objDef?.width ?? 1, objDef?.height ?? 1, built);
+    // Lua uses the same object/door artwork for pending construction and lowers
+    // its opacity. Texture-key resolution belongs in createSpriteMesh; adding a
+    // second `tile_` prefix here previously forced every ghost to a grey quad.
+    const mesh = this.createSpriteMesh(spriteName, objDef?.width ?? 1, objDef?.height ?? 1, built);
     if (!mesh) return;
 
     const pos = tileToScreen(tileX, tileY);
@@ -214,11 +216,16 @@ export class EnvObjectRenderer {
   }
 
   /** Test/debug view of the final composed visual state. */
-  getDebugInfo(id: string): { color: number; opacity: number; spriteName: string } | null {
+  getDebugInfo(id: string): { color: number; opacity: number; spriteName: string; visualSource: string | null } | null {
     const obj = this.objects.get(id);
     if (!obj) return null;
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
-    return { color: mat.color.getHex(), opacity: mat.opacity, spriteName: obj.spriteName };
+    return {
+      color: mat.color.getHex(),
+      opacity: mat.opacity,
+      spriteName: obj.spriteName,
+      visualSource: obj.mesh.userData.visualSource ?? null,
+    };
   }
 
   removeObject(id: string) {
@@ -276,23 +283,33 @@ export class EnvObjectRenderer {
     // 1. Try real sprite frame from atlas
     const frame = getSpriteFrame(spriteName);
     if (frame) {
-      return this.createFromSpriteFrame(frame, gridW, gridH, built);
+      const mesh = this.createFromSpriteFrame(frame, gridW, gridH, built);
+      if (mesh) mesh.userData.visualSource = `sprite:${spriteName}`;
+      return mesh;
     }
 
-    // 2. Try generated placeholder
-    const placeholderTex = getTexture(`placeholder_${spriteName}`);
-    if (placeholderTex) {
-      return this.createFromPlaceholder(placeholderTex, gridW, gridH, built);
-    }
-
-    // 3. Try tile texture (doors use 'tile_' prefixed textures from wall sheet)
+    // 2. Try tile texture (doors use 'tile_' prefixed source textures).
+    // This must precede generated placeholders or all three door types render
+    // as labelled diamonds despite their original artwork being loaded.
     const tileTex = getTexture(`tile_${spriteName}`);
     if (tileTex) {
-      return this.createFromTileTexture(tileTex, gridW, built);
+      const mesh = this.createFromTileTexture(tileTex, gridW, built);
+      mesh.userData.visualSource = `tile:${spriteName}`;
+      return mesh;
+    }
+
+    // 3. Try generated placeholder for genuinely absent source sprites.
+    const placeholderTex = getTexture(`placeholder_${spriteName}`);
+    if (placeholderTex) {
+      const mesh = this.createFromPlaceholder(placeholderTex, gridW, gridH, built);
+      mesh.userData.visualSource = `placeholder:${spriteName}`;
+      return mesh;
     }
 
     // 4. Fallback: simple colored quad
-    return this.createFallbackQuad(gridW, gridH, built);
+    const mesh = this.createFallbackQuad(gridW, gridH, built);
+    mesh.userData.visualSource = `fallback:${spriteName}`;
+    return mesh;
   }
 
   private createFromSpriteFrame(
