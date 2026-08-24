@@ -158,8 +158,15 @@ export class EnvObjectRenderer {
         const baseTex = getTexture(frame.textureKey);
         if (baseTex) {
           const cropped = this.cropTexture(baseTex, frame);
+          mat.map?.dispose();
           mat.map = cropped;
           mat.needsUpdate = true;
+          // Condition and interaction frames can have different source rects
+          // (HappyBot is 92x162 healthy, 109x161 damaged, 140x144 destroyed).
+          // Lua swaps the sprite-deck rect as well as the UVs, so replace the
+          // plane rather than stretching the new frame over the old geometry.
+          obj.mesh.geometry.dispose();
+          obj.mesh.geometry = new THREE.PlaneGeometry(frame.sourceW, frame.sourceH);
           obj.spriteName = spriteName;
         }
       }
@@ -216,7 +223,14 @@ export class EnvObjectRenderer {
   }
 
   /** Test/debug view of the final composed visual state. */
-  getDebugInfo(id: string): { color: number; opacity: number; spriteName: string; visualSource: string | null } | null {
+  getDebugInfo(id: string): {
+    color: number;
+    opacity: number;
+    spriteName: string;
+    visualSource: string | null;
+    renderWidth: number;
+    renderHeight: number;
+  } | null {
     const obj = this.objects.get(id);
     if (!obj) return null;
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
@@ -225,6 +239,8 @@ export class EnvObjectRenderer {
       opacity: mat.opacity,
       spriteName: obj.spriteName,
       visualSource: obj.mesh.userData.visualSource ?? null,
+      renderWidth: (obj.mesh.geometry as THREE.PlaneGeometry).parameters.width,
+      renderHeight: (obj.mesh.geometry as THREE.PlaneGeometry).parameters.height,
     };
   }
 
@@ -323,14 +339,13 @@ export class EnvObjectRenderer {
 
     const cropped = this.cropTexture(baseTex, frame);
 
-    // Scale sprite to fit the grid footprint
-    // The tile footprint in pixels: gridW * TILE_W wide, gridH * TILE_H tall
-    // Sprites are taller than their footprint (3D perspective), so we scale
-    // to match width and let height be proportional
-    const targetW = gridW * TILE_W;
-    const aspect = frame.sourceH / frame.sourceW;
-    const renderW = targetW;
-    const renderH = targetW * aspect;
+    // MOAI draws sprite-deck geometry in source pixels. The Lua implementation
+    // never stretches an EnvObject to its logical tile footprint: the footprint
+    // controls occupancy, while the sprite's source rect controls its visible
+    // size. Scaling to gridW made small props (notably Juke and HappyBot) much
+    // too large and distorted the higher-tier generators/recyclers.
+    const renderW = frame.sourceW;
+    const renderH = frame.sourceH;
 
     const geo = new THREE.PlaneGeometry(renderW, renderH);
     const mat = new THREE.MeshBasicMaterial({

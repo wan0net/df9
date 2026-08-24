@@ -879,6 +879,38 @@ test.describe('Spacebase DF-9 E2E', () => {
     ]);
   });
 
+  test('environment sprites keep Lua source dimensions across condition frames', async () => {
+    const result = await page.evaluate(() => {
+      const renderer = (window as any).__df9._envObjRenderer;
+      const specs = [
+        ['source-size-juke', 'Jukebox'],
+        ['source-size-happybot', 'HappyBot'],
+        ['source-size-reactor3', 'GeneratorLevel3'],
+        ['source-size-o2gen3', 'OxygenRecyclerLevel3'],
+      ];
+      const info: Record<string, any> = {};
+      for (const [id, type] of specs) {
+        renderer.addObject(id, 220, 220, type, true);
+        info[type] = renderer.getDebugInfo(id);
+      }
+
+      renderer.updateObject('source-size-happybot', true, 49, 'happybot_damaged');
+      info.HappyBotDamaged = renderer.getDebugInfo('source-size-happybot');
+      renderer.updateObject('source-size-happybot', true, 0, 'happybot_destroyed');
+      info.HappyBotDestroyed = renderer.getDebugInfo('source-size-happybot');
+
+      for (const [id] of specs) renderer.removeObject(id);
+      return info;
+    });
+
+    expect([result.Jukebox.renderWidth, result.Jukebox.renderHeight]).toEqual([103, 150]);
+    expect([result.HappyBot.renderWidth, result.HappyBot.renderHeight]).toEqual([92, 162]);
+    expect([result.GeneratorLevel3.renderWidth, result.GeneratorLevel3.renderHeight]).toEqual([341, 341]);
+    expect([result.OxygenRecyclerLevel3.renderWidth, result.OxygenRecyclerLevel3.renderHeight]).toEqual([320, 256]);
+    expect([result.HappyBotDamaged.renderWidth, result.HappyBotDamaged.renderHeight]).toEqual([109, 161]);
+    expect([result.HappyBotDestroyed.renderWidth, result.HappyBotDestroyed.renderHeight]).toEqual([140, 144]);
+  });
+
   test('fire creates visual overlay on tiles', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Get a floor tile in a room
     const rooms = await df9(page).rooms();

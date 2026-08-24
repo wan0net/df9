@@ -17,7 +17,7 @@ This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlie
 
 ## Outcome
 
-This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, construction ghosts, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed nineteen graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, absent source colour grading/character outlines, invented research glyphs, grey/placeholder construction ghosts, and object damage tints being erased by room lighting.
+This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, construction ghosts, environment-object geometry, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed twenty graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, absent source colour grading/character outlines, invented research glyphs, grey/placeholder construction ghosts, stretched environment props, and object damage tints being erased by room lighting.
 
 ## Graphics and UI findings
 
@@ -42,6 +42,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-17 | **Fixed + tested** | `CharacterConstants.BACKGROUND_RENDER_LAYER = 'WorldOutlines'` and `Post.lua:OutlineFilter` | Restored the missing character-silhouette buffer. Every visible character rig now receives Lua's amber `{1.0, 0.7, 0.0, 0.2}` edge at the source two-pixel width, composited after colour grading. A half-resolution one-texel mask yields the same two-screen-pixel result without the full-resolution mask's unacceptable GPU cost. | `postfx uses the source LUT and Lua amber character outlines`; complete four-worker WebGL suite |
 | GFX-18 | **Fixed + tested** | `ResearchData.lua:sIcon`, `UI/ResearchProjectEntry.lua`, and extracted `UI/JobRoster` sprites | Removed Unicode research symbols and restored every Lua project-to-job-icon assignment. Projects without `sIcon` and available disease work use `ui_jobs_iconHelp`; completed technology/disease entries use the source `ui_jobs_icon_checkCircle`; hover tint follows the source amber/black button states. | `research panel is full-screen overlay with tabs` now verifies source-sprite-backed entries |
 | GFX-19 | **Fixed + tested** | `EnvObject.lua` pending-build opacity and the extracted environment/door sheets | Pending objects incorrectly prefixed their sprite key twice, forcing every construction ghost to a grey fallback quad. Door placeholders also won before the already-loaded source door textures. Ghosts now resolve the original object frame or Door/Heavy Door/Airlock tile texture first and apply Lua-style translucent construction opacity; generated placeholders remain only for genuinely absent hidden/debug sprites. | `placed-object ghosts use original object and door textures` covers a normal object and all three door types |
+| GFX-20 | **Fixed + tested** | `DFCommon/Graphics.lua:loadSpriteSheet`, `DFCommon/Graphics.lua:alignSprite`, `EnvObject.lua`, and the munged environment sprite metadata | Environment artwork was stretched to the logical tile footprint instead of being drawn at its source sprite-deck dimensions. This enlarged Juke by 24%, HappyBot by 39%, and distorted several higher-tier machines. Source frames now render at their exact pixel dimensions, and condition/interact swaps replace geometry as well as UVs so differently sized damaged/destroyed frames are not stretched over the healthy mesh. | `environment sprites keep Lua source dimensions across condition frames` covers Juke, HappyBot healthy/damaged/destroyed, ReactorGen3, and O2Gen3 |
 
 ## Gameplay and timing findings found during the same review
 
@@ -62,7 +63,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | Events, goals, research, maladies | **Previously verified**; the 24-disease roster, active TraderEvent, and active HostilesFedToMonster goal remain **approved deviations**. |
 | Building, mining, object placement, zoning | **Previously verified**; all available source prop sheets, held tools, object-state tint, and pending object/door ghost textures were rechecked here. |
 | Start/new-base/HUD/inspector/research UI | **Reviewed in this pass**; the two visually dominant pre-game screens received source-coordinate fixes, and research project/status icons now use Lua's exact sprites. |
-| Character/environment rendering | **Reviewed in this pass**; original rig subsets, appearance, accessory, and face-layer textures, layered portraits, clips, shadow, selection, bubbles, props, visible effect sheets/animation, source colour grading, and light/tint composition are now used where assets exist. |
+| Character/environment rendering | **Reviewed in this pass**; original rig subsets, appearance, accessory, and face-layer textures, layered portraits, clips, shadow, selection, bubbles, native environment-sprite geometry, props, visible effect sheets/animation, source colour grading, and light/tint composition are now used where assets exist. |
 | Audio, save/load, input | **Reviewed/previously verified**; character appearance persistence was added and exercised through load/remount, while the remaining paths retain their earlier coverage. |
 
 ## Known residual fidelity boundaries
@@ -173,4 +174,16 @@ The production build reports the existing large-bundle advisory for the 1.6 MB m
 | Focused source-ghost scenario | **PASS — 1/1**, covering Standing Table, Door, Heavy Door, and Airlock |
 | Complete fail-fast Playwright E2E suite | **PASS — 282/282 in 8.8 minutes** |
 | Renderer fallback inventory | **PASS — only the hidden Spawner/DockPoint lack source frames; all placeable visible objects and doors resolve original artwork** |
+| Diff whitespace validation | **PASS** |
+
+### Native environment-sprite continuation — 2026-08-25
+
+| Gate | Result |
+|---|---|
+| TypeScript compilation | **PASS** |
+| Production build (`tsc` + Vite) | **PASS** |
+| Unit suite | **PASS — 95/95** |
+| Focused source-dimension scenario | **PASS — 1/1**, covering Juke, HappyBot healthy/damaged/destroyed, ReactorGen3, and O2Gen3 |
+| Complete stable Playwright E2E suite | **PASS — 283/283 in 13.4 minutes with two WebGL workers** |
+| Four-worker trial | **INCOMPLETE — browser-context teardown exceeded the harness timeout after 55 passing tests; no assertion failed, and the complete stable run above supersedes it** |
 | Diff whitespace validation | **PASS** |
