@@ -3815,13 +3815,14 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result!.hasVariation).toBe(true);
   });
 
-  test('meteor trail effect spawns without errors', async () => {
+  test('meteor trail effect uses the original spark01 particle sheet', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       df9.spawnMeteorTrail(50, 50);
-      return df9.getEffectCount();
+      return { count: df9.getEffectCount(), source: df9.getSourceEffectInfo().effectTexture };
     });
-    expect(result).toBeGreaterThanOrEqual(1);
+    expect(result.count).toBeGreaterThanOrEqual(1);
+    expect(result.source).toBe('spark01');
   });
 
   test('construction sparks effect spawns without errors', async () => {
@@ -6147,22 +6148,29 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result).toEqual({ done: true });
   });
 
-  test('explosion system: spawn explosion effect', async () => {
-    const result = await page.evaluate(() => {
+  test('explosion system plays the original 32-frame explode01 animation', async () => {
+    const initial = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       df9.spawnExplosion(128, 128, 2);
-      return { spawned: true };
+      return df9.getSourceEffectInfo();
     });
-    expect(result.spawned).toBe(true);
+    expect(initial.explosionCount).toBe(1);
+    expect(initial.explosionSource).toBe('explode01_');
+    expect(initial.explosionScale).toBeGreaterThanOrEqual(1.65);
+    expect(initial.explosionScale).toBeLessThanOrEqual(1.95);
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__df9.getSourceEffectInfo().explosionFrame,
+    )).toBeGreaterThan(0);
   });
 
-  test('explosion system: spawn sparks effect', async () => {
+  test('explosion sparks use the original spark01 particle sheet', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       df9.spawnSparksEffect(128, 128, 20);
-      return { spawned: true };
+      return df9.getSourceEffectInfo();
     });
-    expect(result.spawned).toBe(true);
+    expect(result.sparkSource).toBe('spark01');
+    expect(result.fireTexture).toBe('flame01');
   });
 
   test('localization: new SETMENU linecodes return text', async () => {

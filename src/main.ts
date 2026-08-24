@@ -2925,6 +2925,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     showDialogue: (charId: number, text: string) => dialogueSystem.showBubble(charId, text),
     spawnExplosion: (x: number, y: number, intensity?: number) => explosionSystem.spawnExplosion(x, y, intensity ?? 1),
     spawnSparksEffect: (x: number, y: number, count?: number) => explosionSystem.spawnSparks(x, y, count ?? 10),
+    getSourceEffectInfo: () => ({
+      fireTexture: fireParticles?.getTextureSource() ?? null,
+      effectTexture: effectParticles.getTextureSource(),
+      ...explosionSystem.getDebugInfo(),
+    }),
     };
   }
 
