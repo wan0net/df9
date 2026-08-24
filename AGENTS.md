@@ -37,6 +37,7 @@ The original uses `xLeft = -(y % 2)` for the staggered diamond grid. Our renderi
 ## Commands
 ```bash
 npm run dev      # Start Vite dev server (http://localhost:5173)
+npm run dev:e2e -- --port 5180  # In-app browser/E2E server on the exact localhost origin
 npm run build    # TypeScript check + production build
 npx tsc --noEmit # Type-check only
 npm run test:e2e # Run Playwright E2E tests (headless Chromium)

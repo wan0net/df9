@@ -35,7 +35,10 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `VITE_E2E=true npm run dev -- --mode e2e --port ${testPort}`,
+    // Keep the server hostname identical to baseURL. In-app browser tab claiming
+    // is origin-sensitive; binding Vite to 127.0.0.1 while using a localhost tab
+    // previously produced a URL-policy rejection even though Vite was running.
+    command: `npm run dev:e2e -- --port ${testPort}`,
     port: testPort,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
