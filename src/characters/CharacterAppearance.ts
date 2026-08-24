@@ -46,6 +46,11 @@ export interface ModelAppearance {
   hair?: HairAppearance;
 }
 
+export interface FaceLayerTextures {
+  top?: string;
+  bottom?: string;
+}
+
 interface AccessoryDef {
   rig: 'base' | 'alien';
   subset: number;
@@ -318,6 +323,23 @@ function alienHairAppearance(id: number): HairAppearance | undefined {
   return undefined;
 }
 
+function getFaceLayerTextures(stats: AppearanceStats): FaceLayerTextures {
+  const layers: FaceLayerTextures = {};
+  if (stats.nFaceTopVariation >= 1 && stats.nFaceTopVariation <= 4) {
+    layers.top = `Chicken_Head01_top_0${stats.nFaceTopVariation}`;
+  }
+  const bottom = stats.nFaceBottomVariation;
+  if (bottom >= 1 && bottom <= 4) {
+    layers.bottom = `Chicken_Head01_bottom_0${bottom}`;
+  } else if (bottom >= 5 && bottom <= 24) {
+    const offset = bottom - 5;
+    layers.bottom = `Human_Head_Male01_bottom_0${Math.floor(offset / 4) + 1}_Color_0${(offset % 4) + 1}`;
+  } else if (bottom >= 25 && bottom <= 29) {
+    layers.bottom = `Human_Head_Male01_bottom_0${bottom - 24}_Color_05`;
+  }
+  return layers;
+}
+
 export function getModelAppearance(stats: AppearanceStats): ModelAppearance {
   const body = stats.nBodyVariation;
   const tone = bodyTone(body);
@@ -475,10 +497,15 @@ export function getPortraitLayers(stats: AppearanceStats): string[] {
     .map(layer => `${layer}.png`);
 }
 
-export function getVisibleSubsets(stats: AppearanceStats, job: number): { indices: Set<number>; textures: Map<number, string> } {
+export function getVisibleSubsets(stats: AppearanceStats, job: number): {
+  indices: Set<number>;
+  textures: Map<number, string>;
+  faceLayers: Map<number, FaceLayerTextures>;
+} {
   const appearance = getModelAppearance(stats);
   const indices = new Set<number>();
   const textures = new Map<number, string>();
+  const faceLayers = new Map<number, FaceLayerTextures>();
   const add = (subset: number | undefined, texture?: string) => {
     if (subset === undefined) return;
     indices.add(subset);
@@ -486,6 +513,10 @@ export function getVisibleSubsets(stats: AppearanceStats, job: number): { indice
   };
   add(appearance.bodySubset, appearance.bodyTexture);
   add(appearance.headSubset, appearance.headTexture);
+  if (appearance.headSubset !== undefined) {
+    const layers = getFaceLayerTextures(stats);
+    if (layers.top || layers.bottom) faceLayers.set(appearance.headSubset, layers);
+  }
   add(appearance.hair?.subset, appearance.hair?.texture);
 
   if (appearance.rig === 'base') {
@@ -521,5 +552,5 @@ export function getVisibleSubsets(stats: AppearanceStats, job: number): { indice
   };
   addAccessory(stats.nBottomAccessoryVariation, BOTTOM_ACCESSORIES);
   addAccessory(stats.nTopAccessoryVariation, TOP_ACCESSORIES);
-  return { indices, textures };
+  return { indices, textures, faceLayers };
 }

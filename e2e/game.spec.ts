@@ -5592,6 +5592,85 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.builder.map(item => item.subset)).toEqual([7, 12, 55, 68, 83]);
   });
 
+  test('character head material composites Lua beard, comb, and beak layers', async () => {
+    const shaderErrors: string[] = [];
+    const captureShaderError = (message: any) => {
+      const text = message.text();
+      if (message.type() === 'error' && /shader error|validate_status|program not valid/i.test(text)) {
+        shaderErrors.push(text);
+      }
+    };
+    page.on('console', captureShaderError);
+    try {
+      const ids = await page.evaluate(() => {
+        const d = (window as any).__df9;
+        const renderer = d._characterRenderer as any;
+        const human = d._charMgr.spawnCharacterAt(224, 224);
+        Object.assign(human.tStats, {
+          nRace: 1,
+          nBodyVariation: 1, nHeadVariation: 1,
+          nFaceTopVariation: 0, nFaceBottomVariation: 15, nHairVariation: 0,
+          nBottomAccessoryVariation: 1_000_001, nTopAccessoryVariation: 1_000_001,
+          sPortrait: 'Human_Male_Brown_01',
+        });
+        human.setJob(1);
+        human.bSpacewalking = false;
+        renderer.destroyCharacter(human.id);
+        renderer.createCharacter(human);
+
+        const chicken = d._charMgr.spawnCharacterAt(226, 226);
+        Object.assign(chicken.tStats, {
+          nRace: 6,
+          nBodyVariation: 28, nHeadVariation: 28,
+          nFaceTopVariation: 1, nFaceBottomVariation: 1, nHairVariation: 0,
+          nBottomAccessoryVariation: 1_000_001, nTopAccessoryVariation: 1_000_001,
+          sPortrait: 'Chicken_Male_White_01',
+        });
+        chicken.setJob(1);
+        chicken.bSpacewalking = false;
+        renderer.destroyCharacter(chicken.id);
+        renderer.createCharacter(chicken);
+        return { human: human.id, chicken: chicken.id };
+      });
+
+      await expect.poll(async () => page.evaluate(({ human, chicken }) => {
+        const renderer = (window as any).__df9._characterRenderer as any;
+        return renderer.handles.get(human)?.is3D && renderer.handles.get(chicken)?.is3D;
+      }, ids), { timeout: 15_000 }).toBe(true);
+      await page.waitForTimeout(500);
+
+      const result = await page.evaluate(({ human, chicken }) => {
+        const renderer = (window as any).__df9._characterRenderer as any;
+        const inspectHead = (id: number, subset: number) => {
+          const handle = renderer.handles.get(id);
+          let result: any = null;
+          handle.object.traverse((child: any) => {
+            if (child.userData?.sourceSubsetIndex === subset && child.visible) {
+              result = {
+                layers: child.material?.userData?.faceLayerTextures ?? null,
+                programKey: child.material?.customProgramCacheKey?.() ?? '',
+              };
+            }
+          });
+          return result;
+        };
+        return { human: inspectHead(human, 7), chicken: inspectHead(chicken, 5) };
+      }, ids);
+
+      expect(result.human).toEqual({
+        layers: { bottom: 'Human_Head_Male01_bottom_03_Color_03' },
+        programKey: 'df9-face--bottom',
+      });
+      expect(result.chicken).toEqual({
+        layers: { top: 'Chicken_Head01_top_01', bottom: 'Chicken_Head01_bottom_01' },
+        programKey: 'df9-face-top-bottom',
+      });
+      expect(shaderErrors).toEqual([]);
+    } finally {
+      page.off('console', captureShaderError);
+    }
+  });
+
   test('object inspector uses the original portrait, condition strip, and folder geometry', async () => {
     await page.evaluate(() => {
       const d = (window as any).__df9;

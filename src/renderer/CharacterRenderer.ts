@@ -11,7 +11,11 @@ import {
   RACE_MONSTER, RACE_KILLBOT,
   RACE_TYPE, RIG_ALIEN,
 } from '../characters/CharacterConstants';
-import { ensureCharacterAppearance, getVisibleSubsets } from '../characters/CharacterAppearance';
+import {
+  ensureCharacterAppearance,
+  getVisibleSubsets,
+  type FaceLayerTextures,
+} from '../characters/CharacterAppearance';
 
 /**
  * Renders characters in the Three.js scene.
@@ -300,6 +304,48 @@ function loadCharTexture(filename: string): THREE.Texture {
 }
 
 /**
+ * Reproduce the source character material's g_samTop/g_samBottom face layers.
+ * The extracted layer sheets are transparent RGBA overlays, so alpha blending
+ * them after Three's normal base-map sample preserves the original atlas UVs.
+ */
+function applyFaceLayers(mat: THREE.MeshStandardMaterial, layers: FaceLayerTextures) {
+  const top = layers.top ? loadCharTexture(`${layers.top}.png`) : undefined;
+  const bottom = layers.bottom ? loadCharTexture(`${layers.bottom}.png`) : undefined;
+  if (!top && !bottom) return;
+
+  if (top) trackTextureUser(top, mat);
+  if (bottom) trackTextureUser(bottom, mat);
+  mat.userData.faceLayerTextures = { ...layers };
+  mat.customProgramCacheKey = () => `df9-face-${top ? 'top' : ''}-${bottom ? 'bottom' : ''}`;
+  mat.onBeforeCompile = (shader) => {
+    const declarations: string[] = [];
+    const composites: string[] = [];
+    if (top) {
+      shader.uniforms.df9FaceTop = { value: top };
+      declarations.push('uniform sampler2D df9FaceTop;');
+      composites.push(
+        'vec4 df9FaceTopSample = texture2D( df9FaceTop, vMapUv );',
+        'diffuseColor.rgb = mix( diffuseColor.rgb, df9FaceTopSample.rgb, df9FaceTopSample.a );',
+      );
+    }
+    if (bottom) {
+      shader.uniforms.df9FaceBottom = { value: bottom };
+      declarations.push('uniform sampler2D df9FaceBottom;');
+      composites.push(
+        'vec4 df9FaceBottomSample = texture2D( df9FaceBottom, vMapUv );',
+        'diffuseColor.rgb = mix( diffuseColor.rgb, df9FaceBottomSample.rgb, df9FaceBottomSample.a );',
+      );
+    }
+    shader.fragmentShader = `${declarations.join('\n')}\n${shader.fragmentShader}`;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>\n${composites.join('\n')}`,
+    );
+  };
+  mat.needsUpdate = true;
+}
+
+/**
  * Apply textures and colors to a cloned character model.
  * Matches material names to texture files using multiple candidate patterns.
  */
@@ -308,6 +354,7 @@ function applyModelTextures(
   charId: number,
   textureOverrides?: Record<string, string>,
   subsetTextureOverrides?: Map<number, string>,
+  subsetFaceLayers?: Map<number, FaceLayerTextures>,
 ) {
   // R-2: Use all 5 skin tone variants (Lua cycles through _base_01 to _base_05)
   const toneIdx = (charId % 5) + 1;
@@ -356,6 +403,8 @@ function applyModelTextures(
         mat.needsUpdate = true;
         trackTextureUser(tex, mat);
         mat.userData.textureName = baseName;
+        const faceLayers = subsetFaceLayers?.get(currentSubset);
+        if (faceLayers) applyFaceLayers(mat, faceLayers);
         applied = true;
         break;
       }
@@ -484,7 +533,7 @@ function usesAlienRig(char: Character): boolean {
  * Citizen GLBs preserve the source .brig subset order. Select by that order,
  * exactly as Lua's setScl(0,0,0)/setScl(1,1,1) subset replacement does.
  */
-function applyAppearanceSubsets(clone: THREE.Group, char: Character): Map<number, string> {
+function applyAppearanceSubsets(clone: THREE.Group, char: Character): ReturnType<typeof getVisibleSubsets> {
   const stats = ensureCharacterAppearance(char.tStats);
   const selection = getVisibleSubsets(stats, char.getJob());
   let subsetIndex = 0;
@@ -494,7 +543,7 @@ function applyAppearanceSubsets(clone: THREE.Group, char: Character): Map<number
     child.visible = selection.indices.has(subsetIndex);
     subsetIndex++;
   });
-  return selection.textures;
+  return selection;
 }
 
 function loadCitizenModel(): Promise<void> {
@@ -935,8 +984,8 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180);
       clone.rotation.y = 45 * (Math.PI / 180);
 
-      const subsetTextures = applyAppearanceSubsets(clone, char);
-      applyModelTextures(clone, char.id, undefined, subsetTextures);
+      const selection = applyAppearanceSubsets(clone, char);
+      applyModelTextures(clone, char.id, undefined, selection.textures, selection.faceLayers);
       ensureDoubleSided(clone);
       clone.traverse((child) => {
         if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
@@ -993,8 +1042,8 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
-      const subsetTextures = applyAppearanceSubsets(clone, char);
-      applyModelTextures(clone, char.id, undefined, subsetTextures);
+      const selection = applyAppearanceSubsets(clone, char);
+      applyModelTextures(clone, char.id, undefined, selection.textures, selection.faceLayers);
       ensureDoubleSided(clone);
 
       // Reset skeleton bind pose after clone so meshes render correctly

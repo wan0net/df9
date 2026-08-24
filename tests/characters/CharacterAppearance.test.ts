@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   generateCharacterAppearance,
@@ -9,7 +9,7 @@ import {
   isAppearanceValidForRace,
 } from '../../src/characters/CharacterAppearance';
 import {
-  BUILDER, RAIDER, RACE_HUMAN, RACE_SHAMON, RACE_TOBIAN, SCIENTIST,
+  BUILDER, RAIDER, RACE_CHICKEN, RACE_HUMAN, RACE_SHAMON, RACE_TOBIAN, SCIENTIST,
 } from '../../src/characters/CharacterConstants';
 
 describe('Lua character appearance parity', () => {
@@ -78,6 +78,26 @@ describe('Lua character appearance parity', () => {
     const visible = getVisibleSubsets({ nRace: RACE_HUMAN, ...appearance }, 1);
     expect(visible.indices.has(49)).toBe(false);
     expect(visible.indices.has(31)).toBe(false);
+  });
+
+  it('maps Lua face variations to the restored RGBA head layers', () => {
+    const human = generateCharacterAppearance(RACE_HUMAN, () => 0);
+    const humanLayers = getVisibleSubsets({ nRace: RACE_HUMAN, ...human }, 1).faceLayers.get(7);
+    expect(human.nFaceBottomVariation).toBe(8);
+    expect(humanLayers).toEqual({ bottom: 'Human_Head_Male01_bottom_01_Color_04' });
+
+    const chicken = generateCharacterAppearance(RACE_CHICKEN, () => 0);
+    const chickenLayers = getVisibleSubsets({ nRace: RACE_CHICKEN, ...chicken }, 1).faceLayers.get(5);
+    expect(chickenLayers).toEqual({
+      top: 'Chicken_Head01_top_01',
+      bottom: 'Chicken_Head01_bottom_01',
+    });
+
+    // PNG IHDR color type 6 is RGBA. The prior public copies were type 0 grayscale.
+    for (const texture of [humanLayers?.bottom, chickenLayers?.top, chickenLayers?.bottom]) {
+      const png = readFileSync(resolve('public/assets/characters', `${texture}.png`));
+      expect(png[25]).toBe(6);
+    }
   });
 
   it('selects the original Tobian primitive and texture variants', () => {
