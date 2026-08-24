@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { ThreeRenderer } from './renderer/ThreeRenderer';
+import type { SourceColorLUT } from './renderer/PostFX';
 import { CameraController3D } from './renderer/CameraController3D';
 import { TileRenderer3D } from './renderer/TileRenderer3D';
 import { CharacterRenderer } from './renderer/CharacterRenderer';
@@ -2888,6 +2889,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // ── P4: PostFX ──────────────────────────────────────────
     isPostFXEnabled: () => threeRenderer.postfx?.enabled ?? false,
     setPostFXEnabled: (v: boolean) => { if (threeRenderer.postfx) threeRenderer.postfx.enabled = v; },
+    getPostFXInfo: () => threeRenderer.postfx?.getDebugInfo() ?? null,
+    setPostColorLUT: (name: SourceColorLUT) => threeRenderer.postfx?.setColorLUT(name),
     // ── P4: Save slots ──────────────────────────────────────
     saveToSlot: (slotName: string) => {
       const ok = saveLoadSystem.saveToStorage(slotName);

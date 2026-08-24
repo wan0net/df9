@@ -17,7 +17,7 @@ This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlie
 
 ## Outcome
 
-This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, particle presentation, and the timing paths adjacent to those systems. It fixed fifteen graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, and object damage tints being erased by room lighting.
+This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed sixteen graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, absent source colour grading, and object damage tints being erased by room lighting.
 
 ## Graphics and UI findings
 
@@ -38,6 +38,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-13 | **Fixed + tested** | `Character.lua:_setHead`, `CharacterConstants.lua` `FACE_TOP_TYPE`/`FACE_BOTTOM_TYPE`, and the extracted RGBA head-layer sheets | Replaced the unusable grayscale public copies with the source RGBA beard, chicken-comb, and chicken-beak sheets. The Three.js head material now composites Lua's `g_samTop` and `g_samBottom` textures over the selected base head atlas while retaining normal skinning, lighting, depth, and tint behavior. | `character head material composites Lua beard, comb, and beak layers`; unit variation-to-layer and RGBA asset validation |
 | GFX-14 | **Fixed + tested** | Bundled prop `.brig` materials and the extracted `Props/**/Textures` sheets | Audited every public prop GLB material and restored all available original sheets, including the body bag, food items/tray/crate, Weldammer/fire-extinguisher tools, plasma cannon, weights, cigarette, present, handheld game, probe, wand, and primitives. Prop sheets now render as opaque depth-writing surfaces, eliminating rear-face bleed and the prior pale/transparent appearance. | `prop renderer applies every available extracted source texture as an opaque surface`; `held prop renderer textures source models and replaces changed equipment` |
 | GFX-15 | **Fixed + tested** | `World.lua:playExplosion`, `AnimatedSprite.lua`, and extracted `flame01`, `spark01`, and 32-frame `explode01_` assets | Replaced generated radial-gradient particle bitmaps and the square-point explosion burst with the original visible effect sheets. Explosions now play the 32 source frames at the source 30 FPS, random 1.65–1.95 scale, horizontal flip, and 40-pixel vertical offset. | `meteor trail effect uses the original spark01 particle sheet`; `explosion system plays the original 32-frame explode01 animation`; `explosion sparks use the original spark01 particle sheet` |
+| GFX-16 | **Fixed + tested** | `Data/Scripts/PostFX/Post.lua:ScenePlusUI`, `Post.SetPostColorLUT`, and extracted `Neutral2D_256`, `WarmSpace2D_256`, and `ColdSpace2D_256` sheets | Replaced the claim that colour grading had no reusable source asset with a source-LUT shader pass. The original neutral sheet is now the active default before bloom/output, and the two other publicly extracted presets can be selected through the source-compatible post-processing path. Missing magenta/green-punch sheets are not fabricated. | `postfx system uses the original neutral LUT before bloom and can switch source presets` |
 
 ## Gameplay and timing findings found during the same review
 
@@ -58,7 +59,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | Events, goals, research, maladies | **Previously verified**; the 24-disease roster, active TraderEvent, and active HostilesFedToMonster goal remain **approved deviations**. |
 | Building, mining, object placement, zoning | **Previously verified**; all available source prop sheets, held tools, and object-state tint were rechecked here. |
 | Start/new-base/HUD/inspector UI | **Reviewed in this pass**; the two visually dominant pre-game screens received source-coordinate fixes. |
-| Character/environment rendering | **Reviewed in this pass**; original rig subsets, appearance, accessory, and face-layer textures, layered portraits, clips, shadow, selection, bubbles, props, visible effect sheets/animation, and light/tint composition are now used where assets exist. |
+| Character/environment rendering | **Reviewed in this pass**; original rig subsets, appearance, accessory, and face-layer textures, layered portraits, clips, shadow, selection, bubbles, props, visible effect sheets/animation, source colour grading, and light/tint composition are now used where assets exist. |
 | Audio, save/load, input | **Reviewed/previously verified**; character appearance persistence was added and exercised through load/remount, while the remaining paths retain their earlier coverage. |
 
 ## Known residual fidelity boundaries
@@ -67,7 +68,7 @@ These are explicit limits, not hidden “done” items:
 
 1. **Datapad source texture.** The Datapad GLB requests `Datapad01`, but no matching texture exists anywhere in the bundled extraction. Every other public prop material with an available original sheet is now wired and tested; the Datapad retains its model material rather than using an invented replacement.
 2. **Particle emitter motion.** The original visible `flame01`, `spark01`, and `explode01_` assets are now used, and explosions reproduce the Lua animated-sprite parameters. Fire, meteor, construction, and spark emitter motion remains a Three.js procedural equivalent because no original `.pex` definitions exist in the bundled source or extraction.
-3. **Post-processing.** Bloom is present, but the proprietary source colour-LUT/material pipeline has no directly reusable public web asset and remains an approximation.
+3. **Remaining post-processing composition.** The default source neutral LUT and the extracted warm/cold presets are now applied by a tested WebGL pass. The original `SceneLight.material`, separate light/background buffers, amber outline buffer, and missing magenta/green-punch sheets are not in the public extraction, so that wider multi-buffer composition remains a Three.js approximation.
 4. **Module layout ingestion.** Several `.sav` docking/module arrangements are represented by TypeScript generation logic rather than a generic reader for every Lua-era module save.
 5. **UILayout runtime.** Screens are implemented directly in TypeScript/DOM. There is no generic Lua `UILayout` parser, so parity depends on explicit per-screen transcription and regression tests.
 
@@ -120,4 +121,16 @@ The production build reports the existing large-bundle advisory for the 1.6 MB m
 | Focused source-effect scenarios | **PASS — 3/3** |
 | Complete Playwright E2E suite | **PASS — 282/282 in 9.3 minutes** |
 | Extracted effect-asset sweep | **PASS — `flame01`, `spark01`, and all 32 `explode01_` RGBA frames packaged** |
+| Diff whitespace validation | **PASS** |
+
+### Source-LUT continuation — 2026-08-24
+
+| Gate | Result |
+|---|---|
+| TypeScript compilation | **PASS** |
+| Production build (`tsc` + Vite) | **PASS** |
+| Unit suite | **PASS — 95/95** |
+| Focused source-LUT WebGL scenario | **PASS — 1/1** |
+| Complete Playwright E2E suite | **PASS — 282/282 in 8.3 minutes** |
+| Extracted LUT sweep | **PASS — neutral, warm-space, and cold-space 256×256 RGBA sheets packaged exactly** |
 | Diff whitespace validation | **PASS** |

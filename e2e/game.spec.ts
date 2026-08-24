@@ -5036,18 +5036,31 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   // ── P4.3: PostFX / Bloom ──────────────────────────────────
-  test('postfx system initializes and can be toggled', async () => {
+  test('postfx system uses the original neutral LUT before bloom and can switch source presets', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const initial = df9.isPostFXEnabled();
+      const neutral = df9.getPostFXInfo();
+      df9.setPostColorLUT('warmspace');
+      const warm = df9.getPostFXInfo();
+      df9.setPostColorLUT('coldspace');
+      const cold = df9.getPostFXInfo();
+      df9.setPostColorLUT('neutral');
       df9.setPostFXEnabled(false);
       const afterDisable = df9.isPostFXEnabled();
       df9.setPostFXEnabled(true);
       const afterEnable = df9.isPostFXEnabled();
-      return { initial, afterDisable, afterEnable };
+      return { initial, neutral, warm, cold, afterDisable, afterEnable };
     });
-    // PostFX should initialize as enabled (may be false if WebGL2 unavailable)
-    expect(typeof result.initial).toBe('boolean');
+    expect(result.initial).toBe(true);
+    expect(result.neutral).toMatchObject({
+      colorLUT: 'neutral',
+      sourceAsset: 'Neutral2D_256',
+      availableLUTs: ['neutral', 'warmspace', 'coldspace'],
+      appliedBeforeBloom: true,
+    });
+    expect(result.warm).toMatchObject({ colorLUT: 'warmspace', sourceAsset: 'WarmSpace2D_256' });
+    expect(result.cold).toMatchObject({ colorLUT: 'coldspace', sourceAsset: 'ColdSpace2D_256' });
     expect(result.afterDisable).toBe(false);
     expect(result.afterEnable).toBe(true);
   });
