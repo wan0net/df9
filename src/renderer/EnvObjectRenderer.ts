@@ -37,6 +37,10 @@ interface RenderedObject {
 export class EnvObjectRenderer {
   private scene: THREE.Scene;
   private objects: Map<string, RenderedObject> = new Map();
+  private hoveredObjectId: string | null = null;
+  private coverageMeshes: THREE.Mesh[] = [];
+  private coverageMaterial: THREE.MeshBasicMaterial | null = null;
+  private coverageSignature = '';
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -210,6 +214,79 @@ export class EnvObjectRenderer {
     this.applyComposedTint(obj);
   }
 
+  /**
+   * Lua EnvObject:hover pulses the object itself in amber. HappyBot additionally
+   * asks Cursor.drawTiles to show its cached circular range, green while
+   * functioning and red while deactivated/broken.
+   */
+  setHoveredObject(
+    id: string | null,
+    hoverTime: number,
+    coverageTiles: { x: number; y: number }[] = [],
+    coverageIsValid = true,
+  ): void {
+    if (this.hoveredObjectId && this.hoveredObjectId !== id) {
+      const previous = this.objects.get(this.hoveredObjectId);
+      if (previous) this.applyComposedTint(previous);
+    }
+    this.hoveredObjectId = id;
+
+    if (!id) {
+      this.clearCoverageMeshes();
+      return;
+    }
+
+    const obj = this.objects.get(id);
+    if (obj) {
+      const alpha = Math.abs(Math.sin(hoverTime * 4)) * 0.5 + 0.5;
+      (obj.mesh.material as THREE.MeshBasicMaterial).color.setRGB(
+        (223 / 255) * alpha,
+        (162 / 255) * alpha,
+        0,
+      );
+    }
+
+    const signature = `${id}:${coverageIsValid}:${coverageTiles.map(t => `${t.x},${t.y}`).join(';')}`;
+    if (signature === this.coverageSignature) return;
+    this.clearCoverageMeshes();
+    this.coverageSignature = signature;
+    if (coverageTiles.length === 0) return;
+
+    const tex = getTexture('cursor_grid_bright');
+    if (!tex) return;
+    this.coverageMaterial = new THREE.MeshBasicMaterial({
+      map: tex,
+      color: coverageIsValid ? 0x44cc44 : 0xcc2222,
+      transparent: true,
+      opacity: 0.55,
+      alphaTest: 0.01,
+      depthWrite: false,
+    });
+    for (const tile of coverageTiles) {
+      const pos = tileToScreen(tile.x, tile.y);
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(TILE_W, TILE_H),
+        this.coverageMaterial,
+      );
+      mesh.position.set(
+        pos.x + TILE_HALF_W,
+        -(pos.y + TILE_HALF_H),
+        24000 + pos.y + TILE_HALF_H,
+      );
+      this.scene.add(mesh);
+      this.coverageMeshes.push(mesh);
+    }
+  }
+
+  /** Test/debug view of Lua hover presentation. */
+  getHoverDebugInfo(): { hoveredObjectId: string | null; coverageCount: number; coverageColor: number | null } {
+    return {
+      hoveredObjectId: this.hoveredObjectId,
+      coverageCount: this.coverageMeshes.length,
+      coverageColor: this.coverageMaterial?.color.getHex() ?? null,
+    };
+  }
+
   private applyComposedTint(obj: RenderedObject) {
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
     // Lua boosts object lighting by +0.3, then the state tint still applies.
@@ -247,6 +324,10 @@ export class EnvObjectRenderer {
   removeObject(id: string) {
     const obj = this.objects.get(id);
     if (obj) {
+      if (this.hoveredObjectId === id) {
+        this.hoveredObjectId = null;
+        this.clearCoverageMeshes();
+      }
       this.scene.remove(obj.mesh);
       obj.mesh.geometry.dispose();
       (obj.mesh.material as THREE.Material).dispose();
@@ -261,6 +342,17 @@ export class EnvObjectRenderer {
   }
 
   // ── Private helpers ──────────────────────────────────────────
+
+  private clearCoverageMeshes(): void {
+    for (const mesh of this.coverageMeshes) {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    this.coverageMeshes = [];
+    this.coverageMaterial?.dispose();
+    this.coverageMaterial = null;
+    this.coverageSignature = '';
+  }
 
   /** Create the "no power" icon mesh using the ui_no_power texture (Lua UIMisc/no_power sprite). */
   private createPowerIcon(): THREE.Mesh | null {

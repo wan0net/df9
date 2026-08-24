@@ -1654,6 +1654,22 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       renderO2Overlay();
     }
 
+    // Lua EnvObject:hover pulses the prop amber. HappyBot's override also
+    // paints its Euclidean nRange coverage on the cursor grid.
+    {
+      const hovered = buildCursor.hoveredTile;
+      const hoveredObj = hovered ? EnvObjectManager.getObjectAt(hovered.x, hovered.y) : null;
+      const coverageTiles = hoveredObj?.sName === 'HappyBot'
+        ? hoveredObj.getRangeTiles(grid.width, grid.height)
+        : [];
+      envObjRenderer.setHoveredObject(
+        hoveredObj ? String(hoveredObj.id) : null,
+        GameRules.elapsedTime,
+        coverageTiles,
+        hoveredObj?.isFunctioning() ?? true,
+      );
+    }
+
     // Selection highlight
     selectionHighlight.update(selectedEntity);
 

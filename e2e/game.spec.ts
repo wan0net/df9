@@ -911,6 +911,56 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect([result.HappyBotDestroyed.renderWidth, result.HappyBotDestroyed.renderHeight]).toEqual([140, 144]);
   });
 
+  test('environment hover pulses amber and HappyBot shows its Lua radius', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const bot = d._envObjectManager.createObject('HappyBot', 200, 200, false, false, true);
+      bot.bHasPower = true;
+      const id = String(bot.id);
+      const tiles = bot.getRangeTiles(d._grid.width, d._grid.height);
+
+      d._envObjRenderer.setHoveredObject(id, 0, tiles, bot.isFunctioning());
+      const validHover = d._envObjRenderer.getHoverDebugInfo();
+      const hoverSprite = d._envObjRenderer.getDebugInfo(id);
+
+      d._envObjRenderer.setHoveredObject(id, Math.PI / 8, tiles, false);
+      const invalidHover = d._envObjRenderer.getHoverDebugInfo();
+
+      d._envObjRenderer.setHoveredObject(null, 0);
+      const restoredSprite = d._envObjRenderer.getDebugInfo(id);
+      const clearedHover = d._envObjRenderer.getHoverDebugInfo();
+      d._envObjectManager.removeObject(bot);
+
+      return {
+        tiles,
+        validHover,
+        invalidHover,
+        hoverColor: hoverSprite.color,
+        restoredColor: restoredSprite.color,
+        clearedHover,
+      };
+    });
+
+    expect(result.tiles).toHaveLength(29);
+    expect(result.tiles).toContainEqual({ x: 200, y: 200 });
+    expect(result.validHover).toEqual({
+      hoveredObjectId: expect.any(String),
+      coverageCount: 29,
+      coverageColor: 0x44cc44,
+    });
+    const hoverRed = (result.hoverColor >> 16) & 0xff;
+    const hoverGreen = (result.hoverColor >> 8) & 0xff;
+    expect(hoverRed).toBeGreaterThan(hoverGreen);
+    expect(result.hoverColor & 0xff).toBe(0);
+    expect(result.invalidHover.coverageColor).toBe(0xcc2222);
+    expect(result.restoredColor).toBe(0xffffff);
+    expect(result.clearedHover).toEqual({
+      hoveredObjectId: null,
+      coverageCount: 0,
+      coverageColor: null,
+    });
+  });
+
   test('fire creates visual overlay on tiles', { annotation: { type: 'baseline', description: 'room' } }, async () => {
     // Get a floor tile in a room
     const rooms = await df9(page).rooms();

@@ -17,7 +17,7 @@ This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlie
 
 ## Outcome
 
-This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, construction ghosts, environment-object geometry, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed twenty graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, absent source colour grading/character outlines, invented research glyphs, grey/placeholder construction ghosts, stretched environment props, and object damage tints being erased by room lighting.
+This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, construction ghosts, environment-object geometry and hover states, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed twenty-one graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop/effect textures, absent source colour grading/character outlines, invented research glyphs, grey/placeholder construction ghosts, stretched environment props, missing object/HappyBot hover feedback, and object damage tints being erased by room lighting.
 
 ## Graphics and UI findings
 
@@ -43,6 +43,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-18 | **Fixed + tested** | `ResearchData.lua:sIcon`, `UI/ResearchProjectEntry.lua`, and extracted `UI/JobRoster` sprites | Removed Unicode research symbols and restored every Lua project-to-job-icon assignment. Projects without `sIcon` and available disease work use `ui_jobs_iconHelp`; completed technology/disease entries use the source `ui_jobs_icon_checkCircle`; hover tint follows the source amber/black button states. | `research panel is full-screen overlay with tabs` now verifies source-sprite-backed entries |
 | GFX-19 | **Fixed + tested** | `EnvObject.lua` pending-build opacity and the extracted environment/door sheets | Pending objects incorrectly prefixed their sprite key twice, forcing every construction ghost to a grey fallback quad. Door placeholders also won before the already-loaded source door textures. Ghosts now resolve the original object frame or Door/Heavy Door/Airlock tile texture first and apply Lua-style translucent construction opacity; generated placeholders remain only for genuinely absent hidden/debug sprites. | `placed-object ghosts use original object and door textures` covers a normal object and all three door types |
 | GFX-20 | **Fixed + tested** | `DFCommon/Graphics.lua:loadSpriteSheet`, `DFCommon/Graphics.lua:alignSprite`, `EnvObject.lua`, and the munged environment sprite metadata | Environment artwork was stretched to the logical tile footprint instead of being drawn at its source sprite-deck dimensions. This enlarged Juke by 24%, HappyBot by 39%, and distorted several higher-tier machines. Source frames now render at their exact pixel dimensions, and condition/interact swaps replace geometry as well as UVs so differently sized damaged/destroyed frames are not stretched over the healthy mesh. | `environment sprites keep Lua source dimensions across condition frames` covers Juke, HappyBot healthy/damaged/destroyed, ReactorGen3, and O2Gen3 |
+| GFX-21 | **Fixed + tested** | `EnvObject.lua:hover`/`unHover`, `HappyBot.lua:setLoc`/`hover`, and `GridUtil.CalculateIsoToSquare` | Environment objects did not receive Lua's pulsing amber cursor tint, and HappyBot omitted its entire affected-area display. Hover now applies the source amber sine pulse and restores the composed condition/room tint on exit. HappyBot converts through Lua's square grid, draws the exact 29-tile Euclidean radius for `nRange=3`, and changes the coverage from green to red when it is not functioning. | `environment hover pulses amber and HappyBot shows its Lua radius` |
 
 ## Gameplay and timing findings found during the same review
 
@@ -186,4 +187,15 @@ The production build reports the existing large-bundle advisory for the 1.6 MB m
 | Focused source-dimension scenario | **PASS — 1/1**, covering Juke, HappyBot healthy/damaged/destroyed, ReactorGen3, and O2Gen3 |
 | Complete stable Playwright E2E suite | **PASS — 283/283 in 13.4 minutes with two WebGL workers** |
 | Four-worker trial | **INCOMPLETE — browser-context teardown exceeded the harness timeout after 55 passing tests; no assertion failed, and the complete stable run above supersedes it** |
+| Diff whitespace validation | **PASS** |
+
+### Environment-hover continuation — 2026-08-25
+
+| Gate | Result |
+|---|---|
+| TypeScript compilation | **PASS** |
+| Production build (`tsc` + Vite) | **PASS** |
+| Unit suite | **PASS — 95/95** |
+| Focused EnvObject/HappyBot hover scenario | **PASS — 1/1**, including the exact 29-tile `nRange=3` radius and functioning/deactivated colours |
+| Complete stable Playwright E2E suite | **PASS — 284/284 in 12.3 minutes with two WebGL workers** |
 | Diff whitespace validation | **PASS** |

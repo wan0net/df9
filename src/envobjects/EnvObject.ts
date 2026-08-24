@@ -12,6 +12,7 @@ import type { Room } from '../rooms/Room';
 import type { Character } from '../characters/Character';
 import { researchSystem } from '../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../research/ResearchData';
+import { GRID_H, GRID_W } from '../config';
 
 // ── Constants matching EnvObject.lua ────────────────────────────────────
 export const MIN_PCT_HEALED_PER_MAINTAIN = 2;
@@ -381,6 +382,38 @@ export class EnvObject implements TaggableObject {
       ? this.tData.interactSprite
       : this.tData.spriteName;
     return base + this.getConditionSuffix();
+  }
+
+  /**
+   * Tiles inside this object's Lua square-grid radius. HappyBot uses this list
+   * for its hover coverage display (`HappyBot:setLoc` / `Cursor.drawTiles`).
+   */
+  getRangeTiles(gridWidth = GRID_W, gridHeight = GRID_H): { x: number; y: number }[] {
+    const range = this.tData.nRange;
+    if (range <= 0) return [];
+
+    const halfRow = Math.floor(this.tileY * 0.5);
+    const center = {
+      ns: this.tileX + halfRow,
+      we: gridWidth * 0.5 - Math.ceil(this.tileY * 0.5) + this.tileX,
+    };
+    const tiles: { x: number; y: number }[] = [];
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dy = -range; dy <= range; dy++) {
+        if (Math.sqrt(dx * dx + dy * dy) > range) continue;
+        const ns = center.ns + dx;
+        const we = center.we + dy;
+        // Inverse of GridUtil.CalculateIsoToSquare. Lua's square conversion
+        // includes half the world width in the WE axis.
+        const y = ns - we + gridWidth * 0.5;
+        const x = ns - Math.floor(y * 0.5);
+        if (Number.isInteger(x) && Number.isInteger(y)
+          && x >= 0 && y >= 0 && x < gridWidth && y < gridHeight) {
+          tiles.push({ x, y });
+        }
+      }
+    }
+    return tiles;
   }
 
   // ── Save data ────────────────────────────────────────────────
