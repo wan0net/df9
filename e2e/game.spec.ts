@@ -3582,6 +3582,64 @@ test.describe('Spacebase DF-9 E2E', () => {
     ), { timeout: 10_000 }).toEqual({ modelName: 'Builder', textures: ['Builder01'] });
   });
 
+  test('prop renderer applies every available extracted source texture as an opaque surface', async () => {
+    const models: Record<string, string> = {
+      Barbell01: 'barbell01',
+      BodyBag: 'BodyBag01',
+      Carrot: 'fooditems',
+      Cigarette: 'Cigarette',
+      Citizen_Probe: 'Probe01',
+      Cube: 'Gray',
+      FireExtinguisher: 'Tools',
+      FoodBar: 'fooditems',
+      FoodCrate: 'FoodCrate',
+      FoodTray: 'foodtray',
+      PlasmaCannon: 'BFG',
+      Planet: 'white',
+      Present: 'present',
+      Spaceboy64: 'Spaceboy01',
+      Wand: 'Doctor01',
+      Weldammer: 'Tools',
+    };
+    await page.evaluate((entries) => {
+      const props = (window as any).__df9._propRenderer;
+      Object.keys(entries).forEach((model, index) => {
+        props.addProp(`source-prop-${model}`, model, 100 + index, 100, 20);
+      });
+    }, models);
+
+    await expect.poll(async () => page.evaluate((entries) => {
+      const props = (window as any).__df9._propRenderer;
+      return Object.keys(entries).every(model => props.getDebugInfo(`source-prop-${model}`) !== null);
+    }, models), { timeout: 15_000 }).toBe(true);
+
+    const result = await page.evaluate((entries) => {
+      const props = (window as any).__df9._propRenderer as any;
+      return Object.entries(entries).map(([model, expectedTexture]) => {
+        const info = props.getDebugInfo(`source-prop-${model}`);
+        const surfaces: Array<{ transparent: boolean; alphaTest: number; depthWrite: boolean }> = [];
+        props.props.get(`source-prop-${model}`).object.traverse((child: any) => {
+          if (child.isMesh && child.material?.map) {
+            surfaces.push({
+              transparent: child.material.transparent,
+              alphaTest: child.material.alphaTest,
+              depthWrite: child.material.depthWrite,
+            });
+          }
+        });
+        return { model, expectedTexture, info, surfaces };
+      });
+    }, models);
+
+    for (const item of result) {
+      expect(item.info).toEqual({ modelName: item.model, textures: [item.expectedTexture] });
+      expect(item.surfaces.length).toBeGreaterThan(0);
+      expect(item.surfaces.every(surface =>
+        !surface.transparent && surface.alphaTest === 0 && surface.depthWrite,
+      )).toBe(true);
+    }
+  });
+
   test('room lighting preserves object damage and vaporize tints', async () => {
     const info = await page.evaluate(() => {
       const renderer = (window as any).__df9._envObjRenderer;

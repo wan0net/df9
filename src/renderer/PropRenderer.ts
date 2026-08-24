@@ -21,6 +21,20 @@ const PROP_TEXTURES: Record<string, string> = {
   Builder01: 'assets/characters/Builder01.png',
   AsteroidChunk01: 'assets/characters/AsteroidChunk01.png',
   Mug01: 'assets/characters/Mug01.png',
+  Probe01: 'assets/characters/Probe01.png',
+  Gray: 'assets/characters/Gray.png',
+  Doctor01: 'assets/characters/Doctor01.png',
+  barbell01: 'assets/props/barbell01.png',
+  BodyBag01: 'assets/props/BodyBag01.png',
+  fooditems: 'assets/props/fooditems.png',
+  Cigarette: 'assets/props/Cigarette.png',
+  Tools: 'assets/props/Tools.png',
+  FoodCrate: 'assets/props/FoodCrate.png',
+  foodtray: 'assets/props/foodtray.png',
+  BFG: 'assets/props/BFG.png',
+  present: 'assets/props/present.png',
+  Spaceboy01: 'assets/props/Spaceboy01.png',
+  white: 'assets/props/white.png',
 };
 
 /** Cached loaded prop models. */
@@ -60,8 +74,11 @@ function loadModel(name: string): Promise<void> {
           const texture = getPropTexture(mat.name);
           if (texture) {
             mat.map = texture;
-            mat.transparent = true;
-            mat.alphaTest = 0.01;
+            // The extracted prop sheets are opaque. Preserve depth writes so
+            // rear faces cannot bleed through the held or ground model.
+            mat.transparent = false;
+            mat.alphaTest = 0;
+            mat.depthWrite = true;
             mat.userData.textureName = mat.name;
             mat.needsUpdate = true;
           }

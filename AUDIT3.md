@@ -17,7 +17,7 @@ This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlie
 
 ## Outcome
 
-This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, and the timing paths adjacent to those systems. It fixed thirteen graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job textures, and object damage tints being erased by room lighting.
+This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, and the timing paths adjacent to those systems. It fixed fourteen graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing portrait/accessory/face layers, missing race/job/prop textures, and object damage tints being erased by room lighting.
 
 ## Graphics and UI findings
 
@@ -36,6 +36,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-11 | **Fixed + tested** | `Character.lua:_setRig`, `Character.lua:_setPortrait`, `CharacterConstants.lua` body/head/hair tables, original `.brig` subset order, and `UI/Portraits.lua` | Replaced ID-derived sex/tone/hair guesses and first-material mesh selection with a Lua-compatible saved appearance tuple. The renderer now selects the original ordered body, head, hair, helmet, and outfit subsets (including fat/female variants), applies their matching source textures, persists them through save/load, and builds the inspector portrait from the original base/facial-hair/hair layer stack. The complete generated-character portrait atlas is now packaged. | `character appearance mounts the saved Lua body tuple and layered portrait`; `character renderer uses extracted race textures and job outfits`; `save and load restores game state`; unit portrait-atlas sweep |
 | GFX-12 | **Fixed + tested** | `Character.lua:_getValidAccessories`, `Character.lua:_setAccessories`, `Character.lua:_setJobOutfit`, `CharacterConstants.lua` accessory pools/conflicts, and original `.brig` subset order | Restored the source's independent 60/101 top and bottom accessory selection, exact race/body pools, source subset and texture mappings, and per-job conflict visibility. Removed the invented unconditional tourist shirt/shorts from off-duty and non-suited characters, and corrected the remaining three female hair primitive indices. | `character appearance mounts Lua accessory subsets and respects job conflicts`; unit accessory-pool, texture, conflict, no-invented-outfit, and female-hair subset checks |
 | GFX-13 | **Fixed + tested** | `Character.lua:_setHead`, `CharacterConstants.lua` `FACE_TOP_TYPE`/`FACE_BOTTOM_TYPE`, and the extracted RGBA head-layer sheets | Replaced the unusable grayscale public copies with the source RGBA beard, chicken-comb, and chicken-beak sheets. The Three.js head material now composites Lua's `g_samTop` and `g_samBottom` textures over the selected base head atlas while retaining normal skinning, lighting, depth, and tint behavior. | `character head material composites Lua beard, comb, and beak layers`; unit variation-to-layer and RGBA asset validation |
+| GFX-14 | **Fixed + tested** | Bundled prop `.brig` materials and the extracted `Props/**/Textures` sheets | Audited every public prop GLB material and restored all available original sheets, including the body bag, food items/tray/crate, Weldammer/fire-extinguisher tools, plasma cannon, weights, cigarette, present, handheld game, probe, wand, and primitives. Prop sheets now render as opaque depth-writing surfaces, eliminating rear-face bleed and the prior pale/transparent appearance. | `prop renderer applies every available extracted source texture as an opaque surface`; `held prop renderer textures source models and replaces changed equipment` |
 
 ## Gameplay and timing findings found during the same review
 
@@ -54,7 +55,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | Character needs, survival, AI, jobs, inventory | **Previously verified**, with survival scheduling and raider conversion corrected in this pass. |
 | Combat, raids, factions | **Previously verified**, with room combat-awareness timing corrected in this pass. |
 | Events, goals, research, maladies | **Previously verified**; the 24-disease roster, active TraderEvent, and active HostilesFedToMonster goal remain **approved deviations**. |
-| Building, mining, object placement, zoning | **Previously verified**; visual tools/held props and object-state tint were rechecked here. |
+| Building, mining, object placement, zoning | **Previously verified**; all available source prop sheets, held tools, and object-state tint were rechecked here. |
 | Start/new-base/HUD/inspector UI | **Reviewed in this pass**; the two visually dominant pre-game screens received source-coordinate fixes. |
 | Character/environment rendering | **Reviewed in this pass**; original rig subsets, appearance, accessory, and face-layer textures, layered portraits, clips, shadow, selection, bubbles, props, and light/tint composition are now used where assets exist. |
 | Audio, save/load, input | **Reviewed/previously verified**; character appearance persistence was added and exercised through load/remount, while the remaining paths retain their earlier coverage. |
@@ -63,7 +64,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 
 These are explicit limits, not hidden “done” items:
 
-1. **Incomplete prop texture extraction.** Source textures are available for the rifle/pistol, builder tool, asteroid chunk, and mug paths used here. Some public models, including the Weldammer, body bag, and several food items, do not have a corresponding extracted texture in the current asset tree and therefore retain their model material.
+1. **Datapad source texture.** The Datapad GLB requests `Datapad01`, but no matching texture exists anywhere in the bundled extraction. Every other public prop material with an available original sheet is now wired and tested; the Datapad retains its model material rather than using an invented replacement.
 2. **Particle effects.** Fire, meteor, construction, and related effects remain Three.js procedural equivalents because the original `.pex`/engine particle pipeline is not represented as directly usable web assets.
 3. **Post-processing.** Bloom is present, but the proprietary source colour-LUT/material pipeline has no directly reusable public web asset and remains an approximation.
 4. **Module layout ingestion.** Several `.sav` docking/module arrangements are represented by TypeScript generation logic rather than a generic reader for every Lua-era module save.
@@ -100,9 +101,10 @@ The production build reports the existing large-bundle advisory for the 1.6 MB m
 |---|---|
 | Production build (`tsc` + Vite) | **PASS** |
 | Unit suite | **PASS — 95/95** |
-| Focused appearance/save/render scenarios | **PASS — 7/7** |
-| Complete Playwright E2E suite | **PASS — 281/281 in 9.3 minutes** |
+| Focused appearance/save/render scenarios | **PASS — 8/8** |
+| Complete Playwright E2E suite | **PASS — 282/282 in 10.8 minutes** |
 | Generated portrait source-atlas sweep | **PASS — 2,500 generated appearances checked** |
 | Restored head-layer source assets | **PASS — all 33 beard/comb/beak sheets validated as RGBA** |
+| Prop source-material sweep | **PASS — all 16 tested models use their extracted sheets with opaque depth writes** |
 | Diff whitespace validation | **PASS** |
 | In-app manual capture after reload | **INCOMPLETE — blocked by the in-app browser URL safety policy; no visual PASS is claimed from that capture** |
