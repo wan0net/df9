@@ -11,9 +11,8 @@ import { BrigZone } from '../zones/BrigZone';
 import type { Room } from '../rooms/Room';
 import {
   JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL, UNEMPLOYED,
-  RACE_HUMAN, RACE_JELLY, RACE_TOBIAN, RACE_CAT, RACE_BIRDSHARK,
-  RACE_CHICKEN, RACE_MONSTER, RACE_SHAMON, RACE_MURDERFACE, RACE_KILLBOT,
 } from '../characters/CharacterConstants';
+import { ensureCharacterAppearance, getPortraitLayers } from '../characters/CharacterAppearance';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 
 import { line } from '../localization/Localization';
@@ -43,19 +42,6 @@ function getDeathCauseName(cause: number): string {
 const AMBER = '#dfa200';
 const AMBER_OPAQUE = '#3b2600';
 const PANEL_W = 418; // Lua CitizenInspectorLayout.lua: nButtonWidth=418
-
-const CHARACTER_PORTRAITS: Record<number, string> = {
-  [RACE_HUMAN]: 'Human_Male_White_01.png',
-  [RACE_JELLY]: 'Jelly_Female_Blue_01.png',
-  [RACE_TOBIAN]: 'TobianDongHead_Male_Blue_01.png',
-  [RACE_CAT]: 'Cat_male_black_01.png',
-  [RACE_BIRDSHARK]: 'Birdshark_Male_White_01.png',
-  [RACE_CHICKEN]: 'Chicken_Male_White_01.png',
-  [RACE_MONSTER]: 'Monster_01.png',
-  [RACE_SHAMON]: 'Shamon_Male_White_01.png',
-  [RACE_MURDERFACE]: 'MurderFace_Male_Green_01.png',
-  [RACE_KILLBOT]: 'Murder_Robot_01.png',
-};
 
 /** Morale value → text label (Lua CharacterConstants.lua morale thresholds). */
 function getMoraleText(morale: number): string {
@@ -252,11 +238,15 @@ export class InspectorPanel {
     bg.style.cssText = 'position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;';
     wrapper.appendChild(bg);
 
-    const portrait = document.createElement('img');
-    portrait.src = `/assets/ui/portraits/${CHARACTER_PORTRAITS[char.tStats.nRace] ?? CHARACTER_PORTRAITS[RACE_HUMAN]}`;
-    portrait.alt = char.getRaceDef().sName;
-    portrait.style.cssText = `position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;${char.isAlive() ? '' : 'filter:grayscale(1);opacity:0.65;'}`;
-    wrapper.appendChild(portrait);
+    const layers = getPortraitLayers(ensureCharacterAppearance(char.tStats));
+    for (const [index, filename] of layers.entries()) {
+      const portrait = document.createElement('img');
+      portrait.src = `/assets/ui/portraits/${filename}`;
+      portrait.alt = index === 0 ? char.getRaceDef().sName : '';
+      portrait.dataset.portraitLayer = index === 0 ? 'base' : filename.includes('_Hair_') ? 'hair' : 'facial-hair';
+      portrait.style.cssText = `position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;${char.isAlive() ? '' : 'filter:grayscale(1);opacity:0.65;'}`;
+      wrapper.appendChild(portrait);
+    }
     wrapper.addEventListener('click', () => this.onCenterCamera?.(char));
 
     return wrapper;

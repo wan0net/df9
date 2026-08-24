@@ -8,10 +8,10 @@ import type { TileGrid } from '../world/TileGrid';
 import { dialogueSystem } from '../characters/DialogueSystem';
 import { getTexture } from './AssetLoader';
 import {
-  RACE_HUMAN, RACE_CAT, RACE_JELLY, RACE_TOBIAN, RACE_BIRDSHARK,
-  RACE_CHICKEN, RACE_SHAMON, RACE_MONSTER, RACE_MURDERFACE, RACE_KILLBOT,
+  RACE_MONSTER, RACE_KILLBOT,
   RACE_TYPE, RIG_ALIEN,
 } from '../characters/CharacterConstants';
+import { ensureCharacterAppearance, getVisibleSubsets } from '../characters/CharacterAppearance';
 
 /**
  * Renders characters in the Three.js scene.
@@ -303,12 +303,20 @@ function loadCharTexture(filename: string): THREE.Texture {
  * Apply textures and colors to a cloned character model.
  * Matches material names to texture files using multiple candidate patterns.
  */
-function applyModelTextures(group: THREE.Group, charId: number, textureOverrides?: Record<string, string>) {
+function applyModelTextures(
+  group: THREE.Group,
+  charId: number,
+  textureOverrides?: Record<string, string>,
+  subsetTextureOverrides?: Map<number, string>,
+) {
   // R-2: Use all 5 skin tone variants (Lua cycles through _base_01 to _base_05)
   const toneIdx = (charId % 5) + 1;
 
+  let subsetIndex = 0;
   group.traverse((child) => {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
+    const currentSubset = subsetIndex++;
+    child.userData.sourceSubsetIndex = currentSubset;
     // Clone materials per character — Three.js clone() shares material references,
     // so modifying mat.map would affect ALL characters using the same cached model.
     const origMat = child.material as THREE.MeshStandardMaterial;
@@ -326,7 +334,7 @@ function applyModelTextures(group: THREE.Group, charId: number, textureOverrides
     //   2. Strip trailing digits + add tone: "Collar01" → "Collar_base_01"
     //   3. Exact matName (only for non-skin materials or when tone doesn't matter)
     const strippedBase = matName.replace(/_base_\d+$/, '');
-    const overrideBase = textureOverrides?.[matName];
+    const overrideBase = subsetTextureOverrides?.get(currentSubset) ?? textureOverrides?.[matName];
     const candidates = [
       overrideBase,
       `${strippedBase}_base_0${toneIdx}`,
@@ -472,96 +480,21 @@ function usesAlienRig(char: Character): boolean {
     RACE_TYPE[char.tStats.nRace]?.nRig === RIG_ALIEN;
 }
 
-function getAlienTextureOverrides(char: Character): Record<string, string> | undefined {
-  if (char.tStats.nRace === RACE_CHICKEN) {
-    const variant = (char.id % 4) + 1;
-    return {
-      Alien_Body01: `Chicken_Body01_base_0${variant}`,
-      Chicken_Head01: `Chicken_Head01_base_0${variant}`,
-    };
-  }
-  if (char.tStats.nRace === RACE_MURDERFACE) {
-    return {
-      Alien_Body01: 'Murder_Body01',
-      Murder_Head01: 'Murder_Head01',
-    };
-  }
-  return undefined;
-}
-
-function getAlienVisibleMaterials(char: Character): Set<string> {
-  const visible = new Set<string>(['Alien_Body01']);
-  switch (char.tStats.nRace) {
-    case RACE_TOBIAN:
-      visible.add('Alien_Head01');
-      visible.add(char.id % 2 === 0 ? 'Elephant01_Hair01' : 'Moustache01_Hair01');
-      break;
-    case RACE_CHICKEN:
-      visible.add('Chicken_Head01');
-      break;
-    case RACE_MURDERFACE:
-      visible.add('Murder_Head01');
-      break;
-    default:
-      visible.add('Alien_Head01');
-      break;
-  }
-
-  switch (char.getJob()) {
-    case 2:
-      visible.add('Builder01');
-      break;
-    case 3:
-      visible.add('Technician01');
-      break;
-    case 4:
-      visible.add('Miner01');
-      break;
-    case 5:
-      visible.add('Emergency03');
-      break;
-    case 6:
-      visible.add('Raider01');
-      break;
-    case 12:
-      visible.add('Doctor01');
-      break;
-    default:
-      visible.add('Tourist_Shirt_Male_01');
-      visible.add('Tourist_Shorts_Male_01');
-      break;
-  }
-
-  return visible;
-}
-
-/** Use the extracted race/job textures selected by CharacterConstants.lua. */
-function getCitizenTextureOverrides(char: Character, isMale: boolean): Record<string, string> | undefined {
-  const overrides: Record<string, string> = {};
-  const twoVariant = (char.id % 2) + 1;
-  const fourVariant = (char.id % 4) + 1;
-  const bodyMaterial = isMale ? 'Human_Body_Male01' : 'Human_Body_Female01';
-
-  switch (char.tStats.nRace) {
-    case RACE_CAT:
-      overrides[bodyMaterial] = `Cat_Body_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
-      overrides.Cat_Head_Male01_base_02 = `Cat_Head_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
-      break;
-    case RACE_BIRDSHARK:
-      overrides[bodyMaterial] = `Bird_Body_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
-      overrides.Bird_Head_Male01_base_01 = `Bird_Head_${isMale ? 'Male' : 'Female'}01_base_0${twoVariant}`;
-      break;
-    case RACE_JELLY:
-      overrides.Human_Body_Female01 = `Jelly_Body_Female01_base_0${fourVariant}`;
-      overrides.Jelly_Head_Female01_base_04 = `Jelly_Head_Female01_base_0${fourVariant}`;
-      break;
-    case RACE_SHAMON:
-      overrides.Human_Body_Male01_base_03 = 'Shamon_Body';
-      break;
-  }
-
-  if (char.getJob() === 9) overrides.Doctor01 = 'Scientist01';
-  return Object.keys(overrides).length > 0 ? overrides : undefined;
+/**
+ * Citizen GLBs preserve the source .brig subset order. Select by that order,
+ * exactly as Lua's setScl(0,0,0)/setScl(1,1,1) subset replacement does.
+ */
+function applyAppearanceSubsets(clone: THREE.Group, char: Character): Map<number, string> {
+  const stats = ensureCharacterAppearance(char.tStats);
+  const selection = getVisibleSubsets(stats, char.getJob());
+  let subsetIndex = 0;
+  clone.traverse((child) => {
+    if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
+    child.userData.sourceSubsetIndex = subsetIndex;
+    child.visible = selection.indices.has(subsetIndex);
+    subsetIndex++;
+  });
+  return selection.textures;
 }
 
 function loadCitizenModel(): Promise<void> {
@@ -1002,21 +935,8 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180);
       clone.rotation.y = 45 * (Math.PI / 180);
 
-      const showMats = getAlienVisibleMaterials(char);
-      const shown = new Map<string, number>();
-      clone.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-          const matName = (child.material as THREE.Material)?.name ?? '';
-          if (showMats.has(matName) && (shown.get(matName) ?? 0) === 0) {
-            child.visible = true;
-            shown.set(matName, 1);
-          } else {
-            child.visible = false;
-          }
-        }
-      });
-
-      applyModelTextures(clone, char.id, getAlienTextureOverrides(char));
+      const subsetTextures = applyAppearanceSubsets(clone, char);
+      applyModelTextures(clone, char.id, undefined, subsetTextures);
       ensureDoubleSided(clone);
       clone.traverse((child) => {
         if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
@@ -1073,94 +993,8 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
-      // Hide all meshes, then show only the ones matching this character's body config.
-      // Use MATERIAL NAMES (stable across clone methods) instead of indices.
-      {
-        const isMale = char.id % 2 === 0;
-        const race = char.tStats.nRace;
-
-        // Build set of material names to show
-        const showMats = new Set<string>();
-
-        // Head — pick ONE head material based on race
-        if (race === RACE_CAT) showMats.add('Cat_Head_Male01_base_02');
-        else if (race === RACE_JELLY) showMats.add('Jelly_Head_Female01_base_04');
-        else if (race === RACE_BIRDSHARK || race === RACE_CHICKEN) showMats.add('Bird_Head_Male01_base_01');
-        else if (race === RACE_SHAMON) showMats.add('Shamon_Head01');
-        else showMats.add('Human_Head_Male01'); // Human + fallback
-
-        // Body — male or female
-        if (race === RACE_JELLY) showMats.add('Human_Body_Female01'); // Jelly always female body
-        else if (race === RACE_SHAMON) showMats.add('Human_Body_Male01_base_03');
-        else if (isMale) showMats.add('Human_Body_Male01');
-        else showMats.add('Human_Body_Female01');
-
-        // Hair — for human-like races
-        const hasHair = race === RACE_HUMAN || race === RACE_CAT ||
-          race === RACE_BIRDSHARK || race === RACE_CHICKEN || race === RACE_MURDERFACE;
-        if (hasHair) showMats.add('Hair01');
-
-        // Job outfit meshes from CharacterConstants.tJobOutfits.
-        switch (char.getJob()) {
-          case 2:
-            showMats.add('Builder01');
-            break;
-          case 3:
-            showMats.add('Technician01');
-            break;
-          case 4:
-            showMats.add('Miner01');
-            break;
-          case 5:
-            showMats.add('Emergency01');
-            break;
-          case 6:
-            showMats.add('Raider01');
-            break;
-          case 9: // Scientist shares the doctor mesh with Scientist01 texture.
-          case 12:
-            showMats.add('Doctor01');
-            break;
-          default:
-            showMats.add(isMale ? 'Tourist_Shirt_Male_01' : 'Tourist_Shirt_Female_01');
-            showMats.add(isMale ? 'Tourist_Shorts_Male_01' : 'Tourist_Shorts_Female_01');
-            break;
-        }
-
-        // Apply: hide everything, show only matching materials.
-        // For materials with multiple primitives (e.g. 5 head variants), show only ONE.
-        const shown = new Map<string, number>(); // count per material name
-        let totalMeshes = 0;
-        let hiddenCount = 0;
-        clone.traverse((child) => {
-          if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-            totalMeshes++;
-            const mat = child.material;
-            const matName = mat && 'name' in mat ? (mat as any).name : '';
-            if (showMats.has(matName)) {
-              const count = shown.get(matName) ?? 0;
-              if (count === 0) {
-                child.visible = true;
-                shown.set(matName, 1);
-              } else {
-                child.visible = false;
-                hiddenCount++;
-              }
-            } else {
-              child.visible = false;
-              hiddenCount++;
-            }
-          }
-        });
-        // Debug: log first character's mesh visibility
-        if (char.id <= 3) {
-          console.log(`Char ${char.id}: ${totalMeshes} meshes, ${hiddenCount} hidden, showing: ${[...shown.keys()].join(', ')}`);
-        }
-      }
-
-      // Apply textures and default colors
-      const isMale = char.id % 2 === 0;
-      applyModelTextures(clone, char.id, getCitizenTextureOverrides(char, isMale));
+      const subsetTextures = applyAppearanceSubsets(clone, char);
+      applyModelTextures(clone, char.id, undefined, subsetTextures);
       ensureDoubleSided(clone);
 
       // Reset skeleton bind pose after clone so meshes render correctly

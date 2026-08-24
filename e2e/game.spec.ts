@@ -684,6 +684,20 @@ test.describe('Spacebase DF-9 E2E', () => {
   test('save and load restores game state', async () => {
     const matterBefore = await df9(page).matter();
     const popBefore = await df9(page).population();
+    const appearanceBefore = await page.evaluate(() => {
+      const char = (window as any).__df9._charMgr.getCharacters()[0];
+      return {
+        race: char.tStats.nRace,
+        body: char.tStats.nBodyVariation,
+        head: char.tStats.nHeadVariation,
+        faceTop: char.tStats.nFaceTopVariation,
+        faceBottom: char.tStats.nFaceBottomVariation,
+        hair: char.tStats.nHairVariation,
+        portrait: char.tStats.sPortrait,
+        portraitHair: char.tStats.sPortraitHair ?? null,
+        portraitFacialHair: char.tStats.sPortraitFacialHair ?? null,
+      };
+    });
 
     // Save
     const saved = await page.evaluate(() => (window as any).__df9?.saveGame());
@@ -700,6 +714,21 @@ test.describe('Spacebase DF-9 E2E', () => {
     // Verify state restored
     const matterAfter = await df9(page).matter();
     expect(matterAfter).toBe(matterBefore);
+    const appearanceAfter = await page.evaluate(() => {
+      const char = (window as any).__df9._charMgr.getCharacters()[0];
+      return {
+        race: char.tStats.nRace,
+        body: char.tStats.nBodyVariation,
+        head: char.tStats.nHeadVariation,
+        faceTop: char.tStats.nFaceTopVariation,
+        faceBottom: char.tStats.nFaceBottomVariation,
+        hair: char.tStats.nHairVariation,
+        portrait: char.tStats.sPortrait,
+        portraitHair: char.tStats.sPortraitHair ?? null,
+        portraitFacialHair: char.tStats.sPortraitFacialHair ?? null,
+      };
+    });
+    expect(appearanceAfter).toEqual(appearanceBefore);
 
     // Clean up test save
     await page.evaluate(() => (window as any).__df9?.deleteSave());
@@ -3949,6 +3978,13 @@ test.describe('Spacebase DF-9 E2E', () => {
       const renderer = d._characterRenderer as any;
       char.bSpacewalking = false;
       char.tStats.nRace = 4; // CharacterConstants.RACE_CAT
+      Object.assign(char.tStats, {
+        nBodyVariation: 48, nHeadVariation: 22,
+        nFaceTopVariation: 0, nFaceBottomVariation: 0, nHairVariation: 0,
+        nBottomAccessoryVariation: 1_000_001, nTopAccessoryVariation: 1_000_001,
+        sPortrait: 'Cat_female_yellow_01',
+        sPortraitHair: undefined, sPortraitFacialHair: undefined,
+      });
       char.setJob(9); // SCIENTIST
       renderer.destroyCharacter(char.id);
       const handle = renderer.createCharacter(char);
@@ -3956,6 +3992,7 @@ test.describe('Spacebase DF-9 E2E', () => {
       const visible: Array<{
         material: string;
         texture: string | null;
+        subset: number;
         transparent: boolean;
         depthWrite: boolean;
       }> = [];
@@ -3965,6 +4002,7 @@ test.describe('Spacebase DF-9 E2E', () => {
         visible.push({
           material: child.material?.name ?? '',
           texture: child.material?.userData?.textureName ?? null,
+          subset: child.userData?.sourceSubsetIndex ?? -1,
           transparent: child.material?.transparent ?? true,
           depthWrite: child.material?.depthWrite ?? false,
         });
@@ -3974,12 +4012,8 @@ test.describe('Spacebase DF-9 E2E', () => {
 
     expect(result.some(v => v.texture?.startsWith('Cat_Body_'))).toBe(true);
     expect(result.some(v => v.texture?.startsWith('Cat_Head_'))).toBe(true);
-    expect(result).toContainEqual({
-      material: 'Doctor01',
-      texture: 'Scientist01',
-      transparent: false,
-      depthWrite: true,
-    });
+    expect(result.map(v => v.subset).sort((a, b) => a - b)).toEqual([2, 11, 71]);
+    expect(result.some(v => v.subset === 71 && v.texture === 'Scientist01')).toBe(true);
     expect(result.filter(v => v.texture).every(v => !v.transparent && v.depthWrite)).toBe(true);
   });
 
@@ -5422,10 +5456,19 @@ test.describe('Spacebase DF-9 E2E', () => {
     await page.evaluate(() => {
       const d = (window as any).__df9;
       const char = d._charMgr.getCharacters()[0];
+      char.tStats.nRace = 1;
+      Object.assign(char.tStats, {
+        nBodyVariation: 41, nHeadVariation: 41,
+        nFaceTopVariation: 0, nFaceBottomVariation: 0, nHairVariation: 85,
+        nBottomAccessoryVariation: 1_000_001, nTopAccessoryVariation: 1_000_001,
+        sPortrait: 'Human_Large_Female_Black_02',
+        sPortraitHair: 'Human_Large_Female_02_Hair_Gray_01',
+        sPortraitFacialHair: undefined,
+      });
       d._uiManager.setSelectedEntity({ type: 'character', data: char });
     });
     await expect(page.locator('[data-testid="character-summary"]')).toBeVisible();
-    await expect(page.locator('[data-testid="character-portrait"] img')).toHaveCount(2);
+    await expect(page.locator('[data-testid="character-portrait"] img')).toHaveCount(3);
 
     const result = await page.evaluate(() => {
       const panel = document.getElementById('inspector-panel')!;
@@ -5461,6 +5504,8 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.portrait).toEqual({ left: '30px', top: '-19px', width: '110px', height: '124px' });
     expect(result.portraitImages.every(image => image.loaded)).toBe(true);
     expect(result.portraitImages[0].src).toContain('/assets/ui/portraits/Background_01.png');
+    expect(result.portraitImages[1].src).toContain('/assets/ui/portraits/Human_Large_Female_Black_02.png');
+    expect(result.portraitImages[2].src).toContain('/assets/ui/portraits/Human_Large_Female_02_Hair_Gray_01.png');
     expect(result.nameFont).toBe('26px');
     expect(result.statsHeight).toBe('152px');
     expect(result.rowHeights).toEqual(['36px', '36px', '36px', '36px']);
@@ -5469,6 +5514,43 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.tabs[4].icon).toContain('/assets/ui/inspector/ui_icon_duty.png');
     expect(result.panelText).not.toContain('HPMORROOMACTCAM');
     expect(result.panelText).not.toContain('[X] Close');
+  });
+
+  test('character appearance mounts the saved Lua body tuple and layered portrait', async () => {
+    const result = await page.evaluate(() => {
+      const d = (window as any).__df9;
+      const char = d._charMgr.spawnCharacterAt(220, 220);
+      char.bSpacewalking = false;
+      char.setJob(1);
+      Object.assign(char.tStats, {
+        nRace: 1,
+        nBodyVariation: 36, nHeadVariation: 36,
+        nFaceTopVariation: 0, nFaceBottomVariation: 29, nHairVariation: 79,
+        nBottomAccessoryVariation: 1_000_001, nTopAccessoryVariation: 1_000_001,
+        sPortrait: 'Human_Large_Male_Black_02',
+        sPortraitFacialHair: 'Human_Large_Male_02_Beard_Gray_01',
+        sPortraitHair: 'Human_Large_Male_02_Hair_Gray_01',
+      });
+      const renderer = d._characterRenderer as any;
+      renderer.destroyCharacter(char.id);
+      const handle = renderer.createCharacter(char);
+      const visibleSubsets: number[] = [];
+      handle.object.traverse((child: any) => {
+        if ((child.isMesh || child.isSkinnedMesh) && child.visible) {
+          visibleSubsets.push(child.userData.sourceSubsetIndex);
+        }
+      });
+      d._uiManager.setSelectedEntity({ type: 'character', data: char });
+      return visibleSubsets.sort((a, b) => a - b);
+    });
+
+    expect(result).toEqual([8, 13, 24, 31, 50]);
+    const layers = page.locator('[data-testid="character-portrait"] img');
+    await expect(layers).toHaveCount(4);
+    await expect(layers.nth(1)).toHaveAttribute('src', /Human_Large_Male_Black_02\.png$/);
+    await expect(layers.nth(2)).toHaveAttribute('src', /Human_Large_Male_02_Beard_Gray_01\.png$/);
+    await expect(layers.nth(3)).toHaveAttribute('src', /Human_Large_Male_02_Hair_Gray_01\.png$/);
+    expect(await layers.evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   });
 
   test('object inspector uses the original portrait, condition strip, and folder geometry', async () => {

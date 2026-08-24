@@ -51,9 +51,14 @@ import { type LogEntry, addLog, postLogFromQueue, getLogCooldown, setElapsedTime
 import { researchSystem } from '../research/ResearchSystem';
 import { BrigZone } from '../zones/BrigZone';
 import { ZoneType } from '../world/ZoneType';
+import {
+  ensureCharacterAppearance,
+  generateCharacterAppearance,
+  type CharacterAppearance,
+} from './CharacterAppearance';
 
 /** Character stats block (mirrors Lua tStats) */
-export interface CharacterStats {
+export interface CharacterStats extends CharacterAppearance {
   sName: string;
   nJob: number;
   nTeam: number;
@@ -218,11 +223,12 @@ export class Character {
     // Assign a random starting job
     const startingJob = tJobs[Math.floor(Math.random() * tJobs.length)];
 
+    const race = Character.rollRace();
     this.tStats = {
       sName: name,
       nJob: startingJob,
       nTeam: TEAM_ID_PLAYER,
-      nRace: Character.rollRace(),
+      nRace: race,
       nHP: STARTING_HIT_POINTS,
       nMaxHP: STARTING_HIT_POINTS,
       nStatus: STATUS_HEALTHY,
@@ -230,6 +236,7 @@ export class Character {
       nXP: 0,
       tCompetency: {},
       nToughness: 0,
+      ...generateCharacterAppearance(race),
     };
 
     // Skill-point budget allocation (Lua: STARTING_SKILL_POINTS=8 across random jobs)
@@ -283,6 +290,9 @@ export class Character {
     return (h & 1) === 0;
   }
   getRace(): number { return this.tStats.nRace; }
+  /** Restore or regenerate the Lua appearance tuple after legacy loads/race changes. */
+  ensureAppearance(): CharacterStats { return ensureCharacterAppearance(this.tStats); }
+  regenerateAppearance() { Object.assign(this.tStats, generateCharacterAppearance(this.tStats.nRace)); }
   getRaceDef(): RaceTypeDef { return RACE_TYPE[this.tStats.nRace] ?? RACE_TYPE[RACE_HUMAN]; }
   getJob(): number { return this.tStats.nJob; }
   getJobName(): string { return JOB_NAMES[this.tStats.nJob] ?? 'Unknown'; }

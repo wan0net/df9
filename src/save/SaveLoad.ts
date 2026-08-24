@@ -40,6 +40,16 @@ export interface CharSaveData {
   job: number;
   team: number;
   race?: number;
+  nBodyVariation?: number;
+  nHeadVariation?: number;
+  nFaceTopVariation?: number;
+  nFaceBottomVariation?: number;
+  nHairVariation?: number;
+  nBottomAccessoryVariation?: number;
+  nTopAccessoryVariation?: number;
+  sPortrait?: string;
+  sPortraitHair?: string;
+  sPortraitFacialHair?: string;
   hp: number;
   maxHP: number;
   status: number;
@@ -178,6 +188,15 @@ function validateCharacter(value: unknown, width: number, height: number): value
   if (!isInteger(value.id, 0) || !isInteger(value.tileX, 0, width - 1) || !isInteger(value.tileY, 0, height - 1)) return false;
   if (!isString(value.name, 256) || !isInteger(value.job, 0, 100) || !isInteger(value.team, -100_000, 100_000)) return false;
   if (value.race !== undefined && !isInteger(value.race, 0, 100)) return false;
+  for (const key of [
+    'nBodyVariation', 'nHeadVariation', 'nFaceTopVariation', 'nFaceBottomVariation',
+    'nHairVariation', 'nBottomAccessoryVariation', 'nTopAccessoryVariation',
+  ] as const) {
+    if (value[key] !== undefined && !isInteger(value[key], 0, 1_000_001)) return false;
+  }
+  for (const key of ['sPortrait', 'sPortraitHair', 'sPortraitFacialHair'] as const) {
+    if (value[key] !== undefined && !isString(value[key], 256)) return false;
+  }
   if (!isFiniteNumber(value.hp, 0, 1_000_000) || !isFiniteNumber(value.maxHP, 1, 1_000_000) || value.hp > value.maxHP) return false;
   if (!isInteger(value.status, 0, 100) || !isFiniteNumber(value.xp, 0, 1_000_000_000)) return false;
   if (!isRecord(value.competency) || Object.keys(value.competency).length > 128 ||

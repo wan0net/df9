@@ -766,6 +766,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   saveLoadSystem.getCharacterData = () => characterManager.getCharacters().map(c => ({
     id: c.id, tileX: c.tileX, tileY: c.tileY,
     name: c.getName(), job: c.getJob(), team: c.tStats.nTeam, race: c.tStats.nRace,
+    nBodyVariation: c.tStats.nBodyVariation,
+    nHeadVariation: c.tStats.nHeadVariation,
+    nFaceTopVariation: c.tStats.nFaceTopVariation,
+    nFaceBottomVariation: c.tStats.nFaceBottomVariation,
+    nHairVariation: c.tStats.nHairVariation,
+    nBottomAccessoryVariation: c.tStats.nBottomAccessoryVariation,
+    nTopAccessoryVariation: c.tStats.nTopAccessoryVariation,
+    sPortrait: c.tStats.sPortrait,
+    sPortraitHair: c.tStats.sPortraitHair,
+    sPortraitFacialHair: c.tStats.sPortraitFacialHair,
     hp: c.getHP(), maxHP: c.tStats.nMaxHP, status: c.tStats.nStatus,
     xp: c.tStats.nXP, competency: { ...c.tStats.tCompetency },
     morale: c.nMorale, anger: c.nAnger, nRemainingDutyTime: c.nRemainingDutyTime,
@@ -797,6 +807,17 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       char.setJob(cd.job);
       char.tStats.nTeam = cd.team;
       if (cd.race !== undefined) char.tStats.nRace = cd.race;
+      if (cd.nBodyVariation !== undefined) char.tStats.nBodyVariation = cd.nBodyVariation;
+      if (cd.nHeadVariation !== undefined) char.tStats.nHeadVariation = cd.nHeadVariation;
+      if (cd.nFaceTopVariation !== undefined) char.tStats.nFaceTopVariation = cd.nFaceTopVariation;
+      if (cd.nFaceBottomVariation !== undefined) char.tStats.nFaceBottomVariation = cd.nFaceBottomVariation;
+      if (cd.nHairVariation !== undefined) char.tStats.nHairVariation = cd.nHairVariation;
+      if (cd.nBottomAccessoryVariation !== undefined) char.tStats.nBottomAccessoryVariation = cd.nBottomAccessoryVariation;
+      if (cd.nTopAccessoryVariation !== undefined) char.tStats.nTopAccessoryVariation = cd.nTopAccessoryVariation;
+      if (cd.sPortrait !== undefined) char.tStats.sPortrait = cd.sPortrait;
+      char.tStats.sPortraitHair = cd.sPortraitHair;
+      char.tStats.sPortraitFacialHair = cd.sPortraitFacialHair;
+      char.ensureAppearance();
       char.setHP(cd.hp);
       char.tStats.nMaxHP = cd.maxHP;
       char.tStats.nStatus = cd.status;
@@ -835,6 +856,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (cd.tLog) {
         char.tLog = cd.tLog.slice();
       }
+      // spawnCharacterAt mounted the constructor's random rig before the saved
+      // appearance was restored. Remount once so the loaded subset tuple wins.
+      characterRenderer.destroyCharacter(char.id);
+      characterRenderer.createCharacter(char);
     }
   };
   saveLoadSystem.loadObjectData = (objs) => {

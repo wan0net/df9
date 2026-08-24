@@ -1,7 +1,7 @@
 # Spacebase DF-9 — Graphics-first source parity audit (round 3)
 
-> Review date: 2026-08-21  
-> TypeScript baseline: `31366bc` on `codex/fix-full-audit`  
+> Review date: 2026-08-24
+> Review base: `f6f5ef5` on `codex/fix-full-audit`
 > Authority: the bundled Lua source and its public game assets. The three deviations listed in `AGENTS.md` remain intentional.
 
 This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlier discovery passes, but some of their open findings were fixed by `31366bc`; they should not be read as current status lists.
@@ -17,7 +17,7 @@ This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlie
 
 ## Outcome
 
-This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, and the timing paths adjacent to those systems. It fixed nine graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, missing race/job textures, and object damage tints being erased by room lighting.
+This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, and the timing paths adjacent to those systems. It fixed eleven graphics/UI parity defects and three timing/state defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character rig-subset selection, missing layered portraits, missing race/job textures, and object damage tints being erased by room lighting.
 
 ## Graphics and UI findings
 
@@ -33,6 +33,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-08 | **Fixed + tested** | `Room.lua` lighting plus environment-object damage/vaporize presentation | Room lighting is now multiplied with the object's visual state. It no longer overwrites red damage or translucent vaporize tint on the following frame. | `room lighting preserves object damage and vaporize tints` |
 | GFX-09 | **Fixed + tested** | `Character.lua` thought/dialog construction around lines 3167 and 4536 | Replaced the generic black emoji pill with source bubble/end-cap/tail assets, amber Dosis text, dialog/thought variants, and hover-only task bubbles. | `character renderer handles thought bubble creation` |
 | GFX-10 | **Fixed + tested** | `Character.lua:_setSpacesuitRigActive`, per-rig animation tables, and the extracted opaque character textures | Spacesuit animation selection now follows Lua's active-rig precedence even for monster/killbot races. Character body, outfit, and suit textures now write depth as opaque surfaces, preventing rear subsets from bleeding through the visible model. | `changing character race remounts the matching original rig`; `character renderer uses extracted race textures and job outfits` |
+| GFX-11 | **Fixed + tested** | `Character.lua:_setRig`, `Character.lua:_setPortrait`, `CharacterConstants.lua` body/head/hair tables, original `.brig` subset order, and `UI/Portraits.lua` | Replaced ID-derived sex/tone/hair guesses and first-material mesh selection with a Lua-compatible saved appearance tuple. The renderer now selects the original ordered body, head, hair, helmet, and outfit subsets (including fat/female variants), applies their matching source textures, persists them through save/load, and builds the inspector portrait from the original base/facial-hair/hair layer stack. The complete generated-character portrait atlas is now packaged. | `character appearance mounts the saved Lua body tuple and layered portrait`; `character renderer uses extracted race textures and job outfits`; `save and load restores game state`; unit portrait-atlas sweep |
 
 ## Gameplay and timing findings found during the same review
 
@@ -53,19 +54,20 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | Events, goals, research, maladies | **Previously verified**; the 24-disease roster, active TraderEvent, and active HostilesFedToMonster goal remain **approved deviations**. |
 | Building, mining, object placement, zoning | **Previously verified**; visual tools/held props and object-state tint were rechecked here. |
 | Start/new-base/HUD/inspector UI | **Reviewed in this pass**; the two visually dominant pre-game screens received source-coordinate fixes. |
-| Character/environment rendering | **Reviewed in this pass**; original clips, textures, shadow, selection, bubbles, props, and light/tint composition are now used where assets exist. |
-| Audio, save/load, input | **Previously verified** and exercised by the complete E2E suite; no new high-confidence source mismatch was found in this pass. |
+| Character/environment rendering | **Reviewed in this pass**; original rig subsets, appearance textures, layered portraits, clips, shadow, selection, bubbles, props, and light/tint composition are now used where assets exist. |
+| Audio, save/load, input | **Reviewed/previously verified**; character appearance persistence was added and exercised through load/remount, while the remaining paths retain their earlier coverage. |
 
 ## Known residual fidelity boundaries
 
 These are explicit limits, not hidden “done” items:
 
-1. **Exact saved appearance variations.** Lua stores body, head, face, hair, and accessory variation identifiers per citizen. The current TypeScript `CharacterStats` does not retain that complete tuple, so extracted race textures are selected deterministically from the available variants rather than reconstructed from an exact Lua-compatible appearance record.
-2. **Incomplete prop texture extraction.** Source textures are available for the rifle/pistol, builder tool, asteroid chunk, and mug paths used here. Some public models, including the Weldammer, body bag, and several food items, do not have a corresponding extracted texture in the current asset tree and therefore retain their model material.
-3. **Particle effects.** Fire, meteor, construction, and related effects remain Three.js procedural equivalents because the original `.pex`/engine particle pipeline is not represented as directly usable web assets.
-4. **Post-processing.** Bloom is present, but the proprietary source colour-LUT/material pipeline has no directly reusable public web asset and remains an approximation.
-5. **Module layout ingestion.** Several `.sav` docking/module arrangements are represented by TypeScript generation logic rather than a generic reader for every Lua-era module save.
-6. **UILayout runtime.** Screens are implemented directly in TypeScript/DOM. There is no generic Lua `UILayout` parser, so parity depends on explicit per-screen transcription and regression tests.
+1. **Accessory appearance generation.** The Lua-compatible body/head/face/hair/portrait tuple is now generated and saved. Accessory identifiers are retained too, but new citizens currently use Lua's `NO_REPLACE` value rather than sampling the complete top/bottom accessory tables, and those optional accessory meshes are not yet mounted.
+2. **Rig face-layer shader.** Human beard and chicken comb/beak identifiers are generated and persisted, and human facial hair appears in the source portrait stack. Their grayscale base/top/bottom masks are not yet composited onto the Three.js head material as the proprietary Lua-era rig shader did.
+3. **Incomplete prop texture extraction.** Source textures are available for the rifle/pistol, builder tool, asteroid chunk, and mug paths used here. Some public models, including the Weldammer, body bag, and several food items, do not have a corresponding extracted texture in the current asset tree and therefore retain their model material.
+4. **Particle effects.** Fire, meteor, construction, and related effects remain Three.js procedural equivalents because the original `.pex`/engine particle pipeline is not represented as directly usable web assets.
+5. **Post-processing.** Bloom is present, but the proprietary source colour-LUT/material pipeline has no directly reusable public web asset and remains an approximation.
+6. **Module layout ingestion.** Several `.sav` docking/module arrangements are represented by TypeScript generation logic rather than a generic reader for every Lua-era module save.
+7. **UILayout runtime.** Screens are implemented directly in TypeScript/DOM. There is no generic Lua `UILayout` parser, so parity depends on explicit per-screen transcription and regression tests.
 
 ## Acceptance and verification
 
@@ -91,3 +93,15 @@ The implementation should be called **source-complete for the fixes in this docu
 | Diff whitespace validation | **PASS** |
 
 The production build reports the existing large-bundle advisory for the 1.6 MB main chunk; it does not fail the build and is unrelated to the source-parity corrections in this pass.
+
+### Character appearance continuation — 2026-08-24
+
+| Gate | Result |
+|---|---|
+| Production build (`tsc` + Vite) | **PASS** |
+| Unit suite | **PASS — 91/91** |
+| Focused appearance/save/render scenarios | **PASS — 4/4** |
+| Complete Playwright E2E suite | **PASS — 279/279 in 11.5 minutes** |
+| Generated portrait source-atlas sweep | **PASS — 2,500 generated appearances checked** |
+| Diff whitespace validation | **PASS** |
+| In-app manual capture after reload | **INCOMPLETE — blocked by the in-app browser URL safety policy; no visual PASS is claimed from that capture** |
