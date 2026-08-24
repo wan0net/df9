@@ -1674,6 +1674,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     envObjRenderer.updatePowerIcons(GameRules.elapsedTime);
 
     // Render
+    threeRenderer.postfx?.setOutlinedObjects(characterRenderer.getOutlineObjects());
     threeRenderer.render();
 
     requestAnimationFrame(gameLoop);

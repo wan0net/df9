@@ -5036,7 +5036,7 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   // ── P4.3: PostFX / Bloom ──────────────────────────────────
-  test('postfx system uses the original neutral LUT before bloom and can switch source presets', async () => {
+  test('postfx uses the source LUT and Lua amber character outlines', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
       const initial = df9.isPostFXEnabled();
@@ -5058,7 +5058,12 @@ test.describe('Spacebase DF-9 E2E', () => {
       sourceAsset: 'Neutral2D_256',
       availableLUTs: ['neutral', 'warmspace', 'coldspace'],
       appliedBeforeBloom: true,
+      outlineColor: [1, 0.7, 0],
+      outlineWidth: 2,
+      outlineOpacity: 0.2,
+      outlineAppliedAfterLUT: true,
     });
+    expect(result.neutral.outlineObjectCount).toBeGreaterThan(0);
     expect(result.warm).toMatchObject({ colorLUT: 'warmspace', sourceAsset: 'WarmSpace2D_256' });
     expect(result.cold).toMatchObject({ colorLUT: 'coldspace', sourceAsset: 'ColdSpace2D_256' });
     expect(result.afterDisable).toBe(false);

@@ -1531,6 +1531,11 @@ export class CharacterRenderer {
   /** Check if citizen model has skeleton (for testing). */
   hasCitizenSkeleton(): boolean { return citizenHasSkeleton; }
 
+  /** Character rigs rendered into Lua's WorldOutlines-equivalent pass. */
+  getOutlineObjects(): THREE.Object3D[] {
+    return Array.from(this.handles.values(), handle => handle.object).filter(object => object.visible);
+  }
+
   /** Debug: get material info for first character's meshes. */
   debugMaterials(): { name: string; type: string; hasMap: boolean; color: string; visible: boolean }[] {
     const first = this.handles.values().next().value as CharacterRenderHandle | undefined;

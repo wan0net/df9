@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
@@ -66,6 +67,7 @@ export class PostFX {
   private lutPass: ShaderPass;
   private lutTextures: Record<SourceColorLUT, THREE.Texture>;
   private activeLUT: SourceColorLUT = 'neutral';
+  private outlinePass: OutlinePass;
   private bloomPass: UnrealBloomPass;
   enabled = true;
 
@@ -96,10 +98,25 @@ export class PostFX {
     this.lutPass.uniforms.tColorLUT.value = this.lutTextures.neutral;
     this.composer.addPass(this.lutPass);
 
+    // Lua renders every character into WorldOutlines, then composites a
+    // 2-pixel amber outline with {1.0, 0.7, 0.0, 0.2}. OutlinePass supplies
+    // the equivalent isolated-object mask without tinting the character mesh.
+    const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
+    this.outlinePass = new OutlinePass(resolution, scene, camera);
+    this.outlinePass.visibleEdgeColor.setRGB(1.0, 0.7, 0.0);
+    this.outlinePass.hiddenEdgeColor.setRGB(1.0, 0.7, 0.0);
+    this.outlinePass.edgeStrength = 0.2;
+    // A half-resolution one-texel mask produces the source two-screen-pixel
+    // edge while avoiding four full-size mask buffers under SwiftShader/GPU.
+    this.outlinePass.edgeThickness = 1.0;
+    this.outlinePass.edgeGlow = 0;
+    this.outlinePass.downSampleRatio = 2;
+    this.outlinePass.pulsePeriod = 2 * Math.PI;
+    this.composer.addPass(this.outlinePass);
+
     // Bloom — subtle glow matching Lua Post:SuperBlur
     // Lua uses multiple blur passes with additive blending at various intensities (.3, .2, .2, .2, .15)
     // UnrealBloomPass is a good approximation
-    const resolution = new THREE.Vector2(window.innerWidth, window.innerHeight);
     this.bloomPass = new UnrealBloomPass(resolution, 0.42, 0.5, 0.72);
     // Slightly stronger than the previous baseline so bright sprites and HUD accents
     // pick up a soft DF-9-like halo without washing out the whole scene.
@@ -137,11 +154,20 @@ export class PostFX {
     this.lutPass.uniforms.tColorLUT.value = this.lutTextures[name];
   }
 
+  setOutlinedObjects(objects: THREE.Object3D[]) {
+    this.outlinePass.selectedObjects = objects;
+  }
+
   getDebugInfo(): {
     colorLUT: SourceColorLUT;
     sourceAsset: string | null;
     availableLUTs: SourceColorLUT[];
     appliedBeforeBloom: boolean;
+    outlineObjectCount: number;
+    outlineColor: [number, number, number];
+    outlineWidth: number;
+    outlineOpacity: number;
+    outlineAppliedAfterLUT: boolean;
   } {
     const texture = this.lutPass.uniforms.tColorLUT.value as THREE.Texture | null;
     return {
@@ -149,6 +175,11 @@ export class PostFX {
       sourceAsset: texture?.userData.sourceAsset ?? null,
       availableLUTs: Object.keys(this.lutTextures) as SourceColorLUT[],
       appliedBeforeBloom: this.composer.passes.indexOf(this.lutPass) < this.composer.passes.indexOf(this.bloomPass),
+      outlineObjectCount: this.outlinePass.selectedObjects.length,
+      outlineColor: this.outlinePass.visibleEdgeColor.toArray() as [number, number, number],
+      outlineWidth: this.outlinePass.edgeThickness * this.outlinePass.downSampleRatio,
+      outlineOpacity: this.outlinePass.edgeStrength,
+      outlineAppliedAfterLUT: this.composer.passes.indexOf(this.outlinePass) > this.composer.passes.indexOf(this.lutPass),
     };
   }
 
