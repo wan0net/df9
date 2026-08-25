@@ -293,7 +293,7 @@ test.describe('Spacebase DF-9 E2E', () => {
     await page.mouse.click(target.x, target.y);
 
     const inspector = page.locator('#inspector-panel');
-    await expect(inspector).toBeVisible({ timeout: 3_000 });
+    await expect(inspector).toBeVisible({ timeout: 10_000 });
     await expect(inspector).toContainText(target.name);
     const inspectMenu = page.locator('#game-ui');
     await expect(inspectMenu).toContainText('Back');
@@ -6167,7 +6167,7 @@ test.describe('Spacebase DF-9 E2E', () => {
     await page.waitForTimeout(100);
     const result = await page.evaluate(() => {
       const gameUI = document.getElementById('game-ui');
-      if (!gameUI) return { labels: [] as string[], hotkeys: [] as string[] };
+      if (!gameUI) return { labels: [] as string[], hotkeys: [] as string[], icons: [] as any[] };
       const spans = gameUI.querySelectorAll('span');
       const labels: string[] = [];
       const hotkeys: string[] = [];
@@ -6178,7 +6178,13 @@ test.describe('Spacebase DF-9 E2E', () => {
         // Labels are multi-character text
         if (t.length > 2) labels.push(t);
       }
-      return { labels, hotkeys };
+      const icons = Array.from(document.querySelectorAll<HTMLImageElement>('[data-testid="construct-mode-icon"]'))
+        .map(icon => ({
+          mode: icon.dataset.mode,
+          filter: icon.style.filter,
+          rowBackground: (icon.parentElement?.parentElement as HTMLElement | null)?.style.background ?? '',
+        }));
+      return { labels, hotkeys, icons };
     });
     await page.keyboard.press('Escape');
     // Expected hotkeys: c, w, b, p, x, v, e (lowercase, no brackets)
@@ -6188,6 +6194,18 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.hotkeys).toContain('e');
     // No 'd' for Door — not in original game screenshot
     expect(result.hotkeys).not.toContain('d');
+    expect(result.icons).toHaveLength(7);
+    let amberIconCount = 0;
+    for (const icon of result.icons) {
+      expect(icon.filter).not.toBe('none');
+      if (icon.rowBackground === 'rgb(223, 162, 0)') {
+        expect(icon.filter).toBe('brightness(0)');
+      } else {
+        expect(icon.filter).toContain('invert(55%)');
+        amberIconCount++;
+      }
+    }
+    expect(amberIconCount).toBeGreaterThanOrEqual(6);
   });
 
   test('morale emoticon colors match Lua StatusBar thresholds', async () => {

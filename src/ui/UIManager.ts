@@ -926,6 +926,7 @@ export class UIManager {
 
     // Construct sub-menu — Lua ConstructMenu.lua: replaces sidebar buttons entirely
     this.constructSub = document.createElement('div');
+    this.constructSub.id = 'construct-submenu';
     this.constructSub.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:5;background:rgba(0,0,0,0.95);pointer-events:auto;`;
 
     // ── Cancel button — Lua CancelButton (screenshot: amber text + decline icon) ──
@@ -1012,6 +1013,8 @@ export class UIManager {
       if (sb.iconSrc) {
         const img = document.createElement('img');
         img.src = sb.iconSrc;
+        img.dataset.testid = 'construct-mode-icon';
+        img.dataset.mode = sb.mode;
         img.style.cssText = `width:32px;height:32px;object-fit:contain;${ICON_FILTER_AMBER}`;
         const wrap = document.createElement('div');
         wrap.style.cssText = `width:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0;`;
@@ -1058,15 +1061,18 @@ export class UIManager {
         hk.style.color = '#000';
       });
       el.addEventListener('mouseleave', () => {
-        el.style.background = 'transparent';
+        const active = this.getBuildMode() === sb.mode;
+        el.style.background = active ? AMBER : 'transparent';
         if (sb.iconSrc) {
           const img = iconEl.querySelector('img');
-          if (img) img.style.filter = 'none';
+          if (img) {
+            img.style.cssText = `width:32px;height:32px;object-fit:contain;${active ? ICON_FILTER_BLACK : ICON_FILTER_AMBER}`;
+          }
         } else {
-          (iconEl as HTMLSpanElement).style.color = AMBER;
+          (iconEl as HTMLSpanElement).style.color = active ? '#000' : AMBER;
         }
-        lbl.style.color = AMBER;
-        hk.style.color = AMBER;
+        lbl.style.color = active ? '#000' : AMBER;
+        hk.style.color = active ? '#000' : AMBER;
       });
       this.constructSub.appendChild(el);
     }
@@ -2093,7 +2099,7 @@ export class UIManager {
           const child = el.children[c] as HTMLElement;
           const img = child.querySelector('img');
           if (img) {
-            img.style.filter = isSubActive ? 'brightness(0)' : 'none';
+            img.style.cssText = `width:32px;height:32px;object-fit:contain;${isSubActive ? ICON_FILTER_BLACK : ICON_FILTER_AMBER}`;
           } else {
             child.style.color = isSubActive ? '#000' : AMBER;
           }
