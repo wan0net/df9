@@ -105,10 +105,6 @@ export class UIManager {
   private setSelectedZone: (zone: ZoneType) => void;
   private getHoveredRoomZone: () => ZoneType | null;
   private getHoveredInfo: () => string;
-  private onSave: () => void;
-  private onLoad: () => void;
-  private onExport: () => void;
-  private onImport: () => Promise<boolean>;
   private onSpawn: () => void;
   private onObjectSelected: (name: string) => void;
   private getCharacters: () => Character[];
@@ -264,10 +260,6 @@ export class UIManager {
     setSelectedZone: (zone: ZoneType) => void;
     getHoveredRoomZone: () => ZoneType | null;
     getHoveredInfo: () => string;
-    onSave: () => void;
-    onLoad: () => void;
-    onExport: () => void;
-    onImport: () => Promise<boolean>;
     onSpawn: () => void;
     onObjectSelected: (name: string) => void;
     getCharacters: () => Character[];
@@ -306,10 +298,6 @@ export class UIManager {
     this.setSelectedZone = callbacks.setSelectedZone;
     this.getHoveredRoomZone = callbacks.getHoveredRoomZone;
     this.getHoveredInfo = callbacks.getHoveredInfo;
-    this.onSave = callbacks.onSave;
-    this.onLoad = callbacks.onLoad;
-    this.onExport = callbacks.onExport;
-    this.onImport = callbacks.onImport;
     this.onSpawn = callbacks.onSpawn;
     this.onObjectSelected = callbacks.onObjectSelected;
     this.getCharacters = callbacks.getCharacters;
@@ -754,8 +742,6 @@ export class UIManager {
         sb.label.style.display = '';
         sb.hotkey.style.display = '';
       }
-      const util = sidebar.querySelector('.sidebar-util') as HTMLElement;
-      if (util) util.style.display = 'flex';
       SoundManager.playUI('UI_Expand');
       playWarble(sidebar, 0.3, 0.3);
     });
@@ -766,8 +752,6 @@ export class UIManager {
         sb.label.style.display = 'none';
         sb.hotkey.style.display = 'none';
       }
-      const util = sidebar.querySelector('.sidebar-util') as HTMLElement;
-      if (util) util.style.display = 'none';
       SoundManager.playSfx('degauss');
     });
 
@@ -1337,30 +1321,6 @@ export class UIManager {
     this.sidebarEndcap.src = 'assets/ui/hud/ui_hud_anglebottom.png';
     this.sidebarEndcap.style.cssText = `width:100%;height:auto;display:block;pointer-events:none;`;
     sidebar.appendChild(this.sidebarEndcap);
-
-    // Utility buttons — Lua puts Save/Load in StartMenu, but we keep small links at sidebar bottom for convenience
-    const utilContainer = document.createElement('div');
-    utilContainer.className = 'sidebar-util';
-    utilContainer.style.cssText = `padding:6px 10px;display:none;flex-direction:column;gap:2px;margin-top:auto;`;
-    const utilBtns = [
-      { label: line('UIMISC046TEXT'), action: () => { this.onSave(); Base.addAlert('system', line('UIMISC050TEXT')); } },
-      { label: line('UIMISC047TEXT'), action: () => { this.onLoad(); Base.addAlert('system', line('UIMISC051TEXT')); } },
-      { label: line('UIMISC048TEXT'), action: () => { this.onExport(); Base.addAlert('system', line('UIMISC052TEXT')); } },
-      { label: line('UIMISC049TEXT'), action: () => { this.onImport().then(ok => { Base.addAlert('system', ok ? line('UIMISC053TEXT') : line('UIMISC054TEXT')); }); } },
-    ];
-    for (const ub of utilBtns) {
-      const el = document.createElement('div');
-      el.textContent = ub.label;
-      el.style.cssText = `
-        font-size:22px;color:${AMBER};opacity:0.6; /* Lua dosissemibold22 */
-        padding:2px 4px;cursor:pointer;
-      `;
-      el.addEventListener('click', ub.action);
-      el.addEventListener('mouseenter', () => { el.style.opacity = '1'; });
-      el.addEventListener('mouseleave', () => { el.style.opacity = '0.6'; });
-      utilContainer.appendChild(el);
-    }
-    sidebar.appendChild(utilContainer);
 
     this.uiRoot.appendChild(sidebar);
   }
@@ -2234,7 +2194,7 @@ export class UIManager {
     // Restore sidebar buttons and width when no submenu is active
     if (!isConstructActive && !isMineActive && !isBeaconActive && !this.inspectSubActive && !this.disasterSubActive) {
       for (const sb of this.sidebarBtns) {
-        sb.el.style.display = 'flex';
+        sb.el.style.display = sb.action === 'disaster' && !GameRules.bDisasterMode ? 'none' : 'flex';
       }
       // Reset sidebar width to normal expanded/collapsed state
       this.sidebarEl.style.width = this.sidebarExpanded ? `${SIDEBAR_W}px` : `${SIDEBAR_COLLAPSED_W}px`;

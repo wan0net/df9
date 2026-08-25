@@ -1336,24 +1336,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           info.push(`${char.getName()}\n${char.currentTask?.name ?? 'Idle'}`);
         }
       }
-      // Pending commands at tile
-      for (const cmd of CommandQueue.getAllActive()) {
-        if (cmd.tileX === hovered.x && cmd.tileY === hovered.y) {
-          info.push(`[${cmd.type} command pending]`);
-        }
-      }
       // Lua only opens WorldToolTip for an actual hover target. Empty space,
-      // walls and unzoned floor do not advertise their coordinates or type.
+      // walls, pending commands and unzoned floor do not advertise internal state.
       return info.join('\n\n');
     },
-    onSave: () => {
-      saveLoadSystem.saveToStorage();
-      // Store metadata for the default autosave slot
-      SaveSlotPanel.saveMeta('SpacebaseDF9AutoSave', characterManager.getPopulation(), GameRules.nMatter);
-    },
-    onLoad: () => saveLoadSystem.loadFromStorage(),
-    onExport: () => saveLoadSystem.exportToFile(),
-    onImport: () => saveLoadSystem.importFromFile(),
     onSpawn: () => characterManager.spawnCharacter(),
     onObjectSelected: (name) => { /* placeholder */ },
     getCharacters: () => characterManager.getCharacters(),

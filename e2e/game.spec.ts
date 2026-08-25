@@ -3595,6 +3595,47 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(hasCoordDisplay).toBe(false);
   });
 
+  test('pending construction does not expose internal command text', async () => {
+    const tooltip = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      df9.stageRoomBuildForTest([
+        { x: 25, y: 25 }, { x: 26, y: 25 },
+        { x: 25, y: 26 }, { x: 26, y: 26 },
+      ]);
+      const command = df9.getCommands().find((c: any) => c.type === 'build_tile');
+      if (!command) return null;
+      df9._buildCursor.hoveredTile = { x: command.tileX, y: command.tileY };
+      const info = df9._uiManager.getHoveredInfo();
+      df9._buildCursor.hoveredTile = null;
+      df9.cancelBuild();
+      return info;
+    });
+    expect(tooltip).not.toBeNull();
+    expect(tooltip).not.toContain('command pending');
+    expect(tooltip).not.toContain('build_tile');
+  });
+
+  test('main sidebar contains only the Lua gameplay controls', async () => {
+    const result = await page.evaluate(() => {
+      const sidebar = document.getElementById('sidebar');
+      const uiManager = (window as any).__df9._uiManager;
+      const disaster = uiManager.sidebarBtns.find((button: any) => button.action === 'disaster');
+      return {
+        exists: !!sidebar,
+        hasUtilityLinks: !!sidebar?.querySelector('.sidebar-util'),
+        disasterVisible: disaster ? getComputedStyle(disaster.el).display !== 'none' : null,
+        text: sidebar?.textContent ?? '',
+      };
+    });
+    expect(result.exists).toBe(true);
+    expect(result.hasUtilityLinks).toBe(false);
+    expect(result.disasterVisible).toBe(false);
+    expect(result.text).not.toContain('Save');
+    expect(result.text).not.toContain('Load');
+    expect(result.text).not.toContain('Export');
+    expect(result.text).not.toContain('Import');
+  });
+
   test('starting Base Seed is a real six-tile environment object', async () => {
     const result = await page.evaluate(() => {
       const d = (window as any).__df9;
