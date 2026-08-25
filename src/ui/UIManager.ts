@@ -41,7 +41,10 @@ const HINTLOG_HIGHLIGHT = '#BCFFFF'; // Lua Gui.HINTLOG_HIGHLIGHT = {188/255,255
 
 // CSS filter to tint white/gray icons to amber (#dfa200)
 // brightness(0) → black, then invert+sepia+saturate+hue-rotate to amber
-const ICON_FILTER_AMBER = 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);';
+// Solid-white source icons must land on Gui.AMBER (#dfa200). The previous
+// filter produced a yellow-green #c3c700, which made the whole HUD look
+// fluorescent beside DF-9's orange-amber type and borders.
+const ICON_FILTER_AMBER = 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);';
 const ICON_FILTER_BLACK = 'filter:brightness(0);';
 const ICON_FILTER_RED = 'filter:brightness(0) invert(22%) sepia(95%) saturate(7420%) hue-rotate(358deg) brightness(97%) contrast(108%);';
 const ICON_FILTER_ORANGE = 'filter:brightness(0) invert(48%) sepia(88%) saturate(2010%) hue-rotate(358deg) brightness(101%) contrast(101%);';
@@ -918,7 +921,7 @@ export class UIManager {
     const inspBackEl = document.createElement('div');
     inspBackEl.style.cssText = `height:${BUTTON_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;gap:8px;`;
     const inspBackLbl = document.createElement('span');
-    inspBackLbl.textContent = line('HUDHUD018TEXT'); // "Back"
+    inspBackLbl.textContent = line('HUDHUD009TEXT'); // Lua InspectMenu BackLabel
     inspBackLbl.style.cssText = `font-size:40px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;flex:1;`; // Lua dosisregular40
     const inspBackHk = document.createElement('span');
     inspBackHk.textContent = 'ESC';
@@ -1444,7 +1447,7 @@ export class UIManager {
     const btnW = OBJECT_PICKER_W; // 330
 
     // ── Back button (ESC) — Lua ObjectMenuLayout BackButton ──
-    const backEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'ESC', line('HUDHUD018TEXT'), AMBER, () => {
+    const backEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'ESC', line('HUDHUD009TEXT'), AMBER, () => {
       SoundManager.playUI('UI_Select');
       // Return to construct submenu
       this.objectMenuState = 'zones';
@@ -1456,7 +1459,7 @@ export class UIManager {
     this.objectMenuEl.appendChild(backEl);
 
     // ── Cancel button (X) — Lua ObjectMenuLayout CancelButton ──
-    const cancelEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'X', line('HUDHUD020TEXT'), '#FF3D00', () => {
+    const cancelEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'X', line('HUDHUD034TEXT'), '#FF3D00', () => {
       SoundManager.playUI('UI_Select');
       if (this.onCancelBuild) this.onCancelBuild();
       this.setBuildMode('none');
@@ -1525,7 +1528,7 @@ export class UIManager {
     const kHOTKEYS = ['1','2','3','4','5','6','7','8','9','0','A','B','C','D','E','F','O'];
 
     // ── Back button — returns to zone list ──
-    const backEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, 'ESC', line('HUDHUD018TEXT'), AMBER, () => {
+    const backEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, 'ESC', line('HUDHUD009TEXT'), AMBER, () => {
       SoundManager.playUI('UI_Select');
       this.objectMenuState = 'zones';
       this.objectSubMenuEl.style.display = 'none';

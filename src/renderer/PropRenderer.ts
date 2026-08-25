@@ -74,6 +74,9 @@ function loadModel(name: string): Promise<void> {
           const texture = getPropTexture(mat.name);
           if (texture) {
             mat.map = texture;
+            // Converted models carry a 0.5-grey placeholder base colour.
+            // Source prop textures are already authored at their final colour.
+            mat.color.setHex(0xffffff);
             // The extracted prop sheets are opaque. Preserve depth writes so
             // rear faces cannot bleed through the held or ground model.
             mat.transparent = false;

@@ -439,7 +439,7 @@ export class InspectorPanel {
         const img = document.createElement('img');
         img.src = iconSrc;
         img.alt = t.label;
-        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);'}`;
+        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);'}`;
         btn.appendChild(img);
       }
       btn.addEventListener('click', () => {
@@ -891,7 +891,7 @@ export class InspectorPanel {
         const img = document.createElement('img');
         img.src = iconSrc;
         img.alt = t.label;
-        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);'}`;
+        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);'}`;
         btn.appendChild(img);
       }
       btn.addEventListener('click', () => { this.objectTab = t.key; this.refresh(); });
@@ -1203,7 +1203,7 @@ export class InspectorPanel {
       const iconFile = ZONE_ICONS[zoneName] ?? 'generic';
       const icon = document.createElement('img');
       icon.src = `assets/ui/icons/ui_iconIso_${iconFile}.png`;
-      icon.style.cssText = `width:28px;height:28px;object-fit:contain;flex-shrink:0;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);'}`;
+      icon.style.cssText = `width:28px;height:28px;object-fit:contain;flex-shrink:0;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);'}`;
       btn.appendChild(icon);
 
       // Name + description
@@ -1279,7 +1279,7 @@ export class InspectorPanel {
     const icon = document.createElement('img');
     icon.src = `/assets/ui/inspector/${iconName}`;
     icon.alt = '';
-    icon.style.cssText = 'width:24px;height:24px;object-fit:contain;margin-right:6px;flex:0 0 24px;filter:brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg);';
+    icon.style.cssText = 'width:24px;height:24px;object-fit:contain;margin-right:6px;flex:0 0 24px;filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);';
     row.appendChild(icon);
 
     const labelSpan = document.createElement('span');

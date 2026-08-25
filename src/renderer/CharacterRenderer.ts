@@ -10,6 +10,7 @@ import { getTexture } from './AssetLoader';
 import {
   RACE_MONSTER, RACE_KILLBOT,
   RACE_TYPE, RIG_ALIEN,
+  BUILDER, MINER, EMERGENCY, EMERGENCY2, EMERGENCY3, RAIDER,
 } from '../characters/CharacterConstants';
 import {
   ensureCharacterAppearance,
@@ -394,6 +395,10 @@ function applyModelTextures(
       if (CHAR_TEXTURES.has(baseName)) {
         const tex = loadCharTexture(`${baseName}.png`);
         mat.map = tex;
+        // The converted GLBs use a neutral 0.5-grey placeholder material.
+        // Once the original DF-9 texture is restored, the material multiplier
+        // must be white or every source colour renders at half brightness.
+        mat.color.setHex(0xffffff);
         // The extracted DF-9 character sheets are opaque (their alpha channel,
         // when present, is 255 throughout). Keep normal depth writes so rear
         // limbs and outfit subsets cannot render through the front of the rig.
@@ -938,29 +943,34 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
-      // Spacesuit.glb has 7 primitives by material:
-      // 0: Head (always), 1: Suit body (always), 2: AsteroidChunk (MINER),
-      // 3: Builder tool (BUILDER), 4: Suit body (always),
-      // 5: SpaceEmergency (EMERGENCY), 6: MinerAcc (MINER)
+      // Spacesuit.glb preserves the seven source .brig subsets. Material 1 is
+      // reused by both the body (subset 1) and default job equipment (subset 4),
+      // so material-name visibility cannot distinguish them. Lua's
+      // CharacterConstants.SPACESUITS / SPACESUIT_JOB_EQUIPMENT select exactly
+      // one body texture and one equipment subset. Hand props (2/3) are driven
+      // separately by PropRenderer and must not be permanently shown by job.
       const job = char.getJob();
-      const visibleMats = new Set(['Human_Head_Male01', 'Spacesuit01']);
-      if (job === 4) { // MINER
-        visibleMats.add('AsteroidChunk01');
-        visibleMats.add('MinerAcc01');
-      } else if (job === 2) { // BUILDER
-        visibleMats.add('Builder01');
-      } else if (job === 5) { // EMERGENCY
-        visibleMats.add('SpaceEmergency01');
-      }
+      const isMiner = job === MINER;
+      const isEmergency = job === EMERGENCY || job === EMERGENCY2 || job === EMERGENCY3;
+      const equipmentSubset = isMiner ? 6 : isEmergency ? 5 : 4;
+      const visibleSubsets = new Set([0, 1, equipmentSubset]);
+      let subsetIndex = 0;
       clone.traverse((child) => {
         if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-          const matName = (child.material as THREE.Material)?.name ?? '';
-          child.visible = visibleMats.has(matName);
+          child.visible = visibleSubsets.has(subsetIndex++);
         }
       });
 
-      // Apply textures and default colors
-      applyModelTextures(clone, char.id);
+      const bodyTexture = isMiner
+        ? 'SpaceMiner01'
+        : isEmergency
+          ? 'SpaceEmergency01'
+          : job === BUILDER
+            ? 'Spacesuit01'
+            : job === RAIDER
+              ? 'SpaceRaider01'
+              : 'SpaceDefault01';
+      applyModelTextures(clone, char.id, undefined, new Map([[1, bodyTexture]]));
       ensureDoubleSided(clone);
 
       // Reset skeleton bind pose after clone so meshes render correctly

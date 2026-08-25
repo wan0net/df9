@@ -19,7 +19,7 @@ import type { Room } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
 
 const AMBER = '#dfa200';
-const ICON_FILTER_AMBER = 'brightness(0) invert(62%) sepia(98%) saturate(600%) hue-rotate(18deg)';
+const ICON_FILTER_AMBER = 'brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%)';
 
 /** Exact ResearchData.lua sIcon assignments; absent entries use Lua's help icon. */
 const RESEARCH_ICON_BY_ID: Record<string, string> = {

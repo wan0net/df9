@@ -276,23 +276,28 @@ test.describe('Spacebase DF-9 E2E', () => {
     await page.keyboard.press('i');
     expect(await df9(page).buildMode()).toBe('none');
 
-    // Click on center of canvas (where room was built)
-    const canvas = page.locator('canvas').first();
-    const canvasBox = await canvas.boundingBox();
-    expect(canvasBox).toBeTruthy();
-    const centerX = canvasBox!.x + canvasBox!.width / 2;
-    const centerY = canvasBox!.y + canvasBox!.height / 2;
-    await page.mouse.click(centerX, centerY);
+    const target = await page.evaluate(() => {
+      const state = (window as any).__df9;
+      state._gameRules.bRunning = false;
+      const char = state._charMgr.getCharacters()[0];
+      const camera = state._cameraController;
+      return {
+        name: char.getName(),
+        x: (char.screenX - camera.scrollX) * camera.zoom,
+        y: (char.screenY - camera.scrollY) * camera.zoom,
+      };
+    });
 
-    // Wait a moment for click processing
-    await page.waitForTimeout(500);
+    // No artificial down/up delay: this covers a complete browser click that
+    // can begin and end between animation frames.
+    await page.mouse.click(target.x, target.y);
 
-    // Inspector panel should appear (room or character selection)
     const inspector = page.locator('#inspector-panel');
-    // Inspector may or may not appear depending on tile content
-    // Just verify no crash occurred
-    const gameState = await df9(page).population();
-    expect(gameState).toBeGreaterThanOrEqual(3);
+    await expect(inspector).toBeVisible({ timeout: 3_000 });
+    await expect(inspector).toContainText(target.name);
+    const inspectMenu = page.locator('#game-ui');
+    await expect(inspectMenu).toContainText('Back');
+    await expect(inspectMenu).not.toContainText('Submit');
   });
 
   test('alert log displays alerts', async () => {
@@ -773,6 +778,21 @@ test.describe('Spacebase DF-9 E2E', () => {
     await page.evaluate(() => (window as any).__df9?.toggleMute());
     const restored = await page.evaluate(() => (window as any).__df9?.getAudioState());
     expect(restored.muted).toBe(wasMuted);
+  });
+
+  test('music volume can be silenced independently', async () => {
+    const result = await page.evaluate(() => {
+      const df9 = (window as any).__df9;
+      const original = df9.getAudioState().settings.musicVolume;
+      df9.setMusicVolume(0);
+      const silenced = { ...df9.getAudioState().settings };
+      df9.setMusicVolume(original);
+      const restored = df9.getAudioState().settings.musicVolume;
+      return { original, silenced, restored };
+    });
+    expect(result.silenced.musicVolume).toBe(0);
+    expect(result.silenced.masterVolume).toBeGreaterThan(0);
+    expect(result.restored).toBe(result.original);
   });
 
   // ── Milestone 13: Music & Ambience ───────────────────────────
@@ -3615,6 +3635,30 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(iconCount).toBe(16);
   });
 
+  test('HUD source icons are tinted to Lua Gui.AMBER rather than yellow-green', async () => {
+    const result = await page.evaluate(() => {
+      const icon = Array.from(document.querySelectorAll<HTMLImageElement>('#sidebar img'))
+        .find(img => img.src.includes('ui_iconIso_assign'));
+      if (!icon) return null;
+      const filter = getComputedStyle(icon).filter;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      const ctx = canvas.getContext('2d')!;
+      ctx.filter = filter;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, 1, 1);
+      return { filter, rgba: Array.from(ctx.getImageData(0, 0, 1, 1).data) };
+    });
+    expect(result).not.toBeNull();
+    expect(result!.filter).not.toBe('none');
+    expect(result!.rgba[0]).toBeGreaterThanOrEqual(220);
+    expect(result!.rgba[0]).toBeLessThanOrEqual(226);
+    expect(result!.rgba[1]).toBeGreaterThanOrEqual(159);
+    expect(result!.rgba[1]).toBeLessThanOrEqual(165);
+    expect(result!.rgba[2]).toBeLessThanOrEqual(3);
+    expect(result!.rgba[3]).toBe(255);
+  });
+
   // Lua Character:_setUpBlobShadow: original sprite, exact dimensions, no extra aura.
   test('character renderer uses the original blob shadow without an invented aura', async () => {
     const result = await page.evaluate(() => {
@@ -3723,13 +3767,19 @@ test.describe('Spacebase DF-9 E2E', () => {
       const props = (window as any).__df9._propRenderer as any;
       return Object.entries(entries).map(([model, expectedTexture]) => {
         const info = props.getDebugInfo(`source-prop-${model}`);
-        const surfaces: Array<{ transparent: boolean; alphaTest: number; depthWrite: boolean }> = [];
+        const surfaces: Array<{
+          transparent: boolean;
+          alphaTest: number;
+          depthWrite: boolean;
+          color: string;
+        }> = [];
         props.props.get(`source-prop-${model}`).object.traverse((child: any) => {
           if (child.isMesh && child.material?.map) {
             surfaces.push({
               transparent: child.material.transparent,
               alphaTest: child.material.alphaTest,
               depthWrite: child.material.depthWrite,
+              color: child.material.color.getHexString(),
             });
           }
         });
@@ -3741,7 +3791,8 @@ test.describe('Spacebase DF-9 E2E', () => {
       expect(item.info).toEqual({ modelName: item.model, textures: [item.expectedTexture] });
       expect(item.surfaces.length).toBeGreaterThan(0);
       expect(item.surfaces.every(surface =>
-        !surface.transparent && surface.alphaTest === 0 && surface.depthWrite,
+        !surface.transparent && surface.alphaTest === 0 && surface.depthWrite
+          && surface.color === 'ffffff',
       )).toBe(true);
     }
   });
@@ -4160,6 +4211,7 @@ test.describe('Spacebase DF-9 E2E', () => {
         subset: number;
         transparent: boolean;
         depthWrite: boolean;
+        color: string;
       }> = [];
       handle.object.traverse((child: any) => {
         if (!child.isMesh && !child.isSkinnedMesh) return;
@@ -4170,16 +4222,57 @@ test.describe('Spacebase DF-9 E2E', () => {
           subset: child.userData?.sourceSubsetIndex ?? -1,
           transparent: child.material?.transparent ?? true,
           depthWrite: child.material?.depthWrite ?? false,
+          color: child.material?.color?.getHexString?.() ?? '',
         });
       });
-      return visible;
+      char.bSpacewalking = true;
+      renderer.destroyCharacter(char.id);
+      const suitedHandle = renderer.createCharacter(char);
+      const readSuit = (handle: any) => {
+        const suit: Array<{
+          material: string;
+          texture: string | null;
+          color: string;
+          subset: number;
+        }> = [];
+        handle.object.traverse((child: any) => {
+          if ((!child.isMesh && !child.isSkinnedMesh) || !child.visible) return;
+          suit.push({
+            material: child.material?.name ?? '',
+            texture: child.material?.userData?.textureName ?? null,
+            color: child.material?.color?.getHexString?.() ?? '',
+            subset: child.userData?.sourceSubsetIndex ?? -1,
+          });
+        });
+        return suit;
+      };
+      const suitDefault = readSuit(suitedHandle);
+
+      char.setJob(4); // MINER
+      renderer.destroyCharacter(char.id);
+      const suitMiner = readSuit(renderer.createCharacter(char));
+
+      char.setJob(5); // EMERGENCY
+      renderer.destroyCharacter(char.id);
+      const suitEmergency = readSuit(renderer.createCharacter(char));
+      return { visible, suitDefault, suitMiner, suitEmergency };
     });
 
-    expect(result.some(v => v.texture?.startsWith('Cat_Body_'))).toBe(true);
-    expect(result.some(v => v.texture?.startsWith('Cat_Head_'))).toBe(true);
-    expect(result.map(v => v.subset).sort((a, b) => a - b)).toEqual([2, 11, 71]);
-    expect(result.some(v => v.subset === 71 && v.texture === 'Scientist01')).toBe(true);
-    expect(result.filter(v => v.texture).every(v => !v.transparent && v.depthWrite)).toBe(true);
+    expect(result.visible.some(v => v.texture?.startsWith('Cat_Body_'))).toBe(true);
+    expect(result.visible.some(v => v.texture?.startsWith('Cat_Head_'))).toBe(true);
+    expect(result.visible.map(v => v.subset).sort((a, b) => a - b)).toEqual([2, 11, 71]);
+    expect(result.visible.some(v => v.subset === 71 && v.texture === 'Scientist01')).toBe(true);
+    expect(result.visible.filter(v => v.texture).every(v => !v.transparent && v.depthWrite)).toBe(true);
+    expect(result.visible.filter(v => v.texture).every(v => v.color === 'ffffff')).toBe(true);
+    expect(result.suitDefault.map(v => v.subset).sort((a, b) => a - b)).toEqual([0, 1, 4]);
+    expect(result.suitDefault.some(v => v.subset === 1 && v.texture === 'SpaceDefault01')).toBe(true);
+    expect(result.suitDefault.some(v => v.subset === 4 && v.texture === 'Spacesuit01')).toBe(true);
+    expect(result.suitDefault.filter(v => v.texture).every(v => v.color === 'ffffff')).toBe(true);
+    expect(result.suitMiner.map(v => v.subset).sort((a, b) => a - b)).toEqual([0, 1, 6]);
+    expect(result.suitMiner.some(v => v.subset === 1 && v.texture === 'SpaceMiner01')).toBe(true);
+    expect(result.suitMiner.some(v => v.subset === 6 && v.texture === 'MinerAcc01')).toBe(true);
+    expect(result.suitEmergency.map(v => v.subset).sort((a, b) => a - b)).toEqual([0, 1, 5]);
+    expect(result.suitEmergency.filter(v => v.subset !== 0).every(v => v.texture === 'SpaceEmergency01')).toBe(true);
   });
 
   test('door placement does not immediately convert wall to DOOR', async () => {
@@ -5169,6 +5262,7 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.neutral).toMatchObject({
       colorLUT: 'neutral',
       sourceAsset: 'Neutral2D_256',
+      lutFlipY: false,
       availableLUTs: ['neutral', 'warmspace', 'coldspace'],
       appliedBeforeBloom: true,
       outlineColor: [1, 0.7, 0],
@@ -6008,7 +6102,7 @@ test.describe('Spacebase DF-9 E2E', () => {
 
     const result = await page.evaluate(() => {
       const gameUI = document.getElementById('game-ui');
-      if (!gameUI) return { hasZones: false, zoneCount: 0 };
+      if (!gameUI) return { hasZones: false, zoneCount: 0, text: '' };
       const spans = gameUI.querySelectorAll('span');
       // Hotkeys are now lowercase without brackets (matching screenshots)
       const zoneHotkeys = ['z', 'a', 't', 'g', 's', 'b', 'f', 'r', 'n', 'h', 'i'];
@@ -6016,7 +6110,7 @@ test.describe('Spacebase DF-9 E2E', () => {
       for (const span of spans) {
         if (zoneHotkeys.includes(span.textContent?.trim() || '')) foundCount++;
       }
-      return { hasZones: foundCount >= 5, zoneCount: foundCount };
+      return { hasZones: foundCount >= 5, zoneCount: foundCount, text: gameUI.textContent ?? '' };
     });
 
     // Press Escape to exit
@@ -6026,6 +6120,10 @@ test.describe('Spacebase DF-9 E2E', () => {
 
     expect(result.hasZones).toBe(true);
     expect(result.zoneCount).toBeGreaterThanOrEqual(11); // 11 zone categories
+    expect(result.text).toContain('Back');
+    expect(result.text).toContain('Cancel');
+    expect(result.text).toContain('Confirm');
+    expect(result.text).not.toContain('Submit');
   });
 
   test('UI scale: getUIScale returns valid auto-calculated value', async () => {

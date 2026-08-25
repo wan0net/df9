@@ -2495,6 +2495,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }),
     toggleMute: () => SoundManager.toggleMute(),
     setMasterVolume: (v: number) => SoundManager.setMasterVolume(v),
+    setMusicVolume: (v: number) => SoundManager.setMusicVolume(v),
     // ── Milestone 13: Music & Ambience ───────────────────────
     getMusicState: () => ({
       playing: musicSystem.isPlaying(),

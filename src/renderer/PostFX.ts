@@ -87,6 +87,10 @@ export class PostFX {
         texture.wrapS = THREE.ClampToEdgeWrapping;
         texture.wrapT = THREE.ClampToEdgeWrapping;
         texture.colorSpace = THREE.NoColorSpace;
+        // The source LUT is authored top-to-bottom with black/magenta at Y=0
+        // and green/white at Y=1. Three's default upload flip would make a
+        // black scene sample the green row and wash the entire world lime.
+        texture.flipY = false;
         texture.userData.sourceAsset = path.split('/').pop()?.replace('.png', '') ?? name;
         return [name, texture];
       }),
@@ -162,6 +166,7 @@ export class PostFX {
     colorLUT: SourceColorLUT;
     sourceAsset: string | null;
     availableLUTs: SourceColorLUT[];
+    lutFlipY: boolean | null;
     appliedBeforeBloom: boolean;
     outlineObjectCount: number;
     outlineColor: [number, number, number];
@@ -174,6 +179,7 @@ export class PostFX {
       colorLUT: this.activeLUT,
       sourceAsset: texture?.userData.sourceAsset ?? null,
       availableLUTs: Object.keys(this.lutTextures) as SourceColorLUT[],
+      lutFlipY: texture?.flipY ?? null,
       appliedBeforeBloom: this.composer.passes.indexOf(this.lutPass) < this.composer.passes.indexOf(this.bloomPass),
       outlineObjectCount: this.outlinePass.selectedObjects.length,
       outlineColor: this.outlinePass.visibleEdgeColor.toArray() as [number, number, number],
