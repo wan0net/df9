@@ -5419,18 +5419,19 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   // ── P4.7: Settings panel linecodes ────────────────────────
-  test('settings panel linecodes exist (SETMENU01-07)', async () => {
+  test('settings panel source linecodes exist (SETMENU01-07)', async () => {
     const result = await page.evaluate(() => {
       const df9 = (window as any).__df9;
-      const codes = ['SETMENU01TEXT', 'SETMENU02TEXT', 'SETMENU03TEXT',
-        'SETMENU04TEXT', 'SETMENU05TEXT', 'SETMENU06TEXT', 'SETMENU07TEXT'];
+      const codes = ['SETMENU01', 'SETMENU02', 'SETMENU03',
+        'SETMENU04', 'SETMENU05', 'SETMENU06', 'SETMENU07'];
       return codes.map(c => {
         const text = df9.getLine?.(c) ?? '';
-        return { code: c, exists: text.length > 0 };
+        return { code: c, text };
       });
     });
     for (const r of result) {
-      expect(r.exists).toBe(true);
+      expect(r.text).not.toBe('');
+      expect(r.text).not.toContain('INVALID LINECODE');
     }
   });
 
@@ -6318,6 +6319,69 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(regions.motd!.right).toBeLessThan(regions.buttons!.left);
     expect(regions.buttons!.bottom).toBeLessThanOrEqual(720);
     expect(regions.buttons!.width).toBeCloseTo(800 * (1280 / 1920), 0);
+  });
+
+  test('settings screen matches Lua full-screen layout and source controls', async () => {
+    await page.goto('/');
+    await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
+    await page.getByText('SETTINGS', { exact: true }).click();
+    const settings = page.locator('#settings-panel');
+    await expect(settings).toBeVisible({ timeout: 5_000 });
+
+    const layout = await page.evaluate(() => {
+      const panel = document.getElementById('settings-panel')!;
+      const title = panel.querySelector('[data-testid="settings-title"]') as HTMLElement;
+      const labels = Array.from(panel.querySelectorAll<HTMLElement>('[data-testid="settings-label"]'));
+      const rows = Array.from(panel.querySelectorAll<HTMLElement>('[data-testid="settings-row"]'));
+      const logo = panel.querySelector<HTMLImageElement>('[data-testid="settings-logo"]');
+      const rect = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+      };
+      return {
+        background: getComputedStyle(panel).backgroundColor,
+        title: title.textContent,
+        titleColor: getComputedStyle(title).color,
+        labels: labels.map(label => label.textContent),
+        labelColors: labels.map(label => getComputedStyle(label).color),
+        rowTops: rows.map(row => rect(row).top),
+        firstLabel: rect(labels[0]),
+        firstControl: rect(rows[0].querySelector('input')!),
+        logoSrc: logo?.getAttribute('src') ?? '',
+        sliders: panel.querySelectorAll('[data-testid="settings-slider"]').length,
+        checkboxes: panel.querySelectorAll('[data-testid="settings-checkbox"]').length,
+        hasBorderedModal: Array.from(panel.children).some(child =>
+          Number.parseFloat(getComputedStyle(child).borderTopWidth) > 0),
+        bodyText: panel.textContent ?? '',
+      };
+    });
+
+    expect(layout).toMatchObject({
+      background: 'rgba(0, 0, 0, 0.83)',
+      title: 'SETTINGS',
+      titleColor: 'rgb(255, 255, 255)',
+      labels: [
+        'MUSIC VOLUME',
+        'SFX VOLUME',
+        'AUTOSAVE',
+        'USE OS MOUSE CURSOR',
+        'FULLSCREEN',
+        'COLORBLIND MODE (Requires restart)',
+      ],
+      logoSrc: 'assets/ui/startmenu_logo.png',
+      sliders: 2,
+      checkboxes: 4,
+      hasBorderedModal: false,
+    });
+    expect(layout.labelColors.every(color => color === 'rgb(255, 255, 255)')).toBe(true);
+    expect(layout.firstLabel.right).toBeLessThan(layout.firstControl.left);
+    expect(layout.rowTops).toEqual([...layout.rowTops].sort((a, b) => a - b));
+    expect(layout.bodyText).not.toContain('Master Volume');
+    expect(layout.bodyText).not.toContain('UI Scale');
+    expect(layout.bodyText).not.toContain('Done');
+
+    await page.keyboard.press('Escape');
+    await expect(settings).toBeHidden();
   });
 
   test('new-base map and consoles use the Lua native layout at 1280x720', async () => {
