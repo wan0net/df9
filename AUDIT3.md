@@ -17,7 +17,7 @@ This is the current audit record. `AUDIT.md` and `AUDIT2.md` preserve the earlie
 
 ## Outcome
 
-This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, construction ghosts, environment-object geometry and hover states, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed twenty-eight graphics/UI parity defects and four timing/input defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character and spacesuit rig-subset selection, missing portrait/accessory/face layers, missing or half-darkened race/job/prop/effect textures, absent or incorrectly uploaded source colour grading, fluorescent HUD icon tint, invented research glyphs, grey/placeholder construction ghosts, stretched environment props, missing object/HappyBot hover feedback, object damage tints being erased by room lighting, and invented or prematurely visible sidebar/tooltip UI.
+This pass reviewed the renderer, extracted assets, primary game screens, room lighting, character presentation, held-object presentation, construction ghosts, environment-object geometry and hover states, particle presentation, post-processing, and the timing paths adjacent to those systems. It fixed twenty-nine graphics/UI parity defects and four timing/input defects. The highest-impact visual defects were the compressed new-base map, approximate menu geometry, disabled source skeletal animations, invented character aura, incorrect character and spacesuit rig-subset selection, missing portrait/accessory/face layers, missing or half-darkened race/job/prop/effect textures, absent or incorrectly uploaded source colour grading, fluorescent HUD icon tint, invented research glyphs, grey/placeholder construction ghosts, stretched environment props, missing object/HappyBot hover feedback, object damage tints being erased by room lighting, and invented or prematurely visible sidebar/tooltip UI.
 
 ## Graphics and UI findings
 
@@ -51,6 +51,7 @@ This pass reviewed the renderer, extracted assets, primary game screens, room li
 | GFX-26 | **Fixed + tested** | `GuiManager.lua` hover-target routing and `WorldToolTip.lua` | Hovering a pending construction tile exposed the internal string `[build_tile command pending]`. Lua commands are not tooltip targets, so pending construction now remains visually silent unless a real room, object, or character is under the pointer. | `pending construction does not expose internal command text`; live construction flow |
 | GFX-27 | **Fixed + tested** | `NewSideBar.lua`, `UILayouts/SideBarLayout.lua`, and `StartMenu.lua` | The expanded gameplay sidebar appended invented Save, Load, Export, and Import convenience links. Lua confines save/load management to the start/pause flow; the gameplay bar now contains only its source controls. | `main sidebar contains only the Lua gameplay controls`; live expanded-sidebar capture |
 | GFX-28 | **Fixed + tested** | `NewSideBar.lua:init`, `enableDisasterMenu`, and `onTick` | The Disasters button was initially hidden but a later generic layout refresh restored it immediately. It now remains absent until `GameRules.bDisasterMode` is enabled, matching the Lua unlock state. | `main sidebar contains only the Lua gameplay controls`; live locked-state capture |
+| GFX-29 | **Fixed + tested** | `GuiManager.lua:_getTargetAt`, `WorldToolTip.lua`, `Character.lua:getToolTipTextInfos`, `Room.lua:getToolTipTextInfos`, `EnvObject.lua:getToolTipTextInfos`, and the original Inspector/JobRoster sprites | The world tooltip was an unbordered white two-line debug readout that could combine room, prop, and character data and clip off-screen. It now follows Lua's Character → EnvObject → Room priority and mode gating, renders the source job/health/morale/activity/oxygen/bullet icons in a 32-pixel amber bordered row stack, restores health/morale/O2 state colours, condition percentages and power rows, packages the original Janitor broom icon, and keeps the cursor-relative panel inside the browser viewport. | `world tooltips use Lua target priority, rows, icons, and colors`; live citizen-hover capture |
 
 ## Gameplay and timing findings found during the same review
 
@@ -231,4 +232,15 @@ The production build reports the existing large-bundle advisory for the 1.6 MB m
 | Focused pending-tooltip/sidebar scenarios | **PASS — 2/2** |
 | Complete stable Playwright E2E suite | **PASS — 288/288 in 8.5 minutes with two WebGL workers** |
 | In-app construction/inspector/roster/research playthrough | **PASS — construction completed and citizens moved; internal pending-command text removed; the expanded locked-state sidebar contains only the seven Lua controls; inspector, roster, and research flows opened normally; music remained at 0%** |
+| Diff whitespace validation | **PASS** |
+
+### Lua world-tooltip continuation — 2026-08-25
+
+| Gate | Result |
+|---|---|
+| Production build (`tsc` + Vite) | **PASS** |
+| Unit suite | **PASS — 95/95** |
+| Focused world-tooltip scenario | **PASS — 1/1**, covering Lua target priority and mode gating, row structure, source icons, state colours, the Janitor broom, object condition formatting, room oxygen, and viewport clamping |
+| Complete stable Playwright E2E suite | **PASS — 289/289 in 7.1 minutes with two WebGL workers** |
+| In-app browser inspection | **PASS — character tooltip now uses the original amber bordered panel, compact source rows and icons, state colours, and remains fully visible at the viewport edge; music remained at 0%** |
 | Diff whitespace validation | **PASS** |

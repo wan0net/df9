@@ -23,6 +23,7 @@ import { SoundManager } from '../audio/SoundManager';
 import { line } from '../localization/Localization';
 import { playWarble } from './WarbleEffect';
 import { getStoredOrAutoUIScale } from './UIScale';
+import type { WorldTooltipRow } from './WorldTooltip';
 
 const AMBER = '#dfa200';
 const BRIGHT_AMBER = '#FFE696';
@@ -104,7 +105,7 @@ export class UIManager {
   private getSelectedZone: () => ZoneType;
   private setSelectedZone: (zone: ZoneType) => void;
   private getHoveredRoomZone: () => ZoneType | null;
-  private getHoveredInfo: () => string;
+  private getHoveredInfo: () => WorldTooltipRow[];
   private onSpawn: () => void;
   private onObjectSelected: (name: string) => void;
   private getCharacters: () => Character[];
@@ -259,7 +260,7 @@ export class UIManager {
     getSelectedZone: () => ZoneType;
     setSelectedZone: (zone: ZoneType) => void;
     getHoveredRoomZone: () => ZoneType | null;
-    getHoveredInfo: () => string;
+    getHoveredInfo: () => WorldTooltipRow[];
     onSpawn: () => void;
     onObjectSelected: (name: string) => void;
     getCharacters: () => Character[];
@@ -1620,25 +1621,43 @@ export class UIManager {
 
   private createTooltip() {
     this.tooltipEl = document.createElement('div');
+    this.tooltipEl.id = 'world-tooltip';
     this.tooltipEl.style.cssText = `
-      position:fixed;width:280px;z-index:999;
-      background:rgba(0,0,0,0.8);color:#ccc;font-size:22px; /* Lua dosissemibold22 */
+      position:fixed;width:max-content;max-width:460px;z-index:999;
+      background:rgba(0,0,0,0.92);color:${AMBER};font-size:22px; /* Lua dosissemibold22 */
       font-family:'Dosis',sans-serif;font-weight:600;
-      padding:8px;line-height:1.6;white-space:pre-wrap;
+      padding:10px 14px;line-height:32px;white-space:nowrap;
+      border:2px solid ${AMBER};box-sizing:border-box;
       display:none;pointer-events:none;
     `;
     // U-36: Tooltip follows cursor (Lua WorldToolTip nOffsetX=68, nOffsetY=-30)
     // Also update object placement cursor label position (U-43)
     document.addEventListener('mousemove', (e) => {
-      if (this.tooltipEl.style.display !== 'none') {
-        this.tooltipEl.style.left = (e.clientX + 68) + 'px';
-        this.tooltipEl.style.top = (e.clientY - 30) + 'px';
-      }
-      // U-43: Track mouse for object cursor label
       this._lastMouseX = e.clientX;
       this._lastMouseY = e.clientY;
+      if (this.tooltipEl.style.display !== 'none') {
+        this.positionTooltip();
+      }
+      // U-43: Track mouse for object cursor label
     });
     document.body.appendChild(this.tooltipEl);
+  }
+
+  /** Keep Lua's cursor offset while preventing the browser panel from clipping. */
+  private positionTooltip() {
+    const margin = 8;
+    const width = this.tooltipEl.offsetWidth;
+    const height = this.tooltipEl.offsetHeight;
+    let left = this._lastMouseX + 68;
+    let top = this._lastMouseY - 30;
+    if (left + width > window.innerWidth - margin) {
+      left = this._lastMouseX - width - 20;
+    }
+    if (top + height > window.innerHeight - margin) {
+      top = window.innerHeight - height - margin;
+    }
+    this.tooltipEl.style.left = `${Math.max(margin, left)}px`;
+    this.tooltipEl.style.top = `${Math.max(margin, top)}px`;
   }
 
   // ── Alert Log ───────────────────────────────────────────────────
@@ -2221,9 +2240,33 @@ export class UIManager {
     const tooltipSuppressed = this.activePanel !== 'none'
       || this.jobRoster.isVisible()
       || this.inspectorPanel.hasEntity();
-    if (info && !tooltipSuppressed) {
-      this.tooltipEl.textContent = info;
+    if (info.length > 0 && !tooltipSuppressed) {
+      this.tooltipEl.replaceChildren();
+      for (const row of info) {
+        if (!row.text) continue;
+        const rowEl = document.createElement('div');
+        rowEl.dataset.testid = 'world-tooltip-row';
+        rowEl.style.cssText = `height:32px;display:flex;align-items:center;color:${row.color ?? AMBER};`;
+        if (row.icon) {
+          const icon = document.createElement('span');
+          icon.dataset.testid = 'world-tooltip-icon';
+          const iconColor = row.iconColor ?? row.color ?? AMBER;
+          icon.style.cssText = `
+            width:28px;height:28px;margin-right:6px;flex:0 0 28px;
+            background:${iconColor};
+            -webkit-mask:url('${row.icon}') center/contain no-repeat;
+            mask:url('${row.icon}') center/contain no-repeat;
+            mask-mode:${row.iconMaskMode ?? 'alpha'};
+          `;
+          rowEl.appendChild(icon);
+        }
+        const text = document.createElement('span');
+        text.textContent = row.text;
+        rowEl.appendChild(text);
+        this.tooltipEl.appendChild(rowEl);
+      }
       this.tooltipEl.style.display = 'block';
+      this.positionTooltip();
     } else {
       this.tooltipEl.style.display = 'none';
     }

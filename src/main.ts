@@ -22,6 +22,11 @@ import { InputManager } from './input/InputManager';
 import { StartMenuState } from './ui/StartMenu';
 import { NewGameScreenState } from './ui/NewGameScreen';
 import { UIManager } from './ui/UIManager';
+import {
+  getCharacterTooltipRows,
+  getEnvObjectTooltipRows,
+  getRoomTooltipRows,
+} from './ui/WorldTooltip';
 import type { SelectedEntity } from './ui/InspectorPanel';
 
 import { TileGrid } from './world/TileGrid';
@@ -1315,30 +1320,23 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     },
     getHoveredInfo: () => {
       const hovered = buildCursor.hoveredTile;
-      if (!hovered) return '';
+      if (!hovered) return [];
+      // Lua GuiManager only displays WorldToolTip in Inspect, Beacon, Pick,
+      // and PlaceProp. The web build maps those to none, beacon, and object.
+      if (buildMode !== 'none' && buildMode !== 'beacon' && buildMode !== 'object') return [];
       const room = roomManager.getRoomAt(hovered.x, hovered.y);
-      const info: string[] = [];
-      if (room) {
-        info.push(`Room #${room.id}  ${room.size} tiles  Zone: ${ZONE_SPRITES[room.zone].name}`);
-        info.push(`O2: ${room.oxygen}/255  ${room.sealed ? 'Sealed' : 'BREACHED'}`);
-        info.push(`Power: +${room.nPowerOutput}/-${room.nPowerDraw}`);
+      // Beacon and object-placement modes intentionally ignore characters and
+      // props; Lua requests a Room-only hover target in both modes.
+      if (buildMode === 'beacon' || buildMode === 'object') {
+        return room ? getRoomTooltipRows(room) : [];
       }
-      // Env objects at tile (Lua tooltip: "Name · Condition: Good (100%)")
+      // Lua _getTargetAt resolves Character > EnvObject > Room.
+      const char = characterManager.getCharacters().find(candidate =>
+        candidate.tileX === hovered.x && candidate.tileY === hovered.y);
+      if (char) return getCharacterTooltipRows(char);
       const obj = EnvObjectManager.getObjectAt(hovered.x, hovered.y);
-      if (obj) {
-        let objectInfo = `${obj.tData.friendlyName} \u00b7 ${obj.getConditionUIString()} (${Math.round(obj.nCondition)}%)`;
-        if (!obj.bBuilt) objectInfo += ` [Building]`;
-        info.push(objectInfo);
-      }
-      // Characters at tile (Lua tooltip: "Name\nActivity (time)")
-      for (const char of characterManager.getCharacters()) {
-        if (char.tileX === hovered.x && char.tileY === hovered.y) {
-          info.push(`${char.getName()}\n${char.currentTask?.name ?? 'Idle'}`);
-        }
-      }
-      // Lua only opens WorldToolTip for an actual hover target. Empty space,
-      // walls, pending commands and unzoned floor do not advertise internal state.
-      return info.join('\n\n');
+      if (obj) return getEnvObjectTooltipRows(obj);
+      return room ? getRoomTooltipRows(room) : [];
     },
     onSpawn: () => characterManager.spawnCharacter(),
     onObjectSelected: (name) => { /* placeholder */ },

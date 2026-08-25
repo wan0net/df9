@@ -3596,23 +3596,123 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('pending construction does not expose internal command text', async () => {
-    const tooltip = await page.evaluate(() => {
+    const tooltip = await page.evaluate(async () => {
       const df9 = (window as any).__df9;
+      const { tileToScreen } = await import('/src/world/IsometricUtils.ts');
+      const { TILE_HALF_W, TILE_HALF_H } = await import('/src/config.ts');
       df9.stageRoomBuildForTest([
         { x: 25, y: 25 }, { x: 26, y: 25 },
         { x: 25, y: 26 }, { x: 26, y: 26 },
       ]);
       const command = df9.getCommands().find((c: any) => c.type === 'build_tile');
       if (!command) return null;
-      df9._buildCursor.hoveredTile = { x: command.tileX, y: command.tileY };
-      const info = df9._uiManager.getHoveredInfo();
-      df9._buildCursor.hoveredTile = null;
+      const pos = tileToScreen(command.tileX, command.tileY);
+      df9._buildCursor.updateHover(pos.x + TILE_HALF_W, pos.y + TILE_HALF_H);
+      const info = df9._uiManager.getHoveredInfo()
+        .map((row: any) => row.text)
+        .join('\n');
+      df9._buildCursor.updateHover(-10000, -10000);
       df9.cancelBuild();
       return info;
     });
     expect(tooltip).not.toBeNull();
     expect(tooltip).not.toContain('command pending');
     expect(tooltip).not.toContain('build_tile');
+  });
+
+  test('world tooltips use Lua target priority, rows, icons, and colors', async () => {
+    const result = await page.evaluate(async () => {
+      const df9 = (window as any).__df9;
+      const { tileToScreen } = await import('/src/world/IsometricUtils.ts');
+      const { TILE_HALF_W, TILE_HALF_H } = await import('/src/config.ts');
+      df9.resetTransientTestState();
+      const cursor = df9._buildCursor;
+      const ui = df9._uiManager;
+      const hoverTile = (x: number, y: number) => {
+        const pos = tileToScreen(x, y);
+        cursor.updateHover(pos.x + TILE_HALF_W, pos.y + TILE_HALF_H);
+      };
+
+      const char = df9._charMgr.getCharacters()[0];
+      hoverTile(char.tileX, char.tileY);
+      const characterRows = ui.getHoveredInfo();
+      ui.update();
+      const tooltip = document.getElementById('world-tooltip');
+      const characterDom = {
+        display: tooltip ? getComputedStyle(tooltip).display : '',
+        border: tooltip ? getComputedStyle(tooltip).borderTopColor : '',
+        rowCount: tooltip?.querySelectorAll('[data-testid="world-tooltip-row"]').length ?? 0,
+        iconCount: tooltip?.querySelectorAll('[data-testid="world-tooltip-icon"]').length ?? 0,
+      };
+      ui._lastMouseX = window.innerWidth - 2;
+      ui._lastMouseY = window.innerHeight - 2;
+      ui.positionTooltip();
+      const clampedRect = tooltip?.getBoundingClientRect();
+      const clamped = clampedRect ? {
+        left: clampedRect.left,
+        top: clampedRect.top,
+        right: clampedRect.right,
+        bottom: clampedRect.bottom,
+        viewportW: window.innerWidth,
+        viewportH: window.innerHeight,
+      } : null;
+
+      const originalJob = char.tStats.nJob;
+      char.tStats.nJob = 13;
+      const janitorRow = ui.getHoveredInfo()[0];
+      char.tStats.nJob = originalJob;
+
+      df9.createBuiltObject('Generator', 30, 30);
+      hoverTile(30, 30);
+      const objectRows = ui.getHoveredInfo();
+
+      const roomTiles = df9.buildSealedRoom(135, 135, 3);
+      const roomTile = roomTiles.find((tile: any) => df9._roomMgr.getRoomAt(tile.x, tile.y));
+      if (roomTile) hoverTile(roomTile.x, roomTile.y);
+      const roomRows = ui.getHoveredInfo();
+      cursor.updateHover(-10000, -10000);
+
+      return { characterRows, characterDom, clamped, janitorRow, objectRows, roomRows };
+    });
+
+    expect(result.characterRows[0]).toMatchObject({ text: expect.any(String) });
+    expect(result.characterRows[0].icon).toMatch(/ui_jobs_iconJob|JanitorIcon_small/);
+    expect(result.characterRows.map((row: any) => row.icon)).toEqual(expect.arrayContaining([
+      expect.stringContaining('ui_icon_health'),
+      expect.stringContaining('ui_icon_morale'),
+    ]));
+    expect(result.characterRows.map((row: any) => row.text)).toContain('Healthy');
+    expect(result.characterDom).toMatchObject({
+      display: 'block',
+      border: 'rgb(223, 162, 0)',
+      rowCount: result.characterRows.length,
+    });
+    expect(result.characterDom.iconCount).toBeGreaterThanOrEqual(3);
+    expect(result.clamped).not.toBeNull();
+    expect(result.clamped!.left).toBeGreaterThanOrEqual(0);
+    expect(result.clamped!.top).toBeGreaterThanOrEqual(0);
+    expect(result.clamped!.right).toBeLessThanOrEqual(result.clamped!.viewportW);
+    expect(result.clamped!.bottom).toBeLessThanOrEqual(result.clamped!.viewportH);
+    expect(result.janitorRow).toMatchObject({
+      icon: expect.stringContaining('JanitorIcon_small'),
+      iconMaskMode: 'luminance',
+    });
+
+    expect(result.objectRows.map((row: any) => row.text)).toEqual(expect.arrayContaining([
+      'Fusion Reactor',
+      'Condition: Good (100%)',
+      expect.stringContaining('Power Output:'),
+    ]));
+    expect(result.objectRows[1]).toMatchObject({
+      icon: expect.stringContaining('ui_icon_bulletpoint'),
+      color: '#dfa200',
+    });
+
+    expect(result.roomRows[0].text).toBeTruthy();
+    expect(result.roomRows.map((row: any) => row.text)).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^Oxygen: \d+%$/),
+    ]));
+    expect(result.roomRows.some((row: any) => row.text.startsWith('Room #'))).toBe(false);
   });
 
   test('main sidebar contains only the Lua gameplay controls', async () => {
