@@ -6286,6 +6286,47 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.text).not.toContain('Submit');
   });
 
+  test('construct object items use the Lua source sidebar icons', async () => {
+    // Open Construct > Object > All Zones through the visible menu flow.
+    await page.keyboard.press('c');
+    await page.waitForTimeout(100);
+    await page.keyboard.press('p');
+    await page.waitForTimeout(100);
+    await page.getByText('All Zones', { exact: true }).click();
+    await expect(page.locator('[data-testid="object-menu-item-icon"]')).toHaveCount(8);
+    await page.waitForFunction(() => {
+      const icons = Array.from(document.querySelectorAll<HTMLImageElement>('[data-testid="object-menu-item-icon"]'));
+      return icons.length === 8 && icons.every(icon => icon.complete && icon.naturalWidth > 0 && icon.naturalHeight > 0);
+    });
+
+    const result = await page.evaluate(() => {
+      const icons = Array.from(document.querySelectorAll<HTMLImageElement>('[data-testid="object-menu-item-icon"]'));
+      const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="object-menu-item"]'));
+      return {
+        count: icons.length,
+        sources: icons.map(icon => icon.getAttribute('src') ?? ''),
+        iconNames: icons.map(icon => icon.dataset.iconName ?? ''),
+        allLoaded: icons.every(icon => icon.complete && icon.naturalWidth > 0 && icon.naturalHeight > 0),
+        allAmber: icons.every(icon => getComputedStyle(icon).filter !== 'none'),
+        labelOffsets: rows.map(row => {
+          const labelColumn = row.children[1] as HTMLElement | undefined;
+          return labelColumn ? labelColumn.offsetLeft - row.offsetLeft : -1;
+        }),
+      };
+    });
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(50);
+    await page.keyboard.press('Escape');
+
+    expect(result.count).toBe(8);
+    expect(result.sources).toContain('assets/ui/object-icons/icon_door.png');
+    expect(result.iconNames).toContain('icon_airlock_door');
+    expect(result.allLoaded).toBe(true);
+    expect(result.allAmber).toBe(true);
+    expect(result.labelOffsets.every(offset => offset === 105)).toBe(true);
+  });
+
   test('UI scale: getUIScale returns valid auto-calculated value', async () => {
     const scale = await page.evaluate(() => {
       // UIManager static methods are on the constructor of the instance

@@ -1518,12 +1518,36 @@ export class UIManager {
 
       const isSelected = objName === this.selectedObjectName;
       const el = document.createElement('div');
+      el.dataset.testid = 'object-menu-item';
+      el.dataset.objectName = objName;
       el.style.cssText = `
-        height:${OBJECT_SUB_BTN_H}px;display:flex;align-items:center;padding:0 12px;cursor:pointer;
-        gap:8px;position:relative;background:${isSelected ? AMBER : 'transparent'};
+        height:${OBJECT_SUB_BTN_H}px;display:flex;align-items:center;padding:0 12px 0 20px;cursor:pointer;
+        position:relative;background:${isSelected ? AMBER : 'transparent'};
       `;
 
-      // Label + cost column (LEFT side)
+      // Lua SelectObjectForZoneMenu places a source sidebar icon at x=20,
+      // scaled to 60%, with the label beginning at x=105. Objects without a
+      // dedicated sidebarIcon use ui_iconIso_generic.
+      const iconSlot = document.createElement('div');
+      iconSlot.style.cssText = `width:85px;height:${OBJECT_SUB_BTN_H}px;flex:0 0 85px;position:relative;overflow:visible;`;
+      const icon = document.createElement('img');
+      const genericIconSrc = 'assets/ui/icons/ui_iconIso_generic.png';
+      icon.src = objData.sidebarIcon
+        ? `assets/ui/object-icons/${objData.sidebarIcon}.png`
+        : genericIconSrc;
+      icon.alt = '';
+      icon.draggable = false;
+      icon.dataset.testid = 'object-menu-item-icon';
+      icon.dataset.objectName = objName;
+      icon.dataset.iconName = objData.sidebarIcon || 'ui_iconIso_generic';
+      icon.style.cssText = `position:absolute;left:0;top:50%;width:auto;height:auto;transform:translateY(-50%) scale(0.6);transform-origin:left center;object-fit:contain;${ICON_FILTER_AMBER}`;
+      icon.addEventListener('error', () => {
+        if (!icon.src.endsWith('/ui_iconIso_generic.png')) icon.src = genericIconSrc;
+      });
+      iconSlot.appendChild(icon);
+      el.appendChild(iconSlot);
+
+      // Label + cost column begins at Lua x=105.
       const col = document.createElement('div');
       col.style.cssText = 'flex:1;';
       const lbl = document.createElement('div');
@@ -1531,7 +1555,7 @@ export class UIManager {
       lbl.style.cssText = `font-size:40px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:400;`; // Lua dosisregular40
       const cost = document.createElement('div');
       cost.textContent = `${line('HUDHUD042TEXT')} ${objData.matterCost}`;
-      cost.style.cssText = `font-size:18px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.7;`; // Lua dosissemibold18
+      cost.style.cssText = `font-size:22px;color:${isSelected ? '#000' : AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.7;`; // Lua dosissemibold22
       col.appendChild(lbl);
       col.appendChild(cost);
       el.appendChild(col);
