@@ -3761,19 +3761,21 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('sidebar buttons use icon sprites from Shared.png', async () => {
-    const iconCount = await page.evaluate(() => {
+    const iconCounts = await page.evaluate(() => {
       const ui = document.getElementById('game-ui');
-      if (!ui) return 0;
-      // Count sidebar img elements that reference ui_iconIso sprite files
-      const imgs = ui.querySelectorAll('img');
-      let count = 0;
-      for (const img of imgs) {
-        if (img.src && img.src.includes('ui_iconIso_')) count++;
-      }
-      return count;
+      if (!ui) return null;
+      const countSourceIcons = (selector: string) => Array.from(ui.querySelectorAll<HTMLImageElement>(selector))
+        .filter(img => img.src.includes('ui_iconIso_')).length;
+      return {
+        sidebar: countSourceIcons('#sidebar img'),
+        construct: countSourceIcons('#construct-submenu img'),
+        objectZones: countSourceIcons('#object-menu img'),
+        total: countSourceIcons('img'),
+      };
     });
-    // 7 sidebar + 7 construct submenu mode icons (incl. vaporize) + 2 cancel/confirm = 16
-    expect(iconCount).toBe(16);
+    // Lua menus: 7 gameplay controls; 7 construct modes + Cancel/Confirm;
+    // 11 object-zone categories + Cancel/Confirm.
+    expect(iconCounts).toEqual({ sidebar: 7, construct: 9, objectZones: 13, total: 29 });
   });
 
   test('HUD source icons are tinted to Lua Gui.AMBER rather than yellow-green', async () => {
