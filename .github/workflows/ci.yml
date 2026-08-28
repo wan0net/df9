@@ -9,8 +9,8 @@ jobs:
     runs-on: [self-hosted, linux, x64, wan0-ci, df9]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -19,7 +19,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:coverage
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: unit-coverage
@@ -28,17 +28,19 @@ jobs:
 
   e2e:
     runs-on: [self-hosted, linux, x64, wan0-ci, df9]
-    timeout-minutes: 30
+    # The complete WebGL suite takes about 30 minutes on df9-runner-01.
+    # Keep enough headroom for checkout/browser setup and artifact upload.
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:ci
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-failure-artifacts

@@ -48,6 +48,8 @@ const HINTLOG_HIGHLIGHT = '#BCFFFF'; // Lua Gui.HINTLOG_HIGHLIGHT = {188/255,255
 const ICON_FILTER_AMBER = 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);';
 const ICON_FILTER_BLACK = 'filter:brightness(0);';
 const ICON_FILTER_RED = 'filter:brightness(0) invert(22%) sepia(95%) saturate(7420%) hue-rotate(358deg) brightness(97%) contrast(108%);';
+const ICON_FILTER_CONSTRUCT_RED = 'filter:brightness(0) saturate(100%) invert(28%) sepia(99%) saturate(5183%) hue-rotate(358deg) brightness(104%) contrast(105%);';
+const ICON_FILTER_CONSTRUCT_GREEN = 'filter:brightness(0) saturate(100%) invert(80%) sepia(73%) saturate(781%) hue-rotate(27deg) brightness(91%) contrast(92%);';
 const ICON_FILTER_ORANGE = 'filter:brightness(0) invert(48%) sepia(88%) saturate(2010%) hue-rotate(358deg) brightness(101%) contrast(101%);';
 const ICON_FILTER_AMBERGREEN = 'filter:brightness(0) invert(70%) sepia(34%) saturate(622%) hue-rotate(69deg) brightness(96%) contrast(93%);';
 const ICON_FILTER_GREEN = 'filter:brightness(0) invert(60%) sepia(78%) saturate(647%) hue-rotate(82deg) brightness(95%) contrast(101%);';
@@ -1081,12 +1083,14 @@ export class UIManager {
 
     // ── Object Menu — Lua ObjectMenu: zone category buttons (330×72) ──
     this.objectMenuEl = document.createElement('div');
+    this.objectMenuEl.id = 'object-menu';
     this.objectMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${OBJECT_PICKER_W}px;z-index:5;background:rgba(0,0,0,0.95);pointer-events:auto;`;
     this.buildObjectZoneMenu();
     this.uiRoot.appendChild(this.objectMenuEl);
 
     // ── Object Sub-Menu — Lua SelectObjectForZoneMenu: individual object buttons (430×81) ──
     this.objectSubMenuEl = document.createElement('div');
+    this.objectSubMenuEl.id = 'object-submenu';
     this.objectSubMenuEl.style.cssText = `display:none;position:absolute;top:0;left:0;width:${CONSTRUCT_MENU_W}px;z-index:5;background:rgba(0,0,0,0.95);pointer-events:auto;`;
     this.uiRoot.appendChild(this.objectSubMenuEl);
 
@@ -1414,7 +1418,7 @@ export class UIManager {
     const btnW = OBJECT_PICKER_W; // 330
 
     // ── Back button (ESC) — Lua ObjectMenuLayout BackButton ──
-    const backEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'ESC', line('HUDHUD009TEXT'), AMBER, () => {
+    const backEl = this.createObjectMenuButton(btnW, OBJECT_BTN_H, 'ESC', line('HUDHUD009TEXT'), AMBER, () => {
       SoundManager.playUI('UI_Select');
       // Return to construct submenu
       this.objectMenuState = 'zones';
@@ -1426,51 +1430,54 @@ export class UIManager {
     this.objectMenuEl.appendChild(backEl);
 
     // ── Cancel button (X) — Lua ObjectMenuLayout CancelButton ──
-    const cancelEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'X', line('HUDHUD034TEXT'), '#FF3D00', () => {
+    const cancelEl = this.createObjectMenuButton(btnW, OBJECT_BTN_H, 'X', line('HUDHUD034TEXT'), '#FF3D00', () => {
       SoundManager.playUI('UI_Select');
       if (this.onCancelBuild) this.onCancelBuild();
       this.setBuildMode('none');
       GameRules.bRunning = true;
-    });
+    }, 'assets/ui/icons/ui_iconIso_decline.png');
+    cancelEl.dataset.testid = 'object-menu-cancel';
     this.objectMenuEl.appendChild(cancelEl);
 
     // ── Confirm button (C) — Lua ObjectMenuLayout ConfirmButton ──
-    const confirmEl = this.createMenuButton(btnW, OBJECT_BTN_H, 'C', line('HUDHUD019TEXT'), '#A5D318', () => {
+    const confirmEl = this.createObjectMenuButton(btnW, OBJECT_BTN_H, 'C', line('HUDHUD019TEXT'), '#A5D318', () => {
       SoundManager.playUI('UI_Select');
       if (this.onConfirmBuild) this.onConfirmBuild();
       this.setBuildMode('none');
       GameRules.bRunning = true;
-    });
+    }, 'assets/ui/icons/ui_iconIso_confirm.png');
+    confirmEl.dataset.testid = 'object-menu-confirm';
     this.objectMenuEl.appendChild(confirmEl);
 
     // ── ">> Select Zone Type" label (screenshot 20.32.31: Lua HUDHUD024TEXT) ──
     const zoneLabel = document.createElement('div');
-    zoneLabel.textContent = '>> ' + line('HUDHUD024TEXT'); // Lua prepends ">>" to submenu headers
+    zoneLabel.textContent = line('HUDHUD024TEXT');
     zoneLabel.style.cssText = `
       font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;
-      padding:4px 12px;opacity:0.7;
+      height:52px;padding-left:40px;display:flex;align-items:center;box-sizing:border-box;opacity:0.7;
     `; // Lua dosissemibold22
+    zoneLabel.dataset.testid = 'object-zone-menu-header';
     this.objectMenuEl.appendChild(zoneLabel);
 
     // ── Zone category buttons — Lua ObjectMenu zone buttons ──
     // Lua order from ObjectMenuLayout.lua: All, Airlock, Reactor, Garden, LifeSupport,
     //   Pub, Refinery, Residence, Fitness, Research, Infirmary
-    const zoneEntries: { zone: ZoneType; hotkey: string; lc: string }[] = [
-      { zone: ZoneType.PLAIN, hotkey: 'Z', lc: 'ZONEUI058TEXT' },       // All
-      { zone: ZoneType.AIRLOCK, hotkey: 'A', lc: 'ZONEUI036TEXT' },
-      { zone: ZoneType.POWER, hotkey: 'T', lc: 'ZONEUI003TEXT' },       // Reactor
-      { zone: ZoneType.GARDEN, hotkey: 'G', lc: 'ZONEUI069TEXT' },
-      { zone: ZoneType.LIFESUPPORT, hotkey: 'S', lc: 'ZONEUI001TEXT' },
-      { zone: ZoneType.PUB, hotkey: 'B', lc: 'ZONEUI046TEXT' },
-      { zone: ZoneType.REFINERY, hotkey: 'F', lc: 'ZONEUI037TEXT' },
-      { zone: ZoneType.RESIDENCE, hotkey: 'R', lc: 'ZONEUI042TEXT' },
-      { zone: ZoneType.FITNESS, hotkey: 'N', lc: 'ZONEUI109TEXT' },
-      { zone: ZoneType.RESEARCH, hotkey: 'H', lc: 'ZONEUI126TEXT' },
-      { zone: ZoneType.INFIRMARY, hotkey: 'I', lc: 'ZONEUI049TEXT' },
+    const zoneEntries: { zone: ZoneType; hotkey: string; lc: string; icon: string }[] = [
+      { zone: ZoneType.PLAIN, hotkey: 'Z', lc: 'ZONEUI058TEXT', icon: 'ui_iconIso_object' },       // All
+      { zone: ZoneType.AIRLOCK, hotkey: 'A', lc: 'ZONEUI036TEXT', icon: 'ui_iconIso_airlock' },
+      { zone: ZoneType.POWER, hotkey: 'T', lc: 'ZONEUI003TEXT', icon: 'ui_iconIso_reactor' },       // Reactor
+      { zone: ZoneType.GARDEN, hotkey: 'G', lc: 'ZONEUI069TEXT', icon: 'ui_iconIso_garden' },
+      { zone: ZoneType.LIFESUPPORT, hotkey: 'S', lc: 'ZONEUI001TEXT', icon: 'ui_iconIso_lifesupport' },
+      { zone: ZoneType.PUB, hotkey: 'B', lc: 'ZONEUI046TEXT', icon: 'ui_iconIso_pub' },
+      { zone: ZoneType.REFINERY, hotkey: 'F', lc: 'ZONEUI037TEXT', icon: 'ui_iconIso_refineryAlt' },
+      { zone: ZoneType.RESIDENCE, hotkey: 'R', lc: 'ZONEUI042TEXT', icon: 'ui_iconIso_residence' },
+      { zone: ZoneType.FITNESS, hotkey: 'N', lc: 'ZONEUI109TEXT', icon: 'ui_iconIso_fitness' },
+      { zone: ZoneType.RESEARCH, hotkey: 'H', lc: 'ZONEUI126TEXT', icon: 'ui_iconIso_research' },
+      { zone: ZoneType.INFIRMARY, hotkey: 'I', lc: 'ZONEUI049TEXT', icon: 'ui_iconIso_infirmary' },
     ];
 
     for (const ze of zoneEntries) {
-      const el = this.createMenuButton(btnW, OBJECT_BTN_H, ze.hotkey, line(ze.lc), AMBER, () => {
+      const el = this.createObjectMenuButton(btnW, OBJECT_BTN_H, ze.hotkey, line(ze.lc), AMBER, () => {
         SoundManager.playUI('UI_Select');
         this.objectMenuZone = ze.zone;
         this.objectMenuState = 'objects';
@@ -1479,7 +1486,11 @@ export class UIManager {
         this.objectSubMenuEl.style.display = 'block';
         this.sidebarEl.style.width = `${CONSTRUCT_MENU_W}px`; // 430px for object list
         playWarble(this.sidebarEl);
-      });
+      }, `assets/ui/icons/${ze.icon}.png`);
+      el.dataset.testid = 'object-zone-menu-item';
+      el.dataset.zone = ze.zone;
+      const icon = el.querySelector('img');
+      if (icon) icon.dataset.testid = 'object-zone-menu-icon';
       this.objectMenuEl.appendChild(el);
     }
   }
@@ -1495,7 +1506,7 @@ export class UIManager {
     const kHOTKEYS = ['1','2','3','4','5','6','7','8','9','0','A','B','C','D','E','F','O'];
 
     // ── Back button — returns to zone list ──
-    const backEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, 'ESC', line('HUDHUD009TEXT'), AMBER, () => {
+    const backEl = this.createObjectMenuButton(btnW, OBJECT_SUB_BTN_H, 'ESC', line('HUDHUD009TEXT'), AMBER, () => {
       SoundManager.playUI('UI_Select');
       this.objectMenuState = 'zones';
       this.objectSubMenuEl.style.display = 'none';
@@ -1504,7 +1515,37 @@ export class UIManager {
       this.selectedObjectName = '';
       playWarble(this.sidebarEl);
     });
+    backEl.dataset.testid = 'object-submenu-back';
     this.objectSubMenuEl.appendChild(backEl);
+
+    // Lua fixes Cancel and Confirm directly beneath Back, before the object
+    // list. Both controls retain their source icons and hotkeys.
+    const cancelEl = this.createObjectMenuButton(btnW, OBJECT_SUB_BTN_H, 'X', line('HUDHUD034TEXT'), '#FF3D00', () => {
+      SoundManager.playUI('UI_Select');
+      if (this.onCancelBuild) this.onCancelBuild();
+      this.setBuildMode('none');
+      GameRules.bRunning = true;
+    }, 'assets/ui/icons/ui_iconIso_decline.png');
+    cancelEl.dataset.testid = 'object-submenu-cancel';
+    this.objectSubMenuEl.appendChild(cancelEl);
+
+    const confirmEl = this.createObjectMenuButton(btnW, OBJECT_SUB_BTN_H, 'C', line('HUDHUD019TEXT'), '#A5D318', () => {
+      SoundManager.playUI('UI_Select');
+      if (this.onConfirmBuild) this.onConfirmBuild();
+      this.setBuildMode('none');
+      GameRules.bRunning = true;
+    }, 'assets/ui/icons/ui_iconIso_confirm.png');
+    confirmEl.dataset.testid = 'object-submenu-confirm';
+    this.objectSubMenuEl.appendChild(confirmEl);
+
+    const objectLabel = document.createElement('div');
+    objectLabel.textContent = line('HUDHUD026TEXT');
+    objectLabel.dataset.testid = 'object-submenu-header';
+    objectLabel.style.cssText = `
+      height:35px;padding-left:40px;display:flex;align-items:center;box-sizing:border-box;
+      font-size:22px;color:${AMBER};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.7;
+    `;
+    this.objectSubMenuEl.appendChild(objectLabel);
 
     // ── Object buttons ──
     const items = getMenuForZone(zone);
@@ -1595,23 +1636,62 @@ export class UIManager {
       this.objectSubMenuEl.appendChild(el);
     }
 
-    // ── Cancel button — Lua CancelButton ──
-    const cancelEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, 'X', line('HUDHUD020TEXT'), '#FF3D00', () => {
-      SoundManager.playUI('UI_Select');
-      if (this.onCancelBuild) this.onCancelBuild();
-      this.setBuildMode('none');
-      GameRules.bRunning = true;
-    });
-    this.objectSubMenuEl.appendChild(cancelEl);
+  }
 
-    // ── Confirm button — Lua ConfirmButton ──
-    const confirmEl = this.createMenuButton(btnW, OBJECT_SUB_BTN_H, '', line('HUDHUD019TEXT'), '#A5D318', () => {
-      SoundManager.playUI('UI_Select');
-      if (this.onConfirmBuild) this.onConfirmBuild();
-      this.setBuildMode('none');
-      GameRules.bRunning = true;
+  /** Lua ObjectMenu/SelectObjectForZoneMenu row geometry and icon states. */
+  private createObjectMenuButton(
+    width: number,
+    height: number,
+    hotkey: string,
+    label: string,
+    color: string,
+    onClick: () => void,
+    iconSrc?: string,
+  ): HTMLDivElement {
+    const el = document.createElement('div');
+    el.style.cssText = `height:${height}px;width:${width}px;position:relative;cursor:pointer;box-sizing:border-box;`;
+
+    let icon: HTMLImageElement | null = null;
+    const restingFilter = color === '#FF3D00'
+      ? ICON_FILTER_CONSTRUCT_RED
+      : color === '#A5D318'
+        ? ICON_FILTER_CONSTRUCT_GREEN
+        : ICON_FILTER_AMBER;
+    if (iconSrc) {
+      icon = document.createElement('img');
+      icon.src = iconSrc;
+      icon.alt = '';
+      icon.draggable = false;
+      icon.style.cssText = `position:absolute;left:20px;top:50%;width:76.8px;height:76.8px;transform:translateY(-50%);object-fit:contain;${restingFilter}`;
+      el.appendChild(icon);
+    }
+
+    const lbl = document.createElement('span');
+    lbl.textContent = label;
+    lbl.style.cssText = `position:absolute;left:105px;top:50%;transform:translateY(-50%);font-size:40px;line-height:1;color:${color};font-family:'Dosis',sans-serif;font-weight:400;white-space:nowrap;`;
+    el.appendChild(lbl);
+
+    const hk = document.createElement('span');
+    hk.textContent = hotkey.toLowerCase();
+    hk.style.cssText = `position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:22px;line-height:1;color:${color};font-family:'Dosis',sans-serif;font-weight:600;opacity:0.6;`;
+    el.appendChild(hk);
+
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.uiClickConsumed = true; });
+    el.addEventListener('click', onClick);
+    el.addEventListener('mouseenter', () => {
+      SoundManager.playUI('UI_Hilight');
+      el.style.background = color;
+      lbl.style.color = '#000';
+      hk.style.color = '#000';
+      if (icon) icon.style.cssText = `position:absolute;left:20px;top:50%;width:76.8px;height:76.8px;transform:translateY(-50%);object-fit:contain;${ICON_FILTER_BLACK}`;
     });
-    this.objectSubMenuEl.appendChild(confirmEl);
+    el.addEventListener('mouseleave', () => {
+      el.style.background = 'transparent';
+      lbl.style.color = color;
+      hk.style.color = color;
+      if (icon) icon.style.cssText = `position:absolute;left:20px;top:50%;width:76.8px;height:76.8px;transform:translateY(-50%);object-fit:contain;${restingFilter}`;
+    });
+    return el;
   }
 
   /** Helper: create a standard sidebar menu button (Lua-style).

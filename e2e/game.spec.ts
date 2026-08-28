@@ -6259,10 +6259,23 @@ test.describe('Spacebase DF-9 E2E', () => {
     await page.waitForTimeout(100);
     await page.keyboard.press('p');
     await page.waitForTimeout(100);
+    await expect(page.locator('#object-menu [data-testid="object-zone-menu-icon"]')).toHaveCount(11);
+    await page.waitForFunction(() => {
+      const icons = Array.from(document.querySelectorAll<HTMLImageElement>('#object-menu img'));
+      return icons.length === 13 && icons.every(icon => icon.complete && icon.naturalWidth > 0);
+    });
 
     const result = await page.evaluate(() => {
       const gameUI = document.getElementById('game-ui');
-      if (!gameUI) return { hasZones: false, zoneCount: 0, text: '' };
+      if (!gameUI) return {
+        hasZones: false,
+        zoneCount: 0,
+        text: '',
+        zoneIconCount: 0,
+        controlIconCount: 0,
+        header: '',
+        rowLabelOffsets: [] as string[],
+      };
       const spans = gameUI.querySelectorAll('span');
       // Hotkeys are now lowercase without brackets (matching screenshots)
       const zoneHotkeys = ['z', 'a', 't', 'g', 's', 'b', 'f', 'r', 'n', 'h', 'i'];
@@ -6270,7 +6283,20 @@ test.describe('Spacebase DF-9 E2E', () => {
       for (const span of spans) {
         if (zoneHotkeys.includes(span.textContent?.trim() || '')) foundCount++;
       }
-      return { hasZones: foundCount >= 5, zoneCount: foundCount, text: gameUI.textContent ?? '' };
+      const objectMenu = document.getElementById('object-menu');
+      const zoneIcons = objectMenu?.querySelectorAll('[data-testid="object-zone-menu-icon"]') ?? [];
+      const controlIcons = objectMenu?.querySelectorAll('[data-testid="object-menu-cancel"] img, [data-testid="object-menu-confirm"] img') ?? [];
+      const rowLabelOffsets = Array.from(objectMenu?.querySelectorAll<HTMLElement>('[data-testid="object-zone-menu-item"]') ?? [])
+        .map(row => (row.querySelector('span') as HTMLElement).style.left);
+      return {
+        hasZones: foundCount >= 5,
+        zoneCount: foundCount,
+        text: gameUI.textContent ?? '',
+        zoneIconCount: zoneIcons.length,
+        controlIconCount: controlIcons.length,
+        header: objectMenu?.querySelector('[data-testid="object-zone-menu-header"]')?.textContent ?? '',
+        rowLabelOffsets,
+      };
     });
 
     // Press Escape to exit
@@ -6284,6 +6310,10 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.text).toContain('Cancel');
     expect(result.text).toContain('Confirm');
     expect(result.text).not.toContain('Submit');
+    expect(result.zoneIconCount).toBe(11);
+    expect(result.controlIconCount).toBe(2);
+    expect(result.header).toBe('>> Select Zone Type');
+    expect(result.rowLabelOffsets).toEqual(Array(11).fill('105px'));
   });
 
   test('construct object items use the Lua source sidebar icons', async () => {
@@ -6312,6 +6342,14 @@ test.describe('Spacebase DF-9 E2E', () => {
           const labelColumn = row.children[1] as HTMLElement | undefined;
           return labelColumn ? labelColumn.offsetLeft - row.offsetLeft : -1;
         }),
+        submenuOrder: Array.from(document.querySelectorAll<HTMLElement>('#object-submenu > [data-testid]'))
+          .slice(0, 4)
+          .map(el => el.dataset.testid ?? ''),
+        firstItemTop: rows[0]?.offsetTop ?? -1,
+        text: document.getElementById('object-submenu')?.textContent ?? '',
+        controlIconsLoaded: Array.from(document.querySelectorAll<HTMLImageElement>(
+          '#object-submenu [data-testid="object-submenu-cancel"] img, #object-submenu [data-testid="object-submenu-confirm"] img',
+        )).every(icon => icon.complete && icon.naturalWidth > 0),
       };
     });
 
@@ -6325,6 +6363,17 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result.allLoaded).toBe(true);
     expect(result.allAmber).toBe(true);
     expect(result.labelOffsets.every(offset => offset === 105)).toBe(true);
+    expect(result.submenuOrder).toEqual([
+      'object-submenu-back',
+      'object-submenu-cancel',
+      'object-submenu-confirm',
+      'object-submenu-header',
+    ]);
+    expect(result.firstItemTop).toBe(278);
+    expect(result.text).toContain('>> Select Object');
+    expect(result.text).toContain('Cancel');
+    expect(result.text).not.toContain('>> Inspect');
+    expect(result.controlIconsLoaded).toBe(true);
   });
 
   test('UI scale: getUIScale returns valid auto-calculated value', async () => {
