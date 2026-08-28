@@ -16,6 +16,7 @@ import { Malady } from '../malady/Malady';
 import { line } from '../localization/Localization';
 import { playWarble } from './WarbleEffect';
 import type { Room } from '../rooms/Room';
+import { assetUrl } from '../assetUrl';
 import { ZoneType } from '../world/ZoneType';
 
 const AMBER = '#dfa200';
@@ -523,7 +524,7 @@ export class ResearchPanel {
 
     // Icon (Lua: ProjectIcon from UI/JobRoster)
     const iconEl = document.createElement('img');
-    iconEl.src = `/assets/ui/hud/${iconSprite}.png`;
+    iconEl.src = assetUrl(`assets/ui/hud/${iconSprite}.png`);
     iconEl.alt = '';
     iconEl.dataset.sourceSprite = iconSprite;
     iconEl.style.cssText = `

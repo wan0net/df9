@@ -40,7 +40,7 @@ function df9(page: Page) {
 // Navigate through menus and reach the in-game state.
 // Shared setup for all tests via test.describe serial mode.
 async function startNewGame(page: Page) {
-  await page.goto('/');
+  await page.goto('/game.html');
 
   // 1. Wait for start menu
   await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
@@ -85,7 +85,7 @@ test.describe('Spacebase DF-9 E2E', () => {
         return ((value ^ value >>> 14) >>> 0) / 4294967296;
       };
     });
-    await page.goto('/?e2e=1');
+    await page.goto('/game.html?e2e=1');
     await expect(page.locator('#hud-pop')).toBeVisible({ timeout: 30_000 });
 
     await page.evaluate(() => (window as any).__df9.resetTransientTestState());
@@ -5332,7 +5332,7 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('tutorial starts from the original Box module with five indoor settlers', async () => {
-    await page.goto('/?e2e=1&tutorial=1');
+    await page.goto('/game.html?e2e=1&tutorial=1');
     await expect(page.locator('#hud-pop')).toBeVisible({ timeout: 30_000 });
 
     const result = await page.evaluate(() => {
@@ -6405,7 +6405,7 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('start menu keeps Lua reference regions separated at 1280x720', async () => {
-    await page.goto('/');
+    await page.goto('/game.html');
     await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
 
     const regions = await page.evaluate(() => {
@@ -6432,7 +6432,7 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('settings screen matches Lua full-screen layout and source controls', async () => {
-    await page.goto('/');
+    await page.goto('/game.html');
     await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
     await page.getByText('SETTINGS', { exact: true }).click();
     const settings = page.locator('#settings-panel');
@@ -6495,7 +6495,7 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('new-base map and consoles use the Lua native layout at 1280x720', async () => {
-    await page.goto('/');
+    await page.goto('/game.html');
     await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
     await page.getByText('NEW BASE', { exact: true }).click();
     await expect(page.locator('#new-game')).toBeVisible({ timeout: 5_000 });
@@ -6529,7 +6529,7 @@ test.describe('Spacebase DF-9 E2E', () => {
   });
 
   test('deployment ETA and years remain separated at 1280x720', async () => {
-    await page.goto('/');
+    await page.goto('/game.html');
     await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
     await page.getByText('NEW BASE', { exact: true }).click();
     const newGame = page.locator('#new-game');
@@ -6991,5 +6991,40 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(result!.suitSuffocation).toBeGreaterThan(0);
     expect(result!.sealedCause).toBe(3);
     expect(result!.wallCause).toBe(7);
+  });
+
+  test('public landing page states the licence and ownership boundary', async () => {
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: 'Build a home among the stars.' })).toBeVisible();
+    await expect(page.getByText('You must own Spacebase DF-9 to play.')).toBeVisible();
+    await expect(page.getByText('BSD-3', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open the game' })).toHaveAttribute('href', './game.html');
+    await expect(page.getByRole('link', { name: 'Source', exact: true })).toHaveAttribute(
+      'href',
+      'https://github.com/wan0net/df9',
+    );
+  });
+
+  test('ownership gate defers original game assets until acceptance', async () => {
+    await page.evaluate(() => localStorage.removeItem('df9_ownership_terms_v1'));
+    await page.goto('/game.html?terms=1');
+
+    await expect(page.getByRole('heading', { name: 'Confirm that you own Spacebase DF-9' })).toBeVisible();
+    await expect(page.locator('#start-menu')).toHaveCount(0);
+    await expect(page.locator('#accept-terms')).toBeDisabled();
+
+    const assetsBeforeAcceptance = await page.evaluate(() =>
+      performance.getEntriesByType('resource')
+        .map(entry => entry.name)
+        .filter(url => url.includes('/assets/')),
+    );
+    expect(assetsBeforeAcceptance).toEqual([]);
+
+    await page.locator('#ownership-confirmation').check();
+    await page.locator('#accept-terms').click();
+    await expect(page.locator('#start-menu')).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('df9_ownership_terms_v1')))
+      .toBe('accepted');
   });
 });

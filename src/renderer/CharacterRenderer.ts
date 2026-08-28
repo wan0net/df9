@@ -7,6 +7,7 @@ import type { Character } from '../characters/Character';
 import type { TileGrid } from '../world/TileGrid';
 import { dialogueSystem } from '../characters/DialogueSystem';
 import { getTexture } from './AssetLoader';
+import { assetUrl } from '../assetUrl';
 import {
   RACE_MONSTER, RACE_KILLBOT,
   RACE_TYPE, RIG_ALIEN,
@@ -1470,7 +1471,7 @@ export class CharacterRenderer {
 
   private setBubbleKind(handle: CharacterRenderHandle, kind: 'thought' | 'dialog') {
     handle.thoughtEl.dataset.kind = kind;
-    const base = `/assets/ui/dialog/ui_dialog_${kind}_`;
+    const base = assetUrl(`assets/ui/dialog/ui_dialog_${kind}_`);
     const mask = (url: string, repeat: string) =>
       `background:#dfa200;position:absolute;pointer-events:none;` +
       `-webkit-mask:url('${url}') ${repeat};mask:url('${url}') ${repeat};` +
