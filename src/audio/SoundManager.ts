@@ -4,6 +4,7 @@
  */
 
 import { AUDIO_CUES, type AudioCue } from './AudioCueData';
+import { assetUrl } from '../assetUrl';
 
 export type AudioCategory = 'music' | 'sfx' | 'ambience' | 'ui';
 
@@ -218,7 +219,7 @@ class SoundManagerClass {
     const cue = AUDIO_CUES[cueName];
     if (!cue) return null;
 
-    const promise = this.loadBuffer(cueName, `/assets/audio/${cue.path}`);
+    const promise = this.loadBuffer(cueName, assetUrl(`assets/audio/${cue.path}`));
     const wrapped = promise.then(ok => ok ? (this.bufferCache.get(cueName) ?? null) : null);
     this.loadingPromises.set(cueName, wrapped);
     wrapped.finally(() => this.loadingPromises.delete(cueName));
@@ -228,7 +229,7 @@ class SoundManagerClass {
       for (const vPath of cue.variants) {
         const vKey = `${cueName}__${vPath}`;
         if (!this.bufferCache.has(vKey) && !this.loadingPromises.has(vKey)) {
-          this.loadBuffer(vKey, `/assets/audio/${vPath}`);
+          this.loadBuffer(vKey, assetUrl(`assets/audio/${vPath}`));
         }
       }
     }

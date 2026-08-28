@@ -5,6 +5,7 @@ import { line } from '../localization/Localization';
 import { playWarbleFullscreen } from './WarbleEffect';
 import { GameRules } from '../core/GameRules';
 import { getStoredOrAutoUIScale } from './UIScale';
+import { assetUrl } from '../assetUrl';
 
 const AMBER_HEX = '#dfa200';
 const GREEN_HEX = '#a5d318';
@@ -152,7 +153,7 @@ function setColored(el: HTMLElement, label: string, value: string, color: string
 /** Load an image from a URL. Returns null if not found. */
 function loadImg(src: string): HTMLImageElement {
   const img = new Image();
-  img.src = src;
+  img.src = assetUrl(src);
   return img;
 }
 
@@ -233,20 +234,20 @@ export class NewGameScreenState implements SceneState {
 
   // Preload sprite images for snappy display
   private _preloads = [
-    loadImg('/assets/ui/newgame/launchbutton_cover.png'),
-    loadImg('/assets/ui/newgame/launchbutton_active.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_buttonConfirm_active.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_buttonDecline_active.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_sidebarLeft.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_sidebarRight.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_sidebarRight_bottom.png'),
-    loadImg('/assets/ui/newgame/galaxy_zoom01.png'),
-    loadImg('/assets/ui/inspector/ui_inspector_folderTop.png'),
-    loadImg('/assets/ui/inspector/ui_inspector_folderActive.png'),
+    loadImg('assets/ui/newgame/launchbutton_cover.png'),
+    loadImg('assets/ui/newgame/launchbutton_active.png'),
+    loadImg('assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png'),
+    loadImg('assets/ui/newgame/ui_newgame_buttonConfirm_active.png'),
+    loadImg('assets/ui/newgame/ui_newgame_buttonDecline_inactive.png'),
+    loadImg('assets/ui/newgame/ui_newgame_buttonDecline_active.png'),
+    loadImg('assets/ui/newgame/ui_newgame_sidebarLeft.png'),
+    loadImg('assets/ui/newgame/ui_newgame_sidebarLeft_tile.png'),
+    loadImg('assets/ui/newgame/ui_newgame_sidebarRight.png'),
+    loadImg('assets/ui/newgame/ui_newgame_sidebarRight_tile.png'),
+    loadImg('assets/ui/newgame/ui_newgame_sidebarRight_bottom.png'),
+    loadImg('assets/ui/newgame/galaxy_zoom01.png'),
+    loadImg('assets/ui/inspector/ui_inspector_folderTop.png'),
+    loadImg('assets/ui/inspector/ui_inspector_folderActive.png'),
   ];
 
   constructor(handlers: { onStartGame: (lz: LandingZone, tutorial: boolean) => void; onBack: () => void }) {
@@ -368,19 +369,19 @@ export class NewGameScreenState implements SceneState {
 
     // Tile background — fills the entire height seamlessly via CSS repeat
     const lTileBg = document.createElement('div');
-    lTileBg.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_TILE_W}px;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png') left top repeat-y;background-size:${LEFT_SIDEBAR_TILE_W}px auto;`;
+    lTileBg.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_TILE_W}px;height:100%;background:url('${assetUrl('assets/ui/newgame/ui_newgame_sidebarLeft_tile.png')}') left top repeat-y;background-size:${LEFT_SIDEBAR_TILE_W}px auto;`;
     this.leftSidebar.appendChild(lTileBg);
 
     // Top piece — overlays the tile background at the top
     const lTop = document.createElement('img');
-    lTop.src = '/assets/ui/newgame/ui_newgame_sidebarLeft.png';
+    lTop.src = assetUrl('assets/ui/newgame/ui_newgame_sidebarLeft.png');
     lTop.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_W}px;`;
     this.leftSidebar.appendChild(lTop);
 
     // Bottom piece — Lua: pos = { '-W/2', '-(H/2) + 350' }
     // Top of sprite at 350px from viewport bottom.
     const lBottom = document.createElement('img');
-    lBottom.src = '/assets/ui/newgame/ui_newgame_sidebarLeft_bottom.png';
+    lBottom.src = assetUrl('assets/ui/newgame/ui_newgame_sidebarLeft_bottom.png');
     lBottom.style.cssText = `position:absolute;left:0;top:calc(100% - 350px);width:${LEFT_SIDEBAR_W}px;`;
     this.leftSidebar.appendChild(lBottom);
 
@@ -395,19 +396,19 @@ export class NewGameScreenState implements SceneState {
 
     // Tile background — Lua: tiles at W/2 - 126 (30px inset from container left)
     const rTileBg = document.createElement('div');
-    rTileBg.style.cssText = `position:absolute;left:30px;top:0;width:calc(100% - 30px);height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png') left top repeat-y;background-size:auto;`;
+    rTileBg.style.cssText = `position:absolute;left:30px;top:0;width:calc(100% - 30px);height:100%;background:url('${assetUrl('assets/ui/newgame/ui_newgame_sidebarRight_tile.png')}') left top repeat-y;background-size:auto;`;
     this.rightSidebar.appendChild(rTileBg);
 
     // Top piece — flush with container left at its extracted native width.
     const rTop = document.createElement('img');
-    rTop.src = '/assets/ui/newgame/ui_newgame_sidebarRight.png';
+    rTop.src = assetUrl('assets/ui/newgame/ui_newgame_sidebarRight.png');
     rTop.style.cssText = `position:absolute;left:0;top:0;width:${RIGHT_SIDEBAR_W}px;`;
     this.rightSidebar.appendChild(rTop);
 
     // Bottom piece — Lua: pos = { '(W/2) - 146', '-(H/2) + 382' }
     // 10px inset from container left (156-146=10), top at 382px from bottom.
     const rBottom = document.createElement('img');
-    rBottom.src = '/assets/ui/newgame/ui_newgame_sidebarRight_bottom.png';
+    rBottom.src = assetUrl('assets/ui/newgame/ui_newgame_sidebarRight_bottom.png');
     rBottom.style.cssText = `position:absolute;left:10px;top:calc(100% - 382px);width:146px;`;
     this.rightSidebar.appendChild(rBottom);
 
@@ -503,7 +504,7 @@ export class NewGameScreenState implements SceneState {
       z-index:1;pointer-events:none;transform-origin:center center;background:${AMBER_HEX};
     `;
     const previewImg = document.createElement('img');
-    previewImg.src = '/assets/ui/newgame/galaxy_zoom01.png';
+    previewImg.src = assetUrl('assets/ui/newgame/galaxy_zoom01.png');
     previewImg.style.cssText = `
       position:absolute;top:0;left:0;width:100%;height:100%;
       object-fit:fill;opacity:1;display:block;mix-blend-mode:multiply;
@@ -543,11 +544,11 @@ export class NewGameScreenState implements SceneState {
     this.helpFolder = document.createElement('div');
     this.helpFolder.style.cssText = 'position:relative;min-height:208px;background:#120c00;';
     const helpTop = document.createElement('img');
-    helpTop.src = '/assets/ui/inspector/ui_inspector_folderTop.png';
+    helpTop.src = assetUrl('assets/ui/inspector/ui_inspector_folderTop.png');
     helpTop.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:63px;object-fit:fill;opacity:0.98;';
     this.helpFolder.appendChild(helpTop);
     const helpTab = document.createElement('img');
-    helpTab.src = '/assets/ui/inspector/ui_inspector_folderActive.png';
+    helpTab.src = assetUrl('assets/ui/inspector/ui_inspector_folderActive.png');
     helpTab.style.cssText = 'position:absolute;top:0;left:0;width:312px;height:63px;object-fit:fill;';
     this.helpFolder.appendChild(helpTab);
     const helpTitle = document.createElement('div');
@@ -587,7 +588,7 @@ export class NewGameScreenState implements SceneState {
     this.confirmBtnEl.setAttribute('aria-label', 'Confirm');
     this.confirmBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${btnTop}px;width:${btnSize}px;height:${btnSize + 60}px;cursor:pointer;z-index:5;`;
     const confirmImg = this.confirmImg = document.createElement('img');
-    confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
+    confirmImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonConfirm_off.png');
     confirmImg.style.cssText = `width:${btnSize}px;height:${btnSize}px;display:block;image-rendering:auto;transition:filter 0.15s ease;`;
     this.confirmBtnEl.appendChild(confirmImg);
 
@@ -611,7 +612,7 @@ export class NewGameScreenState implements SceneState {
     const declineTop = 300;
     this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize + 60}px;cursor:pointer;z-index:5;`;
     const declineImg = this.declineImg = document.createElement('img');
-    declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
+    declineImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonDecline_off.png');
     declineImg.style.cssText = `width:${btnSize}px;height:${btnSize}px;display:block;image-rendering:auto;transition:filter 0.15s ease;`;
     this.declineBtnEl.appendChild(declineImg);
 
@@ -640,7 +641,7 @@ export class NewGameScreenState implements SceneState {
 
     // Launch cover (hazard stripes "LAUNCH" — shown until confirmed)
     this.launchCoverEl = document.createElement('img') as HTMLImageElement;
-    this.launchCoverEl.src = '/assets/ui/newgame/launchbutton_cover.png';
+    this.launchCoverEl.src = assetUrl('assets/ui/newgame/launchbutton_cover.png');
     this.launchCoverEl.style.cssText = `position:absolute;left:${coverLeft}px;top:calc(100% - 252px);width:${coverW}px;z-index:6;pointer-events:none;transition:transform 0.5s ease-in-out, opacity 0.5s;`;
     this.overlay.appendChild(this.launchCoverEl);
 
@@ -649,7 +650,7 @@ export class NewGameScreenState implements SceneState {
     this.launchActiveEl.style.cssText = `position:absolute;left:66px;top:calc(100% - 244px);width:180px;height:120px;z-index:5;display:none;cursor:pointer;`;
 
     const activeImg = document.createElement('img');
-    activeImg.src = '/assets/ui/newgame/launchbutton_active.png';
+    activeImg.src = assetUrl('assets/ui/newgame/launchbutton_active.png');
     activeImg.style.cssText = 'width:183px;height:auto;pointer-events:none;';
     this.launchActiveEl.appendChild(activeImg);
 
@@ -667,7 +668,7 @@ export class NewGameScreenState implements SceneState {
     this.cancelBtnEl = document.createElement('div');
     this.cancelBtnEl.style.cssText = `position:absolute;left:0px;top:calc(100% - 340px);width:80px;height:65px;z-index:8;display:none;cursor:pointer;`;
     const cancelImg = document.createElement('img');
-    cancelImg.src = '/assets/ui/newgame/cancelbutton_active.png';
+    cancelImg.src = assetUrl('assets/ui/newgame/cancelbutton_active.png');
     cancelImg.style.cssText = 'width:100%;height:100%;object-fit:contain;';
     this.cancelBtnEl.appendChild(cancelImg);
     this.cancelBtnEl.addEventListener('mouseenter', () => {
@@ -819,8 +820,8 @@ export class NewGameScreenState implements SceneState {
     playWarbleFullscreen(this.overlay, 0.3, 0.3);
     this.showInspector(this.selectedZone);
     this.updateTelemetry(this.selectedZone);
-    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_active.png';
-    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_active.png';
+    this.confirmImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonConfirm_active.png');
+    this.declineImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonDecline_active.png');
   }
 
   private onMouseMove(e: MouseEvent) {
@@ -851,8 +852,8 @@ export class NewGameScreenState implements SceneState {
     SoundManager.playUI('Intro_LaunchOpen');     // Lua: launchopen
     playWarbleFullscreen(this.overlay, 0.6, 0.5);
     this.state = 'ConfirmedLandingZone';
-    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png';
-    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png';
+    this.confirmImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png');
+    this.declineImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonDecline_inactive.png');
     this.helpText.style.display   = 'none';
 
     // Slide launch cover away to reveal active button
@@ -872,8 +873,8 @@ export class NewGameScreenState implements SceneState {
     this.infoPanel.style.opacity       = '0';
     this.infoPanel.style.transform     = 'translateX(300px)';
     this.inspectorPreviewWrap.style.transform = 'translateX(-300px) rotate(15deg)';
-    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png';
-    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png';
+    this.confirmImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png');
+    this.declineImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonDecline_inactive.png');
     this.launchActiveEl.style.display  = 'none';
     this.cancelBtnEl.style.display     = 'none';
 
@@ -898,8 +899,8 @@ export class NewGameScreenState implements SceneState {
     this.infoPanel.style.opacity       = '0';
     this.infoPanel.style.transform     = 'translateX(300px)';
     this.inspectorPreviewWrap.style.transform = 'translateX(-300px) rotate(15deg)';
-    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png';
-    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png';
+    this.confirmImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png');
+    this.declineImg.src = assetUrl('assets/ui/newgame/ui_newgame_buttonDecline_inactive.png');
     this.launchActiveEl.style.display  = 'none';
     this.cancelBtnEl.style.display     = 'none';
 

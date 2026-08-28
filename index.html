@@ -1,16 +1,49 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spacebase DF-9</title>
-  <style>
-    * { margin: 0; padding: 0; }
-    body { background: #000; overflow: hidden; }
-    canvas { display: block; }
-  </style>
+  <meta name="description" content="A graphics-first browser recreation of Spacebase DF-9." />
+  <title>Spacebase DF-9 — Browser Recreation</title>
 </head>
-<body>
-  <script type="module" src="/src/main.ts"></script>
+<body class="site-shell">
+  <nav class="site-nav" aria-label="Primary navigation">
+    <a class="site-wordmark" href="./">SPACEBASE DF-9</a>
+    <div class="site-nav-links"><a href="#about">About</a><a href="#ownership">Before you play</a><a href="https://github.com/wan0net/df9">Source</a></div>
+  </nav>
+  <main>
+    <section class="site-hero">
+      <div>
+        <p class="site-eyebrow">Recreated for the browser · Public beta</p>
+        <h1>Build a home among the stars.</h1>
+        <p class="site-lede">A graphics-first recreation of Double Fine's space-station simulation, preserving its original interface, strange little citizens, hard vacuum, and amber-lit machinery.</p>
+        <div class="site-actions">
+          <a class="site-button primary" href="./game.html">Open the game</a>
+          <a class="site-button secondary" href="#ownership">Before you play</a>
+        </div>
+      </div>
+      <div class="station-mark" aria-hidden="true"><span class="station-orbit"></span></div>
+    </section>
+    <section class="site-stats" aria-label="Project status">
+      <div><strong>293</strong><span>browser tests</span></div>
+      <div><strong>95</strong><span>unit tests</span></div>
+      <div><strong>1:1</strong><span>Lua parity goal</span></div>
+      <div><strong>BSD-3</strong><span>project code</span></div>
+    </section>
+    <section id="about" class="site-section">
+      <p class="section-label">The project</p>
+      <h2>Spacebase, carefully reconstructed.</h2>
+      <p>This independent, non-commercial project recreates Spacebase DF-9 with TypeScript, Three.js, and the original game's published Lua source as its behavioral reference. Graphics, layout, simulation rules, AI, construction, hazards, research, and events are cross-checked against the original.</p>
+    </section>
+    <section id="ownership" class="site-section">
+      <p class="section-label">Ownership requirement</p>
+      <h2>You must own Spacebase DF-9 to play.</h2>
+      <p>The BSD-3-Clause licence covers this project's original code and documentation only. Original game-derived artwork, audio, fonts, text, models, and other material remain the property of their respective owners. Before the game loads, you must confirm that you legally own or are otherwise licensed to use Spacebase DF-9.</p>
+      <p>This fan project is not affiliated with, endorsed by, or sponsored by Double Fine Productions or the original creators.</p>
+      <a class="site-button secondary" href="./game.html?terms=1">Read the player terms</a>
+    </section>
+  </main>
+  <footer class="site-footer"><span>Independent non-commercial recreation.</span><span><a href="https://github.com/wan0net/df9">Source code</a> · <a href="./game.html?terms=1">Player terms</a></span></footer>
+  <script type="module" src="./src/site.ts"></script>
 </body>
 </html>

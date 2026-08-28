@@ -17,6 +17,7 @@ import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 
 import { line } from '../localization/Localization';
 import { getTopicName } from '../characters/Topics';
+import { assetUrl } from '../assetUrl';
 
 const TEAM_ID_PLAYER = 1;
 
@@ -233,7 +234,7 @@ export class InspectorPanel {
     wrapper.style.cssText = `position:absolute;left:30px;top:-19px;width:110px;height:124px;overflow:hidden;background:${AMBER};cursor:pointer;`;
 
     const bg = document.createElement('img');
-    bg.src = '/assets/ui/portraits/Background_01.png';
+    bg.src = assetUrl('assets/ui/portraits/Background_01.png');
     bg.alt = '';
     bg.style.cssText = 'position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;';
     wrapper.appendChild(bg);
@@ -241,7 +242,7 @@ export class InspectorPanel {
     const layers = getPortraitLayers(ensureCharacterAppearance(char.tStats));
     for (const [index, filename] of layers.entries()) {
       const portrait = document.createElement('img');
-      portrait.src = `/assets/ui/portraits/${filename}`;
+      portrait.src = assetUrl(`assets/ui/portraits/${filename}`);
       portrait.alt = index === 0 ? char.getRaceDef().sName : '';
       portrait.dataset.portraitLayer = index === 0 ? 'base' : filename.includes('_Hair_') ? 'hair' : 'facial-hair';
       portrait.style.cssText = `position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;${char.isAlive() ? '' : 'filter:grayscale(1);opacity:0.65;'}`;
@@ -260,12 +261,12 @@ export class InspectorPanel {
 
     const portrait = document.createElement('img');
     const portraitName = obj.tData.portrait ?? 'portrait_generic';
-    portrait.src = `/assets/ui/portraits/${portraitName}.png`;
+    portrait.src = assetUrl(`assets/ui/portraits/${portraitName}.png`);
     portrait.alt = obj.tData.friendlyName;
     portrait.style.cssText = 'position:absolute;left:3px;top:1px;width:105px;height:120px;object-fit:contain;image-rendering:auto;';
     portrait.addEventListener('error', () => {
       if (!portrait.src.endsWith('/portrait_generic.png')) {
-        portrait.src = '/assets/ui/portraits/portrait_generic.png';
+        portrait.src = assetUrl('assets/ui/portraits/portrait_generic.png');
       }
     });
     wrapper.appendChild(portrait);
@@ -409,12 +410,12 @@ export class InspectorPanel {
           { label: 'Spaceface', tab: 'log' },
         ];
     const charTabIcons: Record<string, string> = {
-      duty: '/assets/ui/inspector/ui_icon_duty.png',
-      stats: '/assets/ui/inspector/ui_icon_stats.png',
-      psych: '/assets/ui/inspector/ui_icon_psych.png',
-      log: '/assets/ui/inspector/ui_icon_spaceface.png',
+      duty: assetUrl('assets/ui/inspector/ui_icon_duty.png'),
+      stats: assetUrl('assets/ui/inspector/ui_icon_stats.png'),
+      psych: assetUrl('assets/ui/inspector/ui_icon_psych.png'),
+      log: assetUrl('assets/ui/inspector/ui_icon_spaceface.png'),
       // CitizenInspector.lua deliberately reuses the duty icon for Action.
-      actions: '/assets/ui/inspector/ui_icon_duty.png',
+      actions: assetUrl('assets/ui/inspector/ui_icon_duty.png'),
     };
     const charTabCount = tabs.length;
     const charFolderActive = charTabCount >= 5
@@ -1277,7 +1278,7 @@ export class InspectorPanel {
     row.style.cssText = `height:36px;display:flex;align-items:center;box-sizing:border-box;padding:0 10px;cursor:pointer;color:${AMBER};font-family:'Dosis',sans-serif;overflow:hidden;`;
 
     const icon = document.createElement('img');
-    icon.src = `/assets/ui/inspector/${iconName}`;
+    icon.src = assetUrl(`assets/ui/inspector/${iconName}`);
     icon.alt = '';
     icon.style.cssText = 'width:24px;height:24px;object-fit:contain;margin-right:6px;flex:0 0 24px;filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);';
     row.appendChild(icon);
