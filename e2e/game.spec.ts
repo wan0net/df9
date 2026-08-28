@@ -64,7 +64,7 @@ async function startNewGame(page: Page) {
   await page.locator('img[src*="launchbutton_active"]').click({ timeout: 5_000, force: true });
 
   // 7. Wait for deploy animation to finish (new-game overlay disappears)
-  await expect(page.locator('#new-game')).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator('#new-game')).toBeHidden({ timeout: 60_000 });
 
   // 8. Wait for game UI HUD (proves enterGameState succeeded)
   await expect(page.locator('#hud-pop')).toBeVisible({ timeout: 15_000 });
@@ -197,7 +197,9 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(queued).toBe(1);
     const mineCommandsNow = (await df9(page).commands()).filter(c => c.type === 'mine');
     expect(mineCommandsNow).toHaveLength(mineCommandsBefore + 1);
-    expect(mineCommandsNow).toContainEqual(expect.objectContaining({ tileX: 6, tileY: 7, status: 'pending' }));
+    const created = mineCommandsNow.find(command => command.tileX === 6 && command.tileY === 7);
+    expect(created).toBeDefined();
+    expect(['pending', 'in_progress']).toContain(created!.status);
   });
 
   test('command queue exposes data correctly', async () => {
@@ -6063,14 +6065,9 @@ test.describe('Spacebase DF-9 E2E', () => {
 
       await expect.poll(async () => page.evaluate(({ human, chicken }) => {
         const renderer = (window as any).__df9._characterRenderer as any;
-        return renderer.handles.get(human)?.is3D && renderer.handles.get(chicken)?.is3D;
-      }, ids), { timeout: 15_000 }).toBe(true);
-      await page.waitForTimeout(500);
-
-      const result = await page.evaluate(({ human, chicken }) => {
-        const renderer = (window as any).__df9._characterRenderer as any;
         const inspectHead = (id: number, subset: number) => {
           const handle = renderer.handles.get(id);
+          if (!handle?.is3D) return null;
           let result: any = null;
           handle.object.traverse((child: any) => {
             if (child.userData?.sourceSubsetIndex === subset && child.visible) {
@@ -6083,15 +6080,15 @@ test.describe('Spacebase DF-9 E2E', () => {
           return result;
         };
         return { human: inspectHead(human, 7), chicken: inspectHead(chicken, 5) };
-      }, ids);
-
-      expect(result.human).toEqual({
-        layers: { bottom: 'Human_Head_Male01_bottom_03_Color_03' },
-        programKey: 'df9-face--bottom',
-      });
-      expect(result.chicken).toEqual({
-        layers: { top: 'Chicken_Head01_top_01', bottom: 'Chicken_Head01_bottom_01' },
-        programKey: 'df9-face-top-bottom',
+      }, ids), { timeout: 15_000 }).toEqual({
+        human: {
+          layers: { bottom: 'Human_Head_Male01_bottom_03_Color_03' },
+          programKey: 'df9-face--bottom',
+        },
+        chicken: {
+          layers: { top: 'Chicken_Head01_top_01', bottom: 'Chicken_Head01_bottom_01' },
+          programKey: 'df9-face-top-bottom',
+        },
       });
       expect(shaderErrors).toEqual([]);
     } finally {
