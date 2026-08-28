@@ -35,9 +35,9 @@ a { color: inherit; }
 
 .site-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 420px);
+  grid-template-columns: minmax(0, 1.08fr) minmax(420px, .92fr);
   align-items: center;
-  gap: clamp(40px, 8vw, 120px);
+  gap: clamp(36px, 5vw, 72px);
   width: min(1180px, calc(100% - 48px));
   min-height: 660px;
   margin: 0 auto;
@@ -59,10 +59,20 @@ a { color: inherit; }
 .site-button.primary { background: #dfa200; color: #080808; }
 .site-button.secondary { color: #dfa200; }
 
-.station-mark { position: relative; aspect-ratio: 1; border: 1px solid rgba(223,162,0,.35); border-radius: 50%; }
-.station-mark::before, .station-mark::after { content: ""; position: absolute; inset: 18%; border: 2px solid #dfa200; transform: rotate(45deg); }
-.station-mark::after { inset: 34%; background: #dfa200; box-shadow: 0 0 70px rgba(223,162,0,.5); }
-.station-orbit { position: absolute; inset: 8%; border: 1px dashed rgba(255,255,255,.3); border-radius: 50%; transform: scaleY(.42) rotate(-18deg); }
+.site-gameplay-preview {
+  position: relative;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid rgba(223,162,0,.58);
+  background: #080b0e;
+  box-shadow: 0 30px 80px rgba(0,0,0,.62), 0 0 70px rgba(223,162,0,.12);
+  transform: perspective(1200px) rotateY(-2deg);
+  transform-origin: right center;
+}
+.site-gameplay-preview::before { content: ""; position: absolute; inset: 7px; z-index: 1; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,.13); }
+.site-gameplay-preview a { display: block; }
+.site-gameplay-preview img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.site-gameplay-preview figcaption { position: absolute; right: 15px; bottom: 15px; z-index: 2; padding: 7px 9px; background: rgba(5,7,9,.86); color: #d6d2c7; font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 
 .site-section { width: min(980px, calc(100% - 48px)); margin: 0 auto; padding: 100px 0; border-top: 1px solid rgba(255,255,255,.13); }
 .site-section h2 { margin: 16px 0 24px; font-size: clamp(32px, 5vw, 58px); letter-spacing: -.04em; }
@@ -94,7 +104,8 @@ a { color: inherit; }
 @media (max-width: 760px) {
   .site-nav-links { display: none; }
   .site-hero { grid-template-columns: 1fr; min-height: auto; }
-  .station-mark { width: min(72vw, 360px); margin: 0 auto; }
+  .site-gameplay-preview { width: min(100%, 640px); margin: 0 auto; transform: none; }
+  .site-gameplay-preview figcaption { position: static; padding: 10px 4px 3px; background: transparent; }
   .site-stats { grid-template-columns: repeat(2, 1fr); }
   .site-footer, .terms-actions { align-items: flex-start; flex-direction: column; justify-content: center; }
 }

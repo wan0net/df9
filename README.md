@@ -7,7 +7,9 @@ published Lua source as its behavioral reference.
 
 > **Ownership requirement:** you must legally own or otherwise be licensed to
 > use Spacebase DF-9 before opening the hosted game. The public version presents
-> this attestation before any original game-derived asset loads.
+> this attestation before the playable game asset library loads.
+
+[![Spacebase DF-9 live browser gameplay showing a newly deployed station pod and three citizens](public/site/gameplay.jpg)](https://wan0.net/df9/)
 
 ## Play
 

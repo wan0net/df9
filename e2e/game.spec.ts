@@ -6997,6 +6997,13 @@ test.describe('Spacebase DF-9 E2E', () => {
     await expect(page.getByText('You must own Spacebase DF-9 to play.')).toBeVisible();
     await expect(page.getByText('BSD-3', { exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Open the game' })).toHaveAttribute('href', './game.html');
+    const gameplayPreview = page.getByRole('img', {
+      name: 'Live browser gameplay showing the starting station pod, three citizens, and the Spacebase DF-9 HUD',
+    });
+    await expect(gameplayPreview).toBeVisible();
+    await expect(gameplayPreview).toHaveAttribute('src', './site/gameplay.jpg');
+    await expect.poll(() => gameplayPreview.evaluate(image => (image as HTMLImageElement).naturalWidth))
+      .toBe(1280);
     await expect(page.getByRole('link', { name: 'Source', exact: true })).toHaveAttribute(
       'href',
       'https://github.com/wan0net/df9',
