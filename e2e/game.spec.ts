@@ -1037,22 +1037,29 @@ test.describe('Spacebase DF-9 E2E', () => {
       return id;
     });
 
-    // Speed up — use evaluate to directly set game state since key events
-    // may not reach handlers in serial test contexts
-    await page.evaluate(() => {
-      const gr = (window as any).__df9?._gameRules;
-      if (gr) { gr.bRunning = true; gr.playerTimeScale = 4; }
-    });
+    // Drive the same master tick used by the game loop in fixed slices. Hosted
+    // runners can suspend requestAnimationFrame under heavy shard load, which
+    // would otherwise leave this simulation assertion waiting on wall time.
+    const ate = await page.evaluate((id) => {
+      const d = (window as any).__df9;
+      const gr = d?._gameRules;
+      if (!gr) return false;
 
-    await expect.poll(async () => {
-      const chars = await df9(page).characters();
-      const c = chars.find(ch => ch.id === charId);
-      if (!c) return false;
-      return c.taskName === 'Eat' || c.taskName === 'GetDrink' || c.taskName === 'EatAtTable' || c.taskName === 'EatAtFoodReplicator' || c.hunger > 20;
-    }, {
-      timeout: 30_000,
-      message: 'Expected hungry character to eat when food available',
-    }).toBe(true);
+      gr.bRunning = true;
+      gr.playerTimeScale = 4;
+      for (let i = 0; i < 450; i++) {
+        gr.onTick(0.1);
+        const c = d._charMgr.getAllCharacters().find((candidate: { id: number }) => candidate.id === id);
+        if (!c) return false;
+        if (c.currentTask?.name === 'Eat' || c.currentTask?.name === 'GetDrink'
+          || c.currentTask?.name === 'EatAtTable' || c.currentTask?.name === 'EatAtFoodReplicator'
+          || c.needs.hunger > 20) {
+          return true;
+        }
+      }
+      return false;
+    }, charId);
+    expect(ate, 'Expected hungry character to eat when food available').toBe(true);
 
     await page.keyboard.press('1');
   });
