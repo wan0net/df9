@@ -6,7 +6,7 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, wan0-ci, df9]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
           if-no-files-found: ignore
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, wan0-ci, df9]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
