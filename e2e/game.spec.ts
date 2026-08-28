@@ -64,7 +64,7 @@ async function startNewGame(page: Page) {
   await page.locator('img[src*="launchbutton_active"]').click({ timeout: 5_000, force: true });
 
   // 7. Wait for deploy animation to finish (new-game overlay disappears)
-  await expect(page.locator('#new-game')).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator('#new-game')).toBeHidden({ timeout: 60_000 });
 
   // 8. Wait for game UI HUD (proves enterGameState succeeded)
   await expect(page.locator('#hud-pop')).toBeVisible({ timeout: 15_000 });

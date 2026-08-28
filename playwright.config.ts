@@ -28,7 +28,14 @@ export default defineConfig({
       use: {
         browserName: 'chromium',
         launchOptions: {
-          args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'],
+          args: [
+            '--enable-webgl',
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+          ],
         },
       },
     },
