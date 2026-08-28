@@ -14,6 +14,12 @@ import { BUILDER } from '../../characters/CharacterConstants';
 import type { TileGrid } from '../../world/TileGrid';
 import type { WallAutoGen } from '../../world/WallAutoGen';
 
+/** Static callback to notify RoomManager when tiles change. Set from main.ts. */
+let onTileBuilt: ((tiles: { x: number; y: number }[]) => void) | null = null;
+export function setOnTileBuilt(fn: (tiles: { x: number; y: number }[]) => void) {
+  onTileBuilt = fn;
+}
+
 /** Lua BuildBase.lua constants */
 const MIN_BUILD_TILE_DURATION = 2;
 const MAX_BUILD_TILE_DURATION = 5;
@@ -64,7 +70,15 @@ export class BuildTile extends Task {
     }
   }
 
-  protected onUpdate(dt: number) {
+  protected onUpdate(_dt: number) {
+    if (!this.character) return;
+    const cmd = CommandQueue.get(this.commandId);
+    if (!cmd) { this.fail(); return; }
+    // Don't count build time while character is still walking to the tile
+    if (this.character.moving || this.character.path.length > 0) {
+      this.elapsedTime = 0;
+      return;
+    }
     if (this.elapsedTime >= this.duration) {
       this.complete();
     }
@@ -95,6 +109,13 @@ export class BuildTile extends Task {
     }
 
     CommandQueue.complete(this.commandId);
-    Base.addAlert('build', `${this.character?.getName() ?? 'Builder'} built tile at (${cmd.tileX}, ${cmd.tileY})`);
+
+    // Notify RoomManager that tiles changed — triggers room detection
+    onTileBuilt?.([{ x: cmd.tileX, y: cmd.tileY }]);
+  }
+
+  /** Release command claim on failure so other builders can pick it up. */
+  protected onFail() {
+    CommandQueue.release(this.commandId);
   }
 }

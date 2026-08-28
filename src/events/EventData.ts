@@ -38,6 +38,8 @@ export interface EventDef {
   nMaxExteriorRooms?: number;
   /** Min exterior rooms for this event to be eligible (-1 = no limit). */
   nMinExteriorRooms?: number;
+  /** Min undiscovered rooms for this event to be eligible (-1 = no limit). */
+  nMinUndiscoveredRooms?: number;
   /** Estimated population change when this event fires (for forecast accumulation). */
   nPopulationDelta?: number;
   /** Linecode key for forecast alert (Lua: sAlertLC). */
@@ -99,8 +101,8 @@ export const EVENT_DEFS: Record<string, EventDef> = {
   Breaching: {
     name: 'Breaching',
     sEventType: 'breachingEvents',
-    nDefaultWeight: 5,
-    weight: 5,
+    nDefaultWeight: 10, // E-13: Lua uses 10 (forecast) or 16 (no exterior rooms)
+    weight: 10,
     minPopulation: 9,
     maxPopulation: -1,
     minTime: 600,  // 10 minutes
@@ -157,6 +159,7 @@ export const EVENT_DEFS: Record<string, EventDef> = {
     nChanceObey: 1,
     nChanceHostile: 0,
     nPopulationDelta: 2,
+    nMinUndiscoveredRooms: 2,  // Lua DockingEvent.lua:26
     sAlertLC: 'ALERTS028TEXT',  // Lua DockingEvent.lua:18
   },
   HostileDocking: {
@@ -252,8 +255,8 @@ export const FIRST_EVENT_TIME_MAX = 440;
 /** Previous events retained. */
 export const PREV_EVENTS_COUNT = 10;
 
-/** Max consecutive same-event allowed in forecast. */
-export const MAX_CONSECUTIVE_SAME = 3;
+/** Max consecutive same-event allowed in forecast (Lua: nConsecutiveEvents < 3 → max 2). */
+export const MAX_CONSECUTIVE_SAME = 2;
 
 /** Chance of malady on incoming characters (Lua: Event.nChanceOfMalady = 15). */
 export const CHANCE_OF_MALADY = 15;
@@ -286,8 +289,8 @@ export function getDifficulty(elapsedTime: number, population: number): number {
  * Mirrors Lua getChallengeLevel():
  *   nChallenge = clamp(0, 1, nDifficulty - 0.15 + random(0,30)/100)
  */
-export function getChallengeLevel(difficulty: number): number {
-  const challenge = difficulty - 0.15 + (Math.random() * 0.3);
+export function getChallengeLevel(difficulty: number, random: () => number = Math.random): number {
+  const challenge = difficulty - 0.15 + (random() * 0.3);
   return Math.max(0, Math.min(1, challenge));
 }
 
@@ -296,7 +299,11 @@ export function getChallengeLevel(difficulty: number): number {
  * Mirrors Lua EventController._getNextEventTimeDelta():
  *   Uses oscillating alpha curve based on game time progression.
  */
-export function getNextEventTimeDelta(elapsedTime: number, nTimeBetween: number): number {
+export function getNextEventTimeDelta(
+  elapsedTime: number,
+  nTimeBetween: number,
+  random: () => number = Math.random,
+): number {
   const x = Math.min(elapsedTime, DIFFICULTY_MAX_TIME) / DIFFICULTY_MAX_TIME;
 
   // Oscillating alpha curve (Lua formula)
@@ -306,7 +313,7 @@ export function getNextEventTimeDelta(elapsedTime: number, nTimeBetween: number)
   const nMin = 0.6 * nTimeBetween;
   const nMax = 1.4 * nTimeBetween;
   // Lua: math.random(-20, 20) returns integers in [-20, 20]
-  return nMin * alpha + nMax * (1 - alpha) + Math.floor(Math.random() * 41) - 20;
+  return nMin * alpha + nMax * (1 - alpha) + Math.floor(random() * 41) - 20;
 }
 
 /**
@@ -359,12 +366,16 @@ export interface RaiderSpec {
  * Roll random raiders based on difficulty.
  * Mirrors Lua EventController.rollRandomRaiders().
  */
-export function rollRandomRaiders(difficulty: number, bAllowKillbots: boolean): RaiderSpec[] {
+export function rollRandomRaiders(
+  difficulty: number,
+  bAllowKillbots: boolean,
+  random: () => number = Math.random,
+): RaiderSpec[] {
   let nRaiders = 1;
   if (difficulty > 0.4) {
-    nRaiders = 1 + Math.floor(Math.random() * 3); // 1-3
+    nRaiders = 1 + Math.floor(random() * 3); // 1-3
   } else if (difficulty > 0.2) {
-    nRaiders = 1 + Math.floor(Math.random() * 2); // 1-2
+    nRaiders = 1 + Math.floor(random() * 2); // 1-2
   }
 
   // Nerf difficulty for multiple spawns
@@ -374,8 +385,8 @@ export function rollRandomRaiders(difficulty: number, bAllowKillbots: boolean): 
 
   const raiders: RaiderSpec[] = [];
   for (let i = 0; i < nRaiders; i++) {
-    const nChallengeLevel = getChallengeLevel(adjDifficulty);
-    const bKillbot = bAllowKillbots && nChallengeLevel > 0.75 && Math.random() > 0.5;
+    const nChallengeLevel = getChallengeLevel(adjDifficulty, random);
+    const bKillbot = bAllowKillbots && nChallengeLevel > 0.75 && random() > 0.5;
     raiders.push({ nChallengeLevel, bKillbot });
   }
   return raiders;

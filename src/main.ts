@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { ThreeRenderer } from './renderer/ThreeRenderer';
+import type { SourceColorLUT } from './renderer/PostFX';
 import { CameraController3D } from './renderer/CameraController3D';
 import { TileRenderer3D } from './renderer/TileRenderer3D';
 import { CharacterRenderer } from './renderer/CharacterRenderer';
@@ -21,6 +22,11 @@ import { InputManager } from './input/InputManager';
 import { StartMenuState } from './ui/StartMenu';
 import { NewGameScreenState } from './ui/NewGameScreen';
 import { UIManager } from './ui/UIManager';
+import {
+  getCharacterTooltipRows,
+  getEnvObjectTooltipRows,
+  getRoomTooltipRows,
+} from './ui/WorldTooltip';
 import type { SelectedEntity } from './ui/InspectorPanel';
 
 import { TileGrid } from './world/TileGrid';
@@ -31,6 +37,7 @@ import { RoomManager } from './rooms/RoomManager';
 import type { Room } from './rooms/Room';
 import { OxygenSystem } from './oxygen/OxygenSystem';
 import { VacuumSystem } from './oxygen/VacuumSystem';
+import { Character } from './characters/Character';
 import { CharacterManager } from './characters/CharacterManager';
 import { GameRules, type TickableSystem, MAT_BUILD_FLOOR, MAT_VAPE_FLOOR } from './core/GameRules';
 import { EnvObjectManager } from './envobjects/EnvObjectManager';
@@ -44,9 +51,10 @@ import { Lighting } from './lighting/Lighting';
 import { line as locLine, getLanguage, getAvailableLanguages } from './localization/Localization';
 import { DialogSystem } from './ui/DialogSystem';
 import { EventController } from './events/EventController';
+import { MeteorEvent } from './events/MeteorEvent';
 import { Fire } from './hazards/Fire';
 import { ProjectileManager } from './hazards/Projectile';
-import { SaveLoadSystem } from './save/SaveLoad';
+import { SaveLoadSystem, type ObjSaveData } from './save/SaveLoad';
 import { researchSystem } from './research/ResearchSystem';
 import { GoalSystem } from './goals/GoalSystem';
 import { addLog, setElapsedTimeProvider, type LogEntry } from './characters/Log';
@@ -61,7 +69,7 @@ import { AutoSave } from './save/AutoSave';
 import { SoundManager } from './audio/SoundManager';
 import { MusicSystem } from './audio/MusicSystem';
 import { SpatialAudio } from './audio/SpatialAudio';
-import { generateWorld } from './world/WorldGen';
+import { generateTutorialWorld, generateWorld } from './world/WorldGen';
 import { ZoneType, ZONE_SPRITES } from './world/ZoneType';
 import { GRID_W, GRID_H, TILE_W, TILE_HALF_W, TILE_HALF_H } from './config';
 import { tileToScreen, getDiamondFootprint } from './world/IsometricUtils';
@@ -80,17 +88,19 @@ import {
 import { ITEM_TEMPLATES, TAGS, STUFF_NAMES } from './inventory/InventoryData';
 import { Malady } from './malady/Malady';
 import { DebugMenu } from './ui/DebugMenu';
-import { TutorialSystem } from './ui/TutorialSystem';
+import { TutorialSystem, type TutorialSaveState } from './ui/TutorialSystem';
 import { SaveSlotPanel } from './ui/SaveSlotPanel';
 import { EmergencyBeacon } from './combat/EmergencyBeacon';
 import { SquadList } from './combat/SquadList';
 import { MALADY_DEFS, getSpawnableDiseases, getMaladyByTier } from './malady/MaladyData';
-import { CAUSE_OF_DEATH, FACTION_BEHAVIOR } from './characters/CharacterConstants';
+import { BUILDER, CAUSE_OF_DEATH, FACTION_BEHAVIOR, UNEMPLOYED, TEAM_ID_DEBUG_MONSTER, RACE_MONSTER } from './characters/CharacterConstants';
+import { BuildTile, setOnTileBuilt } from './utility/tasks/BuildTile';
 import { BASE_EVENT, EVENT_DATA } from './core/Base';
 import { DerelictSystem } from './events/DerelictSystem';
 import { DockingSystem } from './docking/DockingSystem';
 import { dialogueSystem } from './characters/DialogueSystem';
 import { ExplosionSystem } from './renderer/ExplosionSystem';
+import { BrigZone } from './zones/BrigZone';
 
 // ── Tick adapters (same as GameScene) ─────────────────────────
 
@@ -188,12 +198,9 @@ function startGame() {
   });
 
   const newGameScreen = new NewGameScreenState({
-    onStartGame: (landingZone) => enterGameState(sceneManager, { landingZone }),
+    onStartGame: (landingZone, tutorial) => enterGameState(sceneManager, { landingZone, tutorial }),
     onBack: () => sceneManager.switchTo(startMenu),
   });
-
-  // Start at menu
-  sceneManager.switchTo(startMenu);
 
   // Scene manager drives the update loop for menu states
   let lastTime = performance.now();
@@ -205,12 +212,23 @@ function startGame() {
     sceneManager.update(dt);
     menuLoopId = requestAnimationFrame(menuLoop);
   }
-  menuLoopId = requestAnimationFrame(menuLoop);
-
   // Expose stop function so enterGameState can cancel the menu loop
   (sceneManager as SceneManager & { stopMenuLoop?: () => void }).stopMenuLoop = () => {
     cancelAnimationFrame(menuLoopId);
   };
+
+  // Development-only fast path used by isolated Playwright fixtures. This skips
+  // menu/deploy animation but enters the exact same production game state.
+  const directE2EStart =
+    (import.meta as ImportMeta & { env: { VITE_E2E?: string } }).env.VITE_E2E === 'true'
+    && new URLSearchParams(location.search).get('e2e') === '1';
+  if (directE2EStart) {
+    const params = new URLSearchParams(location.search);
+    enterGameState(sceneManager, { tutorial: params.get('tutorial') === '1' });
+  } else {
+    sceneManager.switchTo(startMenu);
+    menuLoopId = requestAnimationFrame(menuLoop);
+  }
 }
 
 /**
@@ -246,18 +264,22 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Initialize game systems (unchanged logic) ─────────────
   GameRules.init();
+  GameRules.bTutorialMode = initData.tutorial === true;
   setElapsedTimeProvider(() => GameRules.elapsedTime);
   const grid = new TileGrid();
   const tileRenderer = new TileRenderer3D(threeRenderer.scene, grid);
   const wallAutoGen = new WallAutoGen(grid);
   const buildSystem = new BuildSystem(grid, wallAutoGen);
-  const buildCursor = new BuildCursor(threeRenderer.scene, grid);
+  const buildCursor = new BuildCursor(threeRenderer.scene, grid, (x, y) => buildSystem.canBuildWall(x, y));
   const roomManager = new RoomManager(grid);
   tileRenderer.setRoomManager(roomManager);
   buildSystem.setRoomManager(roomManager);
+  // Wire BuildTile → RoomManager so rooms are detected after construction
+  setOnTileBuilt((tiles) => { roomManager.markDirty(tiles); });
   const oxygenSystem = new OxygenSystem(roomManager, grid);
   const vacuumSystem = new VacuumSystem(grid);
   const characterManager = new CharacterManager(grid, roomManager);
+  oxygenSystem.setCharacterProvider(() => characterManager.getAllCharacters());
   characterManager.setWallAutoGen(wallAutoGen);
   characterManager.setVacuumSystem(vacuumSystem);
   const objectPlacement = new ObjectPlacement(grid, roomManager);
@@ -366,6 +388,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const explosionSystem = new ExplosionSystem(threeRenderer.scene);
 
   Malady.reset();
+  BrigZone.reset();
   // Wire air scrubber count for disease spread reduction
   Malady.getAirScrubberCount = (tx, ty, range) => {
     let count = 0;
@@ -377,7 +400,19 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }
     return count;
   };
+  // Wire room lookup for same-room sneeze spread check
+  Malady.getRoomIdAtTile = (tx, ty) => {
+    const room = roomManager.getRoomAt(tx, ty);
+    return room ? room.id : null;
+  };
   EnvObjectManager.init(roomManager);
+  Door.tileTypeAt = (x, y) => grid.get(x, y);
+  Door.tileOxygenAt = (x, y) => grid.getO2(x, y);
+  Door.roomAtTile = (x, y) => roomManager.getRoomAt(x, y) ?? null;
+  Door.tileObstructionCheck = (x, y) => {
+    const tile = grid.get(x, y);
+    return tile === TileType.WALL || EnvObjectManager.getObjectAt(x, y)?.tData.bBlocksPathing === true;
+  };
 
   // Wire door sprite lookup for TileRenderer3D
   tileRenderer.getDoorSpriteAt = (x, y) => {
@@ -409,7 +444,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     if (obj.tData.door && obj.bBuilt) {
       envObjRenderer.removeObject(String(id));
     } else {
-      envObjRenderer.updateObject(String(id), obj.bBuilt, obj.nCondition, obj.getSpriteKey());
+      envObjRenderer.updateObject(String(id), obj.bBuilt, obj.nCondition, obj.getSpriteKey(),
+        obj.bHasPower, obj.bActive);
     }
     // Re-render door tiles when door state changes (open/close/lock)
     if (obj.sName === 'Door' || obj.sName === 'HeavyDoor' || obj.sName === 'Airlock') {
@@ -433,6 +469,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           isAlive: c.isAlive(),
           bIncapacitated: Malady.isIncapacitated(c),
           bCuffed: c.bCuffed,
+          tAssignedToBrig: c.tAssignedToBrig,
+          tImprisonedIn: c.tImprisonedIn,
         })),
     }));
   });
@@ -462,31 +500,56 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     }
   };
-  eventController.onMeteorLand = () => {
-    // Pick a random floor tile in a random room
-    const rooms = roomManager.getRooms();
-    if (rooms.length === 0) return;
-    const room = rooms[Math.floor(Math.random() * rooms.length)];
-    if (room.tiles.length === 0) return;
-    const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
-
-    // Destroy the tile — becomes a breach point (set() auto-marks dirty)
-    grid.set(tile.x, tile.y, TileType.WALL_DESTROYED);
-
-    // Start a fire at the impact site
-    fire.startFire(tile.x, tile.y);
-
-    // Camera shake on meteor impact (Lua Camera:shake(15, 0.2))
-    cameraController.shake(15, 0.2);
-
-    // Meteor trail particles (Lua AnimatedSprite "asteroid01_")
-    effectParticles.spawnMeteorTrail(tile.x, tile.y);
-
-    // Force room re-detection (breach)
-    roomManager.markDirty([tile]);
+  // E-31: Trader spawns as a distinct character type
+  eventController.onTraderSpawn = (count) => {
+    for (let i = 0; i < count; i++) {
+      const char = characterManager.spawnCharacter();
+      if (char) {
+        // Mark as trader — Lua uses FACTION_BEHAVIOR.Trader
+        // Traders are friendly but temporary visitors
+        char.tStats.nJob = UNEMPLOYED;
+        (char as any).bTrader = true;
+      }
+    }
   };
-  eventController.onHostileSpawn = (count, hp) => {
-    characterManager.spawnHostiles(count, hp);
+  // Meteor shower: per-impact callback with tile coords and size (Lua MeteorEvent.lua:183-210)
+  eventController.onMeteorLand = (tx, ty, nSize, nDamage) => {
+    // Meteor trail particles (Lua AnimatedSprite "asteroid01_")
+    effectParticles.spawnMeteorTrail(tx, ty);
+
+    // Spatial audio at impact site
+    const screenPos = tileToScreen(tx, ty);
+    SoundManager.playSfx3D('MeteorImpact', screenPos.x, screenPos.y);
+
+    // Camera shake for large meteors (Lua: nSize > 0.9 -> shake(15, 0.2))
+    if (nSize > 0.9) {
+      cameraController.shake(15, 0.2);
+    }
+
+    // Explosion effect for medium+ meteors (Lua: nSize > 0.5 -> playExplosion)
+    if (nSize > 0.5) {
+      explosionSystem.spawnExplosion(tx, ty, nSize);
+    }
+
+    // Apply tile damage (Lua: World.damageTile)
+    grid.damageTile(tx, ty, nDamage);
+
+    // 25% fire chance if nSize > 0.5 and tile didn't become SPACE (Lua lines 208-209)
+    if (nSize > 0.5 && Math.random() < 0.25) {
+      const tileAfter = grid.get(tx, ty);
+      if (tileAfter !== TileType.SPACE) {
+        fire.startFire(tx, ty);
+      }
+    }
+
+    // Force room re-detection if tile was damaged/destroyed
+    roomManager.markDirty([{ x: tx, y: ty }]);
+  };
+
+  // Wire getTileType so MeteorEvent can detect SPACE tiles for pass-through
+  eventController.getTileType = (tx, ty) => grid.get(tx, ty);
+  eventController.onHostileSpawn = (count, hp, difficulty) => {
+    characterManager.spawnHostiles(count, hp, difficulty);
   };
   eventController.onBreachWall = () => {
     // Pick a random wall tile adjacent to a room and destroy it
@@ -516,7 +579,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   eventController.onDerelictExplore = ({ ship, event, choiceId }) => {
     if (event.type === 'hostileEncounter' && choiceId === 'fight') {
       const count = Math.max(1, Math.min(4, Math.ceil(ship.dangerLevel / 2)));
-      characterManager.spawnHostiles(count, eventController.getScaledRaiderHP());
+      characterManager.spawnHostiles(count, eventController.getScaledRaiderHP(), eventController.getDifficulty());
     }
   };
 
@@ -540,13 +603,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
     }
   };
-  // Wire fire sounds
-  fire.onFireStart = (x, y) => {
-    SpatialAudio.fireStart(x, y);
-  };
-  fire.onFireEnd = (x, y) => {
-    SpatialAudio.fireEnd(x, y);
-  };
+  // A-1: Fire loop audio is handled inside Fire.onTick via SpatialAudio.updateFireLoop
+  // (single global loop at averaged position of all burning tiles).
+  // One-shot fire start SFX is played by Fire.startFire directly.
   const projectileManager = new ProjectileManager();
   projectileManager.init();
   characterManager.setProjectileManager(projectileManager);
@@ -633,6 +692,30 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     hasBuiltObject: () => EnvObjectManager.getObjects().some(o => o.bBuilt),
     getPopulation: () => characterManager.getPopulation(),
     hasHostiles: () => characterManager.getHostileCount() > 0,
+    getRooms: () => roomManager.getRooms(),
+    getCharacters: () => characterManager.getCharacters().map(c => ({
+      getJob: () => c.getJob(),
+      isAlive: () => c.isAlive(),
+      bLowOxygen: c.bLowOxygen,
+      heldItem: c.heldItem,
+      tStats: c.tStats,
+      nStarveTime: c.nStarveTime,
+      maladies: c.maladies.map(m => ({
+        sMaladyName: m.sMaladyName,
+        sType: m.sMaladyType,
+        bSymptomatic: m.bSymptomatic,
+        bDiagnosed: m.bDiagnosed,
+      })),
+      bRampaging: c.bRampaging,
+      tAssignedToBrig: c.tAssignedToBrig,
+      currentTaskName: c.currentTask?.name ?? null,
+      getJobAffinity: (jobId?: number) => c.getJobAffinity(jobId),
+      bSpacewalking: c.bSpacewalking,
+    })),
+    hasActiveFires: () => fire.getFireCount() > 0,
+    hasBeaconPlaced: () => EmergencyBeacon.getAllBeacons().size > 0,
+    getActiveResearch: () => researchSystem.getActiveResearch(),
+    inEditMode: () => false,
   });
 
   // Tutorial system (Lua GameRules.lua 20-stage tutorial)
@@ -646,8 +729,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     spedUp: false, repairedBreach: false, zonedResidence: false,
     mineConfirm: false, assignedTechs: false, exploredDerelict: false,
   };
-  if (isTutorialMode) {
-    tutorialSystem.start(container, {
+  const createTutorialProviders = () => ({
       hasZoomed: () => tutorialFlags.zoomed,
       hasPanned: () => tutorialFlags.panned,
       hasSelected: () => tutorialFlags.selected,
@@ -666,13 +748,40 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       hasMineConfirmed: () => tutorialFlags.mineConfirm,
       hasAssignedTechs: () => tutorialFlags.assignedTechs || characterManager.getCharacters().some(c => c.getJob() === 4),
       hasExploredDerelict: () => tutorialFlags.exploredDerelict,
-    });
+  });
+  const startTutorialSystem = (savedState?: Partial<TutorialSaveState>, savedFlags?: Record<string, boolean>) => {
+    if (savedFlags) {
+      for (const [key, value] of Object.entries(savedFlags)) {
+        if (key in tutorialFlags) {
+          (tutorialFlags as Record<string, boolean>)[key] = value;
+        }
+      }
+    }
+    if (!tutorialSystem.isActive()) {
+      tutorialSystem.start(container, createTutorialProviders(), savedState);
+    } else if (savedState) {
+      tutorialSystem.restoreState(savedState);
+    }
+    GameRules.bTutorialMode = true;
+  };
+  if (isTutorialMode) {
+    startTutorialSystem();
   }
 
   // Wire save/load data providers
   saveLoadSystem.getCharacterData = () => characterManager.getCharacters().map(c => ({
     id: c.id, tileX: c.tileX, tileY: c.tileY,
     name: c.getName(), job: c.getJob(), team: c.tStats.nTeam, race: c.tStats.nRace,
+    nBodyVariation: c.tStats.nBodyVariation,
+    nHeadVariation: c.tStats.nHeadVariation,
+    nFaceTopVariation: c.tStats.nFaceTopVariation,
+    nFaceBottomVariation: c.tStats.nFaceBottomVariation,
+    nHairVariation: c.tStats.nHairVariation,
+    nBottomAccessoryVariation: c.tStats.nBottomAccessoryVariation,
+    nTopAccessoryVariation: c.tStats.nTopAccessoryVariation,
+    sPortrait: c.tStats.sPortrait,
+    sPortraitHair: c.tStats.sPortraitHair,
+    sPortraitFacialHair: c.tStats.sPortraitFacialHair,
     hp: c.getHP(), maxHP: c.tStats.nMaxHP, status: c.tStats.nStatus,
     xp: c.tStats.nXP, competency: { ...c.tStats.tCompetency },
     morale: c.nMorale, anger: c.nAnger, nRemainingDutyTime: c.nRemainingDutyTime,
@@ -682,17 +791,18 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     needs: { ...c.needs },
     inventory: c.inventory.getAll().map(i => ({ sTemplate: i.sTemplate, sName: i.sName, nCount: i.nCount })),
   }));
-  saveLoadSystem.getObjectData = () => EnvObjectManager.getObjects().map(o => ({
-    name: o.sName, tileX: o.tileX, tileY: o.tileY,
-    built: o.bBuilt, condition: o.nCondition, hasPower: o.bHasPower,
-  }));
+  saveLoadSystem.getObjectData = () =>
+    EnvObjectManager.getObjects().map(o => o.getSaveData() as unknown as ObjSaveData);
   saveLoadSystem.getResearchData = () => ({
     active: researchSystem.getActiveResearch(),
     progress: researchSystem.getProgress(),
+    progressByKey: researchSystem.getProgressData(),
     completed: researchSystem.getCompletedList(),
   });
   saveLoadSystem.getEventData = () => eventController.getSaveData();
   saveLoadSystem.getTopicsData = () => getTopicsSaveData();
+  saveLoadSystem.getTutorialState = () => tutorialSystem.getSaveState();
+  saveLoadSystem.getTutorialFlags = () => ({ ...tutorialFlags });
 
   // Wire load callbacks
   saveLoadSystem.loadCharacterData = (chars) => {
@@ -703,6 +813,17 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       char.setJob(cd.job);
       char.tStats.nTeam = cd.team;
       if (cd.race !== undefined) char.tStats.nRace = cd.race;
+      if (cd.nBodyVariation !== undefined) char.tStats.nBodyVariation = cd.nBodyVariation;
+      if (cd.nHeadVariation !== undefined) char.tStats.nHeadVariation = cd.nHeadVariation;
+      if (cd.nFaceTopVariation !== undefined) char.tStats.nFaceTopVariation = cd.nFaceTopVariation;
+      if (cd.nFaceBottomVariation !== undefined) char.tStats.nFaceBottomVariation = cd.nFaceBottomVariation;
+      if (cd.nHairVariation !== undefined) char.tStats.nHairVariation = cd.nHairVariation;
+      if (cd.nBottomAccessoryVariation !== undefined) char.tStats.nBottomAccessoryVariation = cd.nBottomAccessoryVariation;
+      if (cd.nTopAccessoryVariation !== undefined) char.tStats.nTopAccessoryVariation = cd.nTopAccessoryVariation;
+      if (cd.sPortrait !== undefined) char.tStats.sPortrait = cd.sPortrait;
+      char.tStats.sPortraitHair = cd.sPortraitHair;
+      char.tStats.sPortraitFacialHair = cd.sPortraitFacialHair;
+      char.ensureAppearance();
       char.setHP(cd.hp);
       char.tStats.nMaxHP = cd.maxHP;
       char.tStats.nStatus = cd.status;
@@ -722,6 +843,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         char.needs.amusement = cd.needs.amusement;
         char.needs.social = cd.needs.social;
         char.needs.oxygen = cd.needs.oxygen;
+        // Saves created before duty persistence default to the constructor's
+        // full duty need, matching the old load behavior.
+        char.needs.duty = cd.needs.duty ?? 100;
       }
       // Restore inventory
       if (cd.inventory) {
@@ -738,14 +862,44 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (cd.tLog) {
         char.tLog = cd.tLog.slice();
       }
+      // spawnCharacterAt mounted the constructor's random rig before the saved
+      // appearance was restored. Remount once so the loaded subset tuple wins.
+      characterRenderer.destroyCharacter(char.id);
+      characterRenderer.createCharacter(char);
     }
   };
   saveLoadSystem.loadObjectData = (objs) => {
     EnvObjectManager.clearAll();
     for (const od of objs) {
-      const obj = EnvObjectManager.createObject(od.name, od.tileX, od.tileY, false, false, od.built);
+      const name = od.sName ?? od.name;
+      if (!name) continue;
+      const obj = EnvObjectManager.createObject(
+        name,
+        od.tileX,
+        od.tileY,
+        od.bFlipX ?? false,
+        od.bFlipY ?? false,
+        od.bBuilt ?? od.built ?? true,
+      );
       if (obj) {
-        obj.nCondition = od.condition;
+        obj.bActive = od.bActive ?? true;
+        obj.bHasPower = od.bHasPower ?? od.hasPower ?? false;
+        obj.nTempPowerLossEnd = od.nTempPowerLossEnd ?? -1;
+        obj.sUniqueName = od.sUniqueName ?? '';
+        obj.sBuilderName = od.sBuilderName ?? '';
+        obj.sBuildTime = od.sBuildTime ?? '';
+        obj.wallTileX = od.wallTileX ?? -1;
+        obj.wallTileY = od.wallTileY ?? -1;
+        obj.setCondition(od.nCondition ?? od.condition ?? 100);
+        if (obj instanceof Door) {
+          obj.bSmashedOpen = od.bSmashedOpen ?? false;
+          obj.secondTileX = od.secondTileX ?? -1;
+          obj.secondTileY = od.secondTileY ?? -1;
+          obj.setOperation(od.operation ?? obj.getOperation());
+          // Lua forces the saved operation during load, then normal ticking
+          // immediately derives broken/vacuum state from durable fields.
+          obj.onTick(0);
+        }
       }
     }
   };
@@ -757,6 +911,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   };
   saveLoadSystem.loadTopicsData = (data) => {
     topicsFromSaveData(data);
+  };
+  saveLoadSystem.loadTutorialFlags = (flags) => {
+    for (const [key, value] of Object.entries(flags)) {
+      if (key in tutorialFlags) {
+        (tutorialFlags as Record<string, boolean>)[key] = value;
+      }
+    }
+  };
+  saveLoadSystem.loadTutorialState = (state) => {
+    startTutorialSystem(state);
+  };
+  saveLoadSystem.loadTutorialStage = (stage) => {
+    startTutorialSystem({
+      active: true,
+      currentStage: stage,
+      stageTimer: 0,
+      completedConditions: [],
+    });
   };
   saveLoadSystem.getFireData = () => fire.getSaveData();
   saveLoadSystem.loadFireData = (data) => {
@@ -792,7 +964,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Generate world ────────────────────────────────────────
   const landingZone = initData.landingZone as { x: number; y: number; density: number; threat: number; distance: number; interference: number } | undefined;
-  const worldResult = generateWorld(grid, wallAutoGen, landingZone);
+  const worldResult = isTutorialMode
+    ? generateTutorialWorld(grid, wallAutoGen, landingZone)
+    : generateWorld(grid, wallAutoGen, landingZone);
 
   // Wire galaxy position into event system difficulty
   if (landingZone) {
@@ -809,6 +983,28 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   roomManager.markDirty([]);
   roomManager.update();
 
+  // Box.sav stores its zone type in each logical floor value. TS stores all
+  // walkable floors as FLOOR, so restore each detected room by majority vote.
+  if (worldResult.initialZones.size > 0) {
+    for (const room of roomManager.getRooms()) {
+      const counts = new Map<ZoneType, number>();
+      for (const tile of room.tiles) {
+        const zone = worldResult.initialZones.get(`${tile.x},${tile.y}`);
+        if (zone) counts.set(zone, (counts.get(zone) ?? 0) + 1);
+      }
+      let selected = ZoneType.PLAIN;
+      let selectedCount = -1;
+      for (const [zone, count] of counts) {
+        if (count > selectedCount) {
+          selected = zone;
+          selectedCount = count;
+        }
+      }
+      room.zone = selected;
+      roomManager.persistZone(room);
+    }
+  }
+
   // Initialize Topics system (Lua Topics.initializeTopicList)
   setCharacterProvider(
     () => characterManager.getCharacters(),
@@ -820,6 +1016,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const isLoadSave = initData.loadSave === true;
   const saveSlotName = (initData.saveSlot as string | undefined) ?? 'SpacebaseDF9AutoSave';
 
+  let createInitialState = !isLoadSave;
   if (isLoadSave) {
     const loaded = saveLoadSystem.loadFromStorage(saveSlotName);
     if (loaded) {
@@ -828,29 +1025,35 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       roomManager.update();
       tileRenderer.renderRegion(0, 0, grid.width - 1, grid.height - 1);
     } else {
-      // Load failed — fall back to spawning a new crew
-      characterManager.spawnInitialCrew(worldResult.crewSpawns);
+      // Load failed — fall back to the selected starting module.
+      createInitialState = true;
+      characterManager.spawnInitialCrew(worldResult.crewSpawns, worldResult.crewSpacewalking);
     }
   } else {
-    // Spawn the initial 3 spacewalking settlers
-    characterManager.spawnInitialCrew(worldResult.crewSpawns);
+    characterManager.spawnInitialCrew(worldResult.crewSpawns, worldResult.crewSpacewalking);
   }
 
   const cx = Math.floor(grid.width / 2);
   const cy = Math.floor(grid.height / 2);
   tileRenderer.renderRegion(cx - 20, cy - 20, cx + 20, cy + 20);
 
-  // Place the seed pod (BaseSeed) at center — a visible marker
-  if (!isLoadSave) {
-    createSeedPod(threeRenderer, worldResult.seedPodX, worldResult.seedPodY);
+  // Starting-module objects are real EnvObjects, including BaseSeed's 2x3
+  // footprint and the Box tutorial's damaged refinery/equipment.
+  if (createInitialState) {
+    for (const initial of worldResult.initialObjects) {
+      const obj = EnvObjectManager.createObject(initial.sName, initial.x, initial.y, initial.bFlipX ?? false);
+      if (obj && initial.condition !== undefined) obj.setCondition(initial.condition);
+    }
   }
 
   // Lua GameRules._resetCamera: zoom=1.0, center on seed pod / first character
   {
-    const spx = worldResult.seedPodX * TILE_W + TILE_HALF_W;
-    const spy = worldResult.seedPodY * TILE_HALF_H;
-    cameraController.zoom = 1.0;
-    cameraController.centerOnWorld(spx, spy);
+    const crewCenterX = worldResult.crewSpawns.reduce((sum, spawn) => sum + spawn.x, 0) / worldResult.crewSpawns.length;
+    const crewCenterY = worldResult.crewSpawns.reduce((sum, spawn) => sum + spawn.y, 0) / worldResult.crewSpawns.length;
+    const focusX = ((worldResult.seedPodX * 0.6) + (crewCenterX * 0.4)) * TILE_W + TILE_HALF_W;
+    const focusY = ((worldResult.seedPodY * 0.55) + (crewCenterY * 0.45)) * TILE_HALF_H + TILE_HALF_H * 1.5;
+    cameraController.zoom = 1;
+    cameraController.centerOnWorld(focusX, focusY);
   }
 
   // Lua GameRules.lua:686 — new game starts paused
@@ -860,9 +1063,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
 
   // ── Input system ──────────────────────────────────────────
   const inputManager = new InputManager(threeRenderer.getCanvas(), cameraController);
+  cameraController.onUserZoom = () => { tutorialFlags.zoomed = true; };
+  cameraController.onUserPan = () => { tutorialFlags.panned = true; };
 
   let buildMode: BuildMode = 'none';
-  let showO2Overlay = false;
   let selectedZone: ZoneType = ZoneType.GARDEN;
   let selectedEntity: SelectedEntity = null;
   const prevCommandTiles = new Set<string>();
@@ -902,6 +1106,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     const total = pendingTotalCost();
     if (GameRules.nMatter < total) {
       SoundManager.playSfx('disallow');
+      // U-14: Show "Insufficient Matter!" alert (Lua NoFundsLabel feedback)
+      Base.addAlert('build', locLine('BUILDM016TEXT'));
       return false;
     }
     GameRules.nMatter -= total;
@@ -927,6 +1133,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }
     if (changed.length > 0) {
       wallAutoGen.update(changed);
+      wallAutoGen.cleanupOrphans(changed); // Fix: remove orphan WALL_PENDING from cancelled builds
       roomManager.markDirty(changed);
     }
     pendingSavedTiles = [];
@@ -974,18 +1181,31 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     uiManager.setSelectedEntity(null);
     uiManager.dismissInspectSub();
     tutorialFlags.deselected = true;
-    GameRules.bRunning = true;
+    // First ESC starts the game; subsequent ESCs don't unpause
+    if (!GameRules.bRunning) {
+      GameRules.bRunning = true;
+      if (GameRules.playerTimeScale === 0) GameRules.playerTimeScale = 1;
+    }
   });
-  inputManager.onKeyPress('KeyO', () => { showO2Overlay = !showO2Overlay; tutorialFlags.vizModes = true; });
+  inputManager.onKeyPress('KeyO', () => { GameRules.cycleVisualizer(); tutorialFlags.vizModes = true; });
   inputManager.onKeyPress('KeyI', () => { buildMode = 'none'; });
   inputManager.onKeyPress('KeyR', () => { uiManager.toggleJobRoster(); });
-  inputManager.onKeyPress('Space', () => { GameRules.togglePause(); tutorialFlags.timeSpeed = true; });
-  inputManager.onKeyPress('Digit1', () => { GameRules.setTimeScale(1); tutorialFlags.timeSpeed = true; });
-  inputManager.onKeyPress('Digit2', () => { GameRules.setTimeScale(2); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
-  inputManager.onKeyPress('Digit3', () => { GameRules.setTimeScale(4); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  inputManager.onKeyPress('Space', () => {
+    if (!GameRules.bRunning) {
+      // First press: start the game
+      GameRules.bRunning = true;
+      if (GameRules.playerTimeScale === 0) GameRules.playerTimeScale = 1;
+    } else {
+      GameRules.togglePause();
+    }
+    tutorialFlags.timeSpeed = true;
+  });
+  inputManager.onKeyPress('Digit1', () => { GameRules.bRunning = true; GameRules.setTimeScale(1); tutorialFlags.timeSpeed = true; });
+  inputManager.onKeyPress('Digit2', () => { GameRules.bRunning = true; GameRules.setTimeScale(2); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  inputManager.onKeyPress('Digit3', () => { GameRules.bRunning = true; GameRules.setTimeScale(4); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
   // ] / [ keys: speed up / slow down time (Lua GameScreen.lua:285-291)
-  inputManager.onKeyPress('BracketRight', () => { GameRules.timeFaster(); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
-  inputManager.onKeyPress('BracketLeft', () => { GameRules.timeSlower(); tutorialFlags.timeSpeed = true; });
+  inputManager.onKeyPress('BracketRight', () => { GameRules.bRunning = true; GameRules.timeFaster(); tutorialFlags.timeSpeed = true; tutorialFlags.spedUp = true; });
+  inputManager.onKeyPress('BracketLeft', () => { GameRules.bRunning = true; GameRules.timeSlower(); tutorialFlags.timeSpeed = true; });
   // K key: toggle cutaway mode (Lua GameScreen.lua)
   inputManager.onKeyPress('KeyK', () => {
     GameRules.cycleCutawayMode();
@@ -1100,49 +1320,29 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     },
     getHoveredInfo: () => {
       const hovered = buildCursor.hoveredTile;
-      if (!hovered) return '';
-      const tile = grid.get(hovered.x, hovered.y);
+      if (!hovered) return [];
+      // Lua GuiManager only displays WorldToolTip in Inspect, Beacon, Pick,
+      // and PlaceProp. The web build maps those to none, beacon, and object.
+      if (buildMode !== 'none' && buildMode !== 'beacon' && buildMode !== 'object') return [];
       const room = roomManager.getRoomAt(hovered.x, hovered.y);
-      let info = `(${hovered.x}, ${hovered.y})  ${tileName(tile)}`;
-      if (room) {
-        info += `\nRoom #${room.id}  ${room.size} tiles  Zone: ${ZONE_SPRITES[room.zone].name}`;
-        info += `\nO2: ${room.oxygen}/255  ${room.sealed ? 'Sealed' : 'BREACHED'}`;
-        info += `  Power: +${room.nPowerOutput}/-${room.nPowerDraw}`;
+      // Beacon and object-placement modes intentionally ignore characters and
+      // props; Lua requests a Room-only hover target in both modes.
+      if (buildMode === 'beacon' || buildMode === 'object') {
+        return room ? getRoomTooltipRows(room) : [];
       }
-      // Env objects at tile (Lua tooltip: "Name · Condition: Good (100%)")
-      for (const obj of EnvObjectManager.getObjects()) {
-        if (obj.tileX === hovered.x && obj.tileY === hovered.y) {
-          info += `\n\n${obj.tData.friendlyName} \u00b7 ${obj.getConditionUIString()} (${Math.round(obj.nCondition)}%)`;
-          if (!obj.bBuilt) info += ` [Building]`;
-        }
-      }
-      // Characters at tile (Lua tooltip: "Name\nActivity (time)")
-      for (const char of characterManager.getCharacters()) {
-        if (char.tileX === hovered.x && char.tileY === hovered.y) {
-          info += `\n\n${char.getName()}\n${char.currentTask?.name ?? 'Idle'}`;
-        }
-      }
-      // Pending commands at tile
-      for (const cmd of CommandQueue.getAllActive()) {
-        if (cmd.tileX === hovered.x && cmd.tileY === hovered.y) {
-          info += `\n[${cmd.type} command pending]`;
-        }
-      }
-      return info;
+      // Lua _getTargetAt resolves Character > EnvObject > Room.
+      const char = characterManager.getCharacters().find(candidate =>
+        candidate.tileX === hovered.x && candidate.tileY === hovered.y);
+      if (char) return getCharacterTooltipRows(char);
+      const obj = EnvObjectManager.getObjectAt(hovered.x, hovered.y);
+      if (obj) return getEnvObjectTooltipRows(obj);
+      return room ? getRoomTooltipRows(room) : [];
     },
-    onSave: () => {
-      saveLoadSystem.saveToStorage();
-      // Store metadata for the default autosave slot
-      SaveSlotPanel.saveMeta('SpacebaseDF9AutoSave', characterManager.getPopulation(), GameRules.nMatter);
-    },
-    onLoad: () => saveLoadSystem.loadFromStorage(),
-    onExport: () => saveLoadSystem.exportToFile(),
-    onImport: () => saveLoadSystem.importFromFile(),
     onSpawn: () => characterManager.spawnCharacter(),
     onObjectSelected: (name) => { /* placeholder */ },
     getCharacters: () => characterManager.getCharacters(),
     getEnvObjects: () => EnvObjectManager.getObjects(),
-    toggleO2Overlay: () => { showO2Overlay = !showO2Overlay; },
+    toggleO2Overlay: () => { GameRules.cycleVisualizer(); },
     onZoomIn: () => { cameraController.addZoom(3); },
     onZoomOut: () => { cameraController.addZoom(-3); },
     toggleWalls: () => {
@@ -1171,7 +1371,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       // Current drag info (for room size display, etc.)
       const count = hasDrag ? buildCursor.dragTileCount : 0;
       const dims = hasDrag ? buildCursor.dragDimensions : { w: 0, h: 0 };
-      const totalCost = pendingBuildCost + pendingVaporizeCost + pendingCancelCost;
+
+      // Live preview cost during drag (Lua: ConstructMenu:onTick reads getPendingBuildCost live)
+      let dragPreviewCost = 0;
+      if (hasDrag && count > 0) {
+        if (buildMode === 'room' || buildMode === 'floor' || buildMode === 'wall') {
+          dragPreviewCost = count * MAT_BUILD_FLOOR; // Each tile costs MAT_BUILD_FLOOR
+        }
+      }
+      const buildCostTotal = pendingBuildCost + dragPreviewCost;
+      const totalCost = buildCostTotal + pendingVaporizeCost + pendingCancelCost;
 
       if (buildMode === 'room' && hasDrag) {
         const floorW = Math.max(0, dims.w - 2);
@@ -1179,10 +1388,10 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         const floorCount = floorW * floorH;
         const wallCount = count - floorCount;
         const capacityLines = getProjectedCapacity(floorW, floorH);
-        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH, capacityLines, buildCost: pendingBuildCost, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
+        return { cost: totalCost, tileCount: count, mode: buildMode, w: dims.w, h: dims.h, wallCount, floorCount, floorW, floorH, capacityLines, buildCost: buildCostTotal, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
       }
 
-      return { cost: totalCost, tileCount: count || pendingSavedTiles.length, mode: buildMode, w: dims.w, h: dims.h, buildCost: pendingBuildCost, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
+      return { cost: totalCost, tileCount: count || pendingSavedTiles.length, mode: buildMode, w: dims.w, h: dims.h, buildCost: buildCostTotal, vaporizeCost: pendingVaporizeCost, cancelCost: pendingCancelCost };
     },
     onConfirmBuild: () => confirmBuild(),
     onCancelBuild: () => cancelBuild(),
@@ -1219,18 +1428,64 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         }
       }
     },
+    onSpawnRaiders: () => {
+      const count = eventController.getScaledRaiderCount();
+      const hp = eventController.getScaledRaiderHP();
+      characterManager.spawnHostiles(count, hp);
+      Base.addAlert('hostile', `Disaster: ${count} raiders spawned!`);
+    },
+    onStartFire: () => {
+      const rooms = roomManager.getRooms();
+      if (rooms.length === 0) { Base.addAlert('system', 'No rooms to start fire in'); return; }
+      const room = rooms[Math.floor(Math.random() * rooms.length)];
+      if (room.tiles.length === 0) return;
+      const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      fire.startFire(tile.x, tile.y);
+      Base.addAlert('fire', `Disaster: Fire started at (${tile.x}, ${tile.y})!`);
+    },
+    onMeteorShower: () => {
+      const meteorEvent = new MeteorEvent(
+        eventController.getDifficulty(),
+        undefined,
+        undefined,
+        (tx: number, ty: number) => grid.get(tx, ty),
+      );
+      meteorEvent.onMeteorImpact = (tx: number, ty: number, nSize: number, nDamage: number) => {
+        eventController.onMeteorLand?.(tx, ty, nSize, nDamage);
+      };
+      eventController.injectEvent(meteorEvent);
+      Base.addAlert('meteor', 'Disaster: Meteor shower incoming!');
+    },
+    onSpawnMonster: () => {
+      const rooms = roomManager.getRooms();
+      if (rooms.length === 0) { Base.addAlert('system', 'No rooms to spawn monster in'); return; }
+      const room = rooms[Math.floor(Math.random() * rooms.length)];
+      if (room.tiles.length === 0) return;
+      const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      const char = characterManager.spawnCharacterAt(tile.x, tile.y);
+      char.tStats.nTeam = TEAM_ID_DEBUG_MONSTER;
+      char.tStats.nRace = RACE_MONSTER;
+      char.tStats.sName = 'Monster';
+      char.tStats.nHP = 200;
+      char.tStats.nMaxHP = 200;
+      Base.addAlert('hostile', `Disaster: Monster spawned at (${tile.x}, ${tile.y})!`);
+    },
   });
 
   // Keyboard bindings for panels (must come after uiManager creation)
-  inputManager.onKeyPress('KeyE', () => { uiManager.toggleResearchPanel(); });
+  // KeyE is erase mode (line 1008) — research panel uses KeyT to avoid conflict
+  inputManager.onKeyPress('KeyT', () => { uiManager.toggleResearchPanel(); });
   inputManager.onKeyPress('KeyG', () => { uiManager.toggleGoalsPanel(); });
 
   // ── Game loop ─────────────────────────────────────────────
   let lastTime = performance.now();
 
+  /** Lua caps dt at 1/10 s to prevent simulation explosions on tab-background (S-1) */
+  const MAX_FRAME_TIME = 100; // ms
+
   function gameLoop() {
     const now = performance.now();
-    const delta = now - lastTime;
+    const delta = Math.min(now - lastTime, MAX_FRAME_TIME);
     lastTime = now;
 
     // Camera
@@ -1239,18 +1494,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // Build input
     handleBuildInput();
 
-    // Update coordinate display
+    // Lua Character:hover: show the advertised task bubble only for the
+    // character under the cursor. Dialogue bubbles remain independently driven.
     {
-      const hov = buildCursor.hoveredTile;
-      if (hov) {
-        const tileVal = grid.get(hov.x, hov.y);
-        const names: Record<number, string> = {
-          [TileType.SPACE]: 'Space', [TileType.WALL]: 'Wall', [TileType.DOOR]: 'Door',
-          [TileType.WALL_DESTROYED]: 'Destroyed Wall', [TileType.FLOOR]: 'Floor',
-          [TileType.FLOOR_PENDING]: 'Floor (Pending)', [TileType.WALL_PENDING]: 'Wall (Pending)',
-        };
-        uiManager.updateTileInfo(hov.x, hov.y, names[tileVal] ?? 'Unknown');
-      }
+      const hovered = buildCursor.hoveredTile;
+      const hoveredChar = hovered
+        ? characterManager.getAllCharacters().find(c => c.tileX === hovered.x && c.tileY === hovered.y && c.isAlive())
+        : undefined;
+      characterRenderer.setHoveredCharacter(hoveredChar?.id ?? null);
     }
 
     // Tile visibility culling
@@ -1350,10 +1601,6 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     } catch (e) {
       console.error('ExplosionSystem error:', e);
     }
-    if (isTutorialMode && tutorialSystem.isActive()) {
-      if (cameraController.zoom !== 1) tutorialFlags.zoomed = true;
-      if (cameraController.scrollX !== 0 || cameraController.scrollY !== 0) tutorialFlags.panned = true;
-    }
     tutorialSystem.update(gameDt);
     autoSave.onTick(delta / 1000);
     musicSystem.update(delta / 1000);
@@ -1363,7 +1610,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     SoundManager.setZoomDepth(Math.min(1, Math.max(0, (cameraController.zoom - 0.5) / 1.5)));
 
     // Room lighting tints (skip when O2 overlay is active — it has its own tinting)
-    if (!showO2Overlay) {
+    if (!GameRules.isOxygenGridEnabled()) {
       renderRoomLighting();
     }
 
@@ -1372,6 +1619,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     const activeFires = fire.getActiveFires();
     fireParticles.setFireTiles(activeFires);
     fireParticles.update(delta / 1000);
+    // A-1: Update global fire loop with averaged position of all burning tiles
+    SpatialAudio.updateFireLoop(activeFires.map(f => ({ x: f.x, y: f.y })));
 
     // Projectile visuals
     projectileRenderer.update(projectileManager.getActiveProjectiles());
@@ -1385,8 +1634,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     applyCharacterRoomLighting();
 
     // O2 overlay (overrides room lighting tints)
-    if (showO2Overlay) {
+    if (GameRules.isOxygenGridEnabled()) {
       renderO2Overlay();
+    }
+
+    // Lua EnvObject:hover pulses the prop amber. HappyBot's override also
+    // paints its Euclidean nRange coverage on the cursor grid.
+    {
+      const hovered = buildCursor.hoveredTile;
+      const hoveredObj = hovered ? EnvObjectManager.getObjectAt(hovered.x, hovered.y) : null;
+      const coverageTiles = hoveredObj?.sName === 'HappyBot'
+        ? hoveredObj.getRangeTiles(grid.width, grid.height)
+        : [];
+      envObjRenderer.setHoveredObject(
+        hoveredObj ? String(hoveredObj.id) : null,
+        GameRules.elapsedTime,
+        coverageTiles,
+        hoveredObj?.isFunctioning() ?? true,
+      );
     }
 
     // Selection highlight
@@ -1396,16 +1661,20 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     tileRenderer.setCutaway(GameRules.isCutawayModeEnabled());
 
     // Sync O2 overlay button state
-    uiManager.o2OverlayActive = showO2Overlay;
+    uiManager.o2OverlayActive = GameRules.isOxygenGridEnabled();
 
     // UI
-    uiManager.update();
+    uiManager.update(delta / 1000);
 
     // End-of-frame input state
     inputManager.endFrame();
     uiManager.uiClickConsumed = false;
 
+    // Update "no power" blinking icons (Lua EnvObject.lua:1186-1201)
+    envObjRenderer.updatePowerIcons(GameRules.elapsedTime);
+
     // Render
+    threeRenderer.postfx?.setOutlinedObjects(characterRenderer.getOutlineObjects());
     threeRenderer.render();
 
     requestAnimationFrame(gameLoop);
@@ -1521,9 +1790,6 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
           uiManager.setSelectedEntity(null);
         }
         if (found) tutorialFlags.selected = true;
-        // Tile tip text (Lua: StatusBar:setTileTipText)
-        const tileType = grid.get(tile.x, tile.y);
-        uiManager.setTileTip(`(${tile.x}, ${tile.y}) ${tileName(tileType)}`);
       } else if (buildMode === 'zone') {
         const tileType = grid.get(tile.x, tile.y);
         if (tileType !== TileType.FLOOR) {
@@ -1783,17 +2049,33 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
   const WEAPON_MODELS: Record<string, string> = {
     LaserPistol: 'Pistol',
     Pistol: 'Pistol',
+    RedPistol: 'Pistol',
+    AutoPistol: 'Pistol',
+    Stunner: 'Pistol',
     Rifle: 'Rifle',
+    LaserRifle: 'Rifle',
+    RedLaserRifle: 'Rifle',
+    PlasmaRifle: 'Rifle',
+    SniperRifle: 'Rifle',
+    KillbotRifle: 'Rifle',
     SpaceGun: 'SpaceGun',
     PlasmaCannon: 'PlasmaCannon',
     Wand: 'Wand',
   };
   const TASK_MODELS: Record<string, string> = {
     BuildTile: 'Builder',
+    BuildBase: 'Builder',
     BuildEnvObject: 'Builder',
     Mine: 'Weldammer',
     MaintainEnvObject: 'Weldammer',
     ExtinguishFire: 'FireExtinguisher',
+  };
+  const HELD_ITEM_MODELS: Record<string, string> = {
+    Rock: 'AsteroidChunk',
+    Debris: 'AsteroidChunk',
+    Corpse: 'BodyBag',
+    Food: 'FoodBar',
+    ResearchDatacube: 'Cube',
   };
 
   const activePickupProps = new Set<string>();
@@ -1824,15 +2106,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       if (!char.isAlive()) continue;
       const taskName = char.currentTask?.name ?? '';
       const toolModel = TASK_MODELS[taskName];
-      const weaponModel = char.weapon ? WEAPON_MODELS[char.weapon] : null;
-      const modelName = toolModel ?? weaponModel;
+      const weaponModel = taskName === 'AttackEnemy' && char.weapon ? WEAPON_MODELS[char.weapon] : null;
+      const heldModel = char.heldItem ? HELD_ITEM_MODELS[char.heldItem] : null;
+      const modelName = toolModel ?? weaponModel ?? heldModel;
       if (!modelName) continue;
 
       const propId = `held_${char.id}`;
       currentHeld.add(propId);
-      if (!activeHeldProps.has(propId)) {
-        propRenderer.addProp(propId, modelName, char.tileX, char.tileY, 20);
-      }
+      propRenderer.ensureProp(propId, modelName, char.tileX, char.tileY, 20);
       // Follow the character
       propRenderer.updatePropPosition(propId, char.screenX, char.screenY - 15);
     }
@@ -1843,9 +2124,11 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     for (const id of currentHeld) activeHeldProps.add(id);
   }
 
-  // ── Expose game state for E2E test assertions ─────────────
-  (window as any).__df9 = {
+  // ── Expose game state for E2E test assertions in development only ─────────────
+  if ((import.meta as ImportMeta & { env: { VITE_E2E?: string } }).env.VITE_E2E === 'true') {
+    (window as any).__df9 = {
     _charMgr: characterManager,
+    _oxygenSystem: oxygenSystem,
     _envMgr: EnvObjectManager,
     _roomMgr: roomManager,
     _gameRules: GameRules,
@@ -1853,9 +2136,54 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     _cameraController: cameraController,
     _grid: grid,
     _buildSystem: buildSystem,
+    _buildCursor: buildCursor,
+    _fire: fire,
+    _projectileManager: projectileManager,
+    _projectileRenderer: projectileRenderer,
+    _characterRenderer: characterRenderer,
+    _selectionHighlight: selectionHighlight,
+    _propRenderer: propRenderer,
+    _envObjRenderer: envObjRenderer,
+    _objectPlacement: objectPlacement,
     _envObjectManager: EnvObjectManager,
     confirmBuild: () => confirmBuild(),
     cancelBuild: () => cancelBuild(),
+    stageRoomBuildForTest: (tiles: { x: number; y: number }[]) => {
+      saveTileStates(tiles);
+      const before = new Set(pendingSavedTiles.map(t => `${t.x},${t.y}`));
+      const cost = buildSystem.buildRoom(tiles, pendingAvailableMatter());
+      const changed: { x: number; y: number }[] = [];
+      for (let y = 0; y < grid.height; y++) {
+        for (let x = 0; x < grid.width; x++) {
+          if ((grid.get(x, y) === TileType.FLOOR_PENDING || grid.get(x, y) === TileType.WALL_PENDING)
+            && !before.has(`${x},${y}`)) {
+            changed.push({ x, y });
+          }
+        }
+      }
+      saveTileStates(changed);
+      pendingBuildCost += cost;
+      return cost;
+    },
+    getProjectedCapacity: (floorW: number, floorH: number) => getProjectedCapacity(floorW, floorH),
+    designateMineTiles: (tiles: { x: number; y: number }[]) => {
+      let count = 0;
+      for (const tile of tiles) {
+        if (grid.get(tile.x, tile.y) >= 1024
+          && !CommandQueue.getAllActive().some(c => c.tileX === tile.x && c.tileY === tile.y)) {
+          CommandQueue.addCommand('mine', tile.x, tile.y);
+          count++;
+        }
+      }
+      return count;
+    },
+    resetTransientTestState: () => {
+      GameRules.playerTimeScale = 1;
+      GameRules.bRunning = true;
+      buildMode = 'none';
+      cancelBuild();
+      fire.clearAll();
+    },
     hasPendingBuild: () => hasPendingBuild(),
     getPendingBuildCost: () => pendingTotalCost(),
     getPopulation: () => characterManager.getPopulation(),
@@ -1865,7 +2193,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getCharacters: () => characterManager.getCharacters().map(c => ({
       id: c.id, x: c.tileX, y: c.tileY, moving: c.moving, spacewalking: c.bSpacewalking,
       race: c.getRace(), job: c.getJob(), taskName: c.currentTask?.name ?? null,
-      hunger: c.needs.hunger, energy: c.needs.energy,
+      hunger: c.needs.hunger, energy: c.needs.energy, amusement: c.needs.amusement,
+      social: c.needs.social, oxygen: c.needs.oxygen, duty: c.needs.duty,
       morale: c.nMorale, anger: c.nAnger, rampaging: c.bRampaging,
       team: c.tStats.nTeam, hp: c.getHP(), alive: c.isAlive(),
     })),
@@ -1932,8 +2261,12 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       }
       return count;
     },
-    spawnCharacterAt: (tileX: number, tileY: number) => {
-      const char = characterManager.spawnCharacterAt(tileX, tileY);
+    spawnCharacterAt: (tileX: number, tileY: number, spacewalking = false, bImmigration = false) => {
+      const char = characterManager.spawnCharacterAt(tileX, tileY, spacewalking, bImmigration);
+      char.setJob(BUILDER);
+      // Test/debug helper: spawned builders should be immediately on duty so
+      // Lua-faithful WorkShift-gated build tasks are available right away.
+      char.nRemainingDutyTime = Character.SHIFT_DURATION;
       return char.id;
     },
     triggerImmigration: () => {
@@ -2015,8 +2348,16 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getMaladyByTier: (tier: number) => getMaladyByTier(tier),
     getMaladyResearch: () => Malady.getResearch(),
     getMaladyStrains: () => Malady.getAllStrains(),
+    getMaladyFriendlyName: (name: string) => Malady.getFriendlyName(name),
+    getRecentAlerts: () => Base.getRecentAlerts(20),
     getMaladyElapsedTime: () => Malady.getElapsedTime(),
     advanceMaladyTime: (dt: number) => Malady.updateElapsedTime(dt),
+    tickCharacterMaladies: (charId: number, dt = 0) => {
+      const char = characterManager.getAllCharacters().find(c => c.id === charId);
+      if (!char) return false;
+      Malady.tickMaladies(char, dt);
+      return true;
+    },
     createMaladyInstance: (type: string) => {
       try { return Malady.createNewMaladyInstance(type); } catch { return null; }
     },
@@ -2108,6 +2449,24 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     getHints: () => hintSystem.getShownHints(),
     saveGame: () => saveLoadSystem.saveToStorage('df9_test_save'),
     loadGame: () => saveLoadSystem.loadFromStorage('df9_test_save'),
+    getSaveData: () => saveLoadSystem.save(),
+    loadSaveData: (data: unknown) => saveLoadSystem.load(data),
+    loadSaveWithCharacterFailure: (data: unknown) => {
+      const original = saveLoadSystem.loadCharacterData;
+      let shouldThrow = true;
+      saveLoadSystem.loadCharacterData = (characters) => {
+        if (shouldThrow) {
+          shouldThrow = false;
+          throw new Error('Injected character-load failure');
+        }
+        original?.(characters);
+      };
+      try {
+        return saveLoadSystem.load(data);
+      } finally {
+        saveLoadSystem.loadCharacterData = original;
+      }
+    },
     hasSave: () => saveLoadSystem.hasSave('df9_test_save'),
     deleteSave: () => saveLoadSystem.deleteSave('df9_test_save'),
     exportSave: () => saveLoadSystem.exportToFile(),
@@ -2120,6 +2479,7 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     }),
     toggleMute: () => SoundManager.toggleMute(),
     setMasterVolume: (v: number) => SoundManager.setMasterVolume(v),
+    setMusicVolume: (v: number) => SoundManager.setMusicVolume(v),
     // ── Milestone 13: Music & Ambience ───────────────────────
     getMusicState: () => ({
       playing: musicSystem.isPlaying(),
@@ -2276,13 +2636,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
         roomManager.markDirty(tiles);
         roomManager.update();
       }
-      // Set all detected rooms covering these tiles as sealed with full O2
+      // Set all detected rooms covering these tiles as sealed with full O2 + player owned
       const seen = new Set<number>();
       for (const t of tiles) {
         const room = roomManager.getRoomAt(t.x, t.y);
         if (room && !seen.has(room.id)) {
           seen.add(room.id);
           room.sealed = true;
+          room.nTeam = 1; // TEAM_ID_PLAYER — needed for DestOwned tag enforcement
           oxygenSystem.setRoomO2(room, 255);
         }
       }
@@ -2333,6 +2694,14 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
       for (const cmd of CommandQueue.getAllActive()) {
         if (cmd.type === 'build_tile') CommandQueue.complete(cmd.id);
       }
+      // Clear any stale builder work so characters can pick up new jobs immediately.
+      for (const char of characterManager.getCharacters()) {
+        if (char.currentTask instanceof BuildTile) {
+          char.currentTask = null;
+          char.moving = false;
+          char.path = [];
+        }
+      }
       // Force room re-detection
       roomManager.markDirty([]);
       roomManager.update();
@@ -2365,6 +2734,9 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     },
     /** Check if wall can be placed at position (Lua: World.canBuildWall). */
     canBuildWall: (x: number, y: number) => buildSystem.canBuildWall(x, y),
+    /** Check if the build cursor would preview a placement as valid. */
+    canCursorPlace: (x: number, y: number, mode: 'room' | 'floor' | 'wall' | 'door' | 'demolish' | 'vaporize' | 'erase' | 'mine') =>
+      buildCursor.canPlace(x, y, mode),
     /** Get tile HP at position. */
     getTileHP: (x: number, y: number) => grid.getTileHP(x, y),
     /** Set tile HP directly for testing. */
@@ -2519,6 +2891,8 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     // ── P4: PostFX ──────────────────────────────────────────
     isPostFXEnabled: () => threeRenderer.postfx?.enabled ?? false,
     setPostFXEnabled: (v: boolean) => { if (threeRenderer.postfx) threeRenderer.postfx.enabled = v; },
+    getPostFXInfo: () => threeRenderer.postfx?.getDebugInfo() ?? null,
+    setPostColorLUT: (name: SourceColorLUT) => threeRenderer.postfx?.setColorLUT(name),
     // ── P4: Save slots ──────────────────────────────────────
     saveToSlot: (slotName: string) => {
       const ok = saveLoadSystem.saveToStorage(slotName);
@@ -2556,7 +2930,13 @@ function enterGameState(sceneManager: SceneManager, initData: Record<string, unk
     showDialogue: (charId: number, text: string) => dialogueSystem.showBubble(charId, text),
     spawnExplosion: (x: number, y: number, intensity?: number) => explosionSystem.spawnExplosion(x, y, intensity ?? 1),
     spawnSparksEffect: (x: number, y: number, count?: number) => explosionSystem.spawnSparks(x, y, count ?? 10),
-  };
+    getSourceEffectInfo: () => ({
+      fireTexture: fireParticles?.getTextureSource() ?? null,
+      effectTexture: effectParticles.getTextureSource(),
+      ...explosionSystem.getDebugInfo(),
+    }),
+    };
+  }
 
   requestAnimationFrame(gameLoop);
 }
@@ -2631,64 +3011,4 @@ function createSpaceBackground(threeRenderer: ThreeRenderer) {
       threeRenderer.scene.add(mesh);
     }
   }
-}
-
-function createSeedPod(threeRenderer: ThreeRenderer, tileX: number, tileY: number) {
-  const pos = tileToScreen(tileX, tileY);
-  const tex = getTexture('seedpod01');
-
-  if (tex && tex.image) {
-    // Use the actual seed pod sprite
-    const spriteW = tex.image.width || 128;
-    const spriteH = tex.image.height || 128;
-    const geo = new THREE.PlaneGeometry(spriteW, spriteH);
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      alphaTest: 0.01,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(
-      pos.x + TILE_HALF_W,
-      -(pos.y + TILE_HALF_H),
-      15000 + pos.y,
-    );
-    threeRenderer.scene.add(mesh);
-  } else {
-    // Fallback: octahedron placeholder
-    const geo = new THREE.OctahedronGeometry(12, 0);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xdfa200 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(
-      pos.x + TILE_HALF_W,
-      -(pos.y + TILE_HALF_H),
-      15000 + pos.y,
-    );
-    threeRenderer.scene.add(mesh);
-  }
-
-  // Glow ring around the pod
-  const ringGeo = new THREE.RingGeometry(16, 20, 16);
-  const ringMat = new THREE.MeshBasicMaterial({
-    color: 0xdfa200,
-    transparent: true,
-    opacity: 0.4,
-    side: THREE.DoubleSide,
-  });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.position.set(
-    pos.x + TILE_HALF_W,
-    -(pos.y + TILE_HALF_H),
-    15000 + pos.y - 1,
-  );
-  threeRenderer.scene.add(ring);
-}
-
-function tileName(type: number): string {
-  const names: Record<number, string> = {
-    1: 'Space', 4: 'Wall', 5: 'Door', 6: 'Destroyed', 8: 'Floor',
-    9: 'Floor (building)', 10: 'Wall (building)',
-  };
-  return names[type] || 'Unknown';
 }

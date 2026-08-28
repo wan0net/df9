@@ -4,6 +4,7 @@
 
 import { Task, type NeedAdvertisement } from '../Task';
 import { MORALE_DRANK_BASE } from '../../characters/CharacterConstants';
+import { SpatialAudio } from '../../audio/SpatialAudio';
 
 export class GetDrink extends Task {
   readonly name = 'GetDrink';
@@ -23,6 +24,7 @@ export class GetDrink extends Task {
     if (this.elapsedTime >= this.duration) {
       // Morale bonus for drinking
       if (this.character) {
+        SpatialAudio.playAtTile('Citizen_Drink', this.character.tileX, this.character.tileY);
         this.character.addMorale(MORALE_DRANK_BASE);
       }
       this.complete();

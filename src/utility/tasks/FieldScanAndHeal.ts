@@ -6,6 +6,8 @@
 import { Task, type NeedAdvertisement } from '../Task';
 import type { Character } from '../../characters/Character';
 import { HEAL_RATE, STARTING_HIT_POINTS } from '../../characters/CharacterConstants';
+import { Malady } from '../../malady/Malady';
+import { SpatialAudio } from '../../audio/SpatialAudio';
 
 export class FieldScanAndHeal extends Task {
   readonly name = 'FieldScanAndHeal';
@@ -24,17 +26,32 @@ export class FieldScanAndHeal extends Task {
 
   protected onStart() {
     this.duration = 20;
+    if (this.character) {
+      SpatialAudio.playAtTile('DoctorScan', this.character.tileX, this.character.tileY);
+    }
   }
 
-  protected onUpdate(dt: number) {
+  protected onUpdate(_dt: number) {
     if (this.elapsedTime >= this.duration) {
-      // Heal the patient
       if (this.patient.isAlive()) {
+        // Heal HP
         const healAmount = STARTING_HIT_POINTS * HEAL_RATE * this.duration;
         this.patient.tStats.nHP = Math.min(
           this.patient.tStats.nMaxHP,
           this.patient.tStats.nHP + healAmount,
         );
+        // M-2: Diagnose undiagnosed maladies (Lua FieldScanAndHeal._performScanOn)
+        let undiagnosed = Malady.getNextUndiagnosedMalady(this.patient);
+        while (undiagnosed) {
+          Malady.diagnoseMalady(undiagnosed);
+          undiagnosed = Malady.getNextUndiagnosedMalady(this.patient);
+        }
+        // M-2: Cure the next curable malady (Lua: rPatient:cure via getNextCurableMalady)
+        const skillLevel = this.character?.getEffectiveCompetency() ?? 0;
+        const curable = Malady.getNextCurableMalady(this.patient, skillLevel);
+        if (curable) {
+          Malady.cureMalady(this.patient, curable);
+        }
       }
       this.complete();
     }

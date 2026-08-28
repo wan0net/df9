@@ -6,11 +6,13 @@
 import { EnvObjectDef, tObjects } from './EnvObjectData';
 import { ObjectList, OBJ_ENVOBJECT, type ObjectTag, type TaggableObject } from '../core/ObjectList';
 import { SpatialAudio } from '../audio/SpatialAudio';
+import { GameRules } from '../core/GameRules';
 import { SoundManager } from '../audio/SoundManager';
 import type { Room } from '../rooms/Room';
 import type { Character } from '../characters/Character';
 import { researchSystem } from '../research/ResearchSystem';
 import { RESEARCH_DEFS } from '../research/ResearchData';
+import { GRID_H, GRID_W } from '../config';
 
 // ── Constants matching EnvObject.lua ────────────────────────────────────
 export const MIN_PCT_HEALED_PER_MAINTAIN = 2;
@@ -61,6 +63,8 @@ export class EnvObject implements TaggableObject {
   // Power
   bActive = true;
   bHasPower = false;
+  /** O-13: Sabotage timer — game time when power loss ends. -1 = no sabotage. */
+  nTempPowerLossEnd = -1;
 
   // Room assignment
   rRoom: Room | null = null;
@@ -216,6 +220,10 @@ export class EnvObject implements TaggableObject {
   hasPower(): boolean {
     if (!this.bActive) return false;
     if (this.tData.nPowerDraw <= 0 && this.tData.nPowerOutput <= 0) return true;
+    // O-12: Lua g_PowerHoliday bypasses all power checks
+    if (GameRules.bPowerHoliday) return true;
+    // O-13: Sabotage temporarily disables power
+    if (this.nTempPowerLossEnd > 0 && GameRules.elapsedTime < this.nTempPowerLossEnd) return false;
     return this.bHasPower;
   }
 
@@ -231,6 +239,23 @@ export class EnvObject implements TaggableObject {
 
   isFunctioning(): boolean {
     return this.bBuilt && this.hasPower() && this.nCondition > 0;
+  }
+
+  /** O-13: Temporarily disable power for duration seconds (Lua sabotagePowerLoss). */
+  sabotagePowerLoss(duration = 30) {
+    this.nTempPowerLossEnd = GameRules.elapsedTime + duration;
+  }
+
+  /** Lua EnvObject:_isSabotaged — true while sabotage power-loss timer is active. */
+  _isSabotaged(): boolean {
+    if (this.nTempPowerLossEnd > 0) {
+      if (this.nTempPowerLossEnd < GameRules.elapsedTime) {
+        this.nTempPowerLossEnd = -1;
+        return false;
+      }
+      return true;
+    }
+    return false;
   }
 
   // ── Oxygen generation ────────────────────────────────────────
@@ -359,17 +384,56 @@ export class EnvObject implements TaggableObject {
     return base + this.getConditionSuffix();
   }
 
+  /**
+   * Tiles inside this object's Lua square-grid radius. HappyBot uses this list
+   * for its hover coverage display (`HappyBot:setLoc` / `Cursor.drawTiles`).
+   */
+  getRangeTiles(gridWidth = GRID_W, gridHeight = GRID_H): { x: number; y: number }[] {
+    const range = this.tData.nRange;
+    if (range <= 0) return [];
+
+    const halfRow = Math.floor(this.tileY * 0.5);
+    const center = {
+      ns: this.tileX + halfRow,
+      we: gridWidth * 0.5 - Math.ceil(this.tileY * 0.5) + this.tileX,
+    };
+    const tiles: { x: number; y: number }[] = [];
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dy = -range; dy <= range; dy++) {
+        if (Math.sqrt(dx * dx + dy * dy) > range) continue;
+        const ns = center.ns + dx;
+        const we = center.we + dy;
+        // Inverse of GridUtil.CalculateIsoToSquare. Lua's square conversion
+        // includes half the world width in the WE axis.
+        const y = ns - we + gridWidth * 0.5;
+        const x = ns - Math.floor(y * 0.5);
+        if (Number.isInteger(x) && Number.isInteger(y)
+          && x >= 0 && y >= 0 && x < gridWidth && y < gridHeight) {
+          tiles.push({ x, y });
+        }
+      }
+    }
+    return tiles;
+  }
+
   // ── Save data ────────────────────────────────────────────────
 
   getSaveData(): Record<string, unknown> {
     return {
+      schemaVersion: 1,
+      kind: 'object',
       sName: this.sName,
       tileX: this.tileX,
       tileY: this.tileY,
       bFlipX: this.bFlipX,
       bFlipY: this.bFlipY,
+      wallTileX: this.wallTileX,
+      wallTileY: this.wallTileY,
+      bBuilt: this.bBuilt,
       nCondition: this.nCondition,
       bActive: this.bActive,
+      bHasPower: this.bHasPower,
+      nTempPowerLossEnd: this.nTempPowerLossEnd,
       sUniqueName: this.sUniqueName,
       sBuilderName: this.sBuilderName,
       sBuildTime: this.sBuildTime,
@@ -386,6 +450,11 @@ export class EnvObject implements TaggableObject {
     );
     obj.nCondition = (data.nCondition as number) ?? 100;
     obj.bActive = (data.bActive as boolean) ?? true;
+    obj.wallTileX = (data.wallTileX as number) ?? -1;
+    obj.wallTileY = (data.wallTileY as number) ?? -1;
+    obj.bBuilt = (data.bBuilt as boolean) ?? true;
+    obj.bHasPower = (data.bHasPower as boolean) ?? false;
+    obj.nTempPowerLossEnd = (data.nTempPowerLossEnd as number) ?? -1;
     obj.sUniqueName = (data.sUniqueName as string) ?? '';
     obj.sBuilderName = (data.sBuilderName as string) ?? '';
     obj.sBuildTime = (data.sBuildTime as string) ?? '';

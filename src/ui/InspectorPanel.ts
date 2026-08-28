@@ -7,8 +7,12 @@ import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
 import { GameRules } from '../core/GameRules';
 import { Door, DOOR_STATE, DOOR_OPERATION } from '../envobjects/Door';
+import { BrigZone } from '../zones/BrigZone';
 import type { Room } from '../rooms/Room';
-import { JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL, UNEMPLOYED } from '../characters/CharacterConstants';
+import {
+  JOB_NAMES, tJobs, STATUS_DEAD, CAUSE_OF_DEATH, MEMORY_SENT_TO_HOSPITAL, UNEMPLOYED,
+} from '../characters/CharacterConstants';
+import { ensureCharacterAppearance, getPortraitLayers } from '../characters/CharacterAppearance';
 import { ZoneType, ZONE_LIST, ZONE_SPRITES } from '../world/ZoneType';
 
 import { line } from '../localization/Localization';
@@ -36,6 +40,7 @@ function getDeathCauseName(cause: number): string {
 }
 
 const AMBER = '#dfa200';
+const AMBER_OPAQUE = '#3b2600';
 const PANEL_W = 418; // Lua CitizenInspectorLayout.lua: nButtonWidth=418
 
 /** Morale value → text label (Lua CharacterConstants.lua morale thresholds). */
@@ -86,6 +91,11 @@ export class InspectorPanel {
   private onCenterCamera: ((char: Character) => void) | null = null;
   private onSelectRoom: ((room: Room) => void) | null = null;
   private onRezoneRoom: ((room: Room, zone: ZoneType) => void) | null = null;
+  /** Dirty flag — when true, DOM will be rebuilt on next update(). */
+  private dirty = true;
+  private lastRebuildTime = 0;
+  /** How often to rebuild DOM for live data refresh (ms). */
+  private static REBUILD_INTERVAL = 500;
 
   constructor(
     parent: HTMLElement,
@@ -116,9 +126,9 @@ export class InspectorPanel {
     this.el = document.createElement('div');
     this.el.id = 'inspector-panel';
     this.el.style.cssText = `
-      position:absolute;left:0;top:0;width:${PANEL_W}px;height:100%;
-      background:rgba(0,0,0,0.85);
-      color:#ccc;font-family:'nevis','Dosis',sans-serif;font-size:20px; /* Lua nevisBody=20 */
+      position:absolute;left:0;top:81px;width:${PANEL_W}px;height:calc(100% - 81px);
+      background:rgba(0,0,0,0.96);
+      color:#ccc;font-family:'Dosis',sans-serif;font-size:20px;
       display:none;pointer-events:auto;z-index:16;overflow-y:auto;
     `;
 
@@ -143,13 +153,20 @@ export class InspectorPanel {
       this.currentTab = 'duty';
     }
     this.objectTab = 'action'; // Lua: default tab is ObjectActionTab
-    this.roomTab = 'info';
+    this.roomTab = 'rezone'; // Lua: clicking a room defaults to Rezone tab
     this.editingName = false;
+    this.dirty = true;
     if (entity) {
       this.el.style.display = 'block';
     } else {
       this.el.style.display = 'none';
     }
+  }
+
+  /** Force an immediate DOM rebuild (used by internal event handlers). */
+  private refresh() {
+    this.dirty = true;
+    this.update();
   }
 
   /** Whether the inspector is currently showing an entity. */
@@ -173,26 +190,24 @@ export class InspectorPanel {
       // Keep showing dead characters for inspection, but could auto-close after decay
     }
 
+    // Throttle DOM rebuilds so click events can complete.
+    // update() is called every frame but full DOM rebuild destroys/recreates elements,
+    // preventing click events (mousedown target != mouseup target). Only rebuild when
+    // dirty (user interaction) or every REBUILD_INTERVAL for live data refresh.
+    const now = performance.now();
+    if (!this.dirty && now - this.lastRebuildTime < InspectorPanel.REBUILD_INTERVAL) {
+      return;
+    }
+    this.dirty = false;
+    this.lastRebuildTime = now;
+
     this.contentEl.textContent = '';
 
-    // Back button + ">> Inspect" header (Lua: CitizenInspector top bar)
-    const topBar = document.createElement('div');
-    topBar.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:6px 10px;`;
-    const backBtn = document.createElement('div');
-    backBtn.textContent = 'Back';
-    backBtn.style.cssText = `font-size:22px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
-    backBtn.addEventListener('click', () => this.setEntity(null));
-    const closeBtn = document.createElement('div');
-    closeBtn.textContent = 'X';
-    closeBtn.style.cssText = `font-size:22px;color:${AMBER};cursor:pointer;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
-    closeBtn.addEventListener('click', () => this.setEntity(null));
-    topBar.appendChild(backBtn);
-    topBar.appendChild(closeBtn);
-    this.contentEl.appendChild(topBar);
-
+    // InspectMenu occupies the first 81px. This title band brings the citizen
+    // portrait to source y=163 without duplicating Back/Close controls.
     const inspLabel = document.createElement('div');
     inspLabel.textContent = `>> ${line('HUDHUD005TEXT')}`;
-    inspLabel.style.cssText = `font-size:22px;color:${AMBER};padding:0 10px 4px;font-family:'Dosis',sans-serif;`; // Lua dosissemibold22
+    inspLabel.style.cssText = `height:82px;display:flex;align-items:center;padding:0 12px;box-sizing:border-box;font-size:40px;font-weight:400;color:${AMBER};font-family:'Dosis',sans-serif;`;
     this.contentEl.appendChild(inspLabel);
 
     switch (this.entity.type) {
@@ -208,25 +223,76 @@ export class InspectorPanel {
     }
   }
 
+  // ── Portraits ──────────────────────────────────────────
+
+  /** Build the source portrait stack from UI/Portraits. */
+  private buildCharacterPortrait(char: Character): HTMLDivElement {
+    const wrapper = document.createElement('div');
+    wrapper.dataset.testid = 'character-portrait';
+    wrapper.title = 'Center Camera';
+    wrapper.style.cssText = `position:absolute;left:30px;top:-19px;width:110px;height:124px;overflow:hidden;background:${AMBER};cursor:pointer;`;
+
+    const bg = document.createElement('img');
+    bg.src = '/assets/ui/portraits/Background_01.png';
+    bg.alt = '';
+    bg.style.cssText = 'position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;';
+    wrapper.appendChild(bg);
+
+    const layers = getPortraitLayers(ensureCharacterAppearance(char.tStats));
+    for (const [index, filename] of layers.entries()) {
+      const portrait = document.createElement('img');
+      portrait.src = `/assets/ui/portraits/${filename}`;
+      portrait.alt = index === 0 ? char.getRaceDef().sName : '';
+      portrait.dataset.portraitLayer = index === 0 ? 'base' : filename.includes('_Hair_') ? 'hair' : 'facial-hair';
+      portrait.style.cssText = `position:absolute;inset:0;width:110px;height:126px;object-fit:cover;image-rendering:auto;${char.isAlive() ? '' : 'filter:grayscale(1);opacity:0.65;'}`;
+      wrapper.appendChild(portrait);
+    }
+    wrapper.addEventListener('click', () => this.onCenterCamera?.(char));
+
+    return wrapper;
+  }
+
+  /** Build the original object portrait from UI/Portraits. */
+  private buildObjectPortrait(obj: EnvObject): HTMLDivElement {
+    const wrapper = document.createElement('div');
+    wrapper.dataset.testid = 'object-portrait';
+    wrapper.style.cssText = `position:absolute;left:30px;top:-19px;width:110px;height:124px;overflow:hidden;background:${AMBER};`;
+
+    const portrait = document.createElement('img');
+    const portraitName = obj.tData.portrait ?? 'portrait_generic';
+    portrait.src = `/assets/ui/portraits/${portraitName}.png`;
+    portrait.alt = obj.tData.friendlyName;
+    portrait.style.cssText = 'position:absolute;left:3px;top:1px;width:105px;height:120px;object-fit:contain;image-rendering:auto;';
+    portrait.addEventListener('error', () => {
+      if (!portrait.src.endsWith('/portrait_generic.png')) {
+        portrait.src = '/assets/ui/portraits/portrait_generic.png';
+      }
+    });
+    wrapper.appendChild(portrait);
+
+    return wrapper;
+  }
+
   // ── Character Inspector ─────────────────────────────────
 
   private renderCharacter(char: Character) {
     const isDead = !char.isAlive();
     const isPlayer = char.tStats.nTeam === 1; // TEAM_ID_PLAYER
 
-    // Header with editable name
-    const header = this.makeSection();
-    const nameRow = document.createElement('div');
-    nameRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+    // Lua PictureLargeBG / NameEditBG: a single 418×106 amber summary band.
+    const summary = document.createElement('div');
+    summary.dataset.testid = 'character-summary';
+    summary.style.cssText = `position:relative;width:${PANEL_W}px;height:106px;background:${AMBER};box-sizing:border-box;`;
+    summary.appendChild(this.buildCharacterPortrait(char));
 
     if (this.editingName) {
       const input = document.createElement('input');
       input.type = 'text';
       input.value = char.getName();
       input.style.cssText = `
-        font-size:26px;font-weight:600;color:${AMBER};background:#111; /* Lua NameLabel=dosissemibold26 */
-        border:1px solid ${AMBER};outline:none;font-family:'nevis','Dosis',sans-serif;
-        width:180px;padding:1px 4px;
+        position:absolute;left:150px;top:8px;width:245px;height:35px;box-sizing:border-box;
+        font-size:26px;font-weight:600;color:${AMBER};background:#000;
+        border:1px solid #000;outline:none;font-family:'Dosis',sans-serif;padding:1px 4px;
       `;
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -244,114 +310,90 @@ export class InspectorPanel {
         if (trimmed) char.tStats.sName = trimmed;
         this.editingName = false;
       });
-      nameRow.appendChild(input);
+      summary.appendChild(input);
       // Focus on next frame
       setTimeout(() => input.focus(), 0);
     } else {
       const nameSpan = document.createElement('span');
       nameSpan.textContent = char.getName();
-      nameSpan.style.cssText = `font-size:26px;font-weight:600;color:${AMBER};cursor:pointer; /* Lua NameLabel=dosissemibold26 */`;
+      nameSpan.style.cssText = `position:absolute;left:150px;top:8px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:26px;line-height:35px;font-weight:600;color:#000;cursor:pointer;`;
       nameSpan.title = 'Click to edit name';
       nameSpan.addEventListener('click', () => {
         this.editingName = true;
-        this.update();
+        this.refresh();
       });
-      nameRow.appendChild(nameSpan);
+      summary.appendChild(nameSpan);
     }
 
-    header.appendChild(nameRow);
-
-    // Job title — separate line below name (Lua TitleLabel at pos {150, -216}, dosisregular26)
     const jobLine = document.createElement('div');
     const dutyStr = char.isAlive() && char.onDuty() ? ` ${line('DUTIES015TEXT')}` : '';
     jobLine.textContent = `${char.getJobName()}${dutyStr}`;
-    jobLine.style.cssText = `font-size:26px;color:#888;font-weight:400;`; // Lua dosisregular26
-    header.appendChild(jobLine);
+    jobLine.style.cssText = `position:absolute;left:150px;top:50px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:26px;line-height:35px;color:#000;font-weight:400;`;
+    summary.appendChild(jobLine);
+    this.contentEl.appendChild(summary);
 
-    // Structured info rows (Lua CitizenInspector: Diagnosis, Morale, Location, Activity)
-    // Lua StatsBG: amber opaque panel behind stat rows
+    // Lua StatsBG: four 36px source rows with the original inspector icons.
     const infoSection = document.createElement('div');
-    infoSection.style.cssText = `margin-top:6px;background:#3B2600;padding:4px 8px;`; // Lua Gui.AMBER_OPAQUE
+    infoSection.dataset.testid = 'character-stats-summary';
+    infoSection.style.cssText = `height:152px;background:${AMBER_OPAQUE};padding:4px 0;box-sizing:border-box;`;
 
-    // Diagnosis row
-    const diagRow = this.makeInfoRow(
+    infoSection.appendChild(this.makeCharacterInfoRow(
+      'ui_icon_health.png',
       line('INSPEC011TEXT'),
       getHealthStatusText(char),
-      isDead ? '#f44' : '#4f4',
-    );
-    infoSection.appendChild(diagRow);
+      isDead ? '#ff3d00' : AMBER,
+      () => { this.currentTab = 'stats'; this.refresh(); },
+    ));
 
-    // Morale row (or Cause of Death if dead)
     if (isDead) {
-      const deathRow = this.makeInfoRow(
-        line('INSPEC010TEXT') + ':',
+      infoSection.appendChild(this.makeCharacterInfoRow(
+        'ui_icon_enemy.png',
+        line('INSPEC106TEXT'),
         getDeathCauseName(char.nCauseOfDeath),
-        '#f44',
-      );
-      infoSection.appendChild(deathRow);
+        '#ff3d00',
+        () => { this.currentTab = 'stats'; this.refresh(); },
+      ));
     } else {
-      const moraleRow = this.makeInfoRow(
+      infoSection.appendChild(this.makeCharacterInfoRow(
+        'ui_icon_morale.png',
         line('INSPEC012TEXT'),
         getMoraleText(char.nMorale),
         AMBER,
-      );
-      infoSection.appendChild(moraleRow);
+        () => { this.currentTab = 'psych'; this.refresh(); },
+      ));
     }
 
-    // Location row
     let locationText = line('INSPUI036TEXT');
+    let characterRoom: Room | null = null;
     if (!char.bSpacewalking) {
-      const room = this.getRoomForChar?.(char);
-      if (room?.uniqueZoneName) locationText = room.uniqueZoneName;
-      else if (room) locationText = `Room ${room.id}`;
+      characterRoom = this.getRoomForChar?.(char) ?? null;
+      if (characterRoom?.uniqueZoneName) locationText = characterRoom.uniqueZoneName;
+      else if (characterRoom) locationText = `Room ${characterRoom.id}`;
       else locationText = `(${char.tileX}, ${char.tileY})`;
     }
-    const locRow = this.makeInfoRow(line('INSPEC013TEXT'), locationText, '#ccc');
-    infoSection.appendChild(locRow);
+    infoSection.appendChild(this.makeCharacterInfoRow(
+      'ui_icon_location.png',
+      line('INSPEC013TEXT'),
+      locationText,
+      AMBER,
+      () => { if (characterRoom && this.onSelectRoom) this.onSelectRoom(characterRoom); },
+    ));
 
-    // Activity row
     const taskName = char.currentTask?.name ?? (isDead ? line('INSPEC010TEXT') : line('UITASK029TEXT'));
-    const actRow = this.makeInfoRow(line('INSPEC014TEXT'), taskName, '#ccc');
-    infoSection.appendChild(actRow);
-
-    header.appendChild(infoSection);
-
-    // Shortcut buttons (Lua: HealthStatButton, MoraleButton, RoomButton, ActivityButton, CamCenterButton)
-    if (isPlayer && !isDead) {
-      const shortcuts = document.createElement('div');
-      shortcuts.style.cssText = 'display:flex;gap:4px;margin-top:4px;padding:0 8px;';
-      const shortcutDefs: { label: string; title: string; action: () => void }[] = [
-        { label: 'HP', title: 'View Stats', action: () => { this.currentTab = 'stats'; this.update(); } },
-        { label: 'MOR', title: 'View Morale/Psych', action: () => { this.currentTab = 'psych'; this.update(); } },
-        { label: 'ROOM', title: 'View Room', action: () => {
-          const room = this.getRoomForChar?.(char);
-          if (room && this.onSelectRoom) this.onSelectRoom(room);
-        }},
-        { label: 'ACT', title: 'View Actions', action: () => { this.currentTab = 'actions'; this.update(); } },
-        { label: 'CAM', title: 'Center Camera', action: () => { this.onCenterCamera?.(char); } },
-      ];
-      for (const sd of shortcutDefs) {
-        const btn = document.createElement('div');
-        btn.textContent = sd.label;
-        btn.title = sd.title;
-        btn.style.cssText = `
-          font-size:18px;color:${AMBER};border:1px solid ${AMBER}; /* Lua dosissemibold18 */
-          padding:2px 5px;cursor:pointer;
-        `;
-        btn.addEventListener('click', sd.action);
-        btn.addEventListener('mouseenter', () => { btn.style.background = `rgba(223,162,0,0.2)`; });
-        btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
-        shortcuts.appendChild(btn);
-      }
-      this.contentEl.appendChild(shortcuts);
-    }
-
-    this.contentEl.appendChild(header);
+    infoSection.appendChild(this.makeCharacterInfoRow(
+      'ui_icon_bulletpoint.png',
+      line('INSPEC014TEXT'),
+      taskName,
+      AMBER,
+      () => { this.currentTab = 'actions'; this.refresh(); },
+    ));
+    this.contentEl.appendChild(infoSection);
 
     // Tab row
     const tabRow = document.createElement('div');
     tabRow.style.cssText = `
-      display:flex;border-top:1px solid #333;border-bottom:1px solid #333;
+      width:${PANEL_W}px;height:50px;display:flex;align-items:flex-start;
+      box-sizing:border-box;background:${AMBER_OPAQUE};border-bottom:3px solid ${AMBER};
     `;
     // Lua CitizenInspector: 5 tabs (Duty, Stats, Psych, Spaceface, Action)
     const tabs: { label: string; tab: InspectorTab }[] = isPlayer
@@ -367,11 +409,12 @@ export class InspectorPanel {
           { label: 'Spaceface', tab: 'log' },
         ];
     const charTabIcons: Record<string, string> = {
-      duty: 'assets/ui/inspector/ui_icon_duty.png',
-      stats: 'assets/ui/inspector/ui_icon_stats.png',
-      psych: 'assets/ui/inspector/ui_icon_psych.png',
-      log: 'assets/ui/inspector/ui_icon_spaceface.png',
-      actions: 'assets/ui/inspector/ui_icon_activity.png',
+      duty: '/assets/ui/inspector/ui_icon_duty.png',
+      stats: '/assets/ui/inspector/ui_icon_stats.png',
+      psych: '/assets/ui/inspector/ui_icon_psych.png',
+      log: '/assets/ui/inspector/ui_icon_spaceface.png',
+      // CitizenInspector.lua deliberately reuses the duty icon for Action.
+      actions: '/assets/ui/inspector/ui_icon_duty.png',
     };
     const charTabCount = tabs.length;
     const charFolderActive = charTabCount >= 5
@@ -384,25 +427,24 @@ export class InspectorPanel {
       const btn = document.createElement('div');
       const isActive = this.currentTab === t.tab;
       const iconSrc = charTabIcons[t.tab];
+      btn.title = t.label;
+      btn.dataset.tab = t.tab;
       btn.style.cssText = `
-        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px; /* Lua dosissemibold20 */
+        width:83px;height:47px;box-sizing:border-box;cursor:pointer;
         display:flex;align-items:center;justify-content:center;
         background-image:url('${isActive ? charFolderActive : charFolderInactive}');
         background-size:100% 100%;background-repeat:no-repeat;
-        color:${isActive ? '#000' : AMBER};
       `;
       if (iconSrc) {
         const img = document.createElement('img');
         img.src = iconSrc;
-        img.style.cssText = 'width:20px;height:20px;margin-right:4px;vertical-align:middle;image-rendering:pixelated;';
+        img.alt = t.label;
+        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);'}`;
         btn.appendChild(img);
       }
-      const span = document.createElement('span');
-      span.textContent = t.label;
-      btn.appendChild(span);
       btn.addEventListener('click', () => {
         this.currentTab = t.tab;
-        this.update();
+        this.refresh();
       });
       tabRow.appendChild(btn);
     }
@@ -429,8 +471,6 @@ export class InspectorPanel {
     }
     this.contentEl.appendChild(body);
 
-    // Close button
-    this.addCloseButton();
   }
 
   private renderDutyTab(container: HTMLDivElement, char: Character) {
@@ -447,7 +487,7 @@ export class InspectorPanel {
       `;
       row.addEventListener('click', () => {
         if (this.onSetJob) this.onSetJob(char, jobId);
-        this.update();
+        this.refresh();
       });
       row.addEventListener('mouseenter', () => { row.style.background = 'rgba(223,162,0,0.15)'; });
       row.addEventListener('mouseleave', () => {
@@ -497,44 +537,50 @@ export class InspectorPanel {
     // XP + Anger stats
     const statsDiv = document.createElement('div');
     statsDiv.style.cssText = 'margin-top:6px;font-size:20px;color:#ccc;'; // Lua nevisBody=20
-    let statsHtml = `
-      <div style="margin-bottom:4px;">${line('INSPUI007TEXT')} ${char.tStats.nXP}</div>
-      <div style="margin-bottom:4px;">${line('INSPUI008TEXT')} ${char.nAnger}</div>
-    `;
+    const appendStat = (text: string, style = 'margin-bottom:4px;') => {
+      const row = document.createElement('div');
+      row.style.cssText = style;
+      row.textContent = text;
+      statsDiv.appendChild(row);
+    };
+    appendStat(`${line('INSPUI007TEXT')} ${char.tStats.nXP}`);
+    appendStat(`${line('INSPUI008TEXT')} ${char.nAnger}`);
     // Join Date (Lua CitizenStatsTab: INSPEC124TEXT)
     const joinDate = GameRules.getFullStarDateString(char.nJoinTime);
-    statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC124TEXT')} ${joinDate}</div>`;
+    appendStat(`${line('INSPEC124TEXT')} ${joinDate}`);
     // Illness (Lua CitizenStatsTab: INSPEC146TEXT if none)
     const maladies = char.maladies ?? [];
     if (maladies.length > 0) {
-      statsHtml += `<div style="margin-bottom:4px;color:#f84;">${maladies.map(m => m.sFriendlyName ?? m.sMaladyName).join(', ')}</div>`;
+      appendStat(
+        maladies.map(m => m.sFriendlyName ?? m.sMaladyName).join(', '),
+        'margin-bottom:4px;color:#f84;',
+      );
     } else {
-      statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC146TEXT')}</div>`;
+      appendStat(line('INSPEC146TEXT'));
     }
     // Inventory (Lua INSPEC087TEXT)
     const invItems = char.inventory.getAll();
     const invStr = invItems.length > 0 ? invItems.map(i => `${i.sName}${i.nCount > 1 ? ` x${i.nCount}` : ''}`).join(', ') : line('INSPUI010TEXT');
-    statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC087TEXT')} ${invStr}</div>`;
+    appendStat(`${line('INSPEC087TEXT')} ${invStr}`);
     // Favorites (Lua INSPEC117TEXT, INSPEC049TEXT, INSPEC050TEXT)
     const favHobby = char.getFavorite('Activities');
     const favFood = char.getFavorite('Foods');
     const favBand = char.getFavorite('Bands');
-    if (favHobby) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC117TEXT')} ${getTopicName(favHobby)}</div>`;
-    if (favFood) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC049TEXT')} ${getTopicName(favFood)}</div>`;
-    if (favBand) statsHtml += `<div style="margin-bottom:4px;">${line('INSPEC050TEXT')} ${getTopicName(favBand)}</div>`;
+    if (favHobby) appendStat(`${line('INSPEC117TEXT')} ${getTopicName(favHobby)}`);
+    if (favFood) appendStat(`${line('INSPEC049TEXT')} ${getTopicName(favFood)}`);
+    if (favBand) appendStat(`${line('INSPEC050TEXT')} ${getTopicName(favBand)}`);
     // Friends (Lua INSPEC047TEXT — top 4 people with positive affinity, comma-separated names)
     const friends = char.getPeopleOfAffinity(5, true).sort((a, b) => b.nAffinity - a.nAffinity).slice(0, 4);
     const friendStr = friends.length > 0
       ? friends.map(f => getTopicName(f.sID)).join(', ')
       : line('INSPEC082TEXT');
-    statsHtml += `<div style="margin-bottom:2px;">${line('INSPEC047TEXT')} ${friendStr}</div>`;
+    appendStat(`${line('INSPEC047TEXT')} ${friendStr}`, 'margin-bottom:2px;');
     // Enemies (Lua INSPEC048TEXT — top 4 people with negative affinity, comma-separated names)
     const enemies = char.getPeopleOfAffinity(-5, false).sort((a, b) => a.nAffinity - b.nAffinity).slice(0, 4);
     const enemyStr = enemies.length > 0
       ? enemies.map(e => getTopicName(e.sID)).join(', ')
       : line('INSPEC082TEXT');
-    statsHtml += `<div style="margin-bottom:2px;">${line('INSPEC048TEXT')} ${enemyStr}</div>`;
-    statsDiv.innerHTML = statsHtml;
+    appendStat(`${line('INSPEC048TEXT')} ${enemyStr}`, 'margin-bottom:2px;');
     container.appendChild(statsDiv);
   }
 
@@ -677,10 +723,12 @@ export class InspectorPanel {
     container.appendChild(cuffBtn);
 
     // 4. Execute / Cancel (Lua CitizenActionTab button 5: bMarkedForExecution toggle)
+    // U-4: Lua requires character to be cuffed before execution
     const isMarkedExec = char.bMarkedForExecution;
+    const isCuffed = char.bCuffed ?? false;
     const execBtn = this.makeActionButton(
       isMarkedExec ? line('INSPEC198TEXT') : line('INSPEC195TEXT'),
-      isDead || !isPlayer,
+      isDead || !isPlayer || !isCuffed,
       () => {
         char.bMarkedForExecution = !char.bMarkedForExecution;
       },
@@ -714,7 +762,7 @@ export class InspectorPanel {
       opacity:${disabled ? '0.5' : '1'};
     `;
     if (!disabled) {
-      btn.addEventListener('click', () => { onClick(); this.update(); });
+      btn.addEventListener('click', () => { onClick(); this.refresh(); });
       btn.addEventListener('mouseenter', () => { btn.style.background = `rgba(${color === '#f44' ? '255,68,68' : '223,162,0'},0.2)`; });
       btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
     }
@@ -749,28 +797,74 @@ export class InspectorPanel {
   }
 
   private renderObject(obj: EnvObject) {
-    // ── Header area (always shown, Lua ObjectInspector main view) ──
-    const header = this.makeSection();
     const condStr = obj.getConditionUIString();
     const emergencyStr = obj.getEmergencyString();
+    // Lua EnvObject.tConditionColors, evaluated from broadest to narrowest.
+    const conditionColor = obj.nCondition < 1 ? '#b30000'
+      : obj.nCondition < 25 ? '#994000'
+      : obj.nCondition < 50 ? '#b38000'
+      : obj.nCondition < 75 ? '#668000'
+      : '#009900';
 
-    header.innerHTML = `
-      <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
-        ${obj.tData.friendlyName}
-        ${emergencyStr ? `<span style="color:#f44;font-size:20px;margin-left:8px;">[${emergencyStr}]</span>` : ''}
-      </div>
-      <div style="margin-bottom:6px;">
-        ${this.bar(line('INSPEC054TEXT').replace(':', ''), Math.round(obj.nCondition), 100, obj.nCondition < 50 ? '#f44' : '#4f4')}
-      </div>
-      <div style="margin-bottom:4px;">${line('INSPEC054TEXT')} <span style="color:${obj.nCondition < 50 ? '#f44' : '#4f4'};">${condStr} (${Math.round(obj.nCondition)}%)</span></div>
-      ${obj instanceof Door ? `<div style="margin-bottom:4px;">${line('PROPSX055TEXT')} ${this.getDoorStatusText(obj)}</div>` : ''}
-      <div style="margin-bottom:4px;background:#3B2600;padding:4px 8px;color:${AMBER};font-size:20px;">${obj.tData.description ?? ''}</div>
-    `;
-    this.contentEl.appendChild(header);
+    // Lua ObjectInspectorLayout: 418×106 amber summary band, portrait at
+    // (33, -145), name at (145, -174), and condition strip at (140, -218).
+    const summary = document.createElement('div');
+    summary.dataset.testid = 'object-summary';
+    summary.style.cssText = `position:relative;width:${PANEL_W}px;height:106px;background:${AMBER};box-sizing:border-box;`;
+    summary.appendChild(this.buildObjectPortrait(obj));
+
+    const name = document.createElement('div');
+    name.textContent = obj.tData.friendlyName;
+    name.style.cssText = 'position:absolute;left:145px;top:8px;width:268px;height:35px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:26px;line-height:35px;font-weight:600;color:#000;';
+    summary.appendChild(name);
+
+    const condition = document.createElement('div');
+    condition.dataset.testid = 'object-condition';
+    condition.style.cssText = `position:absolute;left:140px;top:55px;width:273px;height:30px;box-sizing:border-box;background:${conditionColor};color:#000;display:flex;align-items:center;padding-left:5px;overflow:hidden;`;
+    const conditionLabel = document.createElement('span');
+    conditionLabel.textContent = `${line('INSPEC054TEXT')} `;
+    conditionLabel.style.cssText = 'font-size:24px;line-height:30px;font-weight:600;white-space:nowrap;';
+    const conditionValue = document.createElement('span');
+    conditionValue.textContent = `${condStr} (${Math.floor(obj.nCondition)}%)`;
+    conditionValue.style.cssText = 'font-size:24px;line-height:30px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    condition.append(conditionLabel, conditionValue);
+    summary.appendChild(condition);
+
+    if (emergencyStr) {
+      const emergency = document.createElement('div');
+      emergency.dataset.testid = 'object-emergency';
+      emergency.textContent = emergencyStr;
+      emergency.style.cssText = 'position:absolute;left:140px;top:-30px;width:278px;height:30px;box-sizing:border-box;background:#f00;color:#fff;font-size:24px;line-height:30px;font-weight:600;padding-left:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      summary.appendChild(emergency);
+    }
+    this.contentEl.appendChild(summary);
+
+    // Lua StatsBG: fixed 152px description field before the folder tabs.
+    const info = document.createElement('div');
+    info.dataset.testid = 'object-info-summary';
+    info.style.cssText = `position:relative;width:${PANEL_W}px;height:152px;background:${AMBER_OPAQUE};box-sizing:border-box;color:${AMBER};overflow:hidden;`;
+    const description = document.createElement('div');
+    description.textContent = obj.tData.description ?? '';
+    description.style.cssText = 'position:absolute;left:20px;top:8px;width:380px;max-height:64px;overflow:hidden;font-size:26px;line-height:30px;font-weight:600;';
+    info.appendChild(description);
+    if (obj instanceof Door) {
+      const doorStatus = document.createElement('div');
+      doorStatus.style.cssText = 'position:absolute;left:16px;top:82px;width:386px;height:36px;display:flex;align-items:center;overflow:hidden;font-size:26px;line-height:32px;';
+      const doorLabel = document.createElement('span');
+      doorLabel.textContent = `${line('PROPSX055TEXT')} `;
+      doorLabel.style.fontWeight = '400';
+      const doorValue = document.createElement('span');
+      doorValue.innerHTML = this.getDoorStatusText(obj);
+      doorValue.style.cssText = 'font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      doorStatus.append(doorLabel, doorValue);
+      info.appendChild(doorStatus);
+    }
+    this.contentEl.appendChild(info);
 
     // ── Tab bar: Stats | Action | About (Lua ObjectInspector 3 tabs) ──
     const tabRow = document.createElement('div');
-    tabRow.style.cssText = 'display:flex;border-top:1px solid #333;border-bottom:1px solid #333;';
+    tabRow.dataset.testid = 'object-tabs';
+    tabRow.style.cssText = `width:${PANEL_W}px;height:50px;display:flex;align-items:flex-start;box-sizing:border-box;background:${AMBER_OPAQUE};border-bottom:3px solid ${AMBER};`;
     const objTabs: { key: ObjectTab; label: string }[] = [
       { key: 'stats', label: line('INSPEC017TEXT') || 'Stats' },
       { key: 'action', label: line('INSPUI005TEXT') || 'Action' },
@@ -785,23 +879,22 @@ export class InspectorPanel {
       const btn = document.createElement('div');
       const isActive = this.objectTab === t.key;
       const iconSrc = objTabIcons[t.key];
+      btn.dataset.objectTab = t.key;
+      btn.title = t.label;
       btn.style.cssText = `
-        flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:20px;
+        width:83px;height:47px;box-sizing:border-box;cursor:pointer;
         display:flex;align-items:center;justify-content:center;
         background-image:url('${isActive ? 'assets/ui/inspector/ui_inspector_folderActive.png' : 'assets/ui/inspector/ui_inspector_folderInactive.png'}');
         background-size:100% 100%;background-repeat:no-repeat;
-        color:${isActive ? '#000' : AMBER};
       `;
       if (iconSrc) {
         const img = document.createElement('img');
         img.src = iconSrc;
-        img.style.cssText = 'width:20px;height:20px;margin-right:4px;vertical-align:middle;image-rendering:pixelated;';
+        img.alt = t.label;
+        img.style.cssText = `width:28px;height:28px;object-fit:contain;image-rendering:auto;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);'}`;
         btn.appendChild(img);
       }
-      const span = document.createElement('span');
-      span.textContent = t.label;
-      btn.appendChild(span);
-      btn.addEventListener('click', () => { this.objectTab = t.key; this.update(); });
+      btn.addEventListener('click', () => { this.objectTab = t.key; this.refresh(); });
       tabRow.appendChild(btn);
     }
     this.contentEl.appendChild(tabRow);
@@ -814,8 +907,6 @@ export class InspectorPanel {
       case 'about': this.renderObjectAboutTab(body, obj); break;
     }
     this.contentEl.appendChild(body);
-
-    this.addCloseButton();
   }
 
   /** Object Stats tab — power, oxygen, condition details. */
@@ -843,20 +934,32 @@ export class InspectorPanel {
 
   /** Object Action tab — demolish, deactivate, door controls (Lua ObjectActionTab). */
   private renderObjectActionTab(container: HTMLDivElement, obj: EnvObject) {
-    // 1. Demolish button (Lua ObjectActionTab button 1: with matter refund)
+    // 1. Demolish / Cancel Demolish button (Lua ObjectActionTab button 1)
     if (obj.bBuilt) {
-      const refund = obj.getVaporizeMatterYield();
-      const demolishBtn = this.makeActionButton(
-        `${line('INSPUI016TEXT')} (+${refund} ${line('INSPUI017TEXT')})`,
-        false,
-        () => {
-          if (this.onDemolishObject) this.onDemolishObject(obj);
-          this.entity = null;
-          this.el.style.display = 'none';
-        },
-        '#f44',
-      );
-      container.appendChild(demolishBtn);
+      if (obj.bSlatedForVaporize) {
+        // Cancel Demolish — object is already slated for teardown
+        const cancelBtn = this.makeActionButton(
+          'Cancel Demolish',
+          false,
+          () => { obj.bSlatedForVaporize = false; },
+          AMBER,
+        );
+        container.appendChild(cancelBtn);
+      } else {
+        // Demolish with matter refund
+        const refund = obj.getVaporizeMatterYield();
+        const demolishBtn = this.makeActionButton(
+          `${line('INSPUI016TEXT')} (+${refund} ${line('INSPUI017TEXT')})`,
+          false,
+          () => {
+            if (this.onDemolishObject) this.onDemolishObject(obj);
+            this.entity = null;
+            this.el.style.display = 'none';
+          },
+          '#f44',
+        );
+        container.appendChild(demolishBtn);
+      }
     }
 
     // 2. Deactivate toggle (Lua ObjectActionTab button 3: INSPEC171/172)
@@ -869,46 +972,89 @@ export class InspectorPanel {
       container.appendChild(deactivateBtn);
     }
 
-    // 3. Door controls (Lua ObjectActionTab: DoorControls custom inspector)
+    // 3. Door controls — Lock / Unlock / Normal buttons (Lua DoorControls custom inspector)
     if (obj instanceof Door) {
+      const door = obj as Door;
       const doorSection = document.createElement('div');
       doorSection.style.cssText = `margin-top:6px;padding:6px 0;border-top:1px solid #333;`;
-      doorSection.innerHTML = `
-        <div style="margin-bottom:4px;color:${AMBER};font-size:20px;">${line('PROPSX058TEXT')}
-          <span style="cursor:pointer;color:${AMBER};border:1px solid ${AMBER};padding:2px 8px;margin-left:4px;"
-                id="inspector-door-cycle">${this.getDoorOperationLabel(obj)}</span>
-        </div>
-      `;
-      container.appendChild(doorSection);
 
-      // Wire door cycle button
-      const doorCycleBtn = doorSection.querySelector('#inspector-door-cycle') as HTMLElement;
-      if (doorCycleBtn) {
-        doorCycleBtn.addEventListener('click', () => {
-          (obj as Door).cycle();
-          this.update();
-        });
+      const label = document.createElement('div');
+      label.style.cssText = `margin-bottom:6px;color:${AMBER};font-size:20px;`;
+      label.textContent = line('PROPSX058TEXT') + ' ' + this.getDoorOperationLabel(door);
+      doorSection.appendChild(label);
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:6px;';
+
+      const lockBtn = this.makeActionButton(
+        'Lock',
+        door.operation === DOOR_OPERATION.LOCKED,
+        () => { door.setOperation(DOOR_OPERATION.LOCKED); },
+      );
+      btnRow.appendChild(lockBtn);
+
+      const unlockBtn = this.makeActionButton(
+        'Unlock',
+        door.operation === DOOR_OPERATION.FORCED_OPEN,
+        () => { door.setOperation(DOOR_OPERATION.FORCED_OPEN); },
+      );
+      btnRow.appendChild(unlockBtn);
+
+      const normalBtn = this.makeActionButton(
+        'Normal',
+        door.operation === DOOR_OPERATION.NORMAL,
+        () => { door.setOperation(DOOR_OPERATION.NORMAL); },
+      );
+      btnRow.appendChild(normalBtn);
+
+      doorSection.appendChild(btnRow);
+      container.appendChild(doorSection);
+    }
+
+    // 4. Brig bed — Release Prisoner button (Lua ObjectActionTab: brig bed controls)
+    if (obj.sName === 'Bed' && obj.rRoom && obj.rRoom.zone === ZoneType.BRIG) {
+      const brigZone = BrigZone.findBrigForRoom(obj.rRoom);
+      if (brigZone) {
+        const prisoners = brigZone.getPrisoners();
+        if (prisoners.length > 0) {
+          const brigSection = document.createElement('div');
+          brigSection.style.cssText = `margin-top:6px;padding:6px 0;border-top:1px solid #333;`;
+
+          for (const charId of prisoners) {
+            const releaseBtn = this.makeActionButton(
+              `Release Prisoner #${charId}`,
+              false,
+              () => { brigZone.unassignChar(charId); },
+            );
+            brigSection.appendChild(releaseBtn);
+          }
+          container.appendChild(brigSection);
+        }
       }
     }
   }
 
   /** Object About tab — description, builder info (Lua ObjectAboutTab). */
   private renderObjectAboutTab(container: HTMLDivElement, obj: EnvObject) {
-    let html = '';
+    const appendAboutRow = (text: string, style: string) => {
+      const row = document.createElement('div');
+      row.style.cssText = style;
+      row.textContent = text;
+      container.appendChild(row);
+    };
     // Description (Lua ObjectInspector: rObject:getDescription())
     const desc = obj.tData.description ?? '';
     if (desc) {
-      html += `<div style="margin-bottom:8px;color:#ccc;font-size:20px;">${desc}</div>`;
+      appendAboutRow(desc, 'margin-bottom:8px;color:#ccc;font-size:20px;');
     }
     // Builder name (Lua INSPEC111TEXT)
     if (obj.sBuilderName) {
-      html += `<div style="margin-bottom:4px;">${line('INSPEC111TEXT')} ${obj.sBuilderName}</div>`;
+      appendAboutRow(`${line('INSPEC111TEXT')} ${obj.sBuilderName}`, 'margin-bottom:4px;');
     }
     // Build time (Lua INSPEC110TEXT)
     if (obj.sBuildTime) {
-      html += `<div style="margin-bottom:4px;">${line('INSPEC110TEXT')} ${obj.sBuildTime}</div>`;
+      appendAboutRow(`${line('INSPEC110TEXT')} ${obj.sBuildTime}`, 'margin-bottom:4px;');
     }
-    container.innerHTML = html;
   }
 
   // ── Room Inspector ──────────────────────────────────────
@@ -916,17 +1062,36 @@ export class InspectorPanel {
   private renderRoom(room: Room) {
     const zoneName = ZONE_SPRITES[room.zone]?.name ?? 'Unknown';
 
-    // Room header — custom name if set, else zone name + room ID (Lua: uniqueZoneName)
+    // Room header — amber bar with zone icon + black text (Lua ZoneInspector header)
     const displayName = room.uniqueZoneName
       ? room.uniqueZoneName
       : `${zoneName} Room #${room.id}`;
-    const header = this.makeSection();
-    header.innerHTML = `
-      <div style="font-size:26px;font-weight:bold;color:${AMBER};margin-bottom:6px;">
-        ${displayName}
-        ${room.uniqueZoneName ? `<span style="color:#888;font-size:20px;"> (${zoneName} #${room.id})</span>` : ''}
-      </div>
+    // Map zone type to icon filename
+    const zoneIconMap: Record<string, string> = {
+      PLAIN: 'generic', GARDEN: 'garden', INFIRMARY: 'infirmary',
+      LIFESUPPORT: 'lifesupport', RESIDENCE: 'residence', PUB: 'pub',
+      POWER: 'reactor', AIRLOCK: 'airlock', REFINERY: 'refinery',
+      FITNESS: 'fitness', RESEARCH: 'research', BRIG: 'generic',
+    };
+    const iconKey = zoneIconMap[room.zone] ?? 'generic';
+    const header = document.createElement('div');
+    header.style.cssText = `
+      background:${AMBER};padding:8px 10px;display:flex;align-items:center;gap:8px;
     `;
+    const iconImg = document.createElement('img');
+    iconImg.src = `assets/ui/icons/ui_iconIso_${iconKey}.png`;
+    iconImg.style.cssText = 'width:32px;height:32px;image-rendering:pixelated;flex-shrink:0;';
+    header.appendChild(iconImg);
+    const titleDiv = document.createElement('div');
+    titleDiv.style.cssText = 'font-size:24px;font-weight:bold;color:#000;';
+    titleDiv.textContent = displayName;
+    if (room.uniqueZoneName) {
+      const subSpan = document.createElement('span');
+      subSpan.style.cssText = 'color:#333;font-size:18px;';
+      subSpan.textContent = ` (${zoneName} #${room.id})`;
+      titleDiv.appendChild(subSpan);
+    }
+    header.appendChild(titleDiv);
     this.contentEl.appendChild(header);
 
     // Tabs: Info | Rezone | Actions (Lua: ZoneInspector has folder tabs)
@@ -962,7 +1127,7 @@ export class InspectorPanel {
       const span = document.createElement('span');
       span.textContent = tab.label;
       tabEl.appendChild(span);
-      tabEl.addEventListener('click', () => { this.roomTab = tab.key; this.update(); });
+      tabEl.addEventListener('click', () => { this.roomTab = tab.key; this.refresh(); });
       tabBar.appendChild(tabEl);
     }
     this.contentEl.appendChild(tabBar);
@@ -983,6 +1148,7 @@ export class InspectorPanel {
     const citizenLabel = charCount === 1 ? line('INSPEC063TEXT') : line('INSPEC061TEXT');
     const moraleScore = room.nMoraleScore;
     const section = this.makeSection();
+    section.style.cssText = 'padding:8px;background:rgba(0,0,0,0.6);margin:4px 8px;border-radius:2px;';
     let html = `
       <div style="margin-bottom:4px;">${line('INSPEC055TEXT')} ${room.size} ${line('INSPEC057TEXT')}</div>
       <div style="margin-bottom:4px;">${line('INSPEC060TEXT')} <span style="color:#fff;">${charCount}</span> ${citizenLabel}</div>
@@ -990,7 +1156,7 @@ export class InspectorPanel {
         ${this.bar(line('INSPEC062TEXT'), room.oxygen, 255, room.oxygen < 50 ? '#f44' : '#48f')}
       </div>
       <div style="margin-bottom:4px;">
-        <span style="color:${room.sealed ? '#4f4' : '#f44'};">${room.sealed ? line('INSPEC153TEXT') : line('INSPEC152TEXT')}</span>
+        <span style="color:${room.bUserBlockOxygen ? '#4f4' : '#f44'};">${room.bUserBlockOxygen ? line('INSPEC153TEXT') : line('INSPEC152TEXT')}</span>
       </div>
       <div style="margin-bottom:4px;">
         ${line('INSPEC167TEXT')} <span style="color:#4f4;">+${room.nPowerOutput}</span> / ${line('INSPEC163TEXT')} <span style="color:#f44;">-${room.nPowerDraw}</span>
@@ -1005,34 +1171,66 @@ export class InspectorPanel {
     this.contentEl.appendChild(section);
   }
 
-  /** Room Rezone tab — zone type buttons (Lua ZoneRezoneTab). */
+  /** Room Rezone tab — scrollable zone list (Lua ZoneRezoneTab + ZoneRezoneButton). */
   private renderRoomRezone(room: Room) {
     const section = this.makeSection();
-    // Zone type buttons matching Lua ZoneRezoneTab.tZoneOptions order
+    section.style.cssText = 'padding:4px 8px;max-height:400px;overflow-y:auto;';
+
+    // Zone icon mapping
+    const ZONE_ICONS: Record<string, string> = {
+      AIRLOCK: 'airlock', LIFESUPPORT: 'lifesupport', POWER: 'reactor',
+      REFINERY: 'refinery', RESIDENCE: 'residence', PUB: 'pub',
+      GARDEN: 'garden', FITNESS: 'fitness', RESEARCH: 'research',
+      INFIRMARY: 'infirmary', BRIG: 'generic', PLAIN: 'generic',
+    };
+
+    // Lua ZoneRezoneTab: scrollable list of ZoneRezoneButtons
     for (const zone of ZONE_LIST) {
       const config = ZONE_SPRITES[zone];
       if (!config) continue;
       const isActive = room.zone === zone;
+      const zoneName = ZoneType[zone] ?? 'PLAIN';
+
       const btn = document.createElement('div');
       btn.style.cssText = `
-        padding:6px 10px;margin-bottom:3px;cursor:pointer;font-size:22px; /* Lua dosissemibold22 */
-        background:${isActive ? 'rgba(223,162,0,0.25)' : 'transparent'};
-        color:${isActive ? AMBER : '#aaa'};
-        border:1px solid ${isActive ? AMBER : '#444'};
+        display:flex;align-items:center;gap:8px;
+        padding:8px 10px;margin-bottom:2px;cursor:pointer;
+        background:${isActive ? AMBER : 'rgba(40,35,25,0.9)'};
+        border:1px solid ${isActive ? AMBER : '#555'};
       `;
-      btn.textContent = config.name;
+
+      // Zone icon
+      const iconFile = ZONE_ICONS[zoneName] ?? 'generic';
+      const icon = document.createElement('img');
+      icon.src = `assets/ui/icons/ui_iconIso_${iconFile}.png`;
+      icon.style.cssText = `width:28px;height:28px;object-fit:contain;flex-shrink:0;${isActive ? 'filter:brightness(0);' : 'filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);'}`;
+      btn.appendChild(icon);
+
+      // Name + description
+      const textWrap = document.createElement('div');
+      textWrap.style.cssText = 'flex:1;';
+      const nameEl = document.createElement('div');
+      nameEl.textContent = config.name;
+      nameEl.style.cssText = `font-size:22px;font-family:'Dosis',sans-serif;font-weight:600;color:${isActive ? '#000' : AMBER};`;
+      textWrap.appendChild(nameEl);
+
+      // Zone is "Unzoned" for PLAIN
+      if (zone === ZoneType.PLAIN) {
+        nameEl.textContent = line('ZONEUI005TEXT') || 'Unzoned';
+      }
+
+      btn.appendChild(textWrap);
+
       if (!isActive) {
         btn.addEventListener('click', () => {
           if (this.onRezoneRoom) this.onRezoneRoom(room, zone);
-          this.update();
+          this.refresh();
         });
         btn.addEventListener('mouseenter', () => {
-          btn.style.background = 'rgba(223,162,0,0.15)';
-          btn.style.color = AMBER;
+          btn.style.background = 'rgba(223,162,0,0.2)';
         });
         btn.addEventListener('mouseleave', () => {
-          btn.style.background = 'transparent';
-          btn.style.color = '#aaa';
+          btn.style.background = 'rgba(40,35,25,0.9)';
         });
       }
       section.appendChild(btn);
@@ -1043,13 +1241,14 @@ export class InspectorPanel {
   /** Room Actions tab — claim/unclaim, seal/unseal (Lua ZoneActionTab). */
   private renderRoomActions(room: Room) {
     const section = this.makeSection();
+    section.style.cssText = 'padding:8px;background:rgba(0,0,0,0.6);margin:4px 8px;border-radius:2px;';
     const isPlayer = room.nTeam === TEAM_ID_PLAYER;
 
     // Claim / Unclaim button (Lua ZoneActionTab.claimButtonPressed)
     const claimLabel = isPlayer ? line('ZONEUI112TEXT') || 'Unclaim' : line('ZONEUI111TEXT') || 'Claim';
     const claimBtn = this.makeActionButton(claimLabel, false, () => {
       if (isPlayer) { room.unclaim(); } else { room.claim(); }
-      this.update();
+      this.refresh();
     });
     section.appendChild(claimBtn);
 
@@ -1058,7 +1257,7 @@ export class InspectorPanel {
     const sealLabel = isSealed ? (line('ZONEUI072TEXT') || 'Unseal Oxygen') : (line('ZONEUI071TEXT') || 'Seal Oxygen');
     const sealBtn = this.makeActionButton(sealLabel, false, () => {
       room.bUserBlockOxygen = !room.bUserBlockOxygen;
-      this.update();
+      this.refresh();
     });
     section.appendChild(sealBtn);
 
@@ -1066,6 +1265,38 @@ export class InspectorPanel {
   }
 
   // ── Helpers ─────────────────────────────────────────────
+
+  private makeCharacterInfoRow(
+    iconName: string,
+    label: string,
+    value: string,
+    valueColor: string,
+    onClick: () => void,
+  ): HTMLDivElement {
+    const row = document.createElement('div');
+    row.style.cssText = `height:36px;display:flex;align-items:center;box-sizing:border-box;padding:0 10px;cursor:pointer;color:${AMBER};font-family:'Dosis',sans-serif;overflow:hidden;`;
+
+    const icon = document.createElement('img');
+    icon.src = `/assets/ui/inspector/${iconName}`;
+    icon.alt = '';
+    icon.style.cssText = 'width:24px;height:24px;object-fit:contain;margin-right:6px;flex:0 0 24px;filter:brightness(0) saturate(100%) invert(55%) sepia(72%) saturate(1273%) hue-rotate(18deg) brightness(90%) contrast(177%);';
+    row.appendChild(icon);
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = `${label} `;
+    labelSpan.style.cssText = 'font-size:26px;line-height:32px;font-weight:400;white-space:nowrap;';
+    row.appendChild(labelSpan);
+
+    const valueSpan = document.createElement('span');
+    valueSpan.textContent = value;
+    valueSpan.style.cssText = `font-size:26px;line-height:32px;font-weight:600;color:${valueColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+    row.appendChild(valueSpan);
+
+    row.addEventListener('click', onClick);
+    row.addEventListener('mouseenter', () => { row.style.background = 'rgba(223,162,0,0.12)'; });
+    row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
+    return row;
+  }
 
   /** Structured "Label: Value" info row matching Lua CitizenInspector layout. */
   private makeInfoRow(label: string, value: string, valueColor: string): HTMLDivElement {

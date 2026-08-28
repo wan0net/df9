@@ -80,12 +80,14 @@ export class InputManager {
 
   /** Check if left button was just pressed this frame. */
   get leftJustPressed(): boolean {
-    return this.isLeftDown() && !this._wasLeftDown;
+    // A normal browser click may deliver pointerdown and pointerup between two
+    // animation frames. Preserve the event edge so quick clicks are not lost.
+    return this._pointerDownThisFrame || (this.isLeftDown() && !this._wasLeftDown);
   }
 
   /** Check if left button was just released this frame. */
   get leftJustReleased(): boolean {
-    return !this.isLeftDown() && this._wasLeftDown;
+    return this._pointerUpThisFrame || (!this.isLeftDown() && this._wasLeftDown);
   }
 
   /** Get screen-space pointer position. */

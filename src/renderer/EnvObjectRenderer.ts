@@ -12,14 +12,35 @@ import { tObjects } from '../envobjects/EnvObjectData';
  * Supports ghost (unbuilt) objects at 30% opacity and condition-based variants.
  */
 
+/** Lua EnvObject.DEFAULT_ICON_OFFSET = {0, 100} — vertical offset for power icon above object. */
+const POWER_ICON_OFFSET_Y = 100;
+/** Size of the no-power icon sprite in world units. */
+const POWER_ICON_SIZE = 32;
+
 interface RenderedObject {
   mesh: THREE.Mesh;
   spriteName: string;
+  /** "No power" blinking icon mesh, if this object has nPowerDraw > 0. */
+  powerIcon: THREE.Mesh | null;
+  /** Cached power state for blink logic. */
+  bHasPower: boolean;
+  /** Cached active state — deactivated objects show icon permanently. */
+  bActive: boolean;
+  /** Whether this object requires power (nPowerDraw > 0). */
+  bNeedsPower: boolean;
+  /** Visual-state tint before room lighting is composed. */
+  stateColor: number;
+  /** Current room-light tint. */
+  lightTint: number;
 }
 
 export class EnvObjectRenderer {
   private scene: THREE.Scene;
   private objects: Map<string, RenderedObject> = new Map();
+  private hoveredObjectId: string | null = null;
+  private coverageMeshes: THREE.Mesh[] = [];
+  private coverageMaterial: THREE.MeshBasicMaterial | null = null;
+  private coverageSignature = '';
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -38,9 +59,11 @@ export class EnvObjectRenderer {
     // Ghost (unbuilt) doors still need a visible sprite so the player can see the placement.
     if (objDef?.door && built) return;
     const spriteName = objDef?.spriteName ?? objectType;
-    const spriteKey = built ? spriteName : `tile_${spriteName}`; // ghost uses tile-prefixed sprite
 
-    const mesh = this.createSpriteMesh(spriteKey, objDef?.width ?? 1, objDef?.height ?? 1, built);
+    // Lua uses the same object/door artwork for pending construction and lowers
+    // its opacity. Texture-key resolution belongs in createSpriteMesh; adding a
+    // second `tile_` prefix here previously forced every ghost to a grey quad.
+    const mesh = this.createSpriteMesh(spriteName, objDef?.width ?? 1, objDef?.height ?? 1, built);
     if (!mesh) return;
 
     const pos = tileToScreen(tileX, tileY);
@@ -80,41 +103,105 @@ export class EnvObjectRenderer {
     }
 
     this.scene.add(mesh);
-    this.objects.set(id, { mesh, spriteName });
+
+    // Create "no power" icon for objects that draw power (Lua EnvObject.lua:507-519)
+    const bNeedsPower = (objDef?.nPowerDraw ?? 0) > 0;
+    let powerIcon: THREE.Mesh | null = null;
+    if (bNeedsPower) {
+      powerIcon = this.createPowerIcon();
+      if (powerIcon) {
+        // Position above the object (Lua DEFAULT_ICON_OFFSET = {0, 100})
+        powerIcon.position.set(
+          mesh.position.x,
+          mesh.position.y + POWER_ICON_OFFSET_Y,
+          mesh.position.z + 1, // slightly in front
+        );
+        powerIcon.visible = false;
+        this.scene.add(powerIcon);
+      }
+    }
+
+    this.objects.set(id, {
+      mesh, spriteName, powerIcon, bHasPower: true, bActive: true, bNeedsPower,
+      stateColor: 0xffffff,
+      lightTint: 0xffffff,
+    });
   }
 
   /** Update an object's visual state based on built status and condition. */
-  updateObject(id: string, built: boolean, condition: number, spriteName?: string) {
+  updateObject(id: string, built: boolean, condition: number, spriteName?: string,
+    bHasPower?: boolean, bActive?: boolean, bSlatedForVaporize?: boolean) {
     const obj = this.objects.get(id);
     if (!obj) return;
 
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
 
-    if (!built) {
+    // R-11: Slated for vaporize — red tint (Lua pendingVaporizeColor = Gui.RED)
+    if (bSlatedForVaporize) {
+      mat.opacity = 0.8;
+      obj.stateColor = 0xff2222;
+    } else if (!built) {
       mat.opacity = 0.3;
-      mat.color.setHex(0xffffff);
+      obj.stateColor = 0xffffff;
     } else if (condition <= 0) {
       mat.opacity = 0.5;
-      mat.color.setHex(0x444444);
+      obj.stateColor = 0x444444;
     } else if (condition < DAMAGED_CONDITION) {
       mat.opacity = 0.8;
-      mat.color.setHex(0xff6666);
+      obj.stateColor = 0xff6666;
     } else {
       mat.opacity = 1.0;
-      mat.color.setHex(0xffffff);
+      obj.stateColor = 0xffffff;
     }
+    this.applyComposedTint(obj);
 
-    // If sprite name changed (condition variant), try swapping the texture frame
+    // If sprite name changed (condition variant or interact sprite), swap the texture frame
     if (spriteName && spriteName !== obj.spriteName) {
       const frame = getSpriteFrame(spriteName);
       if (frame) {
         const baseTex = getTexture(frame.textureKey);
         if (baseTex) {
           const cropped = this.cropTexture(baseTex, frame);
+          mat.map?.dispose();
           mat.map = cropped;
           mat.needsUpdate = true;
+          // Condition and interaction frames can have different source rects
+          // (HappyBot is 92x162 healthy, 109x161 damaged, 140x144 destroyed).
+          // Lua swaps the sprite-deck rect as well as the UVs, so replace the
+          // plane rather than stretching the new frame over the old geometry.
+          obj.mesh.geometry.dispose();
+          obj.mesh.geometry = new THREE.PlaneGeometry(frame.sourceW, frame.sourceH);
           obj.spriteName = spriteName;
         }
+      }
+    }
+
+    // Update cached power state for blink logic
+    if (bHasPower !== undefined) obj.bHasPower = bHasPower;
+    if (bActive !== undefined) obj.bActive = bActive;
+  }
+
+  /**
+   * Per-frame update for "no power" blinking icons.
+   * Lua: math.abs(math.sin(GameRules.elapsedTime * 200)) > 0.5
+   * Called from the game loop each frame.
+   */
+  updatePowerIcons(elapsedTime: number): void {
+    const nBlink = Math.abs(Math.sin(elapsedTime * 200));
+    const blinkOn = nBlink > 0.5;
+
+    for (const obj of this.objects.values()) {
+      if (!obj.powerIcon || !obj.bNeedsPower) continue;
+
+      if (!obj.bActive) {
+        // Deactivated objects show icon permanently (Lua EnvObject.lua:1189-1190)
+        obj.powerIcon.visible = true;
+      } else if (!obj.bHasPower) {
+        // No power — blink (Lua EnvObject.lua:1193-1198)
+        obj.powerIcon.visible = blinkOn;
+      } else {
+        // Has power — hide
+        obj.powerIcon.visible = false;
       }
     }
   }
@@ -123,24 +210,177 @@ export class EnvObjectRenderer {
   setObjectTint(id: string, tint: number) {
     const obj = this.objects.get(id);
     if (!obj) return;
+    obj.lightTint = tint;
+    this.applyComposedTint(obj);
+  }
+
+  /**
+   * Lua EnvObject:hover pulses the object itself in amber. HappyBot additionally
+   * asks Cursor.drawTiles to show its cached circular range, green while
+   * functioning and red while deactivated/broken.
+   */
+  setHoveredObject(
+    id: string | null,
+    hoverTime: number,
+    coverageTiles: { x: number; y: number }[] = [],
+    coverageIsValid = true,
+  ): void {
+    if (this.hoveredObjectId && this.hoveredObjectId !== id) {
+      const previous = this.objects.get(this.hoveredObjectId);
+      if (previous) this.applyComposedTint(previous);
+    }
+    this.hoveredObjectId = id;
+
+    if (!id) {
+      this.clearCoverageMeshes();
+      return;
+    }
+
+    const obj = this.objects.get(id);
+    if (obj) {
+      const alpha = Math.abs(Math.sin(hoverTime * 4)) * 0.5 + 0.5;
+      (obj.mesh.material as THREE.MeshBasicMaterial).color.setRGB(
+        (223 / 255) * alpha,
+        (162 / 255) * alpha,
+        0,
+      );
+    }
+
+    const signature = `${id}:${coverageIsValid}:${coverageTiles.map(t => `${t.x},${t.y}`).join(';')}`;
+    if (signature === this.coverageSignature) return;
+    this.clearCoverageMeshes();
+    this.coverageSignature = signature;
+    if (coverageTiles.length === 0) return;
+
+    const tex = getTexture('cursor_grid_bright');
+    if (!tex) return;
+    this.coverageMaterial = new THREE.MeshBasicMaterial({
+      map: tex,
+      color: coverageIsValid ? 0x44cc44 : 0xcc2222,
+      transparent: true,
+      opacity: 0.55,
+      alphaTest: 0.01,
+      depthWrite: false,
+    });
+    for (const tile of coverageTiles) {
+      const pos = tileToScreen(tile.x, tile.y);
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(TILE_W, TILE_H),
+        this.coverageMaterial,
+      );
+      mesh.position.set(
+        pos.x + TILE_HALF_W,
+        -(pos.y + TILE_HALF_H),
+        24000 + pos.y + TILE_HALF_H,
+      );
+      this.scene.add(mesh);
+      this.coverageMeshes.push(mesh);
+    }
+  }
+
+  /** Test/debug view of Lua hover presentation. */
+  getHoverDebugInfo(): { hoveredObjectId: string | null; coverageCount: number; coverageColor: number | null } {
+    return {
+      hoveredObjectId: this.hoveredObjectId,
+      coverageCount: this.coverageMeshes.length,
+      coverageColor: this.coverageMaterial?.color.getHex() ?? null,
+    };
+  }
+
+  private applyComposedTint(obj: RenderedObject) {
     const mat = obj.mesh.material as THREE.MeshBasicMaterial;
-    const r = ((tint >> 16) & 0xFF) / 255;
-    const g = ((tint >> 8) & 0xFF) / 255;
-    const b = (tint & 0xFF) / 255;
-    mat.color.setRGB(r, g, b);
+    // Lua boosts object lighting by +0.3, then the state tint still applies.
+    const lr = Math.min(1, ((obj.lightTint >> 16) & 0xFF) / 255 + 0.3);
+    const lg = Math.min(1, ((obj.lightTint >> 8) & 0xFF) / 255 + 0.3);
+    const lb = Math.min(1, (obj.lightTint & 0xFF) / 255 + 0.3);
+    const sr = ((obj.stateColor >> 16) & 0xFF) / 255;
+    const sg = ((obj.stateColor >> 8) & 0xFF) / 255;
+    const sb = (obj.stateColor & 0xFF) / 255;
+    mat.color.setRGB(lr * sr, lg * sg, lb * sb);
+  }
+
+  /** Test/debug view of the final composed visual state. */
+  getDebugInfo(id: string): {
+    color: number;
+    opacity: number;
+    spriteName: string;
+    visualSource: string | null;
+    renderWidth: number;
+    renderHeight: number;
+  } | null {
+    const obj = this.objects.get(id);
+    if (!obj) return null;
+    const mat = obj.mesh.material as THREE.MeshBasicMaterial;
+    return {
+      color: mat.color.getHex(),
+      opacity: mat.opacity,
+      spriteName: obj.spriteName,
+      visualSource: obj.mesh.userData.visualSource ?? null,
+      renderWidth: (obj.mesh.geometry as THREE.PlaneGeometry).parameters.width,
+      renderHeight: (obj.mesh.geometry as THREE.PlaneGeometry).parameters.height,
+    };
   }
 
   removeObject(id: string) {
     const obj = this.objects.get(id);
     if (obj) {
+      if (this.hoveredObjectId === id) {
+        this.hoveredObjectId = null;
+        this.clearCoverageMeshes();
+      }
       this.scene.remove(obj.mesh);
       obj.mesh.geometry.dispose();
       (obj.mesh.material as THREE.Material).dispose();
+      // Clean up power icon
+      if (obj.powerIcon) {
+        this.scene.remove(obj.powerIcon);
+        obj.powerIcon.geometry.dispose();
+        (obj.powerIcon.material as THREE.Material).dispose();
+      }
       this.objects.delete(id);
     }
   }
 
   // ── Private helpers ──────────────────────────────────────────
+
+  private clearCoverageMeshes(): void {
+    for (const mesh of this.coverageMeshes) {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    this.coverageMeshes = [];
+    this.coverageMaterial?.dispose();
+    this.coverageMaterial = null;
+    this.coverageSignature = '';
+  }
+
+  /** Create the "no power" icon mesh using the ui_no_power texture (Lua UIMisc/no_power sprite). */
+  private createPowerIcon(): THREE.Mesh | null {
+    const tex = getTexture('ui_no_power');
+    if (!tex) {
+      // Fallback: plain red square
+      const geo = new THREE.PlaneGeometry(POWER_ICON_SIZE, POWER_ICON_SIZE);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xff0000,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      });
+      return new THREE.Mesh(geo, mat);
+    }
+
+    const cloned = tex.clone();
+    cloned.needsUpdate = true;
+    const geo = new THREE.PlaneGeometry(POWER_ICON_SIZE, POWER_ICON_SIZE);
+    const mat = new THREE.MeshBasicMaterial({
+      map: cloned,
+      color: 0xff3333, // Lua: setColor(unpack(Gui.RED))
+      transparent: true,
+      alphaTest: 0.01,
+      depthWrite: false,
+    });
+    return new THREE.Mesh(geo, mat);
+  }
 
   private createSpriteMesh(
     spriteName: string,
@@ -151,23 +391,33 @@ export class EnvObjectRenderer {
     // 1. Try real sprite frame from atlas
     const frame = getSpriteFrame(spriteName);
     if (frame) {
-      return this.createFromSpriteFrame(frame, gridW, gridH, built);
+      const mesh = this.createFromSpriteFrame(frame, gridW, gridH, built);
+      if (mesh) mesh.userData.visualSource = `sprite:${spriteName}`;
+      return mesh;
     }
 
-    // 2. Try generated placeholder
-    const placeholderTex = getTexture(`placeholder_${spriteName}`);
-    if (placeholderTex) {
-      return this.createFromPlaceholder(placeholderTex, gridW, gridH, built);
-    }
-
-    // 3. Try tile texture (doors use 'tile_' prefixed textures from wall sheet)
+    // 2. Try tile texture (doors use 'tile_' prefixed source textures).
+    // This must precede generated placeholders or all three door types render
+    // as labelled diamonds despite their original artwork being loaded.
     const tileTex = getTexture(`tile_${spriteName}`);
     if (tileTex) {
-      return this.createFromTileTexture(tileTex, gridW, built);
+      const mesh = this.createFromTileTexture(tileTex, gridW, built);
+      mesh.userData.visualSource = `tile:${spriteName}`;
+      return mesh;
+    }
+
+    // 3. Try generated placeholder for genuinely absent source sprites.
+    const placeholderTex = getTexture(`placeholder_${spriteName}`);
+    if (placeholderTex) {
+      const mesh = this.createFromPlaceholder(placeholderTex, gridW, gridH, built);
+      mesh.userData.visualSource = `placeholder:${spriteName}`;
+      return mesh;
     }
 
     // 4. Fallback: simple colored quad
-    return this.createFallbackQuad(gridW, gridH, built);
+    const mesh = this.createFallbackQuad(gridW, gridH, built);
+    mesh.userData.visualSource = `fallback:${spriteName}`;
+    return mesh;
   }
 
   private createFromSpriteFrame(
@@ -181,14 +431,13 @@ export class EnvObjectRenderer {
 
     const cropped = this.cropTexture(baseTex, frame);
 
-    // Scale sprite to fit the grid footprint
-    // The tile footprint in pixels: gridW * TILE_W wide, gridH * TILE_H tall
-    // Sprites are taller than their footprint (3D perspective), so we scale
-    // to match width and let height be proportional
-    const targetW = gridW * TILE_W;
-    const aspect = frame.sourceH / frame.sourceW;
-    const renderW = targetW;
-    const renderH = targetW * aspect;
+    // MOAI draws sprite-deck geometry in source pixels. The Lua implementation
+    // never stretches an EnvObject to its logical tile footprint: the footprint
+    // controls occupancy, while the sprite's source rect controls its visible
+    // size. Scaling to gridW made small props (notably Juke and HappyBot) much
+    // too large and distorted the higher-tier generators/recyclers.
+    const renderW = frame.sourceW;
+    const renderH = frame.sourceH;
 
     const geo = new THREE.PlaneGeometry(renderW, renderH);
     const mat = new THREE.MeshBasicMaterial({

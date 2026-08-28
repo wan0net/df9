@@ -145,6 +145,16 @@ export class BuildSystem {
         }
 
         // Lua: check tPropPlacements (pending build_object commands)
+        for (const placement of room.getPropPlacements()) {
+          if (this._testWallPlacementIntersectsProp(
+            placement.sName, tx, ty, placement.tx, placement.ty, placement.bFlipX, placement.bFlipY
+          )) {
+            return false;
+          }
+        }
+
+        // Legacy fallback: queued build_object commands that have not yet been
+        // re-homed into room state.
         for (const cmd of CommandQueue.getAllActive()) {
           if (cmd.type === 'build_object' && cmd.status !== 'cancelled' && cmd.objectName) {
             const propRoom = this.roomManager.getRoomAt(cmd.tileX, cmd.tileY);
@@ -209,6 +219,9 @@ export class BuildSystem {
     for (const t of tiles) {
       const current = this.grid.get(t.x, t.y);
       let bDemolished = false;
+
+      // O-20: Cancel any pending build commands at this tile (Lua _demolishTile checks CommandObject)
+      CommandQueue.cancelAt(t.x, t.y);
 
       // Lua _demolishTile: obj→remove() gives NO matter refund (only vaporize does)
       const obj = EnvObjectManager.getObjectAt(t.x, t.y);

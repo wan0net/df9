@@ -3,7 +3,6 @@ import { line } from '../localization/Localization';
 import { playWarbleFullscreen } from './WarbleEffect';
 
 const AMBER = '#dfa200';
-const BRIGHT_AMBER = '#FFE696'; // Lua Gui.BRIGHT_AMBER = rgba(255,230,150,1)
 
 export interface SettingsCallbacks {
   getAutosaveEnabled?: () => boolean;
@@ -13,11 +12,9 @@ export interface SettingsCallbacks {
 }
 
 /**
- * Settings panel matching Lua AudioVideoSettings.lua + AudioVideoSettingsLayout.lua.
- * Layout order (from Lua): Header (SETMENU01), Music slider (SETMENU02),
- * SFX slider (SETMENU03), Autosave checkbox (SETMENU04),
- * Fullscreen checkbox (SETMENU06), Colorblind checkbox (SETMENU07).
- * Hardware Mouse (SETMENU05) is N/A for web — always uses OS cursor.
+ * Lua AudioVideoSettingsLayout rendered in its native 1920×1152 UI space.
+ * StartMenu applies the viewport scale, so these source offsets remain stable
+ * at the reference resolution and at the original 1280-wide minimum scale.
  */
 export class SettingsPanel {
   private overlay: HTMLDivElement | null = null;
@@ -29,193 +26,185 @@ export class SettingsPanel {
   }
 
   show(container: HTMLElement, onClose: () => void) {
+    this.hide();
     this.overlay = document.createElement('div');
     this.overlay.id = 'settings-panel';
     this.overlay.style.cssText = `
-      position:absolute;top:0;left:0;width:100%;height:100%;
-      background:rgba(0,0,0,0.7);z-index:140;
-      display:flex;align-items:center;justify-content:center;
+      position:absolute;inset:0;z-index:140;overflow:hidden;
+      background:rgba(0,0,0,0.83);font-family:'Dosis',sans-serif;
     `;
 
-    const panel = document.createElement('div');
-    panel.style.cssText = `
-      background:rgba(20,16,8,0.95);border:2px solid ${AMBER};
-      padding:40px 50px;min-width:400px;
-      font-family:'Dosis',sans-serif;
+    // AudioVideoSettingsLayout.Logo is the same StartMenu sprite and source
+    // placement as the main menu, including its 1.5 scale.
+    const logo = document.createElement('img');
+    logo.src = 'assets/ui/startmenu_logo.png';
+    logo.dataset.testid = 'settings-logo';
+    logo.style.cssText = `
+      position:absolute;top:calc(50% - 626px);left:calc(50% - 960px);
+      width:1920px;height:auto;pointer-events:none;
+      filter:drop-shadow(0 0 18px rgba(223,162,0,0.28));
     `;
+    this.overlay.appendChild(logo);
 
-    // Header (Lua: SETMENU01 = "SETTINGS", orbitronWhite style)
     const title = document.createElement('div');
-    title.textContent = line('SETMENU01TEXT');
+    title.textContent = line('SETMENU01');
+    title.dataset.testid = 'settings-title';
     title.style.cssText = `
-      color:${AMBER};font-family:'Orbitron',monospace;font-size:65px; /* Lua orbitronWhite */
-      text-align:center;margin-bottom:30px;letter-spacing:2px;
+      position:absolute;left:calc(50% - 405px);top:calc(50% - 235px);
+      width:800px;height:70px;display:flex;align-items:center;justify-content:center;
+      color:#fff;font-family:'Orbitron',monospace;font-size:65px;letter-spacing:2px;
     `;
-    panel.appendChild(title);
+    this.overlay.appendChild(title);
 
-    // Music Volume slider (Lua: SETMENU02 = "MUSIC VOLUME")
-    panel.appendChild(this.createSlider(line('SETMENU02TEXT'), SoundManager.getMusicVolume(), (v) => {
-      SoundManager.setMusicVolume(v);
-    }));
+    this.overlay.appendChild(this.createSlider(
+      line('SETMENU02'),
+      -110,
+      SoundManager.getMusicVolume(),
+      value => SoundManager.setMusicVolume(value),
+    ));
+    this.overlay.appendChild(this.createSlider(
+      line('SETMENU03'),
+      -40,
+      SoundManager.getSfxVolume(),
+      value => SoundManager.setSfxVolume(value),
+    ));
 
-    // SFX Volume slider (Lua: SETMENU03 = "SFX VOLUME")
-    panel.appendChild(this.createSlider(line('SETMENU03TEXT'), SoundManager.getSfxVolume(), (v) => {
-      SoundManager.setSfxVolume(v);
-    }));
+    this.overlay.appendChild(this.createCheckbox(
+      line('SETMENU04'),
+      108,
+      this.callbacks.getAutosaveEnabled?.() ?? true,
+      value => this.callbacks.setAutosaveEnabled?.(value),
+    ));
 
-    // Master Volume slider (not in original Lua but useful for web)
-    panel.appendChild(this.createSlider('Master Volume', SoundManager.getMasterVolume(), (v) => {
-      SoundManager.setMasterVolume(v);
-    }));
+    // The browser always uses the operating-system pointer. Keep the source
+    // row visible and checked, but immutable because there is no alternate
+    // MOAI cursor mode on the web.
+    this.overlay.appendChild(this.createCheckbox(
+      line('SETMENU05'),
+      180,
+      true,
+      () => {},
+      true,
+    ));
 
-    // UI Scale slider
-    if (this.callbacks.getUIScale && this.callbacks.setUIScale) {
-      const currentScale = this.callbacks.getUIScale();
-      panel.appendChild(this.createSlider('UI Scale', currentScale, (v) => {
-        this.callbacks.setUIScale?.(v);
-      }, 0.3, 1.5));
-    }
-
-    // Autosave checkbox (Lua: SETMENU04 = "AUTOSAVE", configKey = "autosave")
-    if (this.callbacks.getAutosaveEnabled) {
-      panel.appendChild(this.createCheckbox(
-        line('SETMENU04TEXT'),
-        this.callbacks.getAutosaveEnabled(),
-        (v) => { this.callbacks.setAutosaveEnabled?.(v); },
-      ));
-    }
-
-    // Fullscreen checkbox (Lua: SETMENU06 = "FULLSCREEN")
-    panel.appendChild(this.createCheckbox(
-      line('SETMENU06TEXT'),
+    this.overlay.appendChild(this.createCheckbox(
+      line('SETMENU06'),
+      252,
       !!document.fullscreenElement,
-      (v) => {
-        if (v) {
-          document.documentElement.requestFullscreen?.();
-        } else {
-          document.exitFullscreen?.();
-        }
+      value => {
+        if (value) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
       },
     ));
 
-    // Colorblind Mode checkbox (Lua: SETMENU07, configKey = "colorblind")
-    // Stub — stored in localStorage, no visual effect yet
-    const cbStored = localStorage.getItem('df9_colorblind') === 'true';
-    panel.appendChild(this.createCheckbox(
-      line('SETMENU07TEXT'),
-      cbStored,
-      (v) => { localStorage.setItem('df9_colorblind', v ? 'true' : 'false'); },
+    const colorblind = localStorage.getItem('df9_colorblind') === 'true';
+    this.overlay.appendChild(this.createCheckbox(
+      line('SETMENU07'),
+      324,
+      colorblind,
+      value => localStorage.setItem('df9_colorblind', value ? 'true' : 'false'),
     ));
 
-    // Done button
-    const doneBtn = document.createElement('div');
-    doneBtn.textContent = 'Done';
-    doneBtn.style.cssText = `
-      color:${AMBER};font-family:'Orbitron',monospace;font-size:35px; /* Lua dosissemibold35 */
-      text-align:center;padding:12px;margin-top:20px;
-      cursor:pointer;border:1px solid ${AMBER};
-    `;
-    doneBtn.addEventListener('mouseenter', () => {
-      doneBtn.style.background = 'rgba(223,162,0,0.15)';
-      doneBtn.style.color = BRIGHT_AMBER;
-      SoundManager.playUI('UI_Hilight');
-    });
-    doneBtn.addEventListener('mouseleave', () => {
-      doneBtn.style.background = 'transparent';
-      doneBtn.style.color = AMBER;
-    });
-    doneBtn.addEventListener('click', () => {
-      SoundManager.playUI('UI_Select');
-      this.hide();
-      onClose();
-    });
-    panel.appendChild(doneBtn);
-
-    this.overlay.appendChild(panel);
     container.appendChild(this.overlay);
     playWarbleFullscreen(this.overlay, 0.3, 0.3);
 
-    // Click outside panel to close
-    this.overlay.addEventListener('click', (e) => {
-      if (e.target === this.overlay) {
-        this.hide();
-        onClose();
-      }
-    });
-
-    // ESC to close
-    this.keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.hide();
-        onClose();
-      }
+    // Lua captures the whole settings screen and returns to StartMenu on ESC.
+    this.keyHandler = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      SoundManager.playUI('Intro_CancelButton');
+      this.hide();
+      onClose();
     };
-    window.addEventListener('keydown', this.keyHandler);
+    window.addEventListener('keydown', this.keyHandler, true);
   }
 
-  private createSlider(label: string, initialValue: number, onChange: (v: number) => void, minVal = 0, maxVal = 1): HTMLDivElement {
+  private createSlider(
+    label: string,
+    yOffset: number,
+    initialValue: number,
+    onChange: (value: number) => void,
+  ): HTMLDivElement {
     const row = document.createElement('div');
-    row.style.cssText = 'margin:16px 0;';
-
-    const range = maxVal - minVal;
-    const toSlider = (v: number) => Math.round(((v - minVal) / range) * 100);
-    const fromSlider = (s: number) => minVal + (s / 100) * range;
+    row.dataset.testid = 'settings-row';
+    row.dataset.label = label;
+    row.style.cssText = `position:absolute;left:0;right:0;top:calc(50% + ${yOffset}px);height:70px;`;
 
     const labelEl = document.createElement('div');
+    labelEl.textContent = label;
+    labelEl.dataset.testid = 'settings-label';
     labelEl.style.cssText = `
-      color:${AMBER};font-size:35px;margin-bottom:6px; /* Lua dosissemibold35 */
-      display:flex;justify-content:space-between;
+      position:absolute;left:calc(50% - 825px);top:0;width:800px;height:70px;
+      display:flex;align-items:center;justify-content:flex-end;
+      color:#fff;font-size:35px;font-weight:600;
     `;
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = label;
-    labelEl.appendChild(nameSpan);
-    const valSpan = document.createElement('span');
-    valSpan.textContent = Math.round(initialValue * 100) + '%';
-    labelEl.appendChild(valSpan);
     row.appendChild(labelEl);
 
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '0';
     slider.max = '100';
-    slider.value = String(toSlider(initialValue));
+    slider.value = String(Math.round(initialValue * 100));
+    slider.ariaLabel = label;
+    slider.dataset.testid = 'settings-slider';
     slider.style.cssText = `
-      width:100%;accent-color:${AMBER};cursor:pointer;
-      height:6px;
+      position:absolute;left:calc(50% + 25px);top:21px;width:500px;height:28px;
+      margin:0;cursor:pointer;accent-color:${AMBER};
     `;
-    slider.addEventListener('input', () => {
-      const v = fromSlider(parseInt(slider.value));
-      valSpan.textContent = Math.round(v * 100) + '%';
-      onChange(v);
-    });
+    slider.addEventListener('input', () => onChange(Number.parseInt(slider.value, 10) / 100));
+    slider.addEventListener('pointerenter', () => SoundManager.playUI('UI_Hilight'));
     row.appendChild(slider);
     return row;
   }
 
-  private createCheckbox(label: string, initialValue: boolean, onChange: (v: boolean) => void): HTMLDivElement {
+  private createCheckbox(
+    label: string,
+    yOffset: number,
+    initialValue: boolean,
+    onChange: (value: boolean) => void,
+    locked = false,
+  ): HTMLDivElement {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;margin:14px 0;gap:12px;';
+    row.dataset.testid = 'settings-row';
+    row.dataset.label = label;
+    row.style.cssText = `position:absolute;left:0;right:0;top:calc(50% + ${yOffset}px);height:70px;`;
 
-    const check = document.createElement('input');
-    check.type = 'checkbox';
-    check.checked = initialValue;
-    check.style.cssText = `width:20px;height:20px;accent-color:${AMBER};cursor:pointer;`;
-    check.addEventListener('change', () => { onChange(check.checked); });
-    row.appendChild(check);
-
-    const labelEl = document.createElement('span');
+    const labelEl = document.createElement('div');
     labelEl.textContent = label;
-    labelEl.style.cssText = `color:${AMBER};font-size:35px;cursor:pointer;`; // Lua dosissemibold35
-    labelEl.addEventListener('click', () => { check.click(); });
+    labelEl.dataset.testid = 'settings-label';
+    labelEl.style.cssText = `
+      position:absolute;left:calc(50% - 825px);top:0;width:800px;height:70px;
+      display:flex;align-items:center;justify-content:flex-end;
+      color:#fff;font-size:35px;font-weight:600;
+    `;
     row.appendChild(labelEl);
 
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = initialValue;
+    checkbox.disabled = locked;
+    checkbox.ariaLabel = label;
+    checkbox.dataset.testid = 'settings-checkbox';
+    checkbox.style.cssText = `
+      position:absolute;left:calc(50% + 15px);top:15px;width:40px;height:40px;
+      margin:0;cursor:${locked ? 'default' : 'pointer'};accent-color:${AMBER};
+      opacity:${locked ? '0.82' : '1'};
+    `;
+    checkbox.addEventListener('change', () => onChange(checkbox.checked));
+    checkbox.addEventListener('pointerenter', () => SoundManager.playUI('UI_Hilight'));
+    row.appendChild(checkbox);
+
+    if (!locked) {
+      labelEl.style.cursor = 'pointer';
+      labelEl.addEventListener('click', () => checkbox.click());
+    }
     return row;
   }
 
   hide() {
     if (this.keyHandler) {
-      window.removeEventListener('keydown', this.keyHandler);
+      window.removeEventListener('keydown', this.keyHandler, true);
       this.keyHandler = null;
     }
     this.overlay?.remove();

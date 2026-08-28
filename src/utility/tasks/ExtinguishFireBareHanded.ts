@@ -7,6 +7,7 @@
 import { Task, type NeedAdvertisement } from '../Task';
 import type { Fire } from '../../hazards/Fire';
 import { FIRE_DAMAGE_PER_SECOND } from '../../hazards/Fire';
+import { SpatialAudio } from '../../audio/SpatialAudio';
 
 /** Douse amount per second bare-handed (slower than tool). */
 const DOUSE_RATE_BARE = 2;
@@ -57,6 +58,7 @@ export class ExtinguishFireBareHanded extends Task {
     this.fire.douseTile(this.targetX, this.targetY, DOUSE_RATE_BARE * dt);
 
     if (this.interactTime >= this.duration) {
+      SpatialAudio.playAtTile('Firefight_Stomp', this.character.tileX, this.character.tileY);
       this.complete();
     }
   }

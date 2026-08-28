@@ -81,21 +81,21 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
       { key: 'lifesupport02', weight: 1 },
     ],
     ambientLight: [0.2, 0.3, 0.6],
-    roomLights: [{ tLightColor: [0.3, 0.5, 0.8], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 }],
+    roomLights: [{ tLightColor: [0.5, 0.5, 0.8], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 4 }],
   },
   [ZoneType.RESIDENCE]: {
     name: line('ZONEUI042TEXT'),
     wallPrefix: 'Residence',
     floors: [{ key: 'residence_floor', weight: 1 }],
     ambientLight: [0.52, 0.485, 0.41],
-    roomLights: [{ tLightColor: [0.6, 0.5, 0.3], nLightTileGapX: 4, nLightTileGapY: 5, nLightRadius: 3 }],
+    roomLights: [{ tLightColor: [1.0, 0.6, 0.3], nLightTileGapX: 4, nLightTileGapY: 5, nLightRadius: 3 }],
   },
   [ZoneType.PUB]: {
     name: line('ZONEUI046TEXT'),
     wallPrefix: 'Pub',
     floors: [{ key: 'pub_floor', weight: 1 }],
     ambientLight: [0.8, 0.5, 1.0],
-    roomLights: [{ tLightColor: [0.8, 0.4, 1.0], nLightTileGapX: 4, nLightTileGapY: 5, nLightRadius: 3 }],
+    roomLights: [{ tLightColor: [0.4, 0.0, 1.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
   },
   [ZoneType.POWER]: {
     name: line('ZONEUI003TEXT'),
@@ -105,7 +105,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
       { key: 'reactor01', weight: 1 },
     ],
     ambientLight: [0.5, 0.2, 0.2],
-    roomLights: [{ tLightColor: [0.6, 0.15, 0.1], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
+    roomLights: [{ tLightColor: [1.0, 0.0, 0.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2.5 }],
   },
   [ZoneType.AIRLOCK]: {
     name: line('ZONEUI036TEXT'),
@@ -115,14 +115,14 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
       { key: 'airlock01', weight: 1 },
     ],
     ambientLight: [0.3, 0.5, 0.6],
-    roomLights: [{ tLightColor: [0.3, 0.5, 0.6], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2.5 }],
+    roomLights: [{ tLightColor: [0.1, 0.5, 0.2], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
   },
   [ZoneType.REFINERY]: {
     name: line('ZONEUI037TEXT'),
     wallPrefix: 'Refinery',
     floors: [{ key: 'refinery01', weight: 1 }],
     ambientLight: [0.235, 0.22, 0.265],
-    roomLights: [{ tLightColor: [0.3, 0.25, 0.35], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
+    roomLights: [{ tLightColor: [1.0, 0.7, 0.4], nLightTileGapX: 5, nLightTileGapY: 5, nLightRadius: 3 }],
   },
   [ZoneType.FITNESS]: {
     name: line('ZONEUI109TEXT'),
@@ -132,7 +132,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
       { key: 'fitness02', weight: 1 },
     ],
     ambientLight: [0.6, 0.6, 0.6],
-    roomLights: [{ tLightColor: [0.5, 0.5, 0.5], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 }],
+    roomLights: [{ tLightColor: [1.0, 1.0, 1.0], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
   },
   [ZoneType.RESEARCH]: {
     name: line('ZONEUI126TEXT'),
@@ -142,7 +142,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
       { key: 'research02', weight: 1 },
     ],
     ambientLight: [0.3, 0.5, 0.6],
-    roomLights: [{ tLightColor: [0.3, 0.5, 0.6], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 }],
+    roomLights: [{ tLightColor: [0.2, 1.0, 0.4], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 3 }],
   },
   [ZoneType.BRIG]: {
     name: line('ZONEUI142TEXT'),
@@ -153,7 +153,7 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
       { key: 'brig03', weight: 1 },
     ],
     ambientLight: [0.4, 0.45, 0.5],
-    roomLights: [{ tLightColor: [0.4, 0.45, 0.5], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 2 }],
+    roomLights: [{ tLightColor: [0.7, 0.5, 0.5], nLightTileGapX: 4, nLightTileGapY: 4, nLightRadius: 1 }],
   },
   [ZoneType.CONSTRUCTION]: {
     name: 'Construction',
@@ -169,20 +169,20 @@ export const ZONE_SPRITES: Record<ZoneType, ZoneSpriteConfig> = {
   },
 };
 
-/** All player-assignable zone types in the original Lua tOrderedZoneList order */
+/** Zone types in Lua ZoneRezoneTab.lua order (AIRLOCK first, PLAIN/Unzoned last) */
 export const ZONE_LIST: ZoneType[] = [
-  ZoneType.PLAIN,
-  ZoneType.GARDEN,
-  ZoneType.INFIRMARY,
+  ZoneType.AIRLOCK,
   ZoneType.LIFESUPPORT,
+  ZoneType.POWER,
+  ZoneType.REFINERY,
   ZoneType.RESIDENCE,
   ZoneType.PUB,
-  ZoneType.POWER,
-  ZoneType.AIRLOCK,
-  ZoneType.REFINERY,
+  ZoneType.GARDEN,
   ZoneType.FITNESS,
   ZoneType.RESEARCH,
+  ZoneType.INFIRMARY,
   ZoneType.BRIG,
+  ZoneType.PLAIN, // "Unzoned" — always last
 ];
 
 /**

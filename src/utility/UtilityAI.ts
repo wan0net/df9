@@ -4,21 +4,31 @@
  */
 
 import type { Character } from '../characters/Character';
-import type { ActivityOption } from './ActivityOption';
+import { type ActivityOption, PRIORITY } from './ActivityOption';
 import type { Task } from './Task';
 
 export class UtilityAI {
   /**
    * Select the best task from available options.
-   * Returns the task from the highest-scoring option, or null if none available.
+   * Bug 29 fix: Lua requires new option to have STRICTLY HIGHER priority level
+   * than current task. A NORMAL task cannot interrupt another NORMAL task.
+   * Only survival/puppet priority can interrupt.
    */
-  static selectTask(character: Character, options: ActivityOption[]): Task | null {
+  static selectTask(character: Character, options: ActivityOption[], currentTaskPriority = PRIORITY.NO_ACTIVITY): Task | null {
     if (options.length === 0) return null;
+
+    // Lua: nRequiredPri = getCurrentTaskPriority() + 1
+    // Only consider options with priority > current task's priority,
+    // OR if no current task (NO_ACTIVITY), accept any
+    const requiredPri = currentTaskPriority + 1;
 
     let bestOption: ActivityOption | null = null;
     let bestScore = -Infinity;
 
     for (const option of options) {
+      // Bug 29: Skip options that can't interrupt current task
+      if (option.priorityLevel < requiredPri && currentTaskPriority > PRIORITY.NO_ACTIVITY) continue;
+
       const score = option.evaluate(character);
       if (score > bestScore) {
         bestScore = score;

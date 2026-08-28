@@ -125,20 +125,33 @@ const SPRITE_ALIASES: Record<string, string> = {
   FirePanel: 'fire_panel',
   EmergencyAlarm: 'alarm_panel',
   // Entertainment
+  Juke: 'Jukebox',              // R-16: Lua spriteName='Juke'
+  Juke_damaged: 'Jukebox_damaged',
+  Juke_destroyed: 'Jukebox_destroyed',
+  HappyBot: 'happybot',         // R-17: case mismatch
+  HappyBot_damaged: 'happybot_damaged',
+  HappyBot_destroyed: 'happybot_destroyed',
   TVScreen1: 'tv_screen01',
   // Food
   FoodReplicator: 'food_replicator',
   FoodReplicator_damaged: 'food_replicator_damaged',
   FoodReplicator_destroyed: 'food_replicator_destroyed',
-  // Military
-  Turret: 'turret_frames0001',
+  // Military — R-21: Lua uses turret_frames0003 (idle), not 0001
+  Turret: 'turret_frames0003',
+  Turret_damaged: 'turret_frames0003',    // show idle frame when damaged
   Turret_destroyed: 'turret_destroyed',
+  TurretLv2: 'turret_lv2_frames0003',
+  TurretLv2_damaged: 'turret_lv2_frames0003', // show idle frame when damaged
+  TurretLv2_destroyed: 'turret_lv2_destroyed',
   // Garden
   HydroPlant: 'hydro_farm',
   HydroPlant_destroyed: 'hydro_farm_destroyed',
   // Special
   SpaceshipEngine: 'ShipEngine',
   BaseSeed: 'seedpod01',
+  // R-22: Lua uses 'SpaceTree_Healthy.png' with .png suffix
+  'SpaceTree_Healthy.png': 'space_tree',
+  SpaceTree_Healthy: 'space_tree',
 };
 
 /** Look up a sprite frame by name. Returns undefined if not found.

@@ -4,6 +4,7 @@
  */
 
 import { Character } from '../characters/Character';
+import { Malady } from '../malady/Malady';
 import {
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, TEAM_ID_PLAYER_ABANDONED,
   HUMAN_MELEE_DAMAGE, MELEE_RANGE, EMERGENCY,
@@ -21,6 +22,7 @@ import type { EnvObject } from '../envobjects/EnvObject';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { TileType } from '../world/TileTypes';
 import { researchSystem } from '../research/ResearchSystem';
+import { SpatialAudio } from '../audio/SpatialAudio';
 
 /** Grapple duration before melee damage is applied. */
 const GRAPPLE_TIME = 3;
@@ -100,8 +102,7 @@ export function checkLineOfSight(
       if (tileValue === TileType.WALL) return false;
     } else {
       if (tileValue === TileType.WALL) return false;
-      if (tileValue === TileType.SPACE) return false;
-      // Closed doors block LoS (Lua: if rDoor and not rDoor:isOpen())
+      // C-38: SPACE tiles do NOT block LoS in Lua — only walls and closed doors
       if (tileValue === TileType.DOOR) {
         const door = EnvObjectManager.getDoorAt(x, y);
         if (door && !door.isOpen()) return false;
@@ -206,7 +207,7 @@ export class CombatSystem {
   }
 
   /** Update all combat engagements. Returns array of hits for damage processing. */
-  update(dt: number, getCharById: (id: number) => Character | undefined): {
+  update(dt: number, getCharById: (id: number) => Character | undefined, allChars: Character[] = []): {
     attackerId: number; defenderId: number; damage: number; damageType: number;
   }[] {
     const hits: { attackerId: number; defenderId: number; damage: number; damageType: number }[] = [];
@@ -236,10 +237,19 @@ export class CombatSystem {
         const meleeCooldown = eng.weapon.nMeleeCoolDown ?? GRAPPLE_TIME;
         if (eng.grappleTimer >= meleeCooldown) {
           eng.grappleTimer = 0;
+          // A-12: Race-specific melee attack sounds for hostile creatures
+          const race = attacker.tStats.nRace;
+          if (race === RACE_MONSTER) {
+            SpatialAudio.playAtTile('BadAlien_Attack', attacker.tileX, attacker.tileY);
+          } else if (race === RACE_KILLBOT) {
+            SpatialAudio.playAtTile('Killbot_Attack', attacker.tileX, attacker.tileY);
+          }
+          // CC-3: Apply TeamTactics offensive multiplier
+          const ttMult = CombatSystem.getTeamTacticsDamageMultiplier(attacker, allChars);
           hits.push({
             attackerId: eng.attackerId,
             defenderId: eng.defenderId,
-            damage: eng.weapon.nDamage,
+            damage: Math.round(eng.weapon.nDamage * ttMult),
             damageType: eng.weapon.nDamageType,
           });
         }
@@ -271,6 +281,18 @@ export class CombatSystem {
             }
 
             if (hasLoS) {
+              // A-9/A-10/A-12: Weapon fire sounds
+              if (eng.weapon.sName === 'TurretLaser') {
+                SpatialAudio.playAtTile('TurretFire', attacker.tileX, attacker.tileY);
+              } else {
+                const race = attacker.tStats.nRace;
+                if (race === RACE_KILLBOT) {
+                  SpatialAudio.playAtTile('Killbot_Attack', attacker.tileX, attacker.tileY);
+                } else {
+                  SpatialAudio.playAtTile('GunShot', attacker.tileX, attacker.tileY);
+                }
+              }
+
               // Fire projectile visual
               if (this.projectileManager) {
                 this.projectileManager.fire(
@@ -285,11 +307,12 @@ export class CombatSystem {
               // Dodge check (Lua Projectile:_attemptToHitTarget)
               const dodgeChance = defender.dodgeAttackChance();
               if (Math.random() > dodgeChance) {
-                // Hit!
+                // Hit! CC-3: Apply TeamTactics offensive multiplier
+                const ttMultR = CombatSystem.getTeamTacticsDamageMultiplier(attacker, allChars);
                 hits.push({
                   attackerId: eng.attackerId,
                   defenderId: eng.defenderId,
-                  damage: eng.weapon.nDamage,
+                  damage: Math.round(eng.weapon.nDamage * ttMultR),
                   damageType: eng.weapon.nDamageType,
                 });
               }
@@ -363,19 +386,42 @@ export class CombatSystem {
   }
 
   /**
+   * CC-3: Get TeamTactics offensive damage multiplier for an attacker.
+   * Lua Character.lua:2167-2170: nBonus = 1 + count * 0.1 (max 1.5x at 5 nearby).
+   */
+  static getTeamTacticsDamageMultiplier(attacker: Character, allChars: Character[]): number {
+    if (attacker.tStats.nJob !== EMERGENCY || !researchSystem.isCompleted('TeamTactics')) return 1;
+    let count = 0;
+    for (const other of allChars) {
+      if (other === attacker || !other.isAlive()) continue;
+      if (other.tStats.nJob !== EMERGENCY || other.tStats.nTeam !== attacker.tStats.nTeam) continue;
+      const dist = tileDist(attacker.tileX, attacker.tileY, other.tileX, other.tileY);
+      if (dist <= 20) { count++; if (count >= 5) break; }
+    }
+    return 1 + count * 0.1;
+  }
+
+  /**
    * Get damage reduction for a character.
-   * Lua Character.lua:5468-5484 — ArmorLevel2 (0.5) + TeamTactics (+0.75 if nearby security).
-   * @param allChars — all characters for team tactics proximity check.
+   * CC-1/CC-2 fix: Lua Character.lua:5488-5493 — hyperbolic formula:
+   *   reduction = (toughness + armor) / (toughness + armor + 2) + teamTacticsCount * 0.05
    */
   static getDamageReduction(defender: Character, allChars?: Character[]): number {
-    let reduction = 0;
-    // ArmorLevel2: security officers get 0.5 damage reduction
-    if (defender.tStats.nJob === EMERGENCY && researchSystem.isCompleted('ArmorLevel2')) {
-      reduction += 0.5;
+    // Lua: toughness from character stats (0-1 range)
+    const toughness = defender.tStats.nToughness ?? 0;
+    // Lua: armor from equipped inventory item (0-0.75 range based on ArmorLevel0-3)
+    // Since we don't have full inventory, approximate from research:
+    let armor = 0;
+    if (defender.tStats.nJob === EMERGENCY) {
+      if (researchSystem.isCompleted('ArmorLevel2')) armor = 0.5;
+      else armor = 0.25; // base security armor
     }
-    // TeamTactics: +0.75 if 1-5 other security officers within ~20 tiles
-    if (defender.tStats.nJob === EMERGENCY && defender.tStats.nTeam === TEAM_ID_PLAYER
-        && researchSystem.isCompleted('TeamTactics') && allChars) {
+    // CC-1: Hyperbolic formula: resistance / (resistance + 2)
+    const resistance = toughness + armor;
+    let reduction = resistance / (resistance + 2);
+
+    // CC-2: TeamTactics: count * 0.05 (max 5 nearby = +0.25)
+    if (researchSystem.isCompleted('TeamTactics') && allChars) {
       let nearbyCount = 0;
       for (const other of allChars) {
         if (other === defender || !other.isAlive()) continue;
@@ -386,9 +432,10 @@ export class CombatSystem {
           if (nearbyCount >= 5) break;
         }
       }
-      if (nearbyCount > 0) reduction += 0.75;
+      reduction += nearbyCount * 0.05;
     }
-    return Math.min(reduction, 0.95); // cap at 95%
+    // Lua has no explicit cap — hyperbolic formula naturally limits
+    return reduction;
   }
 
   /**
@@ -399,28 +446,47 @@ export class CombatSystem {
    */
   static processHit(
     defender: Character, damage: number, damageType: number,
-    _attacker?: Character, allChars?: Character[],
+    attacker?: Character, allChars?: Character[],
   ): boolean {
     // Apply damage reduction (armor + team tactics)
     const reduction = CombatSystem.getDamageReduction(defender, allChars);
     const effectiveDamage = Math.max(1, Math.round(damage * (1 - reduction)));
-    // Dodge chance from ArmorLevel2 (Lua: nDodgeChance = 0.2)
-    if (defender.tStats.nJob === EMERGENCY && researchSystem.isCompleted('ArmorLevel2')) {
-      if (Math.random() < 0.2) return false; // dodged
+    // C-40: Removed separate ArmorLevel2 dodge — Lua only uses damage reduction (0.5)
+    defender.takeDamage(effectiveDamage, damageType);
+
+    // CC-6: Minor/serious injury on hit (Lua: 75% chance minor, proportional serious)
+    if (defender.isAlive() && effectiveDamage > 1) {
+      if (Math.random() < 0.75) {
+        const minorInjuries = ['BrokenNose', 'SprainedAnkle', 'BrokenRib'];
+        Malady.infectCharacter(defender, minorInjuries[Math.floor(Math.random() * minorInjuries.length)]);
+      }
+      if (Math.random() * 1.5 * 100 < effectiveDamage) {
+        const seriousInjuries = ['BrokenLeg', 'CrackedSkull'];
+        Malady.infectCharacter(defender, seriousInjuries[Math.floor(Math.random() * seriousInjuries.length)]);
+      }
     }
-    defender.takeDamage(effectiveDamage);
+
     if (!defender.isAlive()) {
-      // Stunner damage type → incapacitate instead of kill (Lua Character.lua:5592-5617)
-      if (damageType === DAMAGE_TYPE.Stunner) {
-        // Revive with 10 HP and apply KnockedOut
+      // CC-5: Brawl always stuns — brawling partners get KnockedOut, never killed
+      if (attacker && attacker.tBrawlingWith.has(defender.id)) {
         defender.setHP(10);
         defender.bIncapacitated = true;
-        return false; // Not dead, just stunned
+        Malady.infectCharacter(defender, 'KnockedOut');
+        return false;
       }
-      // Melee has 50% chance to stun (Lua: random stun)
+      // C-41: Stunner → apply KnockedOut malady (Lua creates malady, not just flag)
+      if (damageType === DAMAGE_TYPE.Stunner) {
+        defender.setHP(10);
+        defender.bIncapacitated = true;
+        Malady.infectCharacter(defender, 'KnockedOut');
+        return false;
+      }
+      // CC-4: 50% melee stun IS in Lua (Character.lua:5604-5606)
+      // Previous comment was incorrect — Lua has: math.random() < 0.5 → stun
       if (damageType === DAMAGE_TYPE.Melee && Math.random() < 0.5) {
         defender.setHP(10);
         defender.bIncapacitated = true;
+        Malady.infectCharacter(defender, 'KnockedOut');
         return false;
       }
       return true; // Actually dead

@@ -401,10 +401,10 @@ Medium:
 - [x] `PlantData.ts` — growth stages, sprites, harvest quantities, plant lifetimes matching Lua
 - [x] `EatPlant` task implemented and wired in CharacterManager
 
-### P3.3 HappyBot Custom Class [STUB]
+### P3.3 HappyBot Custom Class ✅
 - [x] EnvObjectData has nMoraleScore=15, nRange=3, customClass='HappyBot'
 - [x] Room morale scoring already integrates object morale scores
-- [ ] Hover visualization of affected tile area (cosmetic, low priority)
+- [x] Hover visualization uses Lua's Euclidean square-grid radius and functioning/deactivated colour state
 - Note: Lua HappyBot custom class mainly adds hover radius visualization; morale boost comes from room nMoraleScore
 - Lua: `HappyBot.lua`
 

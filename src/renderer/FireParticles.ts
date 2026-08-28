@@ -19,27 +19,15 @@ const SPREAD = 20;
 const SIZE_MIN = 4;
 const SIZE_MAX = 10;
 
-/** Generate a small radial gradient texture for flame particles. */
-function createFlameTexture(): THREE.Texture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 32;
-  canvas.height = 32;
-  const ctx = canvas.getContext('2d')!;
-  const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-  grad.addColorStop(0, 'rgba(255,200,50,1)');
-  grad.addColorStop(0.3, 'rgba(255,100,10,0.8)');
-  grad.addColorStop(0.7, 'rgba(200,30,0,0.3)');
-  grad.addColorStop(1, 'rgba(100,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 32, 32);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
-}
-
 let flameTexture: THREE.Texture | null = null;
 function getFlameTexture(): THREE.Texture {
-  if (!flameTexture) flameTexture = createFlameTexture();
+  if (!flameTexture) {
+    flameTexture = new THREE.TextureLoader().load('assets/effects/flame01.png');
+    flameTexture.magFilter = THREE.LinearFilter;
+    flameTexture.minFilter = THREE.LinearFilter;
+    flameTexture.colorSpace = THREE.SRGBColorSpace;
+    flameTexture.userData.sourceAsset = 'flame01';
+  }
   return flameTexture;
 }
 
@@ -190,6 +178,11 @@ export class FireParticles {
     (this.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.attributes.size as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  getTextureSource(): string | null {
+    const material = this.points.material as THREE.PointsMaterial;
+    return material.map?.userData.sourceAsset ?? null;
   }
 
   dispose() {

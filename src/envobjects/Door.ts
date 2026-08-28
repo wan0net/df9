@@ -5,7 +5,12 @@
 
 import { EnvObject } from './EnvObject';
 import { SpatialAudio } from '../audio/SpatialAudio';
+import {
+  EMERGENCY, DOCTOR, TECHNICIAN, BUILDER, OXYGEN_SUFFOCATING,
+} from '../characters/CharacterConstants';
 import type { Room } from '../rooms/Room';
+import { Direction, getAdjacentTile } from '../world/TileGrid';
+import { TileType } from '../world/TileTypes';
 
 export const DOOR_STATE = {
   OPEN: 1,
@@ -28,6 +33,13 @@ export const STAY_OPEN_DURATION = 2;
 export const tDoorsByAddr = new Map<string, Door>();
 
 export class Door extends EnvObject {
+  /** Optional tile obstruction check (Lua g_World._shouldObstructPathing). Set from main.ts. */
+  static tileObstructionCheck: ((x: number, y: number) => boolean) | null = null;
+  /** Tile queries used by Lua-faithful side-local vacuum checks. Set from main.ts. */
+  static tileTypeAt: ((x: number, y: number) => number) | null = null;
+  static tileOxygenAt: ((x: number, y: number) => number) | null = null;
+  static roomAtTile: ((x: number, y: number) => Room | null) | null = null;
+
   state: number = DOOR_STATE.CLOSED;
   operation: number = DOOR_OPERATION.NORMAL;
 
@@ -52,6 +64,10 @@ export class Door extends EnvObject {
   bTouchesVacuum = false;
   /** Is between a brig room and a non-brig room. */
   bBrigDoor = false;
+  /** Whether adjacent tiles are obstructed for pathfinding (Lua Door._updateSpaceStatus). */
+  bWestSideObstructed = false;
+  bEastSideObstructed = false;
+  bIsObstructed = false;
 
   /** Rooms on either side (set by EnvObjectManager on room rebuild). */
   rWestRoom: Room | null = null;
@@ -113,6 +129,26 @@ export class Door extends EnvObject {
     return this.state === DOOR_STATE.LOCKED || this.state === DOOR_STATE.BROKEN_CLOSED;
   }
 
+  /**
+   * DR-4: Per-character lock check for brig doors (Lua Door:locked(rChar)).
+   * Brig doors allow EMERGENCY, DOCTOR, TECHNICIAN, BUILDER through.
+   * Other characters are blocked from entering the brig.
+   */
+  isLockedForCharacter(charJob: number): boolean {
+    if (this.bBrigDoor && this.operation === DOOR_OPERATION.NORMAL) {
+      if (this.state === DOOR_STATE.BROKEN_OPEN) return false;
+      if (this.state === DOOR_STATE.LOCKED || this.state === DOOR_STATE.BROKEN_CLOSED) return true;
+      if (!this.hasPower()) return false;
+      // Allow security, medical, technical, and builder staff through brig doors
+      if (charJob === EMERGENCY || charJob === DOCTOR || charJob === TECHNICIAN || charJob === BUILDER) {
+        return false;
+      }
+      // Block other jobs from entering brig
+      return true;
+    }
+    return this.state === DOOR_STATE.LOCKED || this.state === DOOR_STATE.BROKEN_CLOSED;
+  }
+
   // ── Auto-open proximity ───────────────────────────────────────
 
   setCharacterNearby(nearby: boolean) {
@@ -133,9 +169,59 @@ export class Door extends EnvObject {
   updateSpaceStatus(westRoom: Room | null, eastRoom: Room | null): void {
     this.rWestRoom = westRoom;
     this.rEastRoom = eastRoom;
+    this._updateDoorState(false);
+  }
 
-    this.bWestSideVacuum = !westRoom || westRoom.isBreached();
-    this.bEastSideVacuum = !eastRoom || eastRoom.isBreached();
+  /** Re-read mutable room oxygen and tile obstruction state (Lua Door:_updateSpaceStatus). */
+  private _refreshSpaceStatus(): void {
+    // Door.lua:393-405 selects the side directions from wall orientation.
+    const westDirection = this.bFlipX ? Direction.SW : Direction.NW;
+    const eastDirection = this.bFlipX ? Direction.NE : Direction.SE;
+    const interiorTiles = [{ x: this.tileX, y: this.tileY }];
+    if (this.secondTileX >= 0 && this.secondTileY >= 0) {
+      interiorTiles.push({ x: this.secondTileX, y: this.secondTileY });
+    }
+    const westTiles = interiorTiles.map(tile =>
+      getAdjacentTile(tile.x, tile.y, westDirection)).map(([x, y]) => ({ x, y }));
+    const eastTiles = interiorTiles.map(tile =>
+      getAdjacentTile(tile.x, tile.y, eastDirection)).map(([x, y]) => ({ x, y }));
+
+    const mappedWestRooms = westTiles.map(tile => Door.roomAtTile?.(tile.x, tile.y) ?? null);
+    const mappedEastRooms = eastTiles.map(tile => Door.roomAtTile?.(tile.x, tile.y) ?? null);
+    const westRoom = mappedWestRooms
+      .find((room): room is Room => room !== null) ?? this.rWestRoom;
+    const eastRoom = mappedEastRooms
+      .find((room): room is Room => room !== null) ?? this.rEastRoom;
+    this.rWestRoom = westRoom;
+    this.rEastRoom = eastRoom;
+
+    const isLowOxygen = (
+      tile: { x: number; y: number },
+      room: Room | null,
+      usingExplicitFallback: boolean,
+    ): boolean => {
+      const tileType = Door.tileTypeAt?.(tile.x, tile.y);
+      // updateSpaceStatus accepts explicit side rooms for restoration/tests.
+      // Production side tiles resolve through roomAtTile and use exact tile O2.
+      if (usingExplicitFallback && room) {
+        return room.getOxygenScore() < OXYGEN_SUFFOCATING;
+      }
+      if (tileType === TileType.SPACE) return true;
+      // Door.lua:_testLowOxygen explicitly treats walls as safe to sample.
+      if (tileType === TileType.WALL) return false;
+      if (!room) return true;
+      const oxygen = Door.tileOxygenAt?.(tile.x, tile.y);
+      return oxygen !== undefined
+        ? oxygen < OXYGEN_SUFFOCATING
+        : room.getOxygenScore() < OXYGEN_SUFFOCATING;
+    };
+
+    const westUsesFallback = !mappedWestRooms.some(room => room !== null) && westRoom !== null;
+    const eastUsesFallback = !mappedEastRooms.some(room => room !== null) && eastRoom !== null;
+    this.bWestSideVacuum = westTiles.some(tile =>
+      isLowOxygen(tile, westRoom, westUsesFallback));
+    this.bEastSideVacuum = eastTiles.some(tile =>
+      isLowOxygen(tile, eastRoom, eastUsesFallback));
     this.bTouchesVacuum = this.bWestSideVacuum || this.bEastSideVacuum;
 
     // Check for brig door
@@ -144,18 +230,35 @@ export class Door extends EnvObject {
       this.bBrigDoor = true;
     }
 
-    this._updateDoorState(false);
+    // DR-3: Check obstruction on adjacent tiles (Lua Door:_updateSpaceStatus lines 459-474)
+    this.bWestSideObstructed = false;
+    this.bEastSideObstructed = false;
+    if (Door.tileObstructionCheck) {
+      this.bWestSideObstructed = westTiles.some(tile =>
+        Door.tileObstructionCheck!(tile.x, tile.y));
+      this.bEastSideObstructed = eastTiles.some(tile =>
+        Door.tileObstructionCheck!(tile.x, tile.y));
+    }
+    this.bIsObstructed = this.bWestSideObstructed || this.bEastSideObstructed;
   }
 
   /** Refresh lockdown state (Lua Door:refreshLockdown). */
   refreshLockdown(): void {
-    const bShouldLockdown =
+    let bShouldLockdown = false;
+
+    // DR-5: Sabotage check first — sabotaged doors stay locked (Lua Door.lua:113)
+    if (this._isSabotaged()) {
+      bShouldLockdown = true;
+    } else if (
       (this.rWestRoom && this.rWestRoom.bUserBlockOxygen) ||
-      (this.rEastRoom && this.rEastRoom.bUserBlockOxygen);
+      (this.rEastRoom && this.rEastRoom.bUserBlockOxygen)
+    ) {
+      bShouldLockdown = true;
+    }
 
     if (bShouldLockdown) {
       this.setOperation(DOOR_OPERATION.LOCKED);
-    } else if (this.operation === DOOR_OPERATION.LOCKED) {
+    } else {
       this.setOperation(DOOR_OPERATION.NORMAL);
     }
   }
@@ -186,9 +289,19 @@ export class Door extends EnvObject {
   // ── State update logic (mirrors Door.lua _updateDoorState) ────
 
   private _updateDoorState(bForce: boolean) {
+    // Lua calls _updateSpaceStatus on every state update so a door reacts to
+    // oxygen changes even when room topology has not changed.
+    this._refreshSpaceStatus();
+
     let newState = this.state;
 
-    if (this.isDestroyed()) {
+    if (bForce) {
+      // Door.lua:565-574: loading/operation changes force the requested
+      // operation before condition, oxygen, or obstruction are considered.
+      if (this.operation === DOOR_OPERATION.FORCED_OPEN) newState = DOOR_STATE.OPEN;
+      else if (this.operation === DOOR_OPERATION.NORMAL) newState = DOOR_STATE.CLOSED;
+      else newState = DOOR_STATE.LOCKED;
+    } else if (this.isDestroyed()) {
       // Broken doors: smashed open or broken closed
       if (this.bSmashedOpen || this.state === DOOR_STATE.OPEN || this.state === DOOR_STATE.BROKEN_OPEN) {
         newState = DOOR_STATE.BROKEN_OPEN;
@@ -197,18 +310,24 @@ export class Door extends EnvObject {
       }
     } else if (this.operation === DOOR_OPERATION.FORCED_OPEN) {
       newState = DOOR_STATE.OPEN;
-    } else if (this.operation === DOOR_OPERATION.LOCKED) {
+    } else if (
+      this._isSabotaged() ||
+      this.operation === DOOR_OPERATION.LOCKED ||
+      (this.bTouchesVacuum && this.bEastSideVacuum !== this.bWestSideVacuum) ||
+      this.bIsObstructed
+    ) {
+      // Lua Door.lua:593 — sabotaged, locked, vacuum-one-side, or obstructed → LOCKED
       newState = DOOR_STATE.LOCKED;
-    } else if (this.bTouchesVacuum && this.bEastSideVacuum !== this.bWestSideVacuum) {
-      // Vacuum safety lock: one side vacuum, other side not → lock (Lua Door.lua:593)
-      newState = DOOR_STATE.LOCKED;
-    } else if (bForce) {
-      if (this.operation === DOOR_OPERATION.NORMAL) {
-        newState = DOOR_STATE.CLOSED;
-      }
     } else {
-      // NORMAL operation: auto-open/close based on character proximity
-      if ((this.characterNearby || this.stayOpenTimer > 0) && this.hasPower()) {
+      // NORMAL operation (Lua Door.lua:600-648)
+      if (!this.hasPower()) {
+        // No power: seal if one side vacuum or obstructed, otherwise fail-open
+        if ((this.bTouchesVacuum && this.bEastSideVacuum !== this.bWestSideVacuum) || this.bIsObstructed) {
+          newState = DOOR_STATE.LOCKED;
+        } else {
+          newState = DOOR_STATE.OPEN;
+        }
+      } else if (this.characterNearby || this.stayOpenTimer > 0) {
         newState = DOOR_STATE.OPEN;
       } else {
         newState = DOOR_STATE.CLOSED;
@@ -298,6 +417,7 @@ export class Door extends EnvObject {
 
   getSaveData(): Record<string, unknown> {
     const data = super.getSaveData();
+    data.kind = 'door';
     data.operation = this.operation;
     data.bSmashedOpen = this.bSmashedOpen;
     if (this.secondTileX >= 0) {
@@ -317,7 +437,14 @@ export class Door extends EnvObject {
     );
     d.nCondition    = (data.nCondition  as number)  ?? 100;
     d.bActive       = (data.bActive     as boolean) ?? true;
+    d.wallTileX     = (data.wallTileX   as number)  ?? -1;
+    d.wallTileY     = (data.wallTileY   as number)  ?? -1;
+    d.bBuilt        = (data.bBuilt      as boolean) ?? true;
+    d.bHasPower     = (data.bHasPower   as boolean) ?? false;
+    d.nTempPowerLossEnd = (data.nTempPowerLossEnd as number) ?? -1;
+    d.sUniqueName   = (data.sUniqueName as string) ?? '';
     d.sBuilderName  = (data.sBuilderName as string) ?? '';
+    d.sBuildTime    = (data.sBuildTime as string) ?? '';
     d.operation     = (data.operation   as number)  ?? DOOR_OPERATION.NORMAL;
     d.bSmashedOpen  = (data.bSmashedOpen as boolean) ?? false;
     if (typeof data.secondTileX === 'number') d.secondTileX = data.secondTileX;

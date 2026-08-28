@@ -6,6 +6,17 @@ import { TileType } from '../world/TileTypes';
 import type { Character } from '../characters/Character';
 import type { TileGrid } from '../world/TileGrid';
 import { dialogueSystem } from '../characters/DialogueSystem';
+import { getTexture } from './AssetLoader';
+import {
+  RACE_MONSTER, RACE_KILLBOT,
+  RACE_TYPE, RIG_ALIEN,
+  BUILDER, MINER, EMERGENCY, EMERGENCY2, EMERGENCY3, RAIDER,
+} from '../characters/CharacterConstants';
+import {
+  ensureCharacterAppearance,
+  getVisibleSubsets,
+  type FaceLayerTextures,
+} from '../characters/CharacterAppearance';
 
 /**
  * Renders characters in the Three.js scene.
@@ -16,8 +27,14 @@ import { dialogueSystem } from '../characters/DialogueSystem';
  */
 
 const MODEL_PATH = 'assets/models/Citizen_Base.glb';
+const ALIEN_MODEL_PATH = 'assets/models/Citizen_Alien.glb';
 const SPACESUIT_PATH = 'assets/models/Spacesuit.glb';
+const BAD_ALIEN_PATH = 'assets/models/Bad_Alien.glb';
+const MURDER_ROBOT_PATH = 'assets/models/Murder_Robot.glb';
 const MODEL_SCALE = 56;
+/** Lua: Bad_Alien scale = 0.65 vs Citizen_Base 0.5 → ratio 1.3× our MODEL_SCALE. */
+const BAD_ALIEN_SCALE = Math.round(MODEL_SCALE * 1.3);
+const MURDER_ROBOT_SCALE = MODEL_SCALE;
 
 /** Walk bob amplitude in screen pixels. */
 const WALK_BOB_AMPLITUDE = 4;
@@ -37,9 +54,9 @@ const WORK_BOB_AMPLITUDE = 3;
 const WORK_LEAN = 0.12;
 
 // ── Blob shadow (Lua: Character:_setUpBlobShadow) ──────────────────
-/** Shadow ellipse dimensions. */
-const SHADOW_W = 48;
-const SHADOW_H = 20;
+/** Original UIMisc/blobshadow sprite dimensions. */
+const SHADOW_W = 238;
+const SHADOW_H = 128;
 /** Y offset below character (Lua: setLoc(0, -25, -50)). */
 const SHADOW_OFFSET_Y = 25;
 
@@ -68,54 +85,9 @@ function createBlobShadowTexture(): THREE.Texture {
 
 let blobShadowTex: THREE.Texture | null = null;
 function getBlobShadowTexture(): THREE.Texture {
-  if (!blobShadowTex) blobShadowTex = createBlobShadowTexture();
+  if (!blobShadowTex) blobShadowTex = getTexture('ui_blobshadow') ?? createBlobShadowTexture();
   return blobShadowTex;
 }
-
-/**
- * Subset indices from .brig (Citizen_Base) by category.
- */
-const SUBSETS = {
-  heads: {
-    male:       [7],
-    maleFat:    [6],
-    maleThin:   [8],
-    female:     [4],
-    femaleFat:  [3],
-    bird:       [1],
-    cat:        [2],
-    jelly:      [5],
-    shamon:     [9],
-  },
-  bodies: {
-    male:       [12],
-    maleFat:    [13],
-    maleThin:   [15],
-    female:     [10],
-    femaleFat:  [11],
-    shamon:     [14],
-  },
-  hair: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25],
-  belt_m: [26],
-  belt_f: [26],
-  legPouch_m: [33],
-  legPouch_f: [28],
-  shorts_m: [37],
-  shorts_f: [36],
-  collar_m: [52],
-  collar_f: [44],
-  shirt_m: [62],
-  shirt_f: [61],
-  jobs: {
-    builder:   [68],
-    bartender: [67],
-    doctor:    [72],
-    emergency: [74],
-    miner:     [77],
-    raider:    [80],
-    tech:      [82],
-  },
-};
 
 const JOB_COLORS: Record<number, number> = {
   2: 0xffcc44,   // BUILDER - yellow
@@ -317,6 +289,7 @@ function loadCharTexture(filename: string): THREE.Texture {
               m.map = null;
               m.alphaTest = 0;
               m.transparent = false;
+              m.depthWrite = true;
               m.needsUpdate = true;
             }
           }
@@ -332,14 +305,66 @@ function loadCharTexture(filename: string): THREE.Texture {
 }
 
 /**
+ * Reproduce the source character material's g_samTop/g_samBottom face layers.
+ * The extracted layer sheets are transparent RGBA overlays, so alpha blending
+ * them after Three's normal base-map sample preserves the original atlas UVs.
+ */
+function applyFaceLayers(mat: THREE.MeshStandardMaterial, layers: FaceLayerTextures) {
+  const top = layers.top ? loadCharTexture(`${layers.top}.png`) : undefined;
+  const bottom = layers.bottom ? loadCharTexture(`${layers.bottom}.png`) : undefined;
+  if (!top && !bottom) return;
+
+  if (top) trackTextureUser(top, mat);
+  if (bottom) trackTextureUser(bottom, mat);
+  mat.userData.faceLayerTextures = { ...layers };
+  mat.customProgramCacheKey = () => `df9-face-${top ? 'top' : ''}-${bottom ? 'bottom' : ''}`;
+  mat.onBeforeCompile = (shader) => {
+    const declarations: string[] = [];
+    const composites: string[] = [];
+    if (top) {
+      shader.uniforms.df9FaceTop = { value: top };
+      declarations.push('uniform sampler2D df9FaceTop;');
+      composites.push(
+        'vec4 df9FaceTopSample = texture2D( df9FaceTop, vMapUv );',
+        'diffuseColor.rgb = mix( diffuseColor.rgb, df9FaceTopSample.rgb, df9FaceTopSample.a );',
+      );
+    }
+    if (bottom) {
+      shader.uniforms.df9FaceBottom = { value: bottom };
+      declarations.push('uniform sampler2D df9FaceBottom;');
+      composites.push(
+        'vec4 df9FaceBottomSample = texture2D( df9FaceBottom, vMapUv );',
+        'diffuseColor.rgb = mix( diffuseColor.rgb, df9FaceBottomSample.rgb, df9FaceBottomSample.a );',
+      );
+    }
+    shader.fragmentShader = `${declarations.join('\n')}\n${shader.fragmentShader}`;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>\n${composites.join('\n')}`,
+    );
+  };
+  mat.needsUpdate = true;
+}
+
+/**
  * Apply textures and colors to a cloned character model.
  * Matches material names to texture files using multiple candidate patterns.
  */
-function applyModelTextures(group: THREE.Group, charId: number) {
-  const toneIdx = (charId % 2) + 1;
+function applyModelTextures(
+  group: THREE.Group,
+  charId: number,
+  textureOverrides?: Record<string, string>,
+  subsetTextureOverrides?: Map<number, string>,
+  subsetFaceLayers?: Map<number, FaceLayerTextures>,
+) {
+  // R-2: Use all 5 skin tone variants (Lua cycles through _base_01 to _base_05)
+  const toneIdx = (charId % 5) + 1;
 
+  let subsetIndex = 0;
   group.traverse((child) => {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
+    const currentSubset = subsetIndex++;
+    child.userData.sourceSubsetIndex = currentSubset;
     // Clone materials per character — Three.js clone() shares material references,
     // so modifying mat.map would affect ALL characters using the same cached model.
     const origMat = child.material as THREE.MeshStandardMaterial;
@@ -357,22 +382,34 @@ function applyModelTextures(group: THREE.Group, charId: number) {
     //   2. Strip trailing digits + add tone: "Collar01" → "Collar_base_01"
     //   3. Exact matName (only for non-skin materials or when tone doesn't matter)
     const strippedBase = matName.replace(/_base_\d+$/, '');
+    const overrideBase = subsetTextureOverrides?.get(currentSubset) ?? textureOverrides?.[matName];
     const candidates = [
+      overrideBase,
       `${strippedBase}_base_0${toneIdx}`,
       `${matName.replace(/\d+$/, '')}_base_0${toneIdx}`,
       matName,
-    ];
+    ].filter((name): name is string => !!name);
 
     let applied = false;
     for (const baseName of candidates) {
       if (CHAR_TEXTURES.has(baseName)) {
         const tex = loadCharTexture(`${baseName}.png`);
         mat.map = tex;
-        mat.transparent = true;
-        mat.alphaTest = 0.01;
-        mat.depthWrite = false;
+        // The converted GLBs use a neutral 0.5-grey placeholder material.
+        // Once the original DF-9 texture is restored, the material multiplier
+        // must be white or every source colour renders at half brightness.
+        mat.color.setHex(0xffffff);
+        // The extracted DF-9 character sheets are opaque (their alpha channel,
+        // when present, is 255 throughout). Keep normal depth writes so rear
+        // limbs and outfit subsets cannot render through the front of the rig.
+        mat.transparent = false;
+        mat.alphaTest = 0;
+        mat.depthWrite = true;
         mat.needsUpdate = true;
         trackTextureUser(tex, mat);
+        mat.userData.textureName = baseName;
+        const faceLayers = subsetFaceLayers?.get(currentSubset);
+        if (faceLayers) applyFaceLayers(mat, faceLayers);
         applied = true;
         break;
       }
@@ -388,20 +425,39 @@ function applyModelTextures(group: THREE.Group, charId: number) {
 
     // Store base color so setCharacterTint can multiply rather than replace
     mat.userData.baseColor = (mat as THREE.MeshStandardMaterial).color.getHex();
+    if (mat instanceof THREE.MeshStandardMaterial) {
+      mat.emissive.copy(mat.color).multiplyScalar(0.06);
+      mat.emissiveIntensity = 1;
+    }
   });
 }
 
 /** Cached loaded GLTF data. */
 let cachedCitizen: THREE.Group | null = null;
+let cachedAlienCitizen: THREE.Group | null = null;
 let cachedSpacesuit: THREE.Group | null = null;
+let cachedBadAlien: THREE.Group | null = null;
+let cachedMurderRobot: THREE.Group | null = null;
 let citizenAnimClips: THREE.AnimationClip[] = [];
+let alienAnimClips: THREE.AnimationClip[] = [];
 let spacesuitAnimClips: THREE.AnimationClip[] = [];
+let badAlienAnimClips: THREE.AnimationClip[] = [];
+let murderRobotAnimClips: THREE.AnimationClip[] = [];
 let citizenHasSkeleton = false;
+let alienHasSkeleton = false;
 let spacesuitHasSkeleton = false;
+let badAlienHasSkeleton = false;
+let murderRobotHasSkeleton = false;
 let citizenLoadPromise: Promise<void> | null = null;
+let alienLoadPromise: Promise<void> | null = null;
 let spacesuitLoadPromise: Promise<void> | null = null;
+let badAlienLoadPromise: Promise<void> | null = null;
+let murderRobotLoadPromise: Promise<void> | null = null;
 let citizenLoadFailed = false;
+let alienLoadFailed = false;
 let spacesuitLoadFailed = false;
+let badAlienLoadFailed = false;
+let murderRobotLoadFailed = false;
 
 /** Map character activity state to animation clip name candidates (first match wins). */
 const STATE_CLIP_MAP: Record<string, string[]> = {
@@ -424,26 +480,75 @@ const STATE_CLIP_MAP: Record<string, string[]> = {
   spacewalk: ['Spacewalk_Idle', 'Spacewalk_Walk'],
 };
 
-function stripSkinning(group: THREE.Group) {
-  const toReplace: { skinned: THREE.SkinnedMesh; parent: THREE.Object3D }[] = [];
+const SPACESUIT_STATE_CLIP_MAP: Record<string, string[]> = {
+  walking: ['Spacewalk_Walk'],
+  running: ['Spacewalk_Walk'],
+  idle: ['Spacewalk_Idle'],
+  building: ['Spacewalk_Build'],
+  mining: ['Spacewalk_Mining'],
+  fighting_melee: ['Spacewalk_Punch'],
+  fighting_ranged: ['Spacewalk_Shoot', 'Spacewalk_FireGun'],
+  dead: ['Spacewalk_Death', 'Spacewalk_KillDeath'],
+};
+
+const MONSTER_STATE_CLIP_MAP: Record<string, string[]> = {
+  walking: ['BadAlien_Walk'],
+  running: ['BadAlien_Walk'],
+  idle: ['BadAlien_Idle'],
+  fighting_melee: ['BadAlien_Attack'],
+  dead: ['BadAlien_DeadPose', 'BadAlien_Death'],
+};
+
+const KILLBOT_STATE_CLIP_MAP: Record<string, string[]> = {
+  walking: ['MurderRobot_Walk', 'Combat_Walk'],
+  running: ['MurderRobot_Walk', 'Combat_Walk'],
+  idle: ['MurderRobot_Idle'],
+  fighting_melee: ['MurderRobot_Attack'],
+  fighting_ranged: ['MurderRobot_Attack'],
+  dead: ['MurderRobot_DeadPose', 'MurderRobot_Death'],
+};
+
+/** Ensure all mesh materials are double-sided (works for both Mesh and SkinnedMesh). */
+function ensureDoubleSided(group: THREE.Group) {
   group.traverse((child) => {
-    if (child instanceof THREE.SkinnedMesh && child.parent) {
-      toReplace.push({ skinned: child, parent: child.parent });
-    }
-  });
-  for (const { skinned, parent } of toReplace) {
-    const mesh = new THREE.Mesh(skinned.geometry, skinned.material);
-    mesh.name = skinned.name;
-    mesh.visible = skinned.visible;
-    parent.add(mesh);
-    parent.remove(skinned);
-  }
-  group.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
+    if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
       const mat = child.material as THREE.Material;
       mat.side = THREE.DoubleSide;
     }
   });
+}
+
+/** Check if a loaded GLTF scene contains any SkinnedMesh (i.e. has a skeleton). */
+function detectSkeleton(group: THREE.Group): boolean {
+  let found = false;
+  group.traverse((child) => {
+    if (child instanceof THREE.SkinnedMesh) found = true;
+  });
+  return found;
+}
+
+function usesAlienRig(char: Character): boolean {
+  return !char.bSpacewalking &&
+    char.tStats.nRace !== RACE_MONSTER &&
+    char.tStats.nRace !== RACE_KILLBOT &&
+    RACE_TYPE[char.tStats.nRace]?.nRig === RIG_ALIEN;
+}
+
+/**
+ * Citizen GLBs preserve the source .brig subset order. Select by that order,
+ * exactly as Lua's setScl(0,0,0)/setScl(1,1,1) subset replacement does.
+ */
+function applyAppearanceSubsets(clone: THREE.Group, char: Character): ReturnType<typeof getVisibleSubsets> {
+  const stats = ensureCharacterAppearance(char.tStats);
+  const selection = getVisibleSubsets(stats, char.getJob());
+  let subsetIndex = 0;
+  clone.traverse((child) => {
+    if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.SkinnedMesh)) return;
+    child.userData.sourceSubsetIndex = subsetIndex;
+    child.visible = selection.indices.has(subsetIndex);
+    subsetIndex++;
+  });
+  return selection;
 }
 
 function loadCitizenModel(): Promise<void> {
@@ -453,18 +558,9 @@ function loadCitizenModel(): Promise<void> {
     loader.load(MODEL_PATH, (gltf) => {
       cachedCitizen = gltf.scene;
       citizenAnimClips = gltf.animations || [];
-      // Always strip skinning — SkinnedMesh in bind pose renders as bones.
-      // Procedural animations provide walk/idle/work motion instead.
-      stripSkinning(cachedCitizen);
-      citizenHasSkeleton = false;
-
-      // Ensure double-sided materials
-      cachedCitizen.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.Material;
-          mat.side = THREE.DoubleSide;
-        }
-      });
+      // Keep SkinnedMesh intact so skeletal animation clips can drive the skeleton.
+      citizenHasSkeleton = detectSkeleton(cachedCitizen);
+      ensureDoubleSided(cachedCitizen);
 
       let mc = 0;
       cachedCitizen.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
@@ -479,6 +575,29 @@ function loadCitizenModel(): Promise<void> {
   return citizenLoadPromise;
 }
 
+function loadAlienModel(): Promise<void> {
+  if (alienLoadPromise) return alienLoadPromise;
+  alienLoadPromise = new Promise<void>((resolve) => {
+    const loader = new GLTFLoader();
+    loader.load(ALIEN_MODEL_PATH, (gltf) => {
+      cachedAlienCitizen = gltf.scene;
+      alienAnimClips = gltf.animations || [];
+      alienHasSkeleton = detectSkeleton(cachedAlienCitizen);
+      ensureDoubleSided(cachedAlienCitizen);
+
+      let mc = 0;
+      cachedAlienCitizen.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Citizen_Alien model loaded: ${mc} meshes, ${alienAnimClips.length} clips, skeleton=${alienHasSkeleton}`);
+      resolve();
+    }, undefined, (err) => {
+      console.warn('Failed to load alien citizen model:', err);
+      alienLoadFailed = true;
+      resolve();
+    });
+  });
+  return alienLoadPromise;
+}
+
 function loadSpacesuitModel(): Promise<void> {
   if (spacesuitLoadPromise) return spacesuitLoadPromise;
   spacesuitLoadPromise = new Promise<void>((resolve) => {
@@ -486,16 +605,9 @@ function loadSpacesuitModel(): Promise<void> {
     loader.load(SPACESUIT_PATH, (gltf) => {
       cachedSpacesuit = gltf.scene;
       spacesuitAnimClips = gltf.animations || [];
-      // Always strip skinning — SkinnedMesh in bind pose renders as bones.
-      stripSkinning(cachedSpacesuit);
-      spacesuitHasSkeleton = false;
-
-      cachedSpacesuit.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.Material;
-          mat.side = THREE.DoubleSide;
-        }
-      });
+      // Keep SkinnedMesh intact so skeletal animation clips can drive the skeleton.
+      spacesuitHasSkeleton = detectSkeleton(cachedSpacesuit);
+      ensureDoubleSided(cachedSpacesuit);
 
       let mc = 0;
       cachedSpacesuit.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
@@ -510,9 +622,65 @@ function loadSpacesuitModel(): Promise<void> {
   return spacesuitLoadPromise;
 }
 
-// Start loading both models
+function loadBadAlienModel(): Promise<void> {
+  if (badAlienLoadPromise) return badAlienLoadPromise;
+  badAlienLoadPromise = new Promise<void>((resolve) => {
+    const loader = new GLTFLoader();
+    loader.load(BAD_ALIEN_PATH, (gltf) => {
+      cachedBadAlien = gltf.scene;
+      badAlienAnimClips = gltf.animations || [];
+      badAlienHasSkeleton = detectSkeleton(cachedBadAlien);
+      ensureDoubleSided(cachedBadAlien);
+      let mc = 0;
+      cachedBadAlien.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Bad_Alien model loaded: ${mc} meshes, ${badAlienAnimClips.length} clips, skeleton=${badAlienHasSkeleton}`);
+      resolve();
+    }, undefined, (err) => {
+      console.warn('Failed to load Bad_Alien model:', err);
+      badAlienLoadFailed = true;
+      resolve();
+    });
+  });
+  return badAlienLoadPromise;
+}
+
+function loadMurderRobotModel(): Promise<void> {
+  if (murderRobotLoadPromise) return murderRobotLoadPromise;
+  murderRobotLoadPromise = new Promise<void>((resolve) => {
+    const loader = new GLTFLoader();
+    loader.load(MURDER_ROBOT_PATH, (gltf) => {
+      cachedMurderRobot = gltf.scene;
+      murderRobotAnimClips = gltf.animations || [];
+      murderRobotHasSkeleton = detectSkeleton(cachedMurderRobot);
+      ensureDoubleSided(cachedMurderRobot);
+      let mc = 0;
+      cachedMurderRobot.traverse((c) => { if (c instanceof THREE.Mesh || c instanceof THREE.SkinnedMesh) mc++; });
+      console.log(`Murder_Robot model loaded: ${mc} meshes, ${murderRobotAnimClips.length} clips, skeleton=${murderRobotHasSkeleton}`);
+      resolve();
+    }, undefined, (err) => {
+      console.warn('Failed to load Murder_Robot model:', err);
+      murderRobotLoadFailed = true;
+      resolve();
+    });
+  });
+  return murderRobotLoadPromise;
+}
+
+// Start loading all models
 loadCitizenModel();
+loadAlienModel();
 loadSpacesuitModel();
+loadBadAlienModel();
+loadMurderRobotModel();
+
+/** Whether createModel can mount the requested rig instead of a fallback. */
+function isTargetModelReady(char: Character, spacesuit: boolean): boolean {
+  if (spacesuit) return Boolean(cachedSpacesuit) || spacesuitLoadFailed;
+  if (char.tStats.nRace === RACE_MONSTER) return Boolean(cachedBadAlien) || badAlienLoadFailed;
+  if (char.tStats.nRace === RACE_KILLBOT) return Boolean(cachedMurderRobot) || murderRobotLoadFailed;
+  if (usesAlienRig(char)) return Boolean(cachedAlienCitizen) || alienLoadFailed;
+  return Boolean(cachedCitizen) || citizenLoadFailed;
+}
 
 // ── Thought bubble (Lua Task:showEmoticon / Character:setEmoticon) ────
 /** Duration to show thought bubble text (Lua EMOTICON_INITIAL_DURATION=5). */
@@ -584,6 +752,9 @@ const TASK_DISPLAY_NAMES: Record<string, string> = {
   IncapacitatedOnFloor: 'Injured',
   FieldScanAndHeal: 'Treating',
   ResearchInLab: 'Researching',
+  Starve: 'Starving!',
+  FleeTemperTantrum: 'Fleeing!',
+  RaiderFleeThreat: 'Fleeing!',
 };
 
 export interface CharacterRenderHandle {
@@ -595,6 +766,8 @@ export interface CharacterRenderHandle {
   is3D: boolean;
   /** Whether currently showing spacesuit model. */
   showingSpacesuit: boolean;
+  /** Race whose skeleton/model is currently mounted. */
+  modelRace: number;
   /** Animation phase (unique per character for variety). */
   animPhase: number;
   /** AnimationMixer for skeletal clips (null if no clips). */
@@ -603,10 +776,15 @@ export interface CharacterRenderHandle {
   currentAction: THREE.AnimationAction | null;
   /** Current animation state key. */
   currentAnimState: string;
+  /** Clips retargeted to this clone's node UUIDs. */
+  boundClips: Map<string, THREE.AnimationClip>;
   /** Blob shadow mesh (Lua: rBlobShadow). */
   shadow: THREE.Mesh;
   /** Thought bubble DOM + CSS2DObject. */
   thoughtEl: HTMLDivElement;
+  thoughtBg: HTMLDivElement;
+  thoughtLeft: HTMLDivElement;
+  thoughtRight: HTMLDivElement;
   thoughtTextSpan: HTMLSpanElement;
   thoughtTail: HTMLElement;
   thoughtObj: CSS2DObject;
@@ -624,6 +802,7 @@ export class CharacterRenderer {
   private lastFrameTime = 0;
   private frameDt = 1 / 60;
   private grid: TileGrid | null = null;
+  private hoveredCharacterId: number | null = null;
 
   constructor(scene: THREE.Scene, overlayScene: THREE.Scene) {
     this.scene = scene;
@@ -633,6 +812,11 @@ export class CharacterRenderer {
   /** Set tile grid for shadow visibility checks. */
   setGrid(grid: TileGrid) {
     this.grid = grid;
+  }
+
+  /** Lua Character:hover shows task text only while the rig is hovered. */
+  setHoveredCharacter(charId: number | null) {
+    this.hoveredCharacterId = charId;
   }
 
   createCharacter(char: Character): CharacterRenderHandle {
@@ -646,7 +830,21 @@ export class CharacterRenderer {
       object = this.createBoxPlaceholder(char);
       this.pendingUpgrade.push(char);
       loadSpacesuitModel().then(() => this.upgradePending());
-    } else if (cachedCitizen && !citizenLoadFailed) {
+    } else if (usesAlienRig(char) && !cachedAlienCitizen && !alienLoadFailed) {
+      object = this.createBoxPlaceholder(char);
+      this.pendingUpgrade.push(char);
+      loadAlienModel().then(() => this.upgradePending());
+    } else if (char.tStats.nRace === RACE_MONSTER && !cachedBadAlien && !badAlienLoadFailed) {
+      // R-5: Monster model not loaded yet — placeholder until ready
+      object = this.createBoxPlaceholder(char);
+      this.pendingUpgrade.push(char);
+      loadBadAlienModel().then(() => this.upgradePending());
+    } else if (char.tStats.nRace === RACE_KILLBOT && !cachedMurderRobot && !murderRobotLoadFailed) {
+      // R-5: Killbot model not loaded yet — placeholder until ready
+      object = this.createBoxPlaceholder(char);
+      this.pendingUpgrade.push(char);
+      loadMurderRobotModel().then(() => this.upgradePending());
+    } else if ((usesAlienRig(char) ? cachedAlienCitizen && !alienLoadFailed : cachedCitizen && !citizenLoadFailed)) {
       const result = this.createModel(char, char.bSpacewalking);
       modelGroup = result.group;
       mixer = result.mixer;
@@ -655,7 +853,7 @@ export class CharacterRenderer {
     } else {
       object = this.createBoxPlaceholder(char);
       this.pendingUpgrade.push(char);
-      loadCitizenModel().then(() => this.upgradePending());
+      (usesAlienRig(char) ? loadAlienModel() : loadCitizenModel()).then(() => this.upgradePending());
     }
 
     this.positionCharacter(object, char);
@@ -678,37 +876,48 @@ export class CharacterRenderer {
     const thoughtEl = document.createElement('div');
     thoughtEl.className = 'thought-bubble';
     thoughtEl.style.cssText =
-      'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
-      'background:rgba(0,0,0,0.7);border-radius:4px;' +
-      'padding:4px 8px;white-space:nowrap;text-align:center;display:none;' +
-      'width:fit-content;';
+      'pointer-events:none;position:relative;height:70px;min-width:60px;' +
+      'font-family:"Dosis",sans-serif;font-size:30px;font-weight:600;color:#dfa200;' +
+      'padding:0 16px;white-space:nowrap;text-align:left;display:none;align-items:center;' +
+      'width:fit-content;box-sizing:border-box;';
+    const thoughtBg = document.createElement('div');
+    const thoughtLeft = document.createElement('div');
+    const thoughtRight = document.createElement('div');
     const thoughtTextSpan = document.createElement('span');
-    thoughtEl.appendChild(thoughtTextSpan);
+    thoughtTextSpan.style.cssText = 'position:relative;z-index:2;line-height:70px;';
     const thoughtTail = document.createElement('div');
-    thoughtTail.style.cssText =
-      'position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);' +
-      'width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;' +
-      'border-top:6px solid rgba(0,0,0,0.7);';
-    thoughtEl.appendChild(thoughtTail);
-    const thoughtObj = new CSS2DObject(thoughtEl);
-    thoughtObj.position.set(char.screenX, -(char.screenY - 60), 20002 + char.screenY);
+    thoughtEl.append(thoughtBg, thoughtLeft, thoughtRight, thoughtTail, thoughtTextSpan);
+    // CSS2DRenderer owns the root element's display property. Keep the bubble
+    // in a stable anchor so its own display:none survives renderer frames.
+    const thoughtAnchor = document.createElement('div');
+    thoughtAnchor.className = 'thought-bubble-anchor';
+    thoughtAnchor.style.cssText = 'pointer-events:none;position:relative;';
+    thoughtAnchor.appendChild(thoughtEl);
+    const thoughtObj = new CSS2DObject(thoughtAnchor);
+    thoughtObj.position.set(char.screenX, -(char.screenY - 165), 20002 + char.screenY);
     this.overlayScene.add(thoughtObj);
 
     const handle: CharacterRenderHandle = {
       object, modelGroup, needBarsEl, needBarsObj, is3D,
       showingSpacesuit: char.bSpacewalking,
+      modelRace: char.tStats.nRace,
       animPhase: Math.random() * Math.PI * 2,
       mixer,
       currentAction: null,
       currentAnimState: '',
+      boundClips: new Map(),
       shadow,
       thoughtEl,
+      thoughtBg,
+      thoughtLeft,
+      thoughtRight,
       thoughtTextSpan,
       thoughtTail,
       thoughtObj,
       lastTaskName: '',
       thoughtShowTime: 0,
     };
+    this.setBubbleKind(handle, 'thought');
     this.handles.set(char.id, handle);
     return handle;
   }
@@ -734,34 +943,104 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
-      // Spacesuit.glb has 7 primitives by material:
-      // 0: Head (always), 1: Suit body (always), 2: AsteroidChunk (MINER),
-      // 3: Builder tool (BUILDER), 4: Suit body (always),
-      // 5: SpaceEmergency (EMERGENCY), 6: MinerAcc (MINER)
+      // Spacesuit.glb preserves the seven source .brig subsets. Material 1 is
+      // reused by both the body (subset 1) and default job equipment (subset 4),
+      // so material-name visibility cannot distinguish them. Lua's
+      // CharacterConstants.SPACESUITS / SPACESUIT_JOB_EQUIPMENT select exactly
+      // one body texture and one equipment subset. Hand props (2/3) are driven
+      // separately by PropRenderer and must not be permanently shown by job.
       const job = char.getJob();
-      const visibleMats = new Set(['Human_Head_Male01', 'Spacesuit01']);
-      if (job === 4) { // MINER
-        visibleMats.add('AsteroidChunk01');
-        visibleMats.add('MinerAcc01');
-      } else if (job === 2) { // BUILDER
-        visibleMats.add('Builder01');
-      } else if (job === 5) { // EMERGENCY
-        visibleMats.add('SpaceEmergency01');
-      }
+      const isMiner = job === MINER;
+      const isEmergency = job === EMERGENCY || job === EMERGENCY2 || job === EMERGENCY3;
+      const equipmentSubset = isMiner ? 6 : isEmergency ? 5 : 4;
+      const visibleSubsets = new Set([0, 1, equipmentSubset]);
+      let subsetIndex = 0;
       clone.traverse((child) => {
         if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-          const matName = (child.material as THREE.Material)?.name ?? '';
-          child.visible = visibleMats.has(matName);
+          child.visible = visibleSubsets.has(subsetIndex++);
         }
       });
 
-      // Apply textures and default colors
-      applyModelTextures(clone, char.id);
+      const bodyTexture = isMiner
+        ? 'SpaceMiner01'
+        : isEmergency
+          ? 'SpaceEmergency01'
+          : job === BUILDER
+            ? 'Spacesuit01'
+            : job === RAIDER
+              ? 'SpaceRaider01'
+              : 'SpaceDefault01';
+      applyModelTextures(clone, char.id, undefined, new Map([[1, bodyTexture]]));
+      ensureDoubleSided(clone);
+
+      // Reset skeleton bind pose after clone so meshes render correctly
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) {
+          child.skeleton.pose();
+        }
+      });
 
       group.add(clone);
 
       // Set up animation mixer if clips available
       if (spacesuitHasSkeleton && spacesuitAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
+    } else if (usesAlienRig(char) && cachedAlienCitizen && !alienLoadFailed) {
+      const clone = alienHasSkeleton
+        ? cloneSkeleton(cachedAlienCitizen) as THREE.Group
+        : cachedAlienCitizen.clone(true);
+      clone.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+      clone.rotation.x = 30 * (Math.PI / 180);
+      clone.rotation.y = 45 * (Math.PI / 180);
+
+      const selection = applyAppearanceSubsets(clone, char);
+      applyModelTextures(clone, char.id, undefined, selection.textures, selection.faceLayers);
+      ensureDoubleSided(clone);
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
+      });
+      group.add(clone);
+
+      if (alienHasSkeleton && alienAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
+    } else if (char.tStats.nRace === RACE_MONSTER && cachedBadAlien && !badAlienLoadFailed) {
+      // R-5: Monster race uses Bad_Alien.glb (Lua: RIG_MONSTER, scale 0.65)
+      const clone = badAlienHasSkeleton
+        ? cloneSkeleton(cachedBadAlien) as THREE.Group
+        : cachedBadAlien.clone(true);
+      clone.scale.set(BAD_ALIEN_SCALE, BAD_ALIEN_SCALE, BAD_ALIEN_SCALE);
+      clone.rotation.x = 30 * (Math.PI / 180);
+      clone.rotation.y = 45 * (Math.PI / 180);
+
+      applyModelTextures(clone, char.id);
+      ensureDoubleSided(clone);
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
+      });
+      group.add(clone);
+
+      if (badAlienHasSkeleton && badAlienAnimClips.length > 0) {
+        mixer = new THREE.AnimationMixer(clone);
+      }
+    } else if (char.tStats.nRace === RACE_KILLBOT && cachedMurderRobot && !murderRobotLoadFailed) {
+      // R-5: Killbot race uses Murder_Robot.glb (Lua: RIG_KILLBOT, scale 0.5)
+      const clone = murderRobotHasSkeleton
+        ? cloneSkeleton(cachedMurderRobot) as THREE.Group
+        : cachedMurderRobot.clone(true);
+      clone.scale.set(MURDER_ROBOT_SCALE, MURDER_ROBOT_SCALE, MURDER_ROBOT_SCALE);
+      clone.rotation.x = 30 * (Math.PI / 180);
+      clone.rotation.y = 45 * (Math.PI / 180);
+
+      applyModelTextures(clone, char.id);
+      ensureDoubleSided(clone);
+      clone.traverse((child) => {
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) child.skeleton.pose();
+      });
+      group.add(clone);
+
+      if (murderRobotHasSkeleton && murderRobotAnimClips.length > 0) {
         mixer = new THREE.AnimationMixer(clone);
       }
     } else if (cachedCitizen && !citizenLoadFailed) {
@@ -773,21 +1052,19 @@ export class CharacterRenderer {
       clone.rotation.x = 30 * (Math.PI / 180); // Lua: 30° iso tilt
       clone.rotation.y = 45 * (Math.PI / 180); // Lua: initial facing SE
 
-      const visibleSet = this.getVisibleSubsets(char);
-      let meshIdx = 0;
+      const selection = applyAppearanceSubsets(clone, char);
+      applyModelTextures(clone, char.id, undefined, selection.textures, selection.faceLayers);
+      ensureDoubleSided(clone);
+
+      // Reset skeleton bind pose after clone so meshes render correctly
       clone.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) {
-          child.visible = visibleSet.has(meshIdx);
-          meshIdx++;
+        if (child instanceof THREE.SkinnedMesh && child.skeleton) {
+          child.skeleton.pose();
         }
       });
 
-      // Apply textures and default colors
-      applyModelTextures(clone, char.id);
-
       group.add(clone);
 
-      // Set up animation mixer if clips available
       if (citizenHasSkeleton && citizenAnimClips.length > 0) {
         mixer = new THREE.AnimationMixer(clone);
       }
@@ -800,48 +1077,6 @@ export class CharacterRenderer {
     }
 
     return { group, mixer };
-  }
-
-  private getVisibleSubsets(char: Character): Set<number> {
-    const visible = new Set<number>();
-    const isMale = char.id % 2 === 0;
-
-    if (isMale) {
-      visible.add(SUBSETS.heads.male[0]);
-      visible.add(SUBSETS.bodies.male[0]);
-      visible.add(SUBSETS.collar_m[0]);
-      visible.add(SUBSETS.belt_m[0]);
-      visible.add(SUBSETS.legPouch_m[0]);
-    } else {
-      visible.add(SUBSETS.heads.female[0]);
-      visible.add(SUBSETS.bodies.female[0]);
-      visible.add(SUBSETS.collar_f[0]);
-      visible.add(SUBSETS.belt_m[0]);
-      visible.add(SUBSETS.legPouch_f[0]);
-    }
-
-    const hairIdx = char.id % SUBSETS.hair.length;
-    visible.add(SUBSETS.hair[hairIdx]);
-
-    const job = char.getJob();
-    const jobMap: Record<number, number[]> = {
-      2: SUBSETS.jobs.builder,
-      3: SUBSETS.jobs.tech,
-      4: SUBSETS.jobs.miner,
-      5: SUBSETS.jobs.emergency,
-      7: SUBSETS.jobs.bartender,
-      9: SUBSETS.jobs.tech,
-      12: SUBSETS.jobs.doctor,
-      13: SUBSETS.jobs.tech,
-    };
-    const jobSubsets = jobMap[job];
-    if (jobSubsets) {
-      for (const s of jobSubsets) visible.add(s);
-    } else {
-      visible.add(isMale ? SUBSETS.shirt_m[0] : SUBSETS.shirt_f[0]);
-    }
-
-    return visible;
   }
 
   private positionCharacter(object: THREE.Object3D, char: Character) {
@@ -889,8 +1124,22 @@ export class CharacterRenderer {
         remaining.push(char);
         continue;
       }
+      if (usesAlienRig(char) && !cachedAlienCitizen && !alienLoadFailed) {
+        remaining.push(char);
+        continue;
+      }
+      // R-5: If monster model not loaded yet, keep waiting
+      if (char.tStats.nRace === RACE_MONSTER && !cachedBadAlien && !badAlienLoadFailed) {
+        remaining.push(char);
+        continue;
+      }
+      // R-5: If killbot model not loaded yet, keep waiting
+      if (char.tStats.nRace === RACE_KILLBOT && !cachedMurderRobot && !murderRobotLoadFailed) {
+        remaining.push(char);
+        continue;
+      }
       // If citizen model not loaded yet, keep waiting
-      if (!char.bSpacewalking && (!cachedCitizen || citizenLoadFailed)) {
+      if (!char.bSpacewalking && !usesAlienRig(char) && (!cachedCitizen || citizenLoadFailed)) {
         remaining.push(char);
         continue;
       }
@@ -908,6 +1157,7 @@ export class CharacterRenderer {
       handle.mixer = result.mixer;
       handle.is3D = true;
       handle.showingSpacesuit = char.bSpacewalking;
+      handle.modelRace = char.tStats.nRace;
     }
     this.pendingUpgrade = remaining;
   }
@@ -923,12 +1173,16 @@ export class CharacterRenderer {
       this.lastFrameTime = now;
     }
 
-    // Switch model if spacesuit state changed
-    if (handle.is3D && handle.showingSpacesuit !== char.bSpacewalking) {
+    // Switch model if suit state or the underlying race rig changed. Save-load
+    // and conversion paths can replace tStats after the handle was created;
+    // playing the new race's clips on the old skeleton produces malformed poses.
+    const raceModelChanged = !char.bSpacewalking && handle.modelRace !== char.tStats.nRace;
+    const modelChanged = handle.showingSpacesuit !== char.bSpacewalking || raceModelChanged;
+    if (handle.is3D && modelChanged && isTargetModelReady(char, char.bSpacewalking)) {
       this.scene.remove(handle.object);
-      handle.object.traverse((child) => {
-        if (child instanceof THREE.Mesh) child.geometry.dispose();
-      });
+      // SkeletonUtils.clone shares immutable geometry with the cached model and
+      // other citizens. Do not dispose it while remounting one character.
+      handle.mixer?.stopAllAction();
 
       const result = this.createModel(char, char.bSpacewalking);
       this.scene.add(result.group);
@@ -937,7 +1191,9 @@ export class CharacterRenderer {
       handle.mixer = result.mixer;
       handle.currentAction = null;
       handle.currentAnimState = '';
+      handle.boundClips.clear();
       handle.showingSpacesuit = char.bSpacewalking;
+      handle.modelRace = char.tStats.nRace;
     }
 
     // Base position
@@ -954,29 +1210,43 @@ export class CharacterRenderer {
     // Rotate model to face movement direction (Lua: 30° X-tilt, Y = facing angle)
     if (handle.is3D && handle.modelGroup.children.length > 0) {
       const model = handle.modelGroup.children[0];
+      // R-5: Per-race model scale (Bad_Alien is 1.3× larger in Lua)
+      const baseScale = char.tStats.nRace === RACE_MONSTER ? BAD_ALIEN_SCALE
+        : char.tStats.nRace === RACE_KILLBOT ? MURDER_ROBOT_SCALE
+        : MODEL_SCALE;
 
       // Vacuum death animation: shrink + spin (Lua Character:_vacuumDisappear)
       if (char.nVacuumScale >= 0) {
-        const s = Math.max(0, char.nVacuumScale) * MODEL_SCALE;
+        const s = Math.max(0, char.nVacuumScale) * baseScale;
         model.scale.set(s, s, s);
         model.rotation.x = 30 * (Math.PI / 180);
         model.rotation.y = char.facingAngle + char.nVacuumRotation;
         model.rotation.z = char.nVacuumRotation;
+      } else if (!char.isAlive()) {
+        // R-6: Procedural death pose — rotate 90° on X to lie flat + flatten Y.
+        // Combined with the isometric 30° tilt, this makes the character appear
+        // to be lying on the ground, clearly dead.
+        model.scale.set(baseScale, baseScale * 0.3, baseScale);
+        model.rotation.x = 30 * (Math.PI / 180) + Math.PI / 2; // 30° iso + 90° lie flat
+        model.rotation.y = char.facingAngle;
+        model.rotation.z = 0;
       } else {
         // Normal: Lua setRot(30, dirAngle, 0) — 30° isometric tilt on X-axis
-        model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+        model.scale.set(baseScale, baseScale, baseScale);
         model.rotation.x = 30 * (Math.PI / 180); // 30° = 0.5236 rad
         model.rotation.y = char.facingAngle;
         model.rotation.z = 0;
       }
     }
 
-    // Animation: use skeletal clips if available, else procedural
-    if (handle.mixer) {
-      this.updateSkeletalAnim(handle, char);
-    } else {
-      this.applyProceduralAnim(handle, char);
-    }
+    // Prefer the original skeletal clips embedded from the .banim files. Keep
+    // procedural motion as the fallback for models/states without a matching
+    // original clip.
+    const clip = handle.mixer
+      ? this.findClip(this.getAnimState(char), handle.showingSpacesuit, handle.modelRace)
+      : null;
+    if (handle.mixer && clip) this.updateSkeletalAnim(handle, char);
+    else this.applyProceduralAnim(handle, char);
 
     // Thought bubble (Lua Task:showEmoticon — show for EMOTICON_INITIAL_DURATION on task change)
     this.updateThoughtBubble(handle, char);
@@ -991,26 +1261,59 @@ export class CharacterRenderer {
   /** Get the animation state key for a character. */
   private getAnimState(char: Character): string {
     if (!char.isAlive()) return 'dead';
-    if (char.moving) return 'walking';
     const taskName = char.currentTask?.name;
+    if (char.moving && (
+      taskName === 'RunTo' || taskName === 'PanicFire' || taskName === 'PanicOnFire' ||
+      taskName === 'PanicOxygen' || taskName === 'PanicThreat' ||
+      taskName === 'FireFleeArea' || taskName === 'OxygenFleeArea' ||
+      taskName === 'FleeThreat' || taskName === 'FleeTemperTantrum' ||
+      taskName === 'RaiderFleeThreat'
+    )) return 'running';
+    if (char.moving) return 'walking';
     if (taskName === 'SleepInBed' || taskName === 'SleepOnFloor') return 'sleeping';
     if (taskName === 'BuildEnvObject' || taskName === 'BuildTile') return 'building';
-    if (taskName === 'Eat' || taskName === 'GetDrink') return 'eating';
+    if (taskName === 'Eat' || taskName === 'EatAtTable' ||
+        taskName === 'EatAtFoodReplicator' || taskName === 'EatPlant' ||
+        taskName === 'GetDrink') return 'eating';
     if (taskName === 'AttackEnemy' && char.weapon) return 'fighting_ranged';
-    if (taskName === 'AttackEnemy') return 'fighting_melee';
+    if (taskName === 'AttackEnemy' || taskName === 'Brawl' ||
+        taskName === 'MonsterAttackEquipment') return 'fighting_melee';
     if (taskName === 'Mine') return 'mining';
-    if (taskName === 'Chat' || taskName === 'Socialize') return 'chatting';
-    if (taskName === 'ExtinguishFire') return 'firefighting';
-    if (taskName === 'HealCharacter') return 'healing';
-    if (taskName === 'Research') return 'researching';
-    if (taskName === 'GoToSafety') return 'panicking';
+    if (taskName === 'Chat' || taskName === 'ChatPartner') return 'chatting';
+    if (taskName === 'ExtinguishFireBareHanded' ||
+        taskName === 'ExtinguishFireWithTool') return 'firefighting';
+    if (taskName === 'FieldScanAndHeal' || taskName === 'BedHeal' ||
+        taskName === 'CheckInToHospital') return 'healing';
+    if (taskName === 'ResearchInLab' || taskName === 'TearDownEnvObjectForResearch' ||
+        taskName === 'DeliverResearchDatacube') return 'researching';
+    if (taskName === 'PanicFire' || taskName === 'PanicOnFire' ||
+        taskName === 'PanicOxygen' || taskName === 'PanicThreat') return 'panicking';
     return 'idle';
   }
 
   /** Find the best matching animation clip for a state. */
-  private findClip(state: string, spacesuit: boolean): THREE.AnimationClip | null {
-    const candidates = STATE_CLIP_MAP[state] || [];
-    const clips = spacesuit ? spacesuitAnimClips : citizenAnimClips;
+  private findClip(state: string, spacesuit: boolean, race?: number): THREE.AnimationClip | null {
+    // R-5: Select clip pool based on model type
+    let clips: THREE.AnimationClip[];
+    let candidates: string[];
+    // Lua Character:_setSpacesuitRigActive makes the spacesuit rCurrentRig,
+    // so its animation set takes precedence over the character's race rig.
+    if (spacesuit) {
+      clips = spacesuitAnimClips;
+      candidates = SPACESUIT_STATE_CLIP_MAP[state] || [];
+    } else if (race === RACE_MONSTER) {
+      clips = badAlienAnimClips;
+      candidates = MONSTER_STATE_CLIP_MAP[state] || [];
+    } else if (race === RACE_KILLBOT) {
+      clips = murderRobotAnimClips;
+      candidates = KILLBOT_STATE_CLIP_MAP[state] || [];
+    } else if (race !== undefined && RACE_TYPE[race]?.nRig === RIG_ALIEN) {
+      clips = alienAnimClips;
+      candidates = STATE_CLIP_MAP[state] || [];
+    } else {
+      clips = citizenAnimClips;
+      candidates = STATE_CLIP_MAP[state] || [];
+    }
 
     for (const name of candidates) {
       const clip = clips.find(c => c.name === name);
@@ -1032,12 +1335,30 @@ export class CharacterRenderer {
     if (state !== handle.currentAnimState) {
       handle.currentAnimState = state;
 
-      const clip = this.findClip(state, handle.showingSpacesuit);
+      const clip = this.findClip(state, handle.showingSpacesuit, handle.modelRace);
       if (clip && handle.mixer) {
         if (handle.currentAction) {
           handle.currentAction.fadeOut(0.2);
         }
-        const action = handle.mixer.clipAction(clip);
+        // Converted GLB clips retain source node names. Retarget to this
+        // SkeletonUtils clone's UUIDs so Three never binds a special-race clip
+        // to a same-named node on a stale/parallel rig.
+        let boundClip = handle.boundClips.get(clip.uuid);
+        if (!boundClip) {
+          const root = handle.mixer.getRoot() as THREE.Object3D;
+          boundClip = clip.clone();
+          boundClip.tracks = clip.tracks.map((sourceTrack) => {
+            const separator = sourceTrack.name.indexOf('.');
+            if (separator <= 0) return sourceTrack.clone();
+            const nodeName = sourceTrack.name.slice(0, separator);
+            const node = root.getObjectByName(nodeName);
+            const track = sourceTrack.clone();
+            if (node) track.name = `${node.uuid}${sourceTrack.name.slice(separator)}`;
+            return track;
+          });
+          handle.boundClips.set(clip.uuid, boundClip);
+        }
+        const action = handle.mixer.clipAction(boundClip);
         action.reset().fadeIn(0.2).play();
         handle.currentAction = action;
       }
@@ -1055,6 +1376,9 @@ export class CharacterRenderer {
 
   /** Apply procedural walk bob / idle breathing / working animation. */
   private applyProceduralAnim(handle: CharacterRenderHandle, char: Character) {
+    // Dead characters: no procedural animation (death pose handled in updateCharacter rotation)
+    if (!char.isAlive()) return;
+
     const t = performance.now() / 1000;
     const phase = handle.animPhase;
 
@@ -1099,23 +1423,25 @@ export class CharacterRenderer {
     // Position thought bubble above character
     handle.thoughtObj.position.set(
       char.screenX,
-      -(char.screenY - 60),
+      -(char.screenY - 165),
       20002 + char.screenY,
     );
 
+    if (this.hoveredCharacterId !== char.id) {
+      handle.thoughtEl.style.display = 'none';
+      return;
+    }
+
     // Detect task change — show bubble
-    if (taskName && taskName !== handle.lastTaskName) {
+    if (taskName && (taskName !== handle.lastTaskName || handle.thoughtEl.style.display === 'none')) {
       handle.lastTaskName = taskName;
       handle.thoughtShowTime = now;
-      // Map internal task names to friendly display text
+      // Lua Task:showEmoticon uses the advertised activity text. No icon is
+      // supplied by the base Task implementation.
       const label = TASK_DISPLAY_NAMES[taskName] ?? taskName;
       handle.thoughtTextSpan.textContent = label;
-      handle.thoughtEl.style.cssText =
-        'pointer-events:none;font-family:"Orbitron",monospace;font-size:9px;color:#fff;' +
-        'background:rgba(0,0,0,0.7);border-radius:4px;' +
-        'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
-        'width:fit-content;';
-      handle.thoughtTail.style.borderTopColor = 'rgba(0,0,0,0.7)';
+      this.setBubbleKind(handle, 'thought');
+      handle.thoughtEl.style.display = 'flex';
     }
 
     // Dismiss after THOUGHT_DURATION
@@ -1132,17 +1458,31 @@ export class CharacterRenderer {
   private updateSpeechBubble(handle: CharacterRenderHandle, char: Character) {
     const bubbleText = dialogueSystem.getBubbleText(char.id);
     
-    if (bubbleText && handle.thoughtEl.style.display === 'none') {
+    if (bubbleText) {
       handle.thoughtTextSpan.textContent = bubbleText;
-      handle.thoughtEl.style.cssText =
-        'pointer-events:none;font-family:"Orbitron",monospace;font-size:11px;color:#000;' +
-        'background:rgba(255,255,255,0.85);border-radius:4px;' +
-        'padding:4px 8px;white-space:nowrap;text-align:center;display:block;' +
-        'width:fit-content;';
-      handle.thoughtTail.style.borderTopColor = 'rgba(255,255,255,0.85)';
-    } else if (!bubbleText && handle.thoughtTextSpan.textContent && !handle.lastTaskName) {
+      this.setBubbleKind(handle, 'dialog');
+      handle.thoughtEl.style.display = 'flex';
+    } else if (handle.thoughtEl.dataset.kind === 'dialog') {
+      // Dialogue ended. Task-hover rendering can take over on the next update.
       handle.thoughtEl.style.display = 'none';
     }
+  }
+
+  private setBubbleKind(handle: CharacterRenderHandle, kind: 'thought' | 'dialog') {
+    handle.thoughtEl.dataset.kind = kind;
+    const base = `/assets/ui/dialog/ui_dialog_${kind}_`;
+    const mask = (url: string, repeat: string) =>
+      `background:#dfa200;position:absolute;pointer-events:none;` +
+      `-webkit-mask:url('${url}') ${repeat};mask:url('${url}') ${repeat};` +
+      `-webkit-mask-size:auto 70px;mask-size:auto 70px;`;
+    handle.thoughtBg.style.cssText =
+      mask(`${base}bubblebg.png`, 'repeat-x') + 'left:10px;right:10px;top:0;height:70px;z-index:0;';
+    handle.thoughtLeft.style.cssText =
+      mask(`${base}endcap.png`, 'no-repeat') + 'left:0;top:0;width:10px;height:70px;z-index:1;transform:scaleX(-1);';
+    handle.thoughtRight.style.cssText =
+      mask(`${base}endcap.png`, 'no-repeat') + 'right:0;top:0;width:10px;height:70px;z-index:1;';
+    handle.thoughtTail.style.cssText =
+      mask(`${base}bubbletail.png`, 'no-repeat') + 'left:10px;top:0;width:40px;height:70px;z-index:1;';
   }
 
   private drawNeedBars(el: HTMLDivElement, char: Character) {
@@ -1179,7 +1519,7 @@ export class CharacterRenderer {
 
     this.scene.remove(handle.object);
     handle.object.traverse((child) => {
-      if (child instanceof THREE.Mesh) child.geometry.dispose();
+      if (child instanceof THREE.Mesh || child instanceof THREE.SkinnedMesh) child.geometry.dispose();
     });
     // Remove blob shadow
     this.scene.remove(handle.shadow);
@@ -1190,7 +1530,7 @@ export class CharacterRenderer {
     handle.needBarsEl.remove();
     // Remove thought bubble
     this.overlayScene.remove(handle.thoughtObj);
-    handle.thoughtEl.remove();
+    handle.thoughtObj.element.remove();
     this.handles.delete(charId);
   }
 
@@ -1200,6 +1540,11 @@ export class CharacterRenderer {
   getSpacesuitClipCount(): number { return spacesuitAnimClips.length; }
   /** Check if citizen model has skeleton (for testing). */
   hasCitizenSkeleton(): boolean { return citizenHasSkeleton; }
+
+  /** Character rigs rendered into Lua's WorldOutlines-equivalent pass. */
+  getOutlineObjects(): THREE.Object3D[] {
+    return Array.from(this.handles.values(), handle => handle.object).filter(object => object.visible);
+  }
 
   /** Debug: get material info for first character's meshes. */
   debugMaterials(): { name: string; type: string; hasMap: boolean; color: string; visible: boolean }[] {
@@ -1236,6 +1581,9 @@ export class CharacterRenderer {
             mat.color.setHex(baseHex).multiply(tintColor);
           } else {
             mat.color.copy(tintColor);
+          }
+          if (mat instanceof THREE.MeshStandardMaterial) {
+            mat.emissive.set(mat.color).multiplyScalar(0.06);
           }
         }
       }

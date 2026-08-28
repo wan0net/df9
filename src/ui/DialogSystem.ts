@@ -9,6 +9,7 @@
  */
 
 import { line } from '../localization/Localization';
+import { GameRules } from '../core/GameRules';
 
 // ── Dialog data structures ─────────────────────────────────────────
 
@@ -382,6 +383,8 @@ interface ActiveDialog {
 export class DialogSystem {
   private container: HTMLElement;
   private activeDialog: ActiveDialog | null = null;
+  /** E-8: Track whether we paused the game when the dialog opened. */
+  private bPausedByDialog = false;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -512,12 +515,26 @@ export class DialogSystem {
     if (this.activeDialog) {
       this.activeDialog.element.remove();
       this.activeDialog = null;
+      // E-8: Unpause the game if we paused it when the dialog opened
+      if (this.bPausedByDialog) {
+        this.bPausedByDialog = false;
+        GameRules.togglePause();
+      }
     }
   }
 
   private showDialog(dialog: DialogSet, nChanceObey: number, callback: DialogCallback) {
-    // Close any existing dialog
-    this.close();
+    // Close any existing dialog (without unpausing — we'll re-pause below)
+    if (this.activeDialog) {
+      this.activeDialog.element.remove();
+      this.activeDialog = null;
+    }
+
+    // E-8: Pause the game while dialog is open (Lua: dialogs block the game)
+    if (GameRules.playerTimeScale !== 0) {
+      this.bPausedByDialog = true;
+      GameRules.togglePause();
+    }
 
     const el = document.createElement('div');
     el.style.cssText = `

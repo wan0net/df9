@@ -13,6 +13,8 @@ test-results/
 playwright-report/
 blob-report/
 .playwright-mcp/
+playwright-results.json
+coverage/
 
 # Editor / AI tooling
 .claude/
@@ -21,3 +23,4 @@ blob-report/
 Screenshots/
 verify_*.png
 __pycache__/
+*.png

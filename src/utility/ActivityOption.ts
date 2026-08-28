@@ -7,7 +7,8 @@
 import type { Task, NeedAdvertisement } from './Task';
 import type { Character } from '../characters/Character';
 import type { EnvObject } from '../envobjects/EnvObject';
-import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT } from '../characters/CharacterConstants';
+import type { Room } from '../rooms/Room';
+import { TEAM_ID_PLAYER, STARTING_AFFINITY, ACTIVITY_AFFINITY_CHANGE_PCT, OXYGEN_LOW, NEEDS_HUNGER_STARVATION } from '../characters/CharacterConstants';
 import { isoSquareDist } from '../core/MiscUtil';
 
 /** Distance penalty factor for utility scoring. */
@@ -56,6 +57,13 @@ export interface PersonalityGates {
 }
 
 export class ActivityOption {
+  /**
+   * Room lookup function, set once by CharacterManager so that
+   * meetsTags() can enforce DestSafe / DestOwned without a direct
+   * RoomManager dependency.  Mirrors Lua's global Room.getRoomAt.
+   */
+  static roomLookup: ((tx: number, ty: number) => Room | undefined) | null = null;
+
   /** The task this option would create. */
   task: Task;
 
@@ -128,6 +136,7 @@ export class ActivityOption {
 
   /**
    * Check if this activity's tags are met.
+   * Lua: _gateActivity checks WorkShift/Job; _locationGates checks DestSafe/DestOwned.
    */
   meetsTags(character: Character): boolean {
     const t = this.tags;
@@ -135,8 +144,52 @@ export class ActivityOption {
     // Work shift check: if tagged, only available when on shift
     if (t.WorkShift && !character.wantsWorkShiftTask()) return false;
 
+    // Lua _gateActivity line 710: on-duty characters can't do non-work activities (WorkShift===false)
+    if (character.onDuty() && t.WorkShift === false) return false;
+
+    // Lua _gateActivity line 714: imprisoned characters can't do work tasks (WorkShift===true)
+    if (character.inPrison() && t.WorkShift === true) return false;
+
     // Job restriction: only available to characters with matching job
     if (t.Job !== undefined && character.getJob() !== t.Job) return false;
+
+    // ── DestOwned: reject if destination room is not owned by the character's team ──
+    // Lua ActivityOption:_locationGates lines 500-535
+    if (t.DestOwned && ActivityOption.roomLookup) {
+      const nTeam = character.bCuffed ? TEAM_ID_PLAYER : character.tStats.nTeam;
+      if (this.targetObject) {
+        // Object-based: check object's team
+        if ((this.targetObject as any).nTeam !== undefined &&
+            (this.targetObject as any).nTeam !== nTeam) {
+          return false;
+        }
+      } else {
+        const destRoom = ActivityOption.roomLookup(this.targetX, this.targetY);
+        if (!destRoom || destRoom.nTeam !== nTeam) return false;
+      }
+    }
+
+    // ── DestSafe: reject if destination has fire, breach, hostiles, or low O2 ──
+    // Lua ActivityOption:_locationGates lines 536-579
+    if (t.DestSafe && ActivityOption.roomLookup) {
+      const destRoom = ActivityOption.roomLookup(this.targetX, this.targetY);
+      if (!destRoom) return false; // No room at dest -> not safe
+
+      // Room on fire (Lua: retrieveMemory MEMORY_ROOM_FIRE_PREFIX..rRoom.id)
+      if (destRoom.bBurning || destRoom.nFireTiles > 0) return false;
+
+      // DestSafe !== 'AllowAirlock' -> reject functional airlocks
+      // (We don't have airlock zone logic yet; skip this sub-check)
+
+      // Room breached (Lua: rRoom.bBreach -- uses direct check, not memory)
+      if (destRoom.bBreach) return false;
+
+      // Room in combat (Lua: retrieveMemory MEMORY_ROOM_COMBAT_PREFIX..rRoom.id)
+      if (destRoom.bHasHostiles) return false;
+
+      // Room low oxygen (Lua: rRoom:getOxygenScore() < Character.OXYGEN_LOW)
+      if (destRoom.getOxygenScore() < OXYGEN_LOW) return false;
+    }
 
     return true;
   }
@@ -191,22 +244,51 @@ export class ActivityOption {
       // NORMAL: no bonus
     }
 
-    // Need satisfaction utility
+    // C-4: Need satisfaction utility using sigmoid curve (Lua Needs.scoreFn)
+    // Lua uses a sigmoid that makes urgency grow exponentially as needs get lower.
+    // At need=100: urgency≈0, at need=0: urgency≈0.5, at need=-100: urgency≈1.0
     const advertisedNeeds = this.task.getAdvertisedNeeds();
     for (const adv of advertisedNeeds) {
       const currentValue = this.getNeedValue(character, adv.need);
-      // Lower current value = higher utility for satisfying it
-      // Needs range -100..+100, so urgency maps to 0..1 across full range
-      const urgency = Math.max(0, 100 - currentValue) / 200;
+      // Sigmoid: 1 / (1 + exp(currentValue * 0.06)) — maps -100..+100 to ~1..~0
+      const urgency = 1 / (1 + Math.exp(currentValue * 0.06));
       score += urgency * adv.amount;
     }
 
-    // Distance penalty
-    const dist = isoSquareDist(character.tileX, character.tileY, this.targetX, this.targetY);
-    const distFactor = this.tags.HighDistPenalty ? HIGH_DIST_PENALTY_FACTOR : DISTANCE_PENALTY_FACTOR;
-    score -= dist * distFactor;
+    // C-7: Scale duty score for work-shift tasks (Lua getScaledDutyScore)
+    // On-duty characters get a 2x boost to Duty need satisfaction from work tasks
+    if (this.tags.WorkShift && character.onDuty?.()) {
+      const dutyAdv = advertisedNeeds.find(a => a.need === 'duty');
+      if (dutyAdv) {
+        const dutyUrgency = 1 / (1 + Math.exp(character.needs.duty * 0.06));
+        score += dutyUrgency * dutyAdv.amount; // Double the duty contribution
+      }
+    }
 
-    // Activity affinity modifier (Lua: ±20% from topic affinity)
+    // C-6: Elevate priority to SURVIVAL_NORMAL when starving and option satisfies Hunger
+    // Matches Lua: starving characters urgently seek food
+    if (character.needs.hunger <= NEEDS_HUNGER_STARVATION) {
+      const satisfiesHunger = advertisedNeeds.some(a => a.need === 'hunger');
+      if (satisfiesHunger && this.priorityLevel < PRIORITY.SURVIVAL_NORMAL) {
+        score += 1000; // SURVIVAL_NORMAL bonus
+      }
+    }
+
+    // Bug 18 fix: Lua ActivityOption.lua:482-497 — distance NORMALIZED to [0,1] before scoring
+    // DISTANCE_ADJUST_START=5, DISTANCE_ADJUST_END=50
+    // DISTANCE_ADJUST_SCORE=-1, DISTANCE_ADJUST_SEVERE_SCORE=-3
+    const dx = Math.abs(character.tileX - this.targetX);
+    const dy = Math.abs(character.tileY - this.targetY);
+    const tileDist = Math.min(50, Math.max(dx, dy));
+    if (this.tags.HighDistPenalty) {
+      // Lua: dist/50 * -3 (max penalty = -3)
+      score += (tileDist / 50) * -3;
+    } else if (tileDist > 5) {
+      // Lua: (dist-5)/45 * -1 (max penalty = -1)
+      score += ((tileDist - 5) / 45) * -1;
+    }
+
+    // Activity affinity modifier (Lua: +/-20% from topic affinity)
     const activityAff = character.getAffinityForActivity(this.task.name);
     if (activityAff !== null) {
       const affinityBonus = activityAff / STARTING_AFFINITY;
@@ -226,7 +308,12 @@ export class ActivityOption {
       case 'energy': return character.needs.energy;
       case 'amusement': return character.needs.amusement;
       case 'social': return character.needs.social;
-      case 'duty': return character.needs.duty;
+      case 'duty': {
+        // Bug 16: Cap duty at 90 for WorkShift tasks so it never looks "full"
+        // Lua: duty value capped at 90 when evaluating work-shift activities
+        const raw = character.needs.duty;
+        return (this.tags.WorkShift) ? Math.min(raw, 90) : raw;
+      }
       default: return 100;
     }
   }

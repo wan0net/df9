@@ -4,6 +4,7 @@ import { SoundManager } from '../audio/SoundManager';
 import { line } from '../localization/Localization';
 import { playWarbleFullscreen } from './WarbleEffect';
 import { GameRules } from '../core/GameRules';
+import { getStoredOrAutoUIScale } from './UIScale';
 
 const AMBER_HEX = '#dfa200';
 const GREEN_HEX = '#a5d318';
@@ -26,11 +27,15 @@ const TUTORIAL_Y = 34;
 
 /**
  * Sidebar widths — native Lua pixel sizes.
- * Left sidebar sprite: 295px wide.
- * Right sidebar positioned at W/2 - 156 in Lua (156px from right edge).
+ * Extracted NewGame sprites keep their native Lua dimensions.
  */
-const LEFT_SIDEBAR_W = 295;
-const RIGHT_SIDEBAR_W = 156;
+const LEFT_SIDEBAR_W = 405;
+const LEFT_SIDEBAR_TILE_W = 340;
+const RIGHT_SIDEBAR_W = 158;
+const RIGHT_SIDEBAR_TILE_W = 128;
+/** Lua NewBase:setMapLoc(): map begins at tile width - 90 and ends 146px from the right. */
+const MAP_LEFT = LEFT_SIDEBAR_TILE_W - 90;
+const MAP_RIGHT = 146;
 
 type GameState = 'Initial' | 'SelectedLandingZone' | 'ConfirmedLandingZone' | 'Deploying' | 'Deployed';
 
@@ -151,6 +156,10 @@ function loadImg(src: string): HTMLImageElement {
   return img;
 }
 
+function isTutorialLandingZone(x: number, y: number): boolean {
+  return (x === 12 && y === 34) || (x === 13 && y === 34);
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 /**
@@ -167,7 +176,8 @@ export class NewGameScreenState implements SceneState {
   private selectedZone: LandingZone | null = null;
   private deployTime = 0;
 
-  private mapSize = 0;
+  private mapW = 0;
+  private mapH = 0;
   private mapX = 0;
   private mapY = 0;
   private hoverGx = -1;
@@ -176,8 +186,9 @@ export class NewGameScreenState implements SceneState {
   /** Inspector slide-in timer — NewBaseInspector.lua:150-169 */
   private inspectorTimer  = 0;
   private inspectorActive = false;
+  private resizeHandler: (() => void) | null = null;
 
-  private onStartGame: (lz: LandingZone) => void;
+  private onStartGame: (lz: LandingZone, tutorial: boolean) => void;
   private onBack: () => void;
 
   // DOM refs
@@ -188,12 +199,24 @@ export class NewGameScreenState implements SceneState {
   private panelDistance!: HTMLDivElement;
   private panelThreat!: HTMLDivElement;
   private panelInterference!: HTMLDivElement;
+  private regionSelectionLabel!: HTMLDivElement;
+  private flavorA!: HTMLDivElement;
+  private flavorB!: HTMLDivElement;
+  private tutorialLabel!: HTMLDivElement;
+  private inspectorPreviewWrap!: HTMLDivElement;
+  private telemetryPanel!: HTMLDivElement;
+  private telemetryDensity!: HTMLDivElement;
+  private telemetryDistance!: HTMLDivElement;
+  private telemetryThreat!: HTMLDivElement;
+  private telemetryInterference!: HTMLDivElement;
   private helpFolder!: HTMLDivElement;
   private helpText!: HTMLDivElement;
   private deployOverlay!: HTMLDivElement;
   private deployMsg!: HTMLDivElement;
   private deployEta!: HTMLDivElement;
   private deployYears!: HTMLDivElement;
+  private deployTextWrap!: HTMLDivElement;
+  private deployArrivalRow!: HTMLDivElement;
 
   // Sprite buttons — Lua layout elements
   private confirmBtnEl!: HTMLDivElement;
@@ -212,18 +235,21 @@ export class NewGameScreenState implements SceneState {
   private _preloads = [
     loadImg('/assets/ui/newgame/launchbutton_cover.png'),
     loadImg('/assets/ui/newgame/launchbutton_active.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_buttonConfirm_off.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png'),
     loadImg('/assets/ui/newgame/ui_newgame_buttonConfirm_active.png'),
-    loadImg('/assets/ui/newgame/ui_newgame_buttonDecline_off.png'),
+    loadImg('/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png'),
     loadImg('/assets/ui/newgame/ui_newgame_buttonDecline_active.png'),
     loadImg('/assets/ui/newgame/ui_newgame_sidebarLeft.png'),
     loadImg('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png'),
     loadImg('/assets/ui/newgame/ui_newgame_sidebarRight.png'),
     loadImg('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png'),
     loadImg('/assets/ui/newgame/ui_newgame_sidebarRight_bottom.png'),
+    loadImg('/assets/ui/newgame/galaxy_zoom01.png'),
+    loadImg('/assets/ui/inspector/ui_inspector_folderTop.png'),
+    loadImg('/assets/ui/inspector/ui_inspector_folderActive.png'),
   ];
 
-  constructor(handlers: { onStartGame: (lz: LandingZone) => void; onBack: () => void }) {
+  constructor(handlers: { onStartGame: (lz: LandingZone, tutorial: boolean) => void; onBack: () => void }) {
     this.onStartGame = handlers.onStartGame;
     this.onBack = handlers.onBack;
   }
@@ -249,45 +275,50 @@ export class NewGameScreenState implements SceneState {
       : `transform-origin: top left; transform: scale(${uiScale}); width: ${100/uiScale}%; height: ${100/uiScale}%;`;
     this.overlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;font-family:'Orbitron',monospace;overflow:hidden;${scaleStyles}`;
 
-    const w = Math.round(window.innerWidth / uiScale);
-    const h = Math.round(window.innerHeight / uiScale);
-
     this.canvas = document.createElement('canvas');
-    this.canvas.width  = w;
-    this.canvas.height = h;
+    this.canvas.dataset.testid = 'new-game-map';
     this.canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;';
     this.canvasCtx = this.canvas.getContext('2d')!;
     this.overlay.appendChild(this.canvas);
-    // Galaxy map fills available space between sidebars, with room for title/helptext
-    const availW = w - LEFT_SIDEBAR_W - RIGHT_SIDEBAR_W - 20;
-    const availH = h - 110; // 50px title + 60px help bar at bottom
-    this.mapSize = Math.min(availW, availH);
-    this.mapX = LEFT_SIDEBAR_W + (availW - this.mapSize) / 2 + 10;
-    this.mapY = 55; // below title
 
     this.buildSidebars();
+    this.buildTelemetryPanel();
     this.buildInfoPanel();
     this.buildConfirmDecline();
     this.buildLaunchButton();
     this.buildHelpText();
     this.buildDeployOverlay();
 
+    this.regionSelectionLabel = this.el('div',
+      `position:absolute;left:10px;top:8px;color:rgba(255,255,255,0.72);
+       font-size:11px;font-family:'Dosis',sans-serif;font-weight:600;
+       letter-spacing:0.2px;z-index:7;pointer-events:none;`,
+      'Region Selection') as HTMLDivElement;
+    this.overlay.appendChild(this.regionSelectionLabel);
+
     // Flavor text — Lua: FlavorTextALabel (NEWBAS021TEXT) + FlavorTextBLabel (NEWBAS022TEXT)
     // Positioned at 314px from left edge (just right of left sidebar)
-    const flavorA = this.el('div',
-      `position:absolute;top:26px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:6;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.4;letter-spacing:0.5px;` /* Lua dosissemibold26 */,
-      line('NEWBAS021TEXT'));
-    this.overlay.appendChild(flavorA);
-    const flavorB = this.el('div',
-      `position:absolute;top:126px;left:${LEFT_SIDEBAR_W + 20}px;color:${AMBER_HEX};font-size:18px;z-index:6;font-family:'Dosis',sans-serif;font-style:italic;` /* Lua dosissemibold18 */,
-      line('NEWBAS022TEXT'));
-    this.overlay.appendChild(flavorB);
+    this.flavorA = this.el('div',
+      `position:absolute;top:26px;left:314px;color:${AMBER_HEX};font-size:26px;font-weight:600;z-index:6;font-family:'Dosis',sans-serif;white-space:pre-line;line-height:1.18;letter-spacing:0.2px;text-shadow:0 1px 0 rgba(0,0,0,0.8);max-width:1000px;` /* Lua dosissemibold26 */,
+      line('NEWBAS021TEXT')) as HTMLDivElement;
+    this.overlay.appendChild(this.flavorA);
+    this.flavorB = this.el('div',
+      `position:absolute;top:126px;left:314px;color:${AMBER_HEX};font-size:18px;z-index:6;font-family:'Dosis',sans-serif;font-style:italic;line-height:1.1;letter-spacing:0.05px;text-shadow:0 1px 0 rgba(0,0,0,0.8);` /* Lua dosissemibold18 */,
+      line('NEWBAS022TEXT')) as HTMLDivElement;
+    this.overlay.appendChild(this.flavorB);
+
+    this.tutorialLabel = this.el('div',
+      `position:absolute;left:${this.mapX + 138}px;top:${this.mapY + 370}px;color:${AMBER_HEX};
+       font-size:35px;font-family:'Dosis',sans-serif;font-weight:600;letter-spacing:0.4px;
+       z-index:6;pointer-events:none;text-shadow:0 1px 0 rgba(0,0,0,0.8);`,
+      line('NEWBAS042TEXT')) as HTMLDivElement;
+    this.overlay.appendChild(this.tutorialLabel);
 
     // Lua: ButtonSandboxActive {-W/2+170, -(H/2)+605} 50×50; LabelSandbox {-W/2+30, H/2-550} dosisregular35
     const sandboxCheck = document.createElement('div');
     sandboxCheck.style.cssText = `position:absolute;left:170px;bottom:605px;width:50px;height:50px;border:2px solid ${AMBER_HEX};display:flex;align-items:center;justify-content:center;font-size:32px;color:${AMBER_HEX};z-index:5;cursor:pointer;`;
     sandboxCheck.textContent = '';
-    const sandboxLabel = this.el('div', `position:absolute;left:30px;top:550px;color:${AMBER_HEX};font-size:35px;font-family:'Dosis',sans-serif;font-weight:400;letter-spacing:1px;z-index:5;cursor:pointer;`, 'SANDBOX');
+    const sandboxLabel = this.el('div', `position:absolute;left:18px;top:550px;color:${AMBER_HEX};font-size:35px;font-family:'Dosis',sans-serif;font-weight:400;letter-spacing:1px;z-index:5;cursor:pointer;text-shadow:0 1px 0 rgba(0,0,0,0.7);`, 'SANDBOX');
     let sandboxActive = false;
     const toggleSandbox = () => {
       sandboxActive = !sandboxActive;
@@ -315,8 +346,11 @@ export class NewGameScreenState implements SceneState {
 
     this.canvas.addEventListener('click',     (e) => this.onMapClick(e));
     this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+    this.resizeHandler = () => this.applyLayout();
+    window.addEventListener('resize', this.resizeHandler);
 
     ctx.container.appendChild(this.overlay);
+    this.applyLayout();
     this.draw();
   }
 
@@ -329,11 +363,12 @@ export class NewGameScreenState implements SceneState {
     // ── Left sidebar ──────────────────────────────────────────────────
     // Lua: top piece at left edge, tiles repeat, bottom piece at -(H/2)+350.
     this.leftSidebar = document.createElement('div');
+    this.leftSidebar.dataset.testid = 'new-game-left-sidebar';
     this.leftSidebar.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
 
     // Tile background — fills the entire height seamlessly via CSS repeat
     const lTileBg = document.createElement('div');
-    lTileBg.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png') left top repeat-y;background-size:${LEFT_SIDEBAR_W}px auto;`;
+    lTileBg.style.cssText = `position:absolute;left:0;top:0;width:${LEFT_SIDEBAR_TILE_W}px;height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarLeft_tile.png') left top repeat-y;background-size:${LEFT_SIDEBAR_TILE_W}px auto;`;
     this.leftSidebar.appendChild(lTileBg);
 
     // Top piece — overlays the tile background at the top
@@ -355,6 +390,7 @@ export class NewGameScreenState implements SceneState {
     // Lua: top piece at W/2 - 156, tiles at W/2 - 126, bottom at W/2 - 146.
     // Container is 156px wide (matching the rightmost position offset).
     this.rightSidebar = document.createElement('div');
+    this.rightSidebar.dataset.testid = 'new-game-right-sidebar';
     this.rightSidebar.style.cssText = `position:absolute;right:0;top:0;width:${RIGHT_SIDEBAR_W}px;height:${h}px;z-index:3;pointer-events:none;overflow:hidden;`;
 
     // Tile background — Lua: tiles at W/2 - 126 (30px inset from container left)
@@ -362,7 +398,7 @@ export class NewGameScreenState implements SceneState {
     rTileBg.style.cssText = `position:absolute;left:30px;top:0;width:calc(100% - 30px);height:100%;background:url('/assets/ui/newgame/ui_newgame_sidebarRight_tile.png') left top repeat-y;background-size:auto;`;
     this.rightSidebar.appendChild(rTileBg);
 
-    // Top piece — flush with container left (sprite is 145px wide)
+    // Top piece — flush with container left at its extracted native width.
     const rTop = document.createElement('img');
     rTop.src = '/assets/ui/newgame/ui_newgame_sidebarRight.png';
     rTop.style.cssText = `position:absolute;left:0;top:0;width:${RIGHT_SIDEBAR_W}px;`;
@@ -378,59 +414,157 @@ export class NewGameScreenState implements SceneState {
     this.overlay.appendChild(this.rightSidebar);
   }
 
+  private buildTelemetryPanel() {
+    this.telemetryPanel = document.createElement('div');
+    this.telemetryPanel.dataset.testid = 'new-game-telemetry';
+    this.telemetryPanel.style.cssText = `
+      position:absolute;right:15px;top:18px;width:550px;padding:0;
+      z-index:4;color:${AMBER_HEX};font-size:28px;line-height:1.25;
+      font-family:'Dosis',sans-serif;pointer-events:none;box-sizing:border-box;
+      text-shadow:0 1px 0 rgba(0,0,0,0.75);
+    `;
+
+    const makeRow = () => {
+      const row = document.createElement('div');
+      row.style.cssText = 'height:35px;white-space:nowrap;';
+      return row;
+    };
+
+    this.telemetryDensity = makeRow();
+    this.telemetryDistance = makeRow();
+    this.telemetryThreat = makeRow();
+    this.telemetryInterference = makeRow();
+    this.telemetryPanel.append(
+      this.telemetryDensity,
+      this.telemetryDistance,
+      this.telemetryThreat,
+      this.telemetryInterference,
+    );
+
+    this.overlay.appendChild(this.telemetryPanel);
+    this.updateTelemetry(null);
+  }
+
+  private applyLayout() {
+    const uiScale = this.getUIScale();
+    const w = Math.round(window.innerWidth / uiScale);
+    const h = Math.round(window.innerHeight / uiScale);
+    this.canvas.width = w;
+    this.canvas.height = h;
+
+    this.mapX = MAP_LEFT;
+    this.mapY = 0;
+    this.mapW = Math.max(1, w - MAP_LEFT - MAP_RIGHT);
+    this.mapH = h;
+    this.canvas.dataset.mapLeft = String(this.mapX);
+    this.canvas.dataset.mapWidth = String(this.mapW);
+
+    if (this.leftSidebar) this.leftSidebar.style.height = `${h}px`;
+    if (this.rightSidebar) this.rightSidebar.style.height = `${h}px`;
+    if (this.tutorialLabel) {
+      this.tutorialLabel.style.left = `${this.mapX + (TUTORIAL_X / INFO_MAP_SIZE) * this.mapW + 20}px`;
+      this.tutorialLabel.style.top = `${this.mapY + (TUTORIAL_Y / INFO_MAP_SIZE) * this.mapH + 35}px`;
+    }
+    if (this.regionSelectionLabel) {
+      this.regionSelectionLabel.style.left = `${this.mapX - 6}px`;
+      this.regionSelectionLabel.style.top = '10px';
+    }
+    if (this.flavorA) {
+      this.flavorA.style.left = '314px';
+      this.flavorA.style.top = '24px';
+      this.flavorA.style.maxWidth = '1000px';
+    }
+    if (this.flavorB) {
+      this.flavorB.style.left = '314px';
+      this.flavorB.style.top = '114px';
+    }
+    if (this.helpText) {
+      this.helpText.style.left = '436px';
+    }
+  }
+
   private buildInfoPanel() {
     // Inspector panel on right side — NewBaseInspectorLayout.lua
     // Panel: 550px wide, positioned right of galaxy map, left of right sidebar
-    const panelW = 550; // Lua NewBaseInspectorLayout: WIDTH = 550
-    const panelRight = RIGHT_SIDEBAR_W + 10;
+    const panelW = 550;
+    const panelRight = 120;
     this.infoPanel = document.createElement('div');
     this.infoPanel.style.cssText = `position:absolute;right:${panelRight}px;top:0;width:${panelW}px;color:${AMBER_HEX};font-size:26px;z-index:5;display:none;font-family:'Dosis',sans-serif;pointer-events:none;`; /* Lua dosissemibold26, pointer-events:none so hover preview doesn't block canvas clicks */
 
     // Black background behind everything
     const blackBg = document.createElement('div');
-    blackBg.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);`;
+    blackBg.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:0;`;
     this.infoPanel.appendChild(blackBg);
+
+    // Zoomed map preview — original NewGame/galaxy_zoom01 sprite, amber-multiplied like MOAI.
+    const previewWrap = this.inspectorPreviewWrap = document.createElement('div');
+    previewWrap.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:215px;overflow:hidden;
+      z-index:1;pointer-events:none;transform-origin:center center;background:${AMBER_HEX};
+    `;
+    const previewImg = document.createElement('img');
+    previewImg.src = '/assets/ui/newgame/galaxy_zoom01.png';
+    previewImg.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      object-fit:fill;opacity:1;display:block;mix-blend-mode:multiply;
+    `;
+    previewWrap.appendChild(previewImg);
+    this.infoPanel.appendChild(previewWrap);
 
     // Content container (relative, on top of bg)
     const content = document.createElement('div');
-    content.style.cssText = 'position:relative;z-index:1;';
+    content.style.cssText = 'position:relative;z-index:2;';
 
     // Amber header with region name — Lua: HeaderBG (amber) + LabelName (black text)
     const header = document.createElement('div');
-    header.style.cssText = `background:${AMBER_HEX};padding:12px 16px;`;
+    header.style.cssText = `background:${AMBER_HEX};padding:10px 13px 8px;margin-top:215px;`;
     this.panelName = document.createElement('div');
-    this.panelName.style.cssText = `color:#000;font-weight:600;font-size:52px;font-family:'Dosis',sans-serif;`; /* Lua dosisregular52 */
+    this.panelName.style.cssText = `color:#000;font-weight:500;font-size:38px;font-family:'Dosis',sans-serif;line-height:1.02;`; /* Lua dosisregular52 */
     this.panelAge = document.createElement('div');
-    this.panelAge.style.cssText = `color:#000;font-size:28px;margin-top:4px;font-family:'Dosis',sans-serif;`; /* Lua dosissemibold28 */
+    this.panelAge.style.cssText = `color:#000;font-size:22px;margin-top:4px;font-family:'Dosis',sans-serif;text-align:left;line-height:1.05;`; /* Lua dosissemibold28 */
     header.append(this.panelName, this.panelAge);
     content.appendChild(header);
 
     // Stats section — Lua: StatsBG (amber opaque) with property labels
     const stats = document.createElement('div');
-    stats.style.cssText = `background:#3B2600;padding:12px 16px;border-top:1px solid rgba(223,162,0,0.3);`; /* Lua Gui.AMBER_OPAQUE = {0.23, 0.15, 0, 1} = #3B2600 */
+    stats.style.cssText = `background:#3B2600;padding:9px 13px 11px;border-top:1px solid rgba(223,162,0,0.3);`; /* Lua Gui.AMBER_OPAQUE = {0.23, 0.15, 0, 1} = #3B2600 */
     this.panelDensity      = document.createElement('div');
-    this.panelDensity.style.cssText = 'margin-bottom:6px;font-size:28px;'; /* Lua dosissemibold28 */
+    this.panelDensity.style.cssText = 'margin-bottom:4px;font-size:23px;'; /* Lua dosissemibold28 */
     this.panelDistance     = document.createElement('div');
-    this.panelDistance.style.cssText = 'margin-bottom:6px;font-size:28px;'; /* Lua dosissemibold28 */
+    this.panelDistance.style.cssText = 'margin-bottom:4px;font-size:23px;'; /* Lua dosissemibold28 */
     this.panelThreat       = document.createElement('div');
-    this.panelThreat.style.cssText = 'margin-bottom:6px;font-size:28px;'; /* Lua dosissemibold28 */
+    this.panelThreat.style.cssText = 'margin-bottom:4px;font-size:23px;'; /* Lua dosissemibold28 */
     this.panelInterference = document.createElement('div');
-    this.panelInterference.style.cssText = 'font-size:28px;'; /* Lua dosissemibold28 */
+    this.panelInterference.style.cssText = 'font-size:23px;'; /* Lua dosissemibold28 */
     stats.append(this.panelDensity, this.panelDistance, this.panelThreat, this.panelInterference);
     content.appendChild(stats);
 
     // Help folder — Lua: FolderHeader (amber tab) + LabelFolder "Help" + LabelHelpText
     this.helpFolder = document.createElement('div');
-    this.helpFolder.style.cssText = 'border-top:2px solid rgba(223,162,0,0.5);';
-    const helpTab = document.createElement('div');
-    helpTab.style.cssText = `background:${AMBER_HEX};display:inline-block;padding:4px 16px;color:#000;font-weight:700;font-size:52px;font-family:'Dosis',sans-serif;`; /* Lua dosisregular52, same as LabelFolder */
-    helpTab.textContent = line('NEWBAS013TEXT');
+    this.helpFolder.style.cssText = 'position:relative;min-height:208px;background:#120c00;';
+    const helpTop = document.createElement('img');
+    helpTop.src = '/assets/ui/inspector/ui_inspector_folderTop.png';
+    helpTop.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:63px;object-fit:fill;opacity:0.98;';
+    this.helpFolder.appendChild(helpTop);
+    const helpTab = document.createElement('img');
+    helpTab.src = '/assets/ui/inspector/ui_inspector_folderActive.png';
+    helpTab.style.cssText = 'position:absolute;top:0;left:0;width:312px;height:63px;object-fit:fill;';
     this.helpFolder.appendChild(helpTab);
+    const helpTitle = document.createElement('div');
+    helpTitle.style.cssText = `
+      position:absolute;left:24px;top:2px;color:#000;font-weight:400;
+      font-size:42px;font-family:'Dosis',sans-serif;line-height:1.05;z-index:1;
+    `;
+    helpTitle.textContent = line('NEWBAS013TEXT');
+    this.helpFolder.appendChild(helpTitle);
     const helpFooter = document.createElement('div');
-    helpFooter.style.cssText = `background:${AMBER_HEX};height:3px;margin-top:-1px;`;
+    helpFooter.style.cssText = `position:absolute;left:0;top:63px;width:100%;height:15px;background:${AMBER_HEX};box-shadow:0 1px 0 rgba(0,0,0,0.35);`;
     this.helpFolder.appendChild(helpFooter);
     const helpBody = document.createElement('div');
-    helpBody.style.cssText = `padding:12px 16px;color:${AMBER_HEX};font-size:28px;line-height:1.6;white-space:pre-line;font-family:'Dosis',sans-serif;`; /* Lua dosissemibold28, LabelHelpText */
+    helpBody.style.cssText = `
+      padding:102px 13px 18px;color:${AMBER_HEX};font-size:22px;line-height:1.46;
+      white-space:pre-line;font-family:'Dosis',sans-serif;position:relative;z-index:1;
+    `; /* Lua dosissemibold28, LabelHelpText */
     helpBody.textContent = line('NEWBAS014TEXT');
     this.helpFolder.appendChild(helpBody);
     content.appendChild(this.helpFolder);
@@ -442,22 +576,23 @@ export class NewGameScreenState implements SceneState {
   private buildConfirmDecline() {
     // Confirm and Decline buttons — ON the left sidebar panel
     // Lua: pos = { '-W/2 + 50', 'H/2 - 90' }, scale = { 154, 154 }
-    const btnLeft = 30;
-    const btnTop = 60;
-    const btnSize = 100;
+    const btnLeft = 50;
+    const btnTop = 90;
+    const btnSize = 154;
+    const labelStyle = `color:#000;font-size:35px;line-height:1.1;text-align:left;margin-top:10px;letter-spacing:0px;font-family:'Dosis',sans-serif;font-weight:400;width:220px;`;
 
     // Confirm button
     this.confirmBtnEl = document.createElement('div');
     this.confirmBtnEl.setAttribute('role', 'button');
     this.confirmBtnEl.setAttribute('aria-label', 'Confirm');
-    this.confirmBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${btnTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;pointer-events:none;`;
+    this.confirmBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${btnTop}px;width:${btnSize}px;height:${btnSize + 60}px;cursor:pointer;z-index:5;`;
     const confirmImg = this.confirmImg = document.createElement('img');
     confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
-    confirmImg.style.cssText = `width:100%;height:100%;`;
+    confirmImg.style.cssText = `width:${btnSize}px;height:${btnSize}px;display:block;image-rendering:auto;transition:filter 0.15s ease;`;
     this.confirmBtnEl.appendChild(confirmImg);
 
     // Label below confirm — Lua: LabelAccept, dosisregular35, Gui.BLACK
-    const confirmLabel = this.el('div', `color:${AMBER_HEX};font-size:24px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS002TEXT')); /* Lua dosisregular35 */
+    const confirmLabel = this.el('div', labelStyle, line('NEWBAS002TEXT')); /* Lua dosisregular35 */
     this.confirmBtnEl.appendChild(confirmLabel);
 
     this.confirmBtnEl.addEventListener('mouseenter', () => {
@@ -473,14 +608,14 @@ export class NewGameScreenState implements SceneState {
     // Decline button — below confirm
     this.declineBtnEl = document.createElement('div');
     // Lua: pos = { '-W/2 + 50', 'H/2 - 300' }
-    const declineTop = 210;
-    this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize}px;cursor:pointer;z-index:5;pointer-events:none;`;
+    const declineTop = 300;
+    this.declineBtnEl.style.cssText = `position:absolute;left:${btnLeft}px;top:${declineTop}px;width:${btnSize}px;height:${btnSize + 60}px;cursor:pointer;z-index:5;`;
     const declineImg = this.declineImg = document.createElement('img');
     declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
-    declineImg.style.cssText = `width:100%;height:100%;`;
+    declineImg.style.cssText = `width:${btnSize}px;height:${btnSize}px;display:block;image-rendering:auto;transition:filter 0.15s ease;`;
     this.declineBtnEl.appendChild(declineImg);
 
-    const declineLabel = this.el('div', `color:${AMBER_HEX};font-size:24px;text-align:left;margin-top:4px;letter-spacing:1px;font-family:'Dosis',sans-serif;`, line('NEWBAS003TEXT')); /* Lua dosisregular35 */
+    const declineLabel = this.el('div', labelStyle, line('NEWBAS003TEXT')); /* Lua dosisregular35 */
     this.declineBtnEl.appendChild(declineLabel);
 
     this.declineBtnEl.addEventListener('mouseenter', () => {
@@ -550,25 +685,49 @@ export class NewGameScreenState implements SceneState {
     // Help text bar — Lua: SelectRegionHelpTextBG at -(H/2)+78 (78px from bottom)
     // Width 570, height 50, amber bg with icon + text
     this.helpText = document.createElement('div') as HTMLDivElement;
-    this.helpText.style.cssText = `position:absolute;bottom:78px;left:${LEFT_SIDEBAR_W + 140}px;color:#000;font-size:30px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:10px 20px 10px 40px;font-family:'Dosis',sans-serif;letter-spacing:1px;display:flex;align-items:center;`; /* Lua dosissemibold30 */
-    // Hazard stripe icon (Lua: SelectRegionHelpIcon = ui_hud_buttonPlay)
-    const icon = this.el('span',
-      `display:inline-block;width:30px;height:30px;border:2px solid #000;border-radius:50%;text-align:center;line-height:28px;font-size:22px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
-      '?');
-    this.helpText.appendChild(icon);
-    const textSpan = this.el('span', '', line('NEWBAS001TEXT'));
-    this.helpText.appendChild(textSpan);
+    this.helpText.dataset.testid = 'new-game-help';
+    this.helpText.style.cssText = `position:absolute;bottom:78px;left:436px;color:#000;font-size:25px;font-weight:700;z-index:5;background:${AMBER_HEX};padding:8px 14px 8px 12px;font-family:'Dosis',sans-serif;letter-spacing:0.7px;display:flex;align-items:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.22), 0 1px 0 rgba(0,0,0,0.4);`; /* Lua dosissemibold30 */
+    this.setHelpTextContent('idle', line('NEWBAS001TEXT'));
     this.overlay.appendChild(this.helpText);
   }
 
   private buildDeployOverlay() {
-    // Deploy overlay (black screen + countdown text)
+    // Deploy overlay — keep the galaxy visible until the late fade-to-black,
+    // matching the original sequence more closely than an immediate blackout.
     this.deployOverlay = document.createElement('div');
-    this.deployOverlay.style.cssText = `position:absolute;top:0;left:0;width:100%;height:100%;background:#000;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;font-family:'Orbitron',monospace;color:${AMBER_HEX};`;
-    this.deployMsg   = this.el('div', 'font-size:20px;margin-bottom:20px;letter-spacing:2px;') as HTMLDivElement;
-    this.deployEta   = this.el('div', 'font-size:30px;margin-bottom:20px;letter-spacing:1px;', line('NEWBAS018TEXT')) as HTMLDivElement; /* Lua dosissemibold30 */
-    this.deployYears = this.el('div', 'font-size:48px;font-weight:bold;letter-spacing:3px;') as HTMLDivElement;
-    this.deployOverlay.append(this.deployMsg, this.deployEta, this.deployYears);
+    this.deployOverlay.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0);z-index:50;display:none;
+      font-family:'Orbitron',monospace;color:${AMBER_HEX};
+      pointer-events:none;
+    `;
+    this.deployTextWrap = document.createElement('div');
+    this.deployTextWrap.style.cssText = `
+      position:absolute;inset:0;
+      pointer-events:none;
+    `;
+    this.deployEta = this.el('div',
+      `font-size:52px;letter-spacing:0.5px;font-family:'Dosis',sans-serif;
+       font-weight:400;text-shadow:0 1px 0 rgba(0,0,0,0.85);`,
+      line('NEWBAS018TEXT')) as HTMLDivElement;
+    this.deployYears = this.el('div',
+      `font-size:52px;letter-spacing:0.5px;
+       font-family:'Dosis',sans-serif;font-weight:400;text-shadow:0 1px 0 rgba(0,0,0,0.85);`) as HTMLDivElement;
+    this.deployMsg = this.el('div',
+      `position:absolute;left:50%;top:calc(50% + 308px);transform:translateX(-50%);
+       width:min(1100px, 92%);text-align:center;font-size:52px;letter-spacing:0.4px;
+       font-family:'Dosis',sans-serif;font-weight:400;text-shadow:0 1px 0 rgba(0,0,0,0.85);`) as HTMLDivElement;
+    this.deployArrivalRow = document.createElement('div');
+    this.deployArrivalRow.dataset.testid = 'deploy-arrival-row';
+    this.deployEta.dataset.testid = 'deploy-eta';
+    this.deployYears.dataset.testid = 'deploy-years';
+    this.deployArrivalRow.style.cssText = `
+      position:absolute;left:50%;top:calc(50% + 108px);transform:translateX(-50%);
+      display:flex;align-items:baseline;justify-content:center;gap:14px;white-space:nowrap;
+    `;
+    this.deployArrivalRow.append(this.deployEta, this.deployYears);
+    this.deployTextWrap.append(this.deployArrivalRow, this.deployMsg);
+    this.deployOverlay.append(this.deployTextWrap);
     this.overlay.appendChild(this.deployOverlay);
   }
 
@@ -597,7 +756,6 @@ export class NewGameScreenState implements SceneState {
     // Header — black text on amber bg (Lua: LabelName, LabelAge with Gui.BLACK)
     this.panelName.textContent = getRegionName(x, y);
     this.panelAge.textContent  = `${line('NEWBAS008TEXT')} ${getAge(x)} ${line('NEWBAS009TEXT')}`;
-
     // Stats — colored values
     setColored(this.panelDensity,      line('NEWBAS020TEXT'), severityText(density),      densityColor(density));
     setColored(this.panelDistance,     line('NEWBAS010TEXT'), distanceText(distance),     AMBER_HEX);
@@ -610,6 +768,33 @@ export class NewGameScreenState implements SceneState {
     if (wasHidden) {
       this.inspectorTimer  = 0;
       this.inspectorActive = true;
+      this.infoPanel.style.opacity = '0';
+      this.infoPanel.style.transform = 'translateX(300px)';
+      this.inspectorPreviewWrap.style.transform = 'translateX(-300px) rotate(15deg)';
+    }
+  }
+
+  private updateTelemetry(zone: LandingZone | null) {
+    if (!zone) {
+      setColored(this.telemetryDensity,      line('NEWBAS020TEXT'), '-', AMBER_HEX);
+      setColored(this.telemetryDistance,     line('NEWBAS010TEXT'), '-', AMBER_HEX);
+      setColored(this.telemetryThreat,       line('NEWBAS015TEXT'), '-', AMBER_HEX);
+      setColored(this.telemetryInterference, line('NEWBAS016TEXT'), '-', AMBER_HEX);
+      return;
+    }
+
+    const { density, threat, distance, interference } = zone;
+    setColored(this.telemetryDensity,      line('NEWBAS020TEXT'), severityText(density),      densityColor(density));
+    setColored(this.telemetryDistance,     line('NEWBAS010TEXT'), distanceText(distance),     AMBER_HEX);
+    setColored(this.telemetryThreat,       line('NEWBAS015TEXT'), severityText(threat),       threatColor(threat));
+    setColored(this.telemetryInterference, line('NEWBAS016TEXT'), severityText(interference), AMBER_HEX);
+  }
+
+  private refreshTelemetryFromHover() {
+    if (this.hoverGx >= 0 && this.hoverGx < INFO_MAP_SIZE && this.hoverGy >= 0 && this.hoverGy < INFO_MAP_SIZE) {
+      this.updateTelemetry(this.makeLandingZone(this.hoverGx, this.hoverGy));
+    } else {
+      this.updateTelemetry(null);
     }
   }
 
@@ -619,41 +804,44 @@ export class NewGameScreenState implements SceneState {
     if (this.state !== 'Initial') return;
     const rect = this.canvas.getBoundingClientRect();
     const uiScale = this.getUIScale();
-    const cellSize = this.mapSize / INFO_MAP_SIZE;
-    const gx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellSize);
-    const gy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellSize);
+    const cellW = this.mapW / INFO_MAP_SIZE;
+    const cellH = this.mapH / INFO_MAP_SIZE;
+    const gx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellW);
+    const gy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellH);
     if (gx < 0 || gx >= INFO_MAP_SIZE || gy < 0 || gy >= INFO_MAP_SIZE) return;
 
     this.selectedZone = this.makeLandingZone(gx, gy);
+    GameRules.bTutorialMode = isTutorialLandingZone(gx, gy);
     this.state = 'SelectedLandingZone';
     // Update help text to "ACCEPT or DECLINE region for deployment"
-    this.helpText.textContent = '';
-    const selIcon = this.el('span',
-      `display:inline-block;width:30px;height:30px;border:2px solid #000;border-radius:50%;text-align:center;line-height:28px;font-size:22px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
-      'O');
-    this.helpText.appendChild(selIcon);
-    const selText = this.el('span', '', line('NEWBAS004TEXT'));
-    this.helpText.appendChild(selText);
+    this.setHelpTextContent('selected', line('NEWBAS004TEXT'));
     SoundManager.playUI('Intro_UIAppear');  // Lua: previewappear
     playWarbleFullscreen(this.overlay, 0.3, 0.3);
     this.showInspector(this.selectedZone);
+    this.updateTelemetry(this.selectedZone);
     this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_active.png';
-    this.confirmBtnEl.style.pointerEvents = 'auto';
     this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_active.png';
-    this.declineBtnEl.style.pointerEvents = 'auto';
   }
 
   private onMouseMove(e: MouseEvent) {
-    if (this.state !== 'Initial') return;
     const rect = this.canvas.getBoundingClientRect();
     const uiScale = this.getUIScale();
-    const cellSize = this.mapSize / INFO_MAP_SIZE;
-    this.hoverGx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellSize);
-    this.hoverGy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellSize);
+    const cellW = this.mapW / INFO_MAP_SIZE;
+    const cellH = this.mapH / INFO_MAP_SIZE;
+    this.hoverGx = Math.floor(((e.clientX - rect.left) / uiScale - this.mapX) / cellW);
+    this.hoverGy = Math.floor(((e.clientY - rect.top) / uiScale  - this.mapY) / cellH);
+    if (this.state === 'Initial') {
+      GameRules.bTutorialMode =
+        this.hoverGx >= 0 &&
+        this.hoverGx < INFO_MAP_SIZE &&
+        this.hoverGy >= 0 &&
+        this.hoverGy < INFO_MAP_SIZE &&
+        isTutorialLandingZone(this.hoverGx, this.hoverGy);
+    }
     if (this.hoverGx >= 0 && this.hoverGx < INFO_MAP_SIZE && this.hoverGy >= 0 && this.hoverGy < INFO_MAP_SIZE) {
-      this.showInspector(this.makeLandingZone(this.hoverGx, this.hoverGy));
-    } else {
-      this.infoPanel.style.display = 'none';
+      if (this.state === 'Initial') this.updateTelemetry(this.makeLandingZone(this.hoverGx, this.hoverGy));
+    } else if (this.state === 'Initial') {
+      this.updateTelemetry(null);
     }
   }
 
@@ -663,10 +851,8 @@ export class NewGameScreenState implements SceneState {
     SoundManager.playUI('Intro_LaunchOpen');     // Lua: launchopen
     playWarbleFullscreen(this.overlay, 0.6, 0.5);
     this.state = 'ConfirmedLandingZone';
-    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
-    this.confirmBtnEl.style.pointerEvents = 'none';
-    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
-    this.declineBtnEl.style.pointerEvents = 'none';
+    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png';
+    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png';
     this.helpText.style.display   = 'none';
 
     // Slide launch cover away to reveal active button
@@ -681,11 +867,13 @@ export class NewGameScreenState implements SceneState {
     SoundManager.playUI('Intro_UIDisappear');     // Lua: previewdissappear
     this.state = 'Initial';
     this.selectedZone = null;
+    GameRules.bTutorialMode = false;
     this.infoPanel.style.display       = 'none';
-    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
-    this.confirmBtnEl.style.pointerEvents = 'none';
-    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
-    this.declineBtnEl.style.pointerEvents = 'none';
+    this.infoPanel.style.opacity       = '0';
+    this.infoPanel.style.transform     = 'translateX(300px)';
+    this.inspectorPreviewWrap.style.transform = 'translateX(-300px) rotate(15deg)';
+    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png';
+    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png';
     this.launchActiveEl.style.display  = 'none';
     this.cancelBtnEl.style.display     = 'none';
 
@@ -695,6 +883,7 @@ export class NewGameScreenState implements SceneState {
 
     this.rebuildHelpTextContent(line('NEWBAS001TEXT'));
     this.helpText.style.display    = 'flex';
+    this.refreshTelemetryFromHover();
   }
 
   private onCancel() {
@@ -704,11 +893,13 @@ export class NewGameScreenState implements SceneState {
     SoundManager.playUI('Intro_UIDisappear');     // previewdissappear
     this.state = 'Initial';
     this.selectedZone = null;
+    GameRules.bTutorialMode = false;
     this.infoPanel.style.display       = 'none';
-    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_off.png';
-    this.confirmBtnEl.style.pointerEvents = 'none';
-    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_off.png';
-    this.declineBtnEl.style.pointerEvents = 'none';
+    this.infoPanel.style.opacity       = '0';
+    this.infoPanel.style.transform     = 'translateX(300px)';
+    this.inspectorPreviewWrap.style.transform = 'translateX(-300px) rotate(15deg)';
+    this.confirmImg.src = '/assets/ui/newgame/ui_newgame_buttonConfirm_inactive.png';
+    this.declineImg.src = '/assets/ui/newgame/ui_newgame_buttonDecline_inactive.png';
     this.launchActiveEl.style.display  = 'none';
     this.cancelBtnEl.style.display     = 'none';
 
@@ -718,16 +909,11 @@ export class NewGameScreenState implements SceneState {
 
     this.rebuildHelpTextContent(line('NEWBAS001TEXT'));
     this.helpText.style.display    = 'flex';
+    this.refreshTelemetryFromHover();
   }
 
   private rebuildHelpTextContent(text: string) {
-    this.helpText.textContent = '';
-    const icon = this.el('span',
-      `display:inline-block;width:30px;height:30px;border:2px solid #000;border-radius:50%;text-align:center;line-height:28px;font-size:22px;font-weight:700;margin-right:12px;color:#000;flex-shrink:0;`,
-      '?');
-    this.helpText.appendChild(icon);
-    const span = this.el('span', '', text);
-    this.helpText.appendChild(span);
+    this.setHelpTextContent('idle', text);
   }
 
   private onDeploy() {
@@ -749,7 +935,9 @@ export class NewGameScreenState implements SceneState {
     this.deployEta.style.opacity  = '0';
     this.deployYears.style.opacity = '0';
     this.deployOverlay.style.display = 'flex';
-    this.deployOverlay.style.opacity = '0';
+    this.deployOverlay.style.background = 'rgba(0,0,0,0)';
+    this.deployOverlay.style.opacity = '1';
+    this.deployTextWrap.style.opacity = '0';
   }
 
   // ── Update ───────────────────────────────────────────────────────────────────
@@ -764,16 +952,18 @@ export class NewGameScreenState implements SceneState {
       this.inspectorTimer += dt;
       const STEP = 0.25, TOTAL = 1.0;
       const t = Math.min(this.inspectorTimer / TOTAL, 1);
-      const stepped = Math.floor(t / STEP) * STEP / TOTAL;
-      const progress = Math.min(stepped * (TOTAL / STEP), 1);
-      this.infoPanel.style.opacity   = String(progress);
-      this.infoPanel.style.transform = `translateX(${(1 - progress) * 30}px)`;
-      // Lua NewBaseInspector.lua:180 — rZoomedMap:setRot(0, 0, DFMath.lerp(15, 0, t))
+      const steps = Math.max(Math.floor(TOTAL / STEP), 1);
+      const progress = Math.min(Math.floor(t / STEP) / steps, 1);
+      this.infoPanel.style.opacity = String(progress);
+      this.infoPanel.style.transform = `translateX(${(1 - progress) * 300}px)`;
+      this.inspectorPreviewWrap.style.transform =
+        `translateX(${(-300 + (progress * 300)).toFixed(2)}px) rotate(${(15 * (1 - progress)).toFixed(2)}deg)`;
       if (this.inspectorTimer >= TOTAL) {
         this.inspectorTimer  = 0;
         this.inspectorActive = false;
-        this.infoPanel.style.opacity   = '1';
+        this.infoPanel.style.opacity = '1';
         this.infoPanel.style.transform = 'none';
+        this.inspectorPreviewWrap.style.transform = 'none';
       }
     }
     this.draw();
@@ -781,13 +971,22 @@ export class NewGameScreenState implements SceneState {
 
   private updateDeployAnimation() {
     const t = this.deployTime;
+    const zoomT = Math.max(0, Math.min(1, (t - END_ANIM_INITIAL_DELAY) / END_ANIM_ZOOM_TIME));
+    const fadeAlpha = String(1 - zoomT);
+    this.canvas.style.transformOrigin = 'center center';
+    this.canvas.style.transform = `translateX(${(zoomT * 140).toFixed(1)}px) scale(${(1 + zoomT * 0.18).toFixed(3)})`;
+    this.canvas.style.filter = `brightness(${(1 - zoomT * 0.7).toFixed(3)})`;
+    this.regionSelectionLabel.style.opacity = fadeAlpha;
+    this.flavorA.style.opacity = fadeAlpha;
+    this.flavorB.style.opacity = fadeAlpha;
+    this.tutorialLabel.style.opacity = fadeAlpha;
 
     // Phase 1: fade overlay in
     if (t < END_ANIM_INITIAL_DELAY) {
-      this.deployOverlay.style.opacity = String(t / END_ANIM_INITIAL_DELAY);
+      this.deployTextWrap.style.opacity = String(t / END_ANIM_INITIAL_DELAY);
       return;
     }
-    this.deployOverlay.style.opacity = '1';
+    this.deployTextWrap.style.opacity = '1';
 
     // Phase 2: show seed pod message
     const t2 = t - END_ANIM_INITIAL_DELAY;
@@ -818,11 +1017,13 @@ export class NewGameScreenState implements SceneState {
       this.deployMsg.style.opacity   = alpha;
       this.deployEta.style.opacity   = alpha;
       this.deployYears.style.opacity = alpha;
+      const blackAlpha = Math.min(1, t5 / END_ANIM_FADE_OUT_TIME);
+      this.deployOverlay.style.background = `rgba(0,0,0,${blackAlpha})`;
       return;
     }
 
     this.state = 'Deployed';
-    if (this.selectedZone) this.onStartGame(this.selectedZone);
+    if (this.selectedZone) this.onStartGame(this.selectedZone, GameRules.bTutorialMode);
   }
 
   // ── Draw ─────────────────────────────────────────────────────────────────────
@@ -832,83 +1033,126 @@ export class NewGameScreenState implements SceneState {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     if (this.galaxyImg) {
-      ctx.drawImage(this.galaxyImg, this.mapX, this.mapY, this.mapSize, this.mapSize);
+      ctx.drawImage(this.galaxyImg, this.mapX, this.mapY, this.mapW, this.mapH);
     }
 
+    const vignette = ctx.createRadialGradient(
+      this.mapX + this.mapW * 0.5,
+      this.mapY + this.mapH * 0.48,
+      Math.min(this.mapW, this.mapH) * 0.18,
+      this.mapX + this.mapW * 0.5,
+      this.mapY + this.mapH * 0.5,
+      Math.max(this.mapW, this.mapH) * 0.72,
+    );
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(this.mapX, this.mapY, this.mapW, this.mapH);
+
     // Grid lines
-    const cellSize = this.mapSize / INFO_MAP_SIZE;
+    const cellW = this.mapW / INFO_MAP_SIZE;
+    const cellH = this.mapH / INFO_MAP_SIZE;
     ctx.strokeStyle = 'rgba(223,162,0,0.1)';
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= INFO_MAP_SIZE; i++) {
-      ctx.beginPath(); ctx.moveTo(this.mapX + i * cellSize, this.mapY); ctx.lineTo(this.mapX + i * cellSize, this.mapY + this.mapSize); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(this.mapX, this.mapY + i * cellSize); ctx.lineTo(this.mapX + this.mapSize, this.mapY + i * cellSize); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.mapX + i * cellW, this.mapY); ctx.lineTo(this.mapX + i * cellW, this.mapY + this.mapH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.mapX, this.mapY + i * cellH); ctx.lineTo(this.mapX + this.mapW, this.mapY + i * cellH); ctx.stroke();
     }
 
     // Tutorial marker at (12, 34) — Lua: small radio_pressed icon + label beside it
-    {
-      const tx = this.mapX + TUTORIAL_X * cellSize + cellSize * 0.5;
-      const ty = this.mapY + TUTORIAL_Y * cellSize + cellSize * 0.5;
-      // Small dot marker
+    if (this.state !== 'Deploying') {
+      const tx = this.mapX + TUTORIAL_X * cellW + cellW * 0.5;
+      const ty = this.mapY + TUTORIAL_Y * cellH + cellH * 0.5;
+      ctx.strokeStyle = AMBER_HEX;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(tx - 8, ty - 8, 16, 16);
+      ctx.fillStyle = 'rgba(223,162,0,0.18)';
+      ctx.fillRect(tx - 8, ty - 8, 16, 16);
       ctx.fillStyle = GREEN_HEX;
       ctx.beginPath();
-      ctx.arc(tx, ty, Math.max(3, cellSize * 0.3), 0, Math.PI * 2);
+      ctx.arc(tx, ty, Math.max(3, Math.min(cellW, cellH) * 0.3), 0, Math.PI * 2);
       ctx.fill();
-      // Label to the right of the dot
-      const fs = Math.max(7, cellSize * 0.6);
-      ctx.font         = `bold ${fs}px monospace`;
-      ctx.fillStyle    = GREEN_HEX;
-      ctx.textAlign    = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(line('UIMISC045TEXT'), tx + cellSize * 0.6, ty);
-      ctx.textAlign    = 'left';
-      ctx.textBaseline = 'alphabetic';
     }
 
     // Hover crosshair — mirrors NewBaseLayout CursorLineHorizontal/Vertical
     if (this.state === 'Initial' && this.hoverGx >= 0 && this.hoverGx < INFO_MAP_SIZE) {
-      const hx = this.mapX + (this.hoverGx + 0.5) * cellSize;
-      const hy = this.mapY + (this.hoverGy + 0.5) * cellSize;
+      const hx = this.mapX + (this.hoverGx + 0.5) * cellW;
+      const hy = this.mapY + (this.hoverGy + 0.5) * cellH;
 
       // Full-width crosshair lines (amber)
       ctx.strokeStyle = 'rgba(223,162,0,0.35)';
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(this.mapX, hy); ctx.lineTo(this.mapX + this.mapSize, hy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(hx, this.mapY); ctx.lineTo(hx, this.mapY + this.mapSize); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(this.mapX, hy); ctx.lineTo(this.mapX + this.mapW, hy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx, this.mapY); ctx.lineTo(hx, this.mapY + this.mapH); ctx.stroke();
 
-      // Coordinate label at cursor — mirrors CursorText
-      ctx.font = `bold 10px monospace`;
+      const cursorSize = Math.max(10, Math.min(cellW, cellH) * 0.75);
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(Math.PI / 4);
+      ctx.strokeStyle = AMBER_HEX;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(-cursorSize / 2, -cursorSize / 2, cursorSize, cursorSize);
+      ctx.restore();
+
+      // Coordinate label at cursor — mirrors CursorText / CursorTutorialText
+      ctx.font = `600 22px Dosis, sans-serif`;
       ctx.fillStyle = AMBER_HEX;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(`${this.hoverGx}`, hx, hy - 6);
-      ctx.textBaseline = 'top';
-      ctx.fillText(`${this.hoverGy}`, hx, hy + 6);
+      ctx.fillText(`${this.hoverGx} - ${this.hoverGy}`, hx + 28, hy - 30);
+      if ((this.hoverGx === 12 && this.hoverGy === 34) || (this.hoverGx === 13 && this.hoverGy === 34)) {
+        ctx.textBaseline = 'top';
+        ctx.fillText('QUICK-START MODE', hx - 120, hy + 52);
+      }
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
     }
 
     // Selection marker
     if (this.selectedZone) {
-      const sx = this.mapX + this.selectedZone.x * cellSize;
-      const sy = this.mapY + this.selectedZone.y * cellSize;
+      const sx = this.mapX + this.selectedZone.x * cellW;
+      const sy = this.mapY + this.selectedZone.y * cellH;
       ctx.fillStyle   = 'rgba(223,162,0,0.25)';
       ctx.strokeStyle = AMBER_HEX;
       ctx.lineWidth   = 2;
-      ctx.fillRect(sx, sy, cellSize, cellSize);
-      ctx.strokeRect(sx, sy, cellSize, cellSize);
+      ctx.fillRect(sx, sy, cellW, cellH);
+      ctx.strokeRect(sx, sy, cellW, cellH);
     }
+
+    ctx.strokeStyle = 'rgba(223,162,0,0.22)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(this.mapX + 0.5, this.mapY + 0.5, this.mapW - 1, this.mapH - 1);
+  }
+
+  private setHelpTextContent(mode: 'idle' | 'selected', text: string) {
+    this.helpText.textContent = '';
+
+    const icon = document.createElement('span');
+    icon.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:2px solid #000;border-radius:50%;margin-right:12px;flex-shrink:0;background:rgba(0,0,0,0.08);box-shadow:inset 0 0 0 1px rgba(223,162,0,0.18);';
+    const glyph = document.createElement('span');
+    glyph.style.cssText = `color:#000;font-size:${mode === 'idle' ? 16 : 18}px;font-weight:900;line-height:1;transform:translateY(-1px);`;
+    glyph.textContent = mode === 'idle' ? '▶' : 'O';
+    icon.appendChild(glyph);
+    this.helpText.appendChild(icon);
+
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:24px;line-height:1.1;letter-spacing:0.5px;font-weight:700;';
+    label.textContent = text;
+    this.helpText.appendChild(label);
   }
 
   private getUIScale(): number {
-    const stored = localStorage.getItem('df9_ui_scale');
-    if (stored) {
-      const v = parseFloat(stored);
-      if (v > 0 && v <= 2) return v;
-    }
-    return Math.min(1, window.innerWidth / 1920);
+    return getStoredOrAutoUIScale();
   }
 
   exit() {
+    GameRules.bTutorialMode = false;
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
+    this.canvas.style.transform = 'none';
+    this.canvas.style.filter = 'none';
     this.overlay?.remove();
   }
 }

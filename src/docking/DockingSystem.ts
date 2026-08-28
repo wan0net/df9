@@ -107,7 +107,9 @@ export class DockingSystem {
     Base.addAlert('immigration', line('ALERT_IMMIGRATION_ARRIVED', { count: String(immigrants) }));
     
     for (let i = 0; i < immigrants; i++) {
-      this.characterManager.spawnCharacterAt(0, 0, false, true);
+      // E-7: Spawn at a random room tile, fallback to center of map
+      const tile = this.characterManager.getRandomRoomTile() ?? { x: 128, y: 128 };
+      this.characterManager.spawnCharacterAt(tile.x, tile.y, false, true);
     }
     
     return ship;

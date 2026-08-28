@@ -26,9 +26,18 @@ class SpatialAudioClass {
     SoundManager.playSfx3D(cue, pos.x + TILE_HALF_W, pos.y + TILE_HALF_H);
   }
 
-  /** Start a looping sound at a tile (e.g., machine hum, fire). */
+  /** Start a looping sound at a tile (e.g., machine hum, fire).
+   *  If the loop already exists at the same position, does nothing.
+   *  If the loop already exists at a different position, restarts it at the new position. */
   startLoop(key: string, cue: string, tileX: number, tileY: number) {
-    if (this.activeLoops.has(key)) return;
+    const existing = this.activeLoops.get(key);
+    if (existing) {
+      // Already running — update position if it moved
+      if (existing.tileX !== tileX || existing.tileY !== tileY) {
+        this.updateLoopPosition(key, tileX, tileY);
+      }
+      return;
+    }
     const pos = tileToScreen(tileX, tileY);
     const worldX = pos.x + TILE_HALF_W;
     const worldY = pos.y + TILE_HALF_H;
@@ -40,6 +49,22 @@ class SpatialAudioClass {
     this.activeLoops.set(key, {
       cue, tileX, tileY, worldX, worldY, sourceKey,
     });
+  }
+
+  /** Update the position of an existing loop (stops + restarts at new position). */
+  updateLoopPosition(key: string, tileX: number, tileY: number) {
+    const loop = this.activeLoops.get(key);
+    if (!loop) return;
+    // Stop old source
+    SoundManager.stopLoopByKey(loop.sourceKey);
+    // Update position
+    const pos = tileToScreen(tileX, tileY);
+    loop.tileX = tileX;
+    loop.tileY = tileY;
+    loop.worldX = pos.x + TILE_HALF_W;
+    loop.worldY = pos.y + TILE_HALF_H;
+    // Restart at new position
+    SoundManager.playLoop3D(loop.cue, loop.worldX, loop.worldY, loop.sourceKey);
   }
 
   /** Stop a looping sound. */
@@ -75,15 +100,26 @@ class SpatialAudioClass {
     this.playAtTile('DoorClose', tileX, tileY);
   }
 
-  /** Fire started at tile. */
-  fireStart(tileX: number, tileY: number) {
+  /** Play one-shot fire-start SFX at tile (does NOT create per-tile loop). */
+  fireStartSfx(tileX: number, tileY: number) {
     this.playAtTile('FireStartExtra', tileX, tileY);
-    this.startLoop(`fire_${tileX}_${tileY}`, 'FireLoop', tileX, tileY);
   }
 
-  /** Fire extinguished at tile. */
-  fireEnd(tileX: number, tileY: number) {
-    this.stopLoop(`fire_${tileX}_${tileY}`);
+  /** Update the single global fire loop: compute average position of all burning tiles.
+   *  Call once per fire tick from Fire.onTick.
+   *  If fires is empty, stops the loop. */
+  updateFireLoop(fires: { x: number; y: number }[]) {
+    const FIRE_LOOP_KEY = 'fire_global';
+    if (fires.length === 0) {
+      this.stopLoop(FIRE_LOOP_KEY);
+      return;
+    }
+    let sx = 0, sy = 0;
+    for (const f of fires) { sx += f.x; sy += f.y; }
+    const avgX = Math.round(sx / fires.length);
+    const avgY = Math.round(sy / fires.length);
+    // Start or reposition the single global fire loop
+    this.startLoop(FIRE_LOOP_KEY, 'FireLoop', avgX, avgY);
   }
 
   /** Melee hit at position. */

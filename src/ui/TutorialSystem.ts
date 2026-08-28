@@ -36,6 +36,13 @@ export interface TutorialProviders {
   hasExploredDerelict: () => boolean;
 }
 
+export interface TutorialSaveState {
+  active: boolean;
+  currentStage: number;
+  stageTimer: number;
+  completedConditions: string[];
+}
+
 // 20 tutorial stages from Lua GameRules.lua:51-72
 const STAGES: TutorialStage[] = [
   { sName: 'ZoomedView', sLC: 'TRAING001TEXT', check: (p) => p.hasZoomed() },
@@ -72,12 +79,12 @@ export class TutorialSystem {
   private stageTimer = 0;
   private completedConditions = new Set<string>();
 
-  start(container: HTMLElement, providers: TutorialProviders) {
-    this.active = true;
-    this.currentStage = 0;
+  start(container: HTMLElement, providers: TutorialProviders, savedState?: Partial<TutorialSaveState>) {
+    this.active = savedState?.active ?? true;
+    this.currentStage = savedState?.currentStage ?? 0;
     this.providers = providers;
-    this.stageTimer = 0;
-    this.completedConditions.clear();
+    this.stageTimer = savedState?.stageTimer ?? 0;
+    this.completedConditions = new Set(savedState?.completedConditions ?? []);
 
     // Create tutorial text panel (bottom of screen, matching Lua tutorialText)
     this.overlay = document.createElement('div');
@@ -111,6 +118,14 @@ export class TutorialSystem {
     this.overlay.appendChild(bg);
     container.appendChild(this.overlay);
 
+    this.updateDisplay();
+  }
+
+  restoreState(savedState: Partial<TutorialSaveState>) {
+    this.active = savedState.active ?? this.active;
+    this.currentStage = savedState.currentStage ?? this.currentStage;
+    this.stageTimer = savedState.stageTimer ?? this.stageTimer;
+    this.completedConditions = new Set(savedState.completedConditions ?? this.completedConditions);
     this.updateDisplay();
   }
 
@@ -186,5 +201,14 @@ export class TutorialSystem {
 
   getCompletedConditions(): string[] {
     return Array.from(this.completedConditions);
+  }
+
+  getSaveState(): TutorialSaveState {
+    return {
+      active: this.active,
+      currentStage: this.currentStage,
+      stageTimer: this.stageTimer,
+      completedConditions: this.getCompletedConditions(),
+    };
   }
 }

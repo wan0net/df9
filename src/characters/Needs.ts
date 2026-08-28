@@ -29,22 +29,28 @@ export class Needs {
   private needTickAccum = 0;
 
   /** Decay needs over time. dt in seconds (game-scaled).
-   *  Lua Character.lua:2367-2373 — all needs decay by 1 per NEEDS_REDUCE_TICK.
-   *  @param promisedNeeds - needs currently being satisfied by a task (skip decay) */
-  decay(dt: number, promisedNeeds?: Set<string>) {
+   *  Lua Character.lua:2367-2373 — all needs decay by 1 * malady modifier per NEEDS_REDUCE_TICK.
+   *  @param promisedNeeds - needs currently being satisfied by a task (skip decay)
+   *  @param maladyMods - malady-based need rate modifiers (M-1: from Malady.getNeedsReduceMods) */
+  decay(dt: number, promisedNeeds?: Set<string>, maladyMods?: Record<string, number>) {
     this.needTickAccum += dt;
 
     // Needs reduce every NEEDS_REDUCE_TICK seconds (14.4s in Lua)
     if (this.needTickAccum >= NEEDS_REDUCE_TICK) {
       this.needTickAccum -= NEEDS_REDUCE_TICK;
 
-      // Lua: each need decays by 1 * malady modifier per tick
-      // Skip needs currently promised by the active task
-      if (!promisedNeeds?.has('Hunger'))   this.hunger    = Math.max(-100, this.hunger - 1);
-      if (!promisedNeeds?.has('Energy'))   this.energy    = Math.max(-100, this.energy - 1);
-      if (!promisedNeeds?.has('Amusement'))this.amusement = Math.max(-100, this.amusement - 1);
-      if (!promisedNeeds?.has('Social'))   this.social    = Math.max(-100, this.social - 1);
-      if (!promisedNeeds?.has('Duty'))     this.duty      = Math.max(-100, this.duty - 1);
+      // M-1: Apply malady modifiers to decay rates (Lua getNeedsReduceRate)
+      const hMod = maladyMods?.['Hunger'] ?? 1;
+      const eMod = maladyMods?.['Energy'] ?? 1;
+      const aMod = maladyMods?.['Amusement'] ?? 1;
+      const sMod = maladyMods?.['Social'] ?? 1;
+      const dMod = maladyMods?.['Duty'] ?? 1;
+
+      if (!promisedNeeds?.has('Hunger'))   this.hunger    = Math.max(-100, this.hunger - hMod);
+      if (!promisedNeeds?.has('Energy'))   this.energy    = Math.max(-100, this.energy - eMod);
+      if (!promisedNeeds?.has('Amusement'))this.amusement = Math.max(-100, this.amusement - aMod);
+      if (!promisedNeeds?.has('Social'))   this.social    = Math.max(-100, this.social - sMod);
+      if (!promisedNeeds?.has('Duty'))     this.duty      = Math.max(-100, this.duty - dMod);
     }
   }
 

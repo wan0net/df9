@@ -5,6 +5,7 @@
  */
 
 import { GameRules, type TickableSystem } from '../core/GameRules';
+import { SpatialAudio } from '../audio/SpatialAudio';
 
 // ── Lua-exact constants ──────────────────────────────────────────────
 
@@ -146,6 +147,9 @@ export class Fire implements TickableSystem {
 
     this.fires.set(key, { x, y, nHeat: 1, nIntensity: nIntensity });
 
+    // One-shot fire start SFX at tile (Lua: Fire._addToTile plays start sound)
+    SpatialAudio.fireStartSfx(x, y);
+
     // Notify room and env objects (Lua Fire._addToTile: prop:onFire(), rRoom:onFire())
     this.onFireStart?.(x, y);
   }
@@ -224,8 +228,6 @@ export class Fire implements TickableSystem {
     if (this.timeUntilNextUpdate > 0) return;
     this.timeUntilNextUpdate = TIME_BETWEEN_UPDATES;
 
-    const toSpread: { x: number; y: number }[] = [];
-
     for (const [key, fire] of this.fires) {
       // O2 dousing check (Lua: oxygen < NO_OXYGEN_THRESHOLD or < LOW_OXYGEN_THRESHOLD)
       if (this.oxygenCheck) {
@@ -241,25 +243,25 @@ export class Fire implements TickableSystem {
         }
       }
 
-      // Spread to adjacent tile (Lua: random(2,9) = all 8 neighbors)
+      // FR-1: Spread to adjacent tile — on first successful spread, RETURN immediately
+      // matching Lua Fire.onTick line 148-149: "if Fire._attemptFireTile(tx,ty) then return end"
       if (Math.random() < this.getSpreadProbability(fire.nIntensity)) {
         const neighbors = getAll8Neighbors(fire.x, fire.y);
         const nb = neighbors[Math.floor(Math.random() * neighbors.length)];
+        let canSpread = false;
 
         if (this.tileCheck) {
           const tileType = this.tileCheck(nb.x, nb.y);
-          // Lua: only spread to floor tiles (wall/door spread disabled in Lua: "MTF TEMP")
-          if (countsAsFloor(tileType)) {
-            const nbKey = `${nb.x},${nb.y}`;
-            if (!this.fires.has(nbKey)) {
-              toSpread.push(nb);
-            }
+          if (countsAsFloor(tileType) && !this.fires.has(`${nb.x},${nb.y}`)) {
+            canSpread = true;
           }
-        } else {
-          const nbKey = `${nb.x},${nb.y}`;
-          if (!this.fires.has(nbKey)) {
-            toSpread.push(nb);
-          }
+        } else if (!this.fires.has(`${nb.x},${nb.y}`)) {
+          canSpread = true;
+        }
+
+        if (canSpread) {
+          this.startFire(nb.x, nb.y, INTENSITY_DEFAULT);
+          return; // Lua parity: exit entire onTick after first successful spread
         }
       }
 
@@ -279,12 +281,6 @@ export class Fire implements TickableSystem {
       if (Math.random() < probDamage) {
         fire.nHeat += 0.4;
       }
-    }
-
-    // Spread fires (Lua: only spread 1 fire per tick via early return)
-    if (toSpread.length > 0) {
-      const pos = toSpread[0]; // Lua returns after first successful spread
-      this.startFire(pos.x, pos.y, INTENSITY_DEFAULT);
     }
   }
 
@@ -319,5 +315,7 @@ export class Fire implements TickableSystem {
   /** Clear all fires (for new game / load). */
   clearAll() {
     this.fires.clear();
+    // Stop the global fire loop immediately
+    SpatialAudio.updateFireLoop([]);
   }
 }

@@ -27,25 +27,15 @@ const MAX_EFFECTS = 32;
 const PARTICLES_PER_EFFECT = 16;
 const MAX_PARTICLES = MAX_EFFECTS * PARTICLES_PER_EFFECT;
 
-function createSparkTexture(): THREE.Texture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 16;
-  canvas.height = 16;
-  const ctx = canvas.getContext('2d')!;
-  const grad = ctx.createRadialGradient(8, 8, 0, 8, 8, 8);
-  grad.addColorStop(0, 'rgba(255,255,200,1)');
-  grad.addColorStop(0.5, 'rgba(255,180,50,0.6)');
-  grad.addColorStop(1, 'rgba(200,100,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 16, 16);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
-}
-
 let sparkTex: THREE.Texture | null = null;
 function getSparkTexture(): THREE.Texture {
-  if (!sparkTex) sparkTex = createSparkTexture();
+  if (!sparkTex) {
+    sparkTex = new THREE.TextureLoader().load('assets/effects/spark01.png');
+    sparkTex.magFilter = THREE.LinearFilter;
+    sparkTex.minFilter = THREE.LinearFilter;
+    sparkTex.colorSpace = THREE.SRGBColorSpace;
+    sparkTex.userData.sourceAsset = 'spark01';
+  }
   return sparkTex;
 }
 
@@ -203,6 +193,11 @@ export class EffectParticles {
     (this.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
     (this.geometry.attributes.size as THREE.BufferAttribute).needsUpdate = true;
+  }
+
+  getTextureSource(): string | null {
+    const material = this.points.material as THREE.PointsMaterial;
+    return material.map?.userData.sourceAsset ?? null;
   }
 
   dispose() {

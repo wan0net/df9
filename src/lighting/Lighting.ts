@@ -15,6 +15,7 @@ import { GameRules, type TickableSystem } from '../core/GameRules';
 import type { RoomManager } from '../rooms/RoomManager';
 import type { Fire as FireSystem } from '../hazards/Fire';
 import { ZONE_SPRITES } from '../world/ZoneType';
+import { OXYGEN_SUFFOCATING } from '../characters/CharacterConstants';
 import {
   LIGHTING_SCHEME_OFF,
   LIGHTING_SCHEME_NORMAL,
@@ -35,13 +36,6 @@ export const LIGHTING_SCHEME = {
   LOWPOWER: LIGHTING_SCHEME_LOWPOWER,
 } as const;
 
-/**
- * O2 level (room 0-255 scale) below which the room triggers FIRE lighting.
- * Lua: getOxygenScore() < Character.OXYGEN_SUFFOCATING (100) in Lua tile units;
- * converted: 100/65535*255 ≈ 0.4 → use a practical threshold of 10.
- */
-const O2_SUFFOCATING_ROOM = 10;
-
 export class Lighting implements TickableSystem {
   private roomManager: RoomManager;
   private fire: FireSystem | null = null;
@@ -61,13 +55,13 @@ export class Lighting implements TickableSystem {
 
   /** Resolve the lighting scheme for a room — mirrors Room:updateEmergency(). */
   private computeScheme(room: Room): number {
-    if (room.nPowerDraw > 0 && room.nPowerSupply === 0) {
+    if (room.nPowerSupply === 0) {
       return LIGHTING_SCHEME_VACUUM;
     }
 
     const bBurning = this.roomHasFire(room);
     const bBreach = !room.sealed;
-    const bSuffocating = room.oxygen < O2_SUFFOCATING_ROOM;
+    const bSuffocating = room.getOxygenScore() < OXYGEN_SUFFOCATING;
     if (bBurning || bBreach || bSuffocating) {
       return LIGHTING_SCHEME_FIRE;
     }

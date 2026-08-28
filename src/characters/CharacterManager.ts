@@ -1,22 +1,29 @@
 import { Character } from './Character';
 import { addLog } from './Log';
+import { generateName } from './CitizenNames';
 import { line } from '../localization/Localization';
 import {
   MINER, BUILDER, TECHNICIAN, BARTENDER, BOTANIST, SCIENTIST, DOCTOR, JANITOR, EMERGENCY,
-  RAIDER,
+  RAIDER, UNEMPLOYED,
   CAUSE_OF_DEATH, FAMILIARITY_TICK_RATE, FAMILIARITY_TICK_INCREASE,
   HURT_THRESHOLD,
   TEAM_ID_PLAYER, TEAM_ID_DEBUG_ENEMYGROUP, STARTING_HIT_POINTS,
   STATUS_DEAD,
   OXYGEN_PER_SECOND, OXYGEN_SUFFOCATION_UNTIL_DEATH, SPACESUIT_MAX_OXYGEN,
-  OXYGEN_LOW, OXYGEN_SUFFOCATING,
+  OXYGEN_LOW, OXYGEN_SUFFOCATING, SPACESUIT_OXYGEN_SUFFOCATING,
+  VACUUM_THRESHOLD, VACUUM_THRESHOLD_END,
   NEEDS_HUNGER_STARVATION, TIME_BEFORE_STARVATION,
+  JOB_EXPERIENCE_RATE, UNNECESSARY_SPACESUIT_REMOVE,
+  RACE_KILLBOT, RACE_MONSTER, CHAT_COOLDOWN,
+  ANGER_MAX, FACTION_BEHAVIOR,
 } from './CharacterConstants';
-import { TileGrid } from '../world/TileGrid';
+import { SpatialAudio } from '../audio/SpatialAudio';
+import { Direction, getAdjacentTile, TileGrid } from '../world/TileGrid';
 import { TileType } from '../world/TileTypes';
 import { RoomManager } from '../rooms/RoomManager';
-import { Room } from '../rooms/Room';
+import { Room, VISIBILITY_FULL } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
+import { ResearchZone } from '../zones/ResearchZone';
 import { findPath, WALKABLE_DEFAULT, WALKABLE_SPACEWALK } from '../pathfinding/AStar';
 import { INITIAL_CREW } from '../config';
 import { GameRules } from '../core/GameRules';
@@ -67,20 +74,26 @@ import { ExtinguishFireWithTool } from '../utility/tasks/ExtinguishFireWithTool'
 import { ExtinguishFireBareHanded } from '../utility/tasks/ExtinguishFireBareHanded';
 import { DropEverything } from '../utility/tasks/DropEverything';
 import { DestroyEnvObject } from '../utility/tasks/DestroyEnvObject';
+import { MonsterPatrol } from '../utility/tasks/MonsterPatrol';
+import { MonsterAttackEquipment } from '../utility/tasks/MonsterAttackEquipment';
 import { ChatPartner } from '../utility/tasks/ChatPartner';
 import { MaintainPub } from '../utility/tasks/MaintainPub';
 import { EatAtFoodReplicator } from '../utility/tasks/EatAtFoodReplicator';
 import { EatPlant } from '../utility/tasks/EatPlant';
 import { PlayGameSystem } from '../utility/tasks/PlayGameSystem';
+import { TearDownEnvObjectForResearch } from '../utility/tasks/TearDownEnvObjectForResearch';
+import { DeliverResearchDatacube } from '../utility/tasks/DeliverResearchDatacube';
+import { PutResearchDatacubeWherever } from '../utility/tasks/PutResearchDatacubeWherever';
 import { WorkOutInGym } from '../utility/tasks/WorkOutInGym';
 import { CheckInToHospital } from '../utility/tasks/CheckInToHospital';
 import { PanicOnFire } from '../utility/tasks/PanicOnFire';
 import { VacuumPull } from '../utility/tasks/VacuumPull';
 import { CircleBeacon } from '../utility/tasks/CircleBeacon';
-import { PRIORITY } from '../utility/ActivityOption';
+import { PRIORITY, type PriorityLevel } from '../utility/ActivityOption';
 import { EmergencyBeacon } from '../combat/EmergencyBeacon';
 import { CommandQueue } from '../core/CommandQueue';
 import { EnvObjectManager } from '../envobjects/EnvObjectManager';
+import type { EnvObject } from '../envobjects/EnvObject';
 import { tDoorsByAddr, Door } from '../envobjects/Door';
 import { Base } from '../core/Base';
 import { Corpse, CORPSE_TYPE_FRIENDLY, CORPSE_TYPE_RAIDER, CORPSE_TYPE_MONSTER } from '../pickups/Corpse';
@@ -102,8 +115,13 @@ import type { ProjectileManager } from '../hazards/Projectile';
 import type { DecalRenderer } from '../renderer/DecalRenderer';
 import type { VacuumSystem } from '../oxygen/VacuumSystem';
 
-/** Max AI decisions per tick (Lua: UPDATES_PER_TICK=10) */
-const UPDATES_PER_TICK = 10;
+/** Lua processes 1 decision per frame at 60fps = 60/sec.
+ *  Our aiTickInterval is 1000ms, so ~60 per tick matches Lua throughput. */
+const UPDATES_PER_TICK = 60;
+
+/** Lua CharacterConstants.SURVIVAL_TICK = 1 second.
+ *  Timer per character: 0.5 * SURVIVAL_TICK + random * SURVIVAL_TICK -> 0.5-1.5s */
+const SURVIVAL_TICK = 1;
 
 export class CharacterManager {
   private grid: TileGrid;
@@ -118,6 +136,9 @@ export class CharacterManager {
 
   /** Characters needing new task decisions. */
   private decisionQueue: Character[] = [];
+
+  /** Characters needing immediate AI re-evaluation (task just completed or survival threat). */
+  private immediateAIQueue: Set<Character> = new Set();
 
   /** Active pickups (corpses, debris, etc.) */
   pickups: Pickup[] = [];
@@ -161,6 +182,9 @@ export class CharacterManager {
 
     // Create default security squad
     SquadList.createSquad('Alpha Squad');
+
+    // Wire ActivityOption.roomLookup for DestSafe/DestOwned tag enforcement (C-1)
+    ActivityOption.roomLookup = (tx: number, ty: number) => this.roomManager.getRoomAt(tx, ty);
   }
 
   setRenderer(renderer: CharacterRenderer) {
@@ -224,14 +248,13 @@ export class CharacterManager {
    * Spawn the initial crew at given positions (from WorldGen).
    * Original: 3 SpacewalkingSettlers in open space near the seed pod.
    */
-  spawnInitialCrew(spawns: CrewSpawnPoint[]) {
+  spawnInitialCrew(spawns: CrewSpawnPoint[], spacewalking = true) {
     for (const spawn of spawns) {
       const char = new Character(this.nextId++, spawn.x, spawn.y);
-      char.bSpacewalking = true; // Initial crew starts spacewalking
-      // Lua: SpacewalkingSettler template (ModuleData.lua:85-100)
-      char.bSpacesuit = true;
-      char.nSuitOxygen = SPACESUIT_MAX_OXYGEN;
-      char.setJob(BUILDER); // Starting crew are all builders
+      char.bSpacewalking = spacewalking;
+      // Lua: SpacewalkingSettler has bSpacewalking; tutorial Settler does not.
+      char.bSpacesuit = spacewalking;
+      char.nSuitOxygen = spacewalking ? SPACESUIT_MAX_OXYGEN : 0;
       // Lua: tStatus={bBaseFounder=true, bImmuneToParasite=true, nMorale=50}
       char.nMorale = 50;
       char.bBaseFounder = true;
@@ -266,7 +289,29 @@ export class CharacterManager {
           promisedNeeds = new Set(advNeeds.map(a => a.need.charAt(0).toUpperCase() + a.need.slice(1)));
         }
       }
-      char.needs.decay(dtSec, promisedNeeds);
+      // M-1: Get malady need modifiers (one per need)
+      const maladyMods: Record<string, number> = {};
+      for (const need of ['Hunger', 'Energy', 'Amusement', 'Social', 'Duty'] as const) {
+        const mod = Malady.getNeedsReduceMods(char, need);
+        if (mod !== undefined) maladyMods[need] = mod;
+      }
+      // Bug 2: Skip need decay for non-player characters in rooms without full visibility
+      // Lua only decays needs for player-team chars or chars in fully-visible rooms
+      const charRoomForDecay = this.roomManager.getRoomAt(char.tileX, char.tileY);
+      const bDecayNeeds = char.tStats.nTeam === TEAM_ID_PLAYER ||
+        (charRoomForDecay !== undefined && charRoomForDecay.nLastVisibility === VISIBILITY_FULL);
+      if (bDecayNeeds) {
+        char.needs.decay(dtSec, promisedNeeds, Object.keys(maladyMods).length > 0 ? maladyMods : undefined);
+      }
+
+      // C-5: Continuous job XP gain for on-duty characters performing work-shift tasks
+      // Lua Character.lua: JOB_EXPERIENCE_RATE = 25/60 per second while working
+      if (char.currentTask && char.currentTask.tags?.WorkShift && char.onDuty()) {
+        const job = char.tStats.nJob;
+        if (job >= 0 && job !== UNEMPLOYED) {
+          char.addJobExperience(JOB_EXPERIENCE_RATE * dtSec);
+        }
+      }
 
       // Starvation check (Lua Character.lua:2430-2443)
       if (char.needs.hunger <= NEEDS_HUNGER_STARVATION) {
@@ -287,6 +332,40 @@ export class CharacterManager {
         char.currentTask.update(dtSec);
       }
 
+      // Handle Cuff task completion: cuff the target and assign to brig
+      if (char.currentTask instanceof Cuff && char.currentTask.isComplete()) {
+        const cuffTask = char.currentTask as Cuff;
+        const target = this.characters.find(c => c.id === cuffTask.getTargetCharId());
+        if (target && target.isAlive()) {
+          target.cuff();
+          // Assign to brig if one was found
+          if (cuffTask._assignedBrigRoomId !== null) {
+            target.assignedToBrig(cuffTask._assignedBrigRoomId);
+          }
+        }
+      }
+
+      // Test prison status on any task completion (Lua Character:taskCompleting calls _testInPrison)
+      if (char.currentTask && char.currentTask.isComplete()) {
+        // Bug 21: Track whether completed task was a WorkShift task
+        char.bOldTaskWorkShift = !!char.currentTask.tags?.WorkShift;
+        const roomId = charRoom?.id ?? null;
+        char.testInPrison(roomId);
+      }
+
+      // Validate brig assignment each frame (Lua _updatePrison check)
+      if (char.tAssignedToBrig !== null) {
+        char.updatePrison();
+      }
+
+      // C-2: Immediate reassignment -- Lua checks needsNewTask() every frame.
+      // When a task completes or fails, queue for immediate AI instead of
+      // waiting for the next aiTickInterval.
+      if (char.isAlive() && !char.moving && char.path.length === 0 &&
+          (!char.currentTask || char.currentTask.isComplete() || char.currentTask.isFailed())) {
+        this.immediateAIQueue.add(char);
+      }
+
       // Register character with room — add to current room's tCharacters
       // (Old room removal happens via room rebuild clearing tCharacters, or
       //  we clear all rooms' tCharacters at start of this loop — see below.)
@@ -295,6 +374,12 @@ export class CharacterManager {
         // Update room last-seen time when player-team character is present
         if (char.tStats.nTeam === TEAM_ID_PLAYER) {
           charRoom.nLastSeen = GameRules.elapsedTime;
+        }
+        // O-7: Auto-team assignment — Lua Room.lua:1868-1874
+        // Friendly-faction characters in fully-visible rooms become player citizens
+        if (charRoom.nLastVisibility === VISIBILITY_FULL &&
+            Base.getTeamFactionBehavior(char.tStats.nTeam) === FACTION_BEHAVIOR.Friendly) {
+          char.tStats.nTeam = TEAM_ID_PLAYER;
         }
         // Track hostiles in room
         if (char.tStats.nTeam !== TEAM_ID_PLAYER && isHostile(char.tStats.nTeam, TEAM_ID_PLAYER)) {
@@ -307,8 +392,9 @@ export class CharacterManager {
       const room = charRoom;
       const OXYGEN_TICK = 0.25;
 
-      // Non-breathing races (MONSTER, KILLBOT) don't need O2
-      if (!char.doesBreathe()) {
+      // Lua fully exempts killbots. Monsters still run the space branch below,
+      // but are clamped above suffocation in indoor low-O2 rooms.
+      if (char.tStats.nRace === RACE_KILLBOT) {
         char.needs.updateOxygen(255);
         char.suffocationTime = 0;
         if (char.bSpacewalking) char.bSpacewalking = false;
@@ -322,12 +408,9 @@ export class CharacterManager {
           const o2 = room ? room.getOxygenScore() : 0;
           char.needs.updateOxygen(room?.oxygen ?? 0);
 
-          // Lua: _updateSpacewalking(o2 < OXYGEN_LOW)
-          if (o2 < OXYGEN_LOW) {
-            if (!char.bSpacewalking) char.bSpacewalking = true;
-          } else {
-            if (char.bSpacewalking) char.bSpacewalking = false;
-          }
+          // Lua: _updateSpacewalking — sets bSpacewalking = wearingSpacesuit()
+          // (Character.lua:1755-1759: bSpacesuitActive, not O2-based)
+          char.bSpacewalking = char.bSpacesuit;
 
           // Suit vs no-suit logic (Lua Character.updateOxygen lines 1627-1750)
           if (!char.bSpacesuit) {
@@ -339,6 +422,8 @@ export class CharacterManager {
             if (tileType === TileType.SPACE) {
               char.suffocationTime += 15;
               newO2 = 0;
+            } else if (char.tStats.nRace === RACE_MONSTER) {
+              newO2 = Math.max(OXYGEN_SUFFOCATING + 1, newO2);
             }
 
             if (newO2 < OXYGEN_SUFFOCATING) {
@@ -354,8 +439,8 @@ export class CharacterManager {
           } else {
             // Wearing spacesuit — consume suit O2 (Lua lines 1712-1745)
             char.nSuitOxygen -= OXYGEN_PER_SECOND * o2dt;
-            if (char.nSuitOxygen <= 0) {
-              char.nSuitOxygen = 0;
+            if (char.nSuitOxygen < SPACESUIT_OXYGEN_SUFFOCATING) {
+              if (char.nSuitOxygen < 0) char.nSuitOxygen = 0;
               char.suffocationTime += o2dt;
               char.bLowOxygen = true;
             } else {
@@ -368,7 +453,29 @@ export class CharacterManager {
 
       // Kill if suffocated too long
       if (char.suffocationTime >= OXYGEN_SUFFOCATION_UNTIL_DEATH && char.isAlive()) {
-        char.kill(CAUSE_OF_DEATH.SUFFOCATION);
+        char.kill(this.getSuffocationDeathCause(char.tileX, char.tileY));
+      } else if (
+        char.isAlive() &&
+        !char.bSpacesuit &&
+        char.tStats.nRace !== RACE_KILLBOT &&
+        this.grid.get(char.tileX, char.tileY) === TileType.SPACE &&
+        char.bLowOxygen
+      ) {
+        // Character.lua kills unsuited characters in SPACE on the first
+        // suffocation update, even before the normal timer expires.
+        char.kill(CAUSE_OF_DEATH.SUCKED_INTO_SPACE);
+      }
+
+      // C-26: Remove unnecessary spacesuit after 10s in pressurized room
+      // Check room O2 directly (not bSpacewalking, which equals bSpacesuit per Bug 41)
+      if (char.bSpacesuit && charRoom && charRoom.sealed && charRoom.oxygen > 200) {
+        (char as any).nUnnecessarySpacesuit += dtSec;
+        if ((char as any).nUnnecessarySpacesuit >= UNNECESSARY_SPACESUIT_REMOVE) {
+          char.bSpacesuit = false;
+          (char as any).nUnnecessarySpacesuit = -1;
+        }
+      } else if (char.bSpacesuit) {
+        (char as any).nUnnecessarySpacesuit = 0;
       }
 
       // Update renderer
@@ -456,12 +563,89 @@ export class CharacterManager {
       this.tickFamiliarity();
     }
 
-    // AI tick
+    // C-3: Survival threat preemption (Lua Character:_testSurvivalThreats)
+    for (const char of this.characters) {
+      if (!char.isAlive()) continue;
+      if (char.survivalTimer !== undefined) char.survivalTimer -= dtSec;
+      // Lua evaluates survival threats immediately on the first AI update, then
+      // resets the timer to a randomized half-to-one-and-a-half tick interval.
+      if (char.survivalTimer === undefined || char.survivalTimer < dtSec) {
+        char.survivalTimer = 0.5 * SURVIVAL_TICK + Math.random() * SURVIVAL_TICK;
+
+        // Lua Character:updateAI decrements conversion once per survival tick,
+        // not continuously every rendered frame.
+        this.tickRaiderConversion(char);
+
+        this.testSurvivalThreats(char);
+      }
+    }
+
+    // C-2: Process immediate AI queue (characters whose tasks just completed
+    // or who were flagged by survival threat checks).
+    if (this.immediateAIQueue.size > 0) {
+      let processed = 0;
+      for (const char of this.immediateAIQueue) {
+        if (processed >= UPDATES_PER_TICK) break;
+        if (!char.isAlive()) continue;
+        this.runAIForCharacter(char);
+        processed++;
+      }
+      this.immediateAIQueue.clear();
+    }
+
+    // AI tick (periodic batch re-evaluation for idle characters)
     this.aiTickAccum += delta;
     if (this.aiTickAccum >= this.aiTickInterval) {
       this.aiTickAccum -= this.aiTickInterval;
       this.runAI();
     }
+  }
+
+  /** One Lua Character:updateAI survival evaluation for raider conversion. */
+  private tickRaiderConversion(char: Character) {
+    if (char.nTimeToConvert === null || !char.inPrison()) return;
+    const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
+    if (charRoom?.nLastVisibility !== VISIBILITY_FULL || char.nAnger >= 0.7 * ANGER_MAX) return;
+    char.nTimeToConvert -= 1;
+    if (char.nTimeToConvert < 0) this.convertRaider(char);
+  }
+
+  /** Lua Character:_convert. */
+  private convertRaider(char: Character) {
+    char.nTimeToConvert = null;
+    char.tStats.nTeam = TEAM_ID_PLAYER;
+    // Character:setTeam calls _factionSetup in Lua; its citizen branch changes
+    // the Raider job to Unemployed. TS has no equivalent faction hook.
+    char.tStats.nJob = UNEMPLOYED;
+    char.tStats.sName = generateName();
+    Base.incrementStat('nRaidersConverted');
+  }
+
+  /** Lua World.isDestroyedWallAdjacentToSpace + Character death selection. */
+  private getSuffocationDeathCause(tileX: number, tileY: number): number {
+    if (this.grid.get(tileX, tileY) === TileType.SPACE) {
+      return CAUSE_OF_DEATH.SUCKED_INTO_SPACE;
+    }
+    if (this.grid.get(tileX, tileY) === TileType.WALL_DESTROYED) {
+      for (let direction = Direction.NW; direction <= Direction.W; direction++) {
+        const [adjX, adjY] = getAdjacentTile(tileX, tileY, direction);
+        if (this.grid.get(adjX, adjY) === TileType.SPACE) {
+          return CAUSE_OF_DEATH.SUCKED_INTO_SPACE;
+        }
+      }
+    }
+    return CAUSE_OF_DEATH.SUFFOCATION;
+  }
+
+  /** Get a random tile from an existing room (for spawn placement). */
+  getRandomRoomTile(): { x: number; y: number } | null {
+    const rooms = this.roomManager.getRooms();
+    for (const room of rooms) {
+      if (room.tiles.length > 0) {
+        return room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      }
+    }
+    return null;
   }
 
   /** Spawn a single character on a random floor tile in any available room */
@@ -479,15 +663,38 @@ export class CharacterManager {
     return null;
   }
 
-  /** Spawn hostile raiders in a random room. */
-  spawnHostiles(count: number, hp: number = STARTING_HIT_POINTS) {
+  /** Spawn hostile raiders in a random room.
+   *  CC-10: Optional difficulty (0-1) for point-buy equipment approximation. */
+  spawnHostiles(count: number, hp: number = STARTING_HIT_POINTS, difficulty: number = 0) {
     const rooms = this.roomManager.getRooms();
     if (rooms.length === 0) return;
 
     for (let i = 0; i < count; i++) {
       const room = rooms[Math.floor(Math.random() * rooms.length)];
       if (room.tiles.length === 0) continue;
-      const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+      let tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+
+      // EV-9: Validate spawn tile is walkable (not WALL/SPACE); try adjacent if not
+      const tileType = this.grid.get(tile.x, tile.y);
+      if (tileType === TileType.WALL || tileType === TileType.SPACE) {
+        let found = false;
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+          const nx = tile.x + dx, ny = tile.y + dy;
+          const nt = this.grid.get(nx, ny);
+          if (nt === TileType.FLOOR || nt === TileType.DOOR) {
+            tile = { x: nx, y: ny };
+            found = true;
+            break;
+          }
+        }
+        if (!found) continue; // skip this raider if no walkable tile
+      }
+
+      // CC-10: Per-raider challenge level from difficulty (Lua getChallengeLevel)
+      const diff = Math.max(0, Math.min(1, difficulty - 0.15 + Math.random() * 0.3));
+
+      // CC-10: Killbot chance at high difficulty (Lua: challenge > 0.75 && random > 0.5)
+      const bKillbot = diff > 0.75 && Math.random() > 0.5;
 
       const char = new Character(this.nextId++, tile.x, tile.y);
       char.tStats.nTeam = TEAM_ID_DEBUG_ENEMYGROUP;
@@ -495,7 +702,32 @@ export class CharacterManager {
       char.tStats.nHP = hp;
       char.tStats.nMaxHP = hp;
       char.tStats.sName = `Raider ${i + 1}`;
-      char.weapon = 'LaserPistol';
+
+      // CC-10: Equipment based on difficulty tier (Lua point-buy approximation)
+      if (diff > 0.75) {
+        char.weapon = 'LaserRifle';
+        char.tStats.nToughness = 0.6;
+        if (bKillbot) {
+          char.tStats.nRace = RACE_KILLBOT;
+          char.tStats.nHP = hp * 2;
+          char.tStats.nMaxHP = hp * 2;
+          char.tStats.sName = 'Kill Bot';
+          char.weapon = 'KillbotRifle';
+        }
+      } else if (diff > 0.5) {
+        char.weapon = 'LaserRifle';
+        char.tStats.nToughness = 0.4;
+      } else if (diff > 0.2) {
+        char.weapon = 'Pistol';
+        char.tStats.nToughness = 0.2;
+      } else {
+        char.weapon = 'Pistol';
+        char.tStats.nToughness = 0;
+      }
+
+      // Lua: nTimeToConvert = (1 - nAuthoritarian) * 600 (Character.lua:5344)
+      const auth = char.tStats.personality.nAuthoritarian ?? 0.5;
+      char.nTimeToConvert = (1 - auth) * 600;
 
       this.characterRenderer?.createCharacter(char);
       this.characters.push(char);
@@ -504,7 +736,8 @@ export class CharacterManager {
 
   /** Process combat system — resolve hits. */
   private processCombat(dt: number) {
-    const hits = this.combatSystem.update(dt, (id) => this.characters.find(c => c.id === id));
+    // CC-3: Pass allChars for TeamTactics offensive damage multiplier
+    const hits = this.combatSystem.update(dt, (id) => this.characters.find(c => c.id === id), this.characters);
 
     for (const hit of hits) {
       const defender = this.characters.find(c => c.id === hit.defenderId);
@@ -558,6 +791,11 @@ export class CharacterManager {
 
         // Disengage from combat
         this.combatSystem.disengage(char.id);
+
+        // A-12: Killbot death sound
+        if (char.tStats.nRace === RACE_KILLBOT) {
+          SpatialAudio.playAtTile('Killbot_Death', char.tileX, char.tileY);
+        }
 
         // Log death alert — per-cause linecodes (Lua CharacterManager:_alertOnDeath)
         const deathAlertLC = (() => {
@@ -622,7 +860,21 @@ export class CharacterManager {
   /** Spawn a character at a specific tile position. Returns the new character.
    *  @param bImmigration — if true, apply malady pre-roll (Lua: CHANCE_OF_MALADY). */
   spawnCharacterAt(tileX: number, tileY: number, spacewalking = false, bImmigration = false): Character {
-    const char = new Character(this.nextId++, tileX, tileY);
+    // EV-9: Validate spawn tile is walkable; try adjacent tiles if WALL/SPACE
+    let spawnX = tileX, spawnY = tileY;
+    const tileType = this.grid.get(spawnX, spawnY);
+    if (tileType === TileType.WALL || tileType === TileType.SPACE) {
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+        const nx = spawnX + dx, ny = spawnY + dy;
+        const nt = this.grid.get(nx, ny);
+        if (nt === TileType.FLOOR || nt === TileType.DOOR) {
+          spawnX = nx;
+          spawnY = ny;
+          break;
+        }
+      }
+    }
+    const char = new Character(this.nextId++, spawnX, spawnY);
     char.bSpacewalking = spacewalking;
     this.characterRenderer?.createCharacter(char);
     this.characters.push(char);
@@ -704,9 +956,10 @@ export class CharacterManager {
       if (!carrier.isAlive() || carrier.maladies.length === 0) continue;
 
       // Check if it's time for a sneeze-spread
-      const anim = Malady.getSymptomAnim(carrier);
-      if (anim === 'sneeze') {
-        Malady.playedSymptomAnim(carrier, this.characters);
+      // MD-7: getSymptomAnim now returns { anim, malady } — only that specific malady is spread
+      const result = Malady.getSymptomAnim(carrier);
+      if (result && result.anim === 'sneeze') {
+        Malady.playedSymptomAnim(carrier, this.characters, result.malady);
       }
     }
   }
@@ -742,19 +995,7 @@ export class CharacterManager {
             9,
           ));
         }
-        // Build objects (doors on walls, etc.) while spacewalking
-        for (const cmd of CommandQueue.getAvailable('build_object')) {
-          const obj = EnvObjectManager.getObjects().find(
-            o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
-          );
-          if (obj) {
-            outdoorOptions.push(new ActivityOption(
-              new BuildEnvObject(obj, cmd.id, this.grid),
-              cmd.tileX, cmd.tileY,
-              8,
-            ));
-          }
-        }
+        this.addBuildEnvObjectOptions(outdoorOptions, 8, true);
         for (const cmd of CommandQueue.getAvailable('mine')) {
           outdoorOptions.push(new ActivityOption(
             new Mine(cmd.id, this.grid),
@@ -785,9 +1026,14 @@ export class CharacterManager {
         continue;
       }
 
-      // Hostile AI: attack nearest player character
+      // Hostile AI: monsters have distinct behavior (C-13/C-14/C-15), raiders use generic
       if (isHostile(TEAM_ID_PLAYER, char.tStats.nTeam)) {
-        this.runHostileAI(char);
+        const race = char.tStats.nRace;
+        if (race === RACE_MONSTER || race === RACE_KILLBOT) {
+          this.runMonsterAI(char);
+        } else {
+          this.runHostileAI(char);
+        }
         processed++;
         continue;
       }
@@ -827,6 +1073,118 @@ export class CharacterManager {
     }
   }
 
+  /**
+   * C-3: Survival threat preemption for a single character.
+   * Mirrors Lua Character:_testSurvivalThreats().
+   */
+  private testSurvivalThreats(char: Character): void {
+    if (char.currentTask && (char.currentTask as any).priorityLevel === PRIORITY.PUPPET) return;
+    if (Malady.isIncapacitated(char)) return;
+
+    const room = this.roomManager.getRoomAt(char.tileX, char.tileY);
+    let nThreat: PriorityLevel = PRIORITY.NORMAL;
+
+    const tileType = this.grid.get(char.tileX, char.tileY);
+    if (tileType === TileType.SPACE && !char.bSpacesuit) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (char.bLowOxygen) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (room && (room.bBreach || room.bPendingBreach || room.getOxygenScore() < OXYGEN_LOW)) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (room && room.isEmergencyAlarmOn()) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else if (char.needs.hunger <= NEEDS_HUNGER_STARVATION) {
+      nThreat = PRIORITY.SURVIVAL_NORMAL;
+    } else {
+      if (room && room.bHasHostiles) {
+        nThreat = PRIORITY.SURVIVAL_NORMAL;
+      }
+      if (nThreat < PRIORITY.SURVIVAL_NORMAL && room && (room.bBurning || room.nFireTiles > 0)) {
+        nThreat = PRIORITY.SURVIVAL_NORMAL;
+      }
+      if (nThreat < PRIORITY.SURVIVAL_LOW && char.bRampaging) {
+        nThreat = PRIORITY.SURVIVAL_LOW;
+      }
+    }
+
+    const currentPri = char.currentTask
+      ? ((char.currentTask as any).priorityLevel ?? PRIORITY.NORMAL)
+      : PRIORITY.NO_ACTIVITY;
+    if (nThreat > currentPri) {
+      if (char.currentTask) {
+        // Call task.fail() to properly release CommandQueue claims (Bug 5 fix)
+        char.currentTask.fail();
+        char.currentTask = null;
+        char.path = [];
+      }
+      this.immediateAIQueue.add(char);
+    }
+  }
+
+  /**
+   * C-2: Run AI decision for a single character (immediate reassignment).
+   */
+  private runAIForCharacter(char: Character): void {
+    if (!char.isAlive()) return;
+    if (char.moving || char.path.length > 0) return;
+    if (char.currentTask && !char.currentTask.isComplete() && !char.currentTask.isFailed()) return;
+
+    if (char.bSpacewalking) {
+      const outdoorOptions: ActivityOption[] = [];
+      for (const cmd of CommandQueue.getAvailable('build_tile')) {
+        outdoorOptions.push(new ActivityOption(
+          new BuildTile(cmd.id, this.grid, this.wallAutoGen ?? undefined),
+          cmd.tileX, cmd.tileY, 9,
+        ));
+      }
+      this.addBuildEnvObjectOptions(outdoorOptions, 8, true);
+      for (const cmd of CommandQueue.getAvailable('mine')) {
+        outdoorOptions.push(new ActivityOption(
+          new Mine(cmd.id, this.grid),
+          cmd.tileX, cmd.tileY, 7,
+        ));
+      }
+      if (outdoorOptions.length > 0) {
+        const task = UtilityAI.selectTask(char, outdoorOptions);
+        if (task) { this.assignTask(char, task); return; }
+      }
+      this.seekNearestRoom(char);
+      return;
+    }
+
+    const charRoom = this.roomManager.getRoomAt(char.tileX, char.tileY);
+    if (!charRoom && this.grid.get(char.tileX, char.tileY) === TileType.SPACE) {
+      char.bSpacewalking = true;
+      this.seekNearestRoom(char);
+      return;
+    }
+
+    if (isHostile(TEAM_ID_PLAYER, char.tStats.nTeam)) {
+      this.runHostileAI(char);
+      return;
+    }
+
+    if (char.needs.oxygen < 0) {
+      this.seekOxygenatedRoom(char);
+      return;
+    }
+
+    if (Malady.isIncapacitated(char)) {
+      char.bIncapacitated = true;
+      return;
+    }
+    char.bIncapacitated = false;
+
+    const options = this.gatherOptions(char);
+    const task = UtilityAI.selectTask(char, options);
+    if (task) {
+      this.assignTask(char, task);
+    } else {
+      this.wander(char);
+    }
+    char.idleTimer = 0;
+  }
+
   /** Run hostile AI — attack nearest player character. */
   private runHostileAI(char: Character) {
     const target = this.combatSystem.findNearestHostile(char, this.characters);
@@ -844,23 +1202,134 @@ export class CharacterManager {
     }
   }
 
+  /**
+   * Run monster AI — distinct from raiders (C-13/C-14/C-15).
+   * Lua OptionData: MonsterPatrol (BaseScore=1), MonsterAttackEquipment (BaseScore=2),
+   * MonsterWander (BaseScore=0.1). Priorities: attack characters > attack objects > wander.
+   */
+  private runMonsterAI(char: Character) {
+    // ── Priority 1: Attack nearby player character (within 10 tiles) ──
+    const MONSTER_AGGRO_RANGE = 10;
+    let nearestChar: Character | null = null;
+    let nearestCharDist = Infinity;
+    for (const other of this.characters) {
+      if (other === char || !other.isAlive()) continue;
+      if (!isHostile(char.tStats.nTeam, other.tStats.nTeam)) continue;
+      const dist = Math.max(
+        Math.abs(char.tileX - other.tileX),
+        Math.abs(char.tileY - other.tileY),
+      );
+      if (dist <= MONSTER_AGGRO_RANGE && dist < nearestCharDist) {
+        nearestCharDist = dist;
+        nearestChar = other;
+      }
+    }
+
+    if (nearestChar) {
+      const task = new AttackEnemy(nearestChar.id);
+      task.targetX = nearestChar.tileX;
+      task.targetY = nearestChar.tileY;
+      this.assignTask(char, task);
+      // A-12: MonsterScream on first engagement (engage returns false if already engaged)
+      if (this.combatSystem.engage(char, nearestChar)) {
+        SpatialAudio.playAtTile('MonsterScream', char.tileX, char.tileY);
+      }
+      return;
+    }
+
+    // ── Priority 2: 50% chance to attack a nearby environment object ──
+    if (Math.random() < 0.5) {
+      const allObjects = EnvObjectManager.getObjects();
+      let nearestObj: EnvObject | null = null;
+      let nearestObjDist = Infinity;
+      for (const obj of allObjects) {
+        if (!obj.bBuilt || obj.nCondition <= 0) continue;
+        const dist = Math.max(
+          Math.abs(char.tileX - obj.tileX),
+          Math.abs(char.tileY - obj.tileY),
+        );
+        if (dist < nearestObjDist) {
+          nearestObjDist = dist;
+          nearestObj = obj;
+        }
+      }
+      if (nearestObj) {
+        const task = new MonsterAttackEquipment(nearestObj);
+        this.assignTask(char, task);
+        return;
+      }
+    }
+
+    // ── Priority 3: Monster wander / patrol to a random room ──
+    const rooms = this.roomManager.getRooms();
+    if (rooms.length > 0 && Math.random() < 0.5) {
+      // MonsterPatrol: walk to a random room
+      const room = rooms[Math.floor(Math.random() * rooms.length)];
+      if (room.tiles.length > 0) {
+        const tile = room.tiles[Math.floor(Math.random() * room.tiles.length)];
+        const task = new MonsterPatrol();
+        task.targetX = tile.x;
+        task.targetY = tile.y;
+        this.assignTask(char, task);
+        return;
+      }
+    }
+
+    // MonsterWander: fallback idle wander
+    this.wander(char);
+  }
+
+  /** BuildEnvObject options from room-owned prop placements. */
+  private addBuildEnvObjectOptions(
+    options: ActivityOption[],
+    basePriority: number,
+    includeSpaceRoom: boolean,
+  ): void {
+    const seen = new Set<string>();
+    for (const placement of this.roomManager.getAllPropPlacements(includeSpaceRoom)) {
+      const cmd = CommandQueue.get(placement.commandId);
+      if (!cmd || cmd.status !== 'pending') continue;
+      if (placement.buildGhost.bBuilt) continue;
+      const key = `${placement.commandId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const task = new BuildEnvObject(placement.buildGhost, placement.commandId, this.grid);
+      task.rTargetObject = placement.buildGhost;
+      const opt = new ActivityOption(
+        task,
+        placement.tx,
+        placement.ty,
+        basePriority,
+        {
+          tags: { WorkShift: true, Job: BUILDER },
+          prerequisites: { EmptyHands: true },
+        },
+      );
+      opt.targetObject = placement.buildGhost;
+      options.push(opt);
+    }
+  }
+
   /** Gather all available activity options for a character. */
   private gatherOptions(character: Character): ActivityOption[] {
     const options: ActivityOption[] = [];
     const room = this.roomManager.getRoomAt(character.tileX, character.tileY);
     const job = character.getJob();
 
-    // Always available: wander
+    // Always available: wander (Lua: DestOwned=true)
     if (room && room.tiles.length >= 2) {
       const target = room.tiles[Math.floor(Math.random() * room.tiles.length)];
-      options.push(new ActivityOption(new WanderAround(), target.x, target.y, 1));
+      options.push(new ActivityOption(new WanderAround(), target.x, target.y, 1,
+        { tags: { DestOwned: true } }));
     }
 
-    // Sleep on floor (low priority, always available)
+    // Sleep on floor (Lua: DestOwned=true)
     options.push(new ActivityOption(
       new SleepOnFloor(),
       character.tileX, character.tileY,
       0.5,
+      { tags: { DestOwned: true } },
     ));
 
     // Chat (if other characters nearby in same room)
@@ -870,6 +1339,9 @@ export class CharacterManager {
         if (other === character) continue;
         if (!other.isAlive()) continue;
         if (other.tStats.nTeam !== TEAM_ID_PLAYER) continue; // Don't chat with hostiles
+        // C-8: Chat cooldown — skip if chatted with this person recently
+        const lastChat = character.tLastChatTime.get(other.id);
+        if (lastChat !== undefined && GameRules.elapsedTime - lastChat < CHAT_COOLDOWN) continue;
         const otherRoom = this.roomManager.getRoomAt(other.tileX, other.tileY);
         if (otherRoom === room) {
           // nGregariousness scales priority — gregarious chars chat more
@@ -904,20 +1376,8 @@ export class CharacterManager {
       ));
     }
 
-    // ── Build object commands ────────────────────────────────
-    for (const cmd of CommandQueue.getAvailable('build_object')) {
-      const obj = EnvObjectManager.getObjects().find(
-        o => o.tileX === cmd.tileX && o.tileY === cmd.tileY && !o.bBuilt,
-      );
-      if (obj) {
-        const priority = job === BUILDER ? 8 : 3;
-        options.push(new ActivityOption(
-          new BuildEnvObject(obj, cmd.id, this.grid),
-          cmd.tileX, cmd.tileY,
-          priority,
-        ));
-      }
-    }
+    // ── Build object jobs ───────────────────────────────────
+    this.addBuildEnvObjectOptions(options, job === BUILDER ? 8 : 3, false);
 
     // ── Build tile commands (floor/wall construction) ─────
     // Floors get higher priority than walls so builders complete the interior
@@ -934,13 +1394,14 @@ export class CharacterManager {
       ));
     }
 
-    // ── Sleep in bed ─────────────────────────────────────────
+    // ── Sleep in bed (Lua: DestOwned+DestSafe) ──────────────
     for (const bed of EnvObjectManager.getObjectsByType('Bed')) {
       if (!bed.bBuilt || !bed.isFunctioning()) continue;
       options.push(new ActivityOption(
         new SleepInBed(),
         bed.tileX, bed.tileY,
         2,
+        { tags: { DestOwned: true, DestSafe: true } },
       ));
     }
 
@@ -966,6 +1427,7 @@ export class CharacterManager {
         new Eat(),
         food.tileX, food.tileY,
         2,
+        // Eat is a survival need — no DestOwned/DestSafe so starving chars can always eat
       );
       opt.targetObject = food;
       options.push(opt);
@@ -979,21 +1441,34 @@ export class CharacterManager {
         new MaintainEnvObject(obj),
         obj.tileX, obj.tileY,
         priority,
+        { tags: { DestOwned: true } },
       );
       opt.targetObject = obj;
       options.push(opt);
     }
 
-    // ── Combat response: attack hostiles ────────────────────
+    // ── Combat response: attack hostiles (C-37: bravery gating) ──
+    // Lua has 3 tiers: RangedAttack (bravery>0.1, has gun, score=120),
+    // AttackThreat (bravery>0.8, score=110), AttackFallback (no gate, score=99)
     if (job === EMERGENCY || this.getHostileCount() > 0) {
       const nearest = this.combatSystem.findNearestHostile(character, this.characters);
       if (nearest) {
-        const combatPriority = job === EMERGENCY ? 15 : 5;
+        const bravery = character.tStats.personality?.nBravery ?? 0.5;
+        let combatScore = 0;
+        if (bravery > 0.1 && character.weapon) {
+          combatScore = 120; // Ranged attack tier
+        } else if (bravery > 0.8) {
+          combatScore = 110; // Brave melee tier
+        } else {
+          combatScore = 99;  // Fallback — everyone can fight as last resort
+        }
+        // Emergency job gets boost
+        if (job === EMERGENCY) combatScore += 20;
         const attackTask = new AttackEnemy(nearest.id);
         options.push(new ActivityOption(
           attackTask,
           nearest.tileX, nearest.tileY,
-          combatPriority,
+          combatScore,
         ));
       }
     }
@@ -1023,13 +1498,14 @@ export class CharacterManager {
           new ServeDrink(),
           bar.tileX, bar.tileY,
           6 + shiftBoost,
+          { tags: { DestSafe: true, Job: BARTENDER, WorkShift: true } },
         ));
-        // MaintainPub: bartender maintains the bar (Lua: OpenPub Duty=8, MaintainPub Duty=1)
+        // MaintainPub (Lua: DestOwned+DestSafe)
         const opt = new ActivityOption(
           new MaintainPub(),
           bar.tileX, bar.tileY,
           8 + shiftBoost,
-          { tags: { Job: BARTENDER, WorkShift: true } },
+          { tags: { Job: BARTENDER, WorkShift: true, DestOwned: true, DestSafe: true } },
         );
         opt.targetObject = bar;
         options.push(opt);
@@ -1046,6 +1522,7 @@ export class CharacterManager {
             new MaintainPlants(plant),
             plant.tileX, plant.tileY,
             7 + shiftBoost,
+            { tags: { DestOwned: true, DestSafe: true, Job: BOTANIST, WorkShift: true } },
           ));
         }
       }
@@ -1055,11 +1532,84 @@ export class CharacterManager {
     if (job === SCIENTIST) {
       for (const desk of EnvObjectManager.getObjectsByType('ResearchDesk')) {
         if (!desk.bBuilt || !desk.isFunctioning()) continue;
+        const room = this.roomManager.getRoomAt(desk.tileX, desk.tileY);
+        const researchZone = room?.zoneObj;
+        if (!(researchZone instanceof ResearchZone) || !researchZone.hasActiveResearch()) continue;
         options.push(new ActivityOption(
-          new ResearchInLab(),
+          new ResearchInLab(researchZone),
           desk.tileX, desk.tileY,
           5 + shiftBoost,
+          { tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true } },
         ));
+      }
+    }
+
+    // SCIENTIST: Tear down datacube env objects for research data (C-10)
+    // Lua OptionData: TearDownEnvObjectForResearch — Duty=20, Job=SCIENTIST
+    if (job === SCIENTIST && character.heldItem === null) {
+      for (const obj of EnvObjectManager.getObjectsByType('ResearchDatacube')) {
+        if (!obj.bBuilt || obj.bSlatedForVaporize) continue;
+        options.push(new ActivityOption(
+          new TearDownEnvObjectForResearch(obj, (p) => this.pickups.push(p)),
+          obj.tileX, obj.tileY,
+          20 + shiftBoost,
+          {
+            tags: { Job: SCIENTIST, WorkShift: true },
+            prerequisites: { EmptyHands: true },
+          },
+        ));
+      }
+    }
+
+    // SCIENTIST: Deliver held datacube to research desk (C-11)
+    // Lua OptionData: DeliverResearchDatacube — Duty=20, Job=SCIENTIST,
+    // Prerequisites={HeldItem='ResearchDatacube', Spacewalking=false}
+    if (job === SCIENTIST && character.heldItem === 'ResearchDatacube') {
+      const desks = EnvObjectManager.getObjectsByType('ResearchDesk');
+      const hasDesk = desks.some(d => d.bBuilt && d.isFunctioning());
+      if (hasDesk) {
+        for (const desk of desks) {
+          if (!desk.bBuilt || !desk.isFunctioning()) continue;
+          options.push(new ActivityOption(
+            new DeliverResearchDatacube(),
+            desk.tileX, desk.tileY,
+            20 + shiftBoost,
+            {
+              tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true },
+              prerequisites: { HeldItem: 'ResearchDatacube' },
+            },
+          ));
+        }
+      } else {
+        // No desk available — drop datacube wherever (C-12)
+        // Lua OptionData: PutResearchDatacubeWherever — Duty=7, DropEverything
+        options.push(new ActivityOption(
+          new PutResearchDatacubeWherever((p) => this.pickups.push(p)),
+          character.tileX, character.tileY,
+          7 + shiftBoost,
+          {
+            tags: { DestOwned: true, DestSafe: true, Job: SCIENTIST, WorkShift: true },
+            prerequisites: { HeldItem: 'ResearchDatacube' },
+          },
+        ));
+      }
+    }
+
+    // SCIENTIST: Pick up datacube pickups from floor
+    if (job === SCIENTIST && character.heldItem === null) {
+      for (const pickup of this.pickups) {
+        if (pickup.sName === 'ResearchDatacube' && !pickup.bPickedUp) {
+          const task = new PickUpFloorItem(pickup, (p) => this.removePickup(p));
+          options.push(new ActivityOption(
+            task,
+            pickup.tileX, pickup.tileY,
+            10 + shiftBoost,
+            {
+              tags: { Job: SCIENTIST, WorkShift: true },
+              prerequisites: { EmptyHands: true },
+            },
+          ));
+        }
       }
     }
 
@@ -1074,6 +1624,7 @@ export class CharacterManager {
             new FieldScanAndHeal(other),
             other.tileX, other.tileY,
             10 + shiftBoost,
+            { tags: { DestOwned: true, DestSafe: true, Job: DOCTOR, WorkShift: true } },
           ));
         }
       }
@@ -1087,6 +1638,7 @@ export class CharacterManager {
           new Patrol(),
           target.x, target.y,
           3 + shiftBoost,
+          { tags: { DestOwned: true, Job: EMERGENCY, WorkShift: true } },
         ));
       }
 
@@ -1133,7 +1685,7 @@ export class CharacterManager {
           new DropOffCorpse(),
           ref.tileX, ref.tileY,
           9 + shiftBoost,
-          { tags: { Job: JANITOR } },
+          { tags: { Job: JANITOR, DestOwned: true, WorkShift: true } },
         ));
       }
     }
@@ -1163,6 +1715,7 @@ export class CharacterManager {
         new ListenToJukebox(),
         jukebox.tileX, jukebox.tileY,
         2,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = jukebox;
       options.push(opt);
@@ -1175,6 +1728,7 @@ export class CharacterManager {
         new LiftAtWeightBench(),
         bench.tileX, bench.tileY,
         2,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = bench;
       options.push(opt);
@@ -1186,16 +1740,20 @@ export class CharacterManager {
         new WorkOut(),
         character.tileX, character.tileY,
         0.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       ));
     }
 
-    // ── Hobby: Work out in gym (with gym equipment) ──────────
+    // ── Hobby: Work out in gym (with gym equipment in FITNESS zone — G-8) ──
     for (const gym of EnvObjectManager.getObjectsByType('GymEquipment')) {
       if (!gym.bBuilt || !gym.isFunctioning()) continue;
+      // G-8: Lua only offers WorkOutInGym via FitnessZone — require FITNESS zone
+      if (!gym.rRoom || gym.rRoom.zone !== ZoneType.FITNESS) continue;
       const opt = new ActivityOption(
         new WorkOutInGym(),
         gym.tileX, gym.tileY,
         1.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = gym;
       options.push(opt);
@@ -1208,6 +1766,7 @@ export class CharacterManager {
         new PlayGameSystem(),
         game.tileX, game.tileY,
         1.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = game;
       options.push(opt);
@@ -1222,6 +1781,7 @@ export class CharacterManager {
           new EatPlant(),
           plant.tileX, plant.tileY,
           2,
+          { tags: { DestOwned: true, DestSafe: true } },
         );
         opt.targetObject = plant;
         options.push(opt);
@@ -1236,6 +1796,7 @@ export class CharacterManager {
         new EatAtFoodReplicator(),
         rep.tileX, rep.tileY,
         1.5,
+        { tags: { DestOwned: true, DestSafe: true } },
       );
       opt.targetObject = rep;
       options.push(opt);
@@ -1285,9 +1846,10 @@ export class CharacterManager {
             priorityLevel: PRIORITY.SURVIVAL_NORMAL,
             personalityGates: { nBravery: [0.05, 1] },
             prerequisites: { EmptyHands: true },
+            tags: { DestOwned: true },
           },
         ));
-        // Extinguish bare-handed (BaseScore=6, requires more bravery)
+        // Extinguish bare-handed (BaseScore=6, Lua: DestOwned)
         options.push(new ActivityOption(
           new ExtinguishFireBareHanded(this.fire),
           fireTile.x, fireTile.y,
@@ -1296,6 +1858,7 @@ export class CharacterManager {
             priorityLevel: PRIORITY.SURVIVAL_NORMAL,
             personalityGates: { nBravery: [0.15, 1] },
             prerequisites: { EmptyHands: true },
+            tags: { DestOwned: true },
           },
         ));
       }
@@ -1322,7 +1885,7 @@ export class CharacterManager {
     }
 
     // ── Oxygen response (branching on bravery) ───────────────
-    if (room && room.oxygen < 30) {
+    if (room && room.getOxygenScore() < OXYGEN_LOW) {
       // Low bravery: panic
       options.push(new ActivityOption(
         new PanicOxygen(),
@@ -1430,7 +1993,7 @@ export class CharacterManager {
               new BedHeal(other),
               bed.tileX, bed.tileY,
               16 + shiftBoost,
-              { tags: { Job: DOCTOR, WorkShift: true } },
+              { tags: { Job: DOCTOR, WorkShift: true, DestOwned: true, DestSafe: true } },
             ));
             break;
           }
@@ -1449,7 +2012,7 @@ export class CharacterManager {
               new HarvestAndDeliverFood(),
               plant.tileX, plant.tileY,
               7 + shiftBoost,
-              { tags: { Job: BOTANIST, WorkShift: true } },
+              { tags: { Job: BOTANIST, WorkShift: true, DestOwned: true, DestSafe: true } },
             ));
             break;
           }
@@ -1465,7 +2028,7 @@ export class CharacterManager {
           new ServeFoodAtTable(),
           table.tileX, table.tileY,
           6 + shiftBoost,
-          { tags: { Job: BARTENDER, WorkShift: true } },
+          { tags: { Job: BARTENDER, WorkShift: true, DestSafe: true } },
         );
         opt.targetObject = table;
         options.push(opt);
@@ -1479,6 +2042,7 @@ export class CharacterManager {
         new EatAtTable(),
         table.tileX, table.tileY,
         3,
+        { tags: { DestSafe: true } },
       ));
     }
 
@@ -1495,7 +2059,7 @@ export class CharacterManager {
           ref.tileX, ref.tileY,
           7 + shiftBoost,
           {
-            tags: { Job: MINER },
+            tags: { Job: MINER, DestOwned: true, WorkShift: true },
             prerequisites: { HeldItem: 'Rock' },
           },
         ));
@@ -1539,19 +2103,28 @@ export class CharacterManager {
     }
 
     // ── VacuumPull: character in breaching room gets pulled toward space ───
-    if (room && !room.sealed && room.oxygen < 50 && !character.bSpacesuit) {
-      const spaceTile = this.findNearestSpaceTile(character.tileX, character.tileY);
-      if (spaceTile) {
-        const vec = this.vacuumSystem?.getVacuumVec(character.tileX, character.tileY);
+    if (!character.bSpacesuit) {
+      const vec = this.vacuumSystem?.getVacuumVec(character.tileX, character.tileY);
+      const wasInVacuum = (character as Character & { bWasInVacuum?: boolean }).bWasInVacuum === true;
+      const inVacuum = !!vec && (wasInVacuum
+        ? vec.magnitude >= VACUUM_THRESHOLD_END
+        : vec.magnitude > VACUUM_THRESHOLD);
+      (character as Character & { bWasInVacuum?: boolean }).bWasInVacuum = inVacuum;
+
+      if (inVacuum && vec) {
         const pull = new VacuumPull();
-        pull.vacuumMagnitude = vec?.magnitude ?? 0;
+        pull.vacuumVx = vec.vx;
+        pull.vacuumVy = vec.vy;
+        pull.vacuumMagnitude = vec.magnitude;
         options.push(new ActivityOption(
           pull,
-          spaceTile.x, spaceTile.y,
+          character.tileX, character.tileY,
           500, // PUPPET level — overrides everything
           { priorityLevel: PRIORITY.PUPPET },
         ));
       }
+    } else {
+      (character as Character & { bWasInVacuum?: boolean }).bWasInVacuum = false;
     }
 
     // ── PanicOnFire: character standing on a fire tile ───────
@@ -1572,6 +2145,7 @@ export class CharacterManager {
           new CheckInToHospital(),
           bed.tileX, bed.tileY,
           4,
+          { tags: { DestOwned: true, DestSafe: true } },
         );
         opt.targetObject = bed;
         options.push(opt);
@@ -1609,21 +2183,6 @@ export class CharacterManager {
     return null;
   }
 
-  /** Find nearest SPACE tile from a position (for vacuum pull direction). */
-  private findNearestSpaceTile(x: number, y: number): { x: number; y: number } | null {
-    // Check expanding rings of neighbors
-    for (let r = 1; r <= 5; r++) {
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // only ring edge
-          const nx = x + dx, ny = y + dy;
-          if (this.grid.get(nx, ny) === TileType.SPACE) return { x: nx, y: ny };
-        }
-      }
-    }
-    return null;
-  }
-
   /** Assign a task to a character and start pathfinding if needed. */
   private assignTask(char: Character, task: Task) {
     char.currentTask = task;
@@ -1634,15 +2193,33 @@ export class CharacterManager {
     }
     task.start(char);
 
+    // C-8: Record chat cooldown
+    if (task.name === 'Chat' && task.targetX >= 0 && task.targetY >= 0) {
+      // Find the character at the target position
+      for (const other of this.characters) {
+        if (other !== char && other.tileX === task.targetX && other.tileY === task.targetY) {
+          char.tLastChatTime.set(other.id, GameRules.elapsedTime);
+          break;
+        }
+      }
+    }
+
     // Path to task target if not already there
     if (task.targetX >= 0 && (task.targetX !== char.tileX || task.targetY !== char.tileY)) {
+      // Lua: builders auto-suit to reach WALL_PENDING tiles in SPACE.
+      // Without this, non-spacewalking characters can't pathfind through SPACE
+      // to reach exterior wall tiles, causing walls to never get built.
+      const needsSpacewalk = !char.bSpacewalking &&
+        task instanceof BuildTile &&
+        this.grid.get(task.targetX, task.targetY) === TileType.WALL_PENDING;
+      if (needsSpacewalk) {
+        char.bSpacesuit = true;
+        char.bSpacewalking = true;
+      }
       const filter = char.bSpacewalking ? WALKABLE_SPACEWALK : WALKABLE_DEFAULT;
       const maxNodes = char.bSpacewalking ? 3000 : 1000;
-      // Lua Room:_refreshPropJobList sets pathToNearest=true for build tasks.
-      // If the target tile is non-walkable (e.g. WALL for door building, ASTEROID
-      // for mining), path to the nearest adjacent walkable tile instead.
       const targetType = this.grid.get(task.targetX, task.targetY);
-      const bPathToNearest = !filter(targetType);
+      const bPathToNearest = task.pathToNearest === true || !filter(targetType);
       const path = findPath(this.grid, char.tileX, char.tileY, task.targetX, task.targetY, maxNodes, filter, bPathToNearest);
       if (path && path.length > 0) {
         char.startPath(path);

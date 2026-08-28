@@ -353,7 +353,11 @@ export class DerelictSystem {
 
   private rescueSurvivors(ship: DerelictShip) {
     for (let i = 0; i < ship.crewRemaining; i++) {
-      this.characterManager.spawnCharacterAt(0, 0, false, true);
+      // E-7: Spawn at a random room tile instead of (0,0)
+      const tile = this.characterManager.getRandomRoomTile();
+      if (tile) {
+        this.characterManager.spawnCharacterAt(tile.x, tile.y, false, true);
+      }
     }
     Base.addAlert('system', line('DERELICT_RESCUED', { count: String(ship.crewRemaining) }));
     ship.crewRemaining = 0;
@@ -420,10 +424,10 @@ export class DerelictSystem {
     return this.exploredDerelicts;
   }
 
-  onTick(dt: number) {
-    if (Math.random() < dt / 300 && this.derelicts.size < 9) {
-      this.spawnDerelict();
-    }
+  onTick(_dt: number) {
+    // E-21: Removed independent spawn that bypassed EventController.
+    // Lua derelicts only come from the event queue, not from a random timer.
+    // DerelictEvent in EventController calls spawnDerelict() when triggered.
   }
 
   clear() {

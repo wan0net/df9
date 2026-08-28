@@ -107,6 +107,8 @@ export interface MaladyDef {
   bNoCreate?: boolean;
   /** Cannot be cured by any means. */
   bIncurable?: boolean;
+  /** MD-11: If true, symptom stages loop back to start after exhausting (Lua bStagesLoop). */
+  bStagesLoop?: boolean;
 }
 
 // ── Default Template ────────────────────────────────────────────────────
@@ -535,7 +537,9 @@ export const MALADY_DEFS: Record<string, MaladyDef> = {
     tSymptomStages: [
       {
         tTimeToSymptoms: [10, 60 * 2],
-        tReduceMods: { Duty: 0, Social: 0, Amusement: -0.3 },
+        // MD-9: Lua has lowercase `social=0` — never read by needs system (expects `Social`).
+        // Omitted for 1:1 Lua runtime parity: Social need is NOT locked in stage 1.
+        tReduceMods: { Duty: 0, Amusement: -0.3 },
         sSymptomLog: 'HEALTH_CITIZEN_GETTING_ILL',
       },
       {
@@ -562,7 +566,8 @@ export const MALADY_DEFS: Record<string, MaladyDef> = {
     nDifficultyTier: 1,
     tDurationRange: [600, 2000],
     tTimeToContagious: [5, 10],
-    tTimeToSymptoms: [2, 5],  // Note: Lua has typo "tTimeToSymptions"
+    // MD-8: Lua has typo "tTimeToSymptions" (not "tTimeToSymptoms"), so this field is
+    // never read by reproduceMalady — ProcSyn is immediately symptomatic. Omitted for 1:1 parity.
     nFieldTreatSkill: 5,
     bCreateStrains: true,
     sType: 'Disease',
@@ -655,11 +660,13 @@ export const MALADY_DEFS: Record<string, MaladyDef> = {
     bCreateStrains: true,
     sType: 'Disease',
     sSymptomLog: 'HEALTH_CITIZEN_GETTING_ILL',
+    // MD-10: Lua has `nSpeed=.3` INSIDE tReduceMods (data bug — "nSpeed" is not a valid need
+    // name so it's silently ignored, and speed is never applied at top level). For 1:1 Lua
+    // parity, nSpeed is omitted from top level so the disease does NOT slow characters.
     tReduceMods: {
       Social: 0.2,
       Energy: 4,
     },
-    nSpeed: 0.3,
   },
 
   AllBadDisease: {
@@ -710,7 +717,9 @@ export const MALADY_DEFS: Record<string, MaladyDef> = {
     tSymptomStages: [
       {
         tTimeToSymptoms: [10, 60 * 5],
-        tReduceMods: { Social: 6, Amusement: -0.3 },
+        // MD-9: Lua has lowercase `social=6` — never read by needs system (expects `Social`).
+        // Omitted for 1:1 Lua runtime parity: Social need is NOT modified in stage 1.
+        tReduceMods: { Amusement: -0.3 },
         nSpeed: 1.2,
         sSymptomLog: 'WORM_STAGE_ONE',
       },

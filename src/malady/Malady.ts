@@ -19,12 +19,15 @@ export interface CharacterLike {
   id: number;
   tileX: number;
   tileY: number;
-  tStats: { nTeam: number; nStatus: number; nHP: number; nJob: number };
+  tStats: { nTeam: number; nStatus: number; nHP: number; nJob: number; nRace: number };
   bSpacewalking: boolean;
   bSpacesuit: boolean;
+  bRefuseDoctor: boolean;
+  bHideSigns: boolean;
   maladies: MaladyInstance[];
   damage(amount: number, cause: number): void;
-  kill(cause: number): void;
+  kill(cause: number, tData?: { sDiseaseName?: string }): void;
+  catchFire(): void;
   currentTask: { name?: string } | null;
 }
 
@@ -38,7 +41,8 @@ const SNEEZE_RANGE_MIN = 45;
 const SNEEZE_RANGE_MAX = 90;
 const LOG_RANGE_MIN = 120;
 const LOG_RANGE_MAX = 360;
-const SPREAD_RANGE = 5;
+/** Default duration range for staged diseases after all stages exhaust (Lua MaladyData.Default.tDurationRange). */
+const DEFAULT_DURATION_RANGE: [number, number] = [600, 2000];
 
 const INCAPACITATED_ALLOWED = new Set(['IncapacitatedOnFloor', 'GetFieldScanned']);
 
@@ -64,6 +68,7 @@ export interface MaladyInstance {
   tSymptomStageStarts: number[];
   nNextSneeze: number;
   nNextLog: number;
+  nNextSpawnAttempt?: number;
 
   // Merged from def (may be overridden by stages)
   sType: MaladyType;
@@ -96,6 +101,8 @@ export interface MaladyInstance {
   tTimeToSymptoms?: [number, number];
   sFriendlyName?: string;
   sDesc?: string;
+  /** MD-11: If true, symptom stages loop back to start after exhausting (Lua bStagesLoop). */
+  bStagesLoop?: boolean;
 }
 
 // ── Research Entry ───────────────────────────────────────────────────────
@@ -182,6 +189,9 @@ export const Malady = {
 
   /** Callback: count powered AirScrubbers within range of a tile. */
   getAirScrubberCount: null as ((tx: number, ty: number, range: number) => number) | null,
+
+  /** Callback: get room ID at a tile (for same-room sneeze spread check). */
+  getRoomIdAtTile: null as ((tx: number, ty: number) => number | null) | null,
 
   // ── State Management ───────────────────────────────────────
 
@@ -321,10 +331,11 @@ export const Malady = {
     return MALADY_DEFS[sMaladyName]?.sType === 'MinorInjury';
   },
 
-  /** Get friendly display name for a strain. */
+  /** Get friendly display name for a strain (Lua: tMaladyStrains[name].sFriendlyName). */
   getFriendlyName(sMaladyName: string): string {
+    // Research entry's sMaladyName field stores the friendly name (set in _createNewStrain)
     const entry = tS.tResearch[sMaladyName];
-    if (entry) return sMaladyName;
+    if (entry?.sMaladyName) return entry.sMaladyName;
     const def = MALADY_DEFS[sMaladyName];
     if (def?.sFriendlyName) return def.sFriendlyName;
     return sMaladyName;
@@ -346,8 +357,11 @@ export const Malady = {
   diseaseEncountered(tMalady: MaladyInstance, nTeam: number): void {
     const key = tMalady.sMaladyName;
     if (!tS.tResearch[key]) {
+      // MD-1 fix: Lua Malady.lua:322-326 sets nResearchCure=0 for non-forced diseases
+      // (immediately curable after first encounter). Only nForceResearch diseases need research.
       const researchTime = tMalady.nForceResearch
-        ?? Math.max(200, tMalady.nSeverity * 1000);
+        ? Math.floor(Math.random() * tMalady.nForceResearch) + 500
+        : 0;
       tS.tResearch[key] = {
         sMaladyName: key,
         sMaladyType: tMalady.sMaladyType,
@@ -359,7 +373,7 @@ export const Malady = {
     // Fire alert on first encounter (Lua: Base.EVENTS.MaladyEncountered)
     if (nTeam === TEAM_ID_PLAYER && !tS.tResearch[key].bEncountered) {
       if (!Malady.isInjury(key)) {
-        const friendlyName = tMalady.sFriendlyName ?? key;
+        const friendlyName = Malady.getFriendlyName(key);
         Base.addAlert('disease', line('ALERTS021TEXT', { name: friendlyName }));
       }
       tS.tResearch[key].bEncountered = true;
@@ -433,7 +447,9 @@ export const Malady = {
 
     const duration = randRange(def.tDurationRange[0], def.tDurationRange[1]);
     const start = nElapsedTime;
-    const end = start + duration;
+    // Lua: only set nMaladyEnd for non-staged diseases.
+    // Staged diseases get nMaladyEnd after all stages exhaust (in _tickMalady).
+    const end = def.tSymptomStages ? Infinity : start + duration;
 
     // Contagious start time
     let contagiousStart = end + 1;
@@ -459,7 +475,7 @@ export const Malady = {
       bDiagnosed: false,
       nCurrentStage: -1,
       tSymptomStageStarts: [],
-      nNextSneeze: start + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX),
+      nNextSneeze: start,
       nNextLog: start + randRange(LOG_RANGE_MIN, LOG_RANGE_MAX),
       sType: def.sType,
       nDifficultyTier: def.nDifficultyTier,
@@ -491,6 +507,7 @@ export const Malady = {
       tTimeToSymptoms: def.tTimeToSymptoms,
       sFriendlyName: def.sFriendlyName,
       sDesc: def.sDesc,
+      bStagesLoop: def.bStagesLoop,
     };
 
     Malady._initSymptomStarts(instance);
@@ -602,6 +619,10 @@ export const Malady = {
 
   /** Tick all maladies on a character. Called from game loop. */
   tickMaladies(rChar: CharacterLike, dt: number): void {
+    // M-4: Lua Malady.tickMaladies returns early if character is in hospital
+    // (freezes disease progression during treatment)
+    if (rChar.currentTask?.name === 'CheckInToHospital') return;
+
     for (let i = rChar.maladies.length - 1; i >= 0; i--) {
       const tMalady = rChar.maladies[i];
       if (Malady._tickMalady(rChar, tMalady, dt)) {
@@ -617,18 +638,38 @@ export const Malady = {
       return true;
     }
 
-    // Advance symptom stages
+    // Advance symptom stages — MD-6: only ONE stage per tick (Lua checks nCurrentStage+1 only)
     if (tMalady.tSymptomStages && tMalady.tSymptomStageStarts) {
-      for (let i = tMalady.nCurrentStage + 1; i < tMalady.tSymptomStages.length; i++) {
-        if (nElapsedTime >= tMalady.tSymptomStageStarts[i]) {
-          tMalady.nCurrentStage = i;
-          const stage = tMalady.tSymptomStages[i];
-          if (stage.tReduceMods) tMalady.tReduceMods = { ...stage.tReduceMods };
-          if (stage.sSpecial) tMalady.sSpecial = stage.sSpecial;
-          if (stage.nSpeed !== undefined) tMalady.nSpeed = stage.nSpeed;
-          if (stage.bHidden !== undefined) tMalady.bHidden = stage.bHidden;
-          if (stage.sSymptomLog) tMalady.sSymptomLog = stage.sSymptomLog;
+      let nNextStage = tMalady.nCurrentStage + 1;
+
+      // MD-11: bStagesLoop — when all stages are exhausted and looping is enabled,
+      // re-initialize symptom start times and reset stage counter (Lua Malady.lua:607-609).
+      // No disease currently uses this but the engine supports it.
+      if (nNextStage >= tMalady.tSymptomStages.length && tMalady.bStagesLoop) {
+        Malady._initSymptomStarts(tMalady);
+        tMalady.nCurrentStage = -1;
+        nNextStage = 0;
+      }
+
+      if (nNextStage < tMalady.tSymptomStages.length &&
+          tMalady.tSymptomStageStarts[nNextStage] !== undefined &&
+          nElapsedTime >= tMalady.tSymptomStageStarts[nNextStage]) {
+        tMalady.nCurrentStage = nNextStage;
+        // MD-5: Lua copies ALL stage fields except tTimeToSymptoms (not just 5)
+        const stage = tMalady.tSymptomStages[nNextStage];
+        for (const key of Object.keys(stage)) {
+          if (key !== 'tTimeToSymptoms') {
+            (tMalady as any)[key] = (stage as any)[key];
+          }
         }
+        // Force immediate symptomatic on stage entry (Lua line 614)
+        tMalady.nSymptomStart = nElapsedTime - 0.01;
+      }
+      // Lua: set nMaladyEnd when all stages exhaust (no next stage, no end yet)
+      // MD-11: Don't set end time if stages loop
+      const nextStageCheck = tMalady.nCurrentStage + 1;
+      if (nextStageCheck >= tMalady.tSymptomStages.length && tMalady.nMaladyEnd === Infinity && !tMalady.bStagesLoop) {
+        tMalady.nMaladyEnd = nElapsedTime + randRange(DEFAULT_DURATION_RANGE[0], DEFAULT_DURATION_RANGE[1]);
       }
     }
 
@@ -641,6 +682,13 @@ export const Malady = {
     if (!tMalady.bSymptomatic && nElapsedTime >= tMalady.nSymptomStart) {
       tMalady.bSymptomatic = true;
       Malady.diseaseEncountered(tMalady, rChar.tStats.nTeam);
+      // M-3: Set character flags from malady def (Lua Malady._tickMalady)
+      if (tMalady.bRefuseHeal) {
+        rChar.bRefuseDoctor = true;
+      }
+      if (tMalady.bHidden) {
+        rChar.bHideSigns = true;
+      }
     }
 
     // Handle specials (only when symptomatic)
@@ -655,28 +703,36 @@ export const Malady = {
   _handleSpecial(rChar: CharacterLike, tMalady: MaladyInstance): void {
     switch (tMalady.sSpecial) {
       case 'thing':
-        // ~10% chance every 15s (0.67% per second at 1 tick/s)
-        if (Math.random() < 0.0067) {
-          Malady.spawnThing(rChar);
+        // Lua: 15s cooldown timer, then ~10% random gate
+        // MD-13: Lua uses math.random(0,100) < 10 — integer random (0-100 inclusive = 101 values, 9.9%)
+        if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
+          tMalady.nNextSpawnAttempt = nElapsedTime + 15;
+          if (Math.floor(Math.random() * 101) < 10) {
+            Malady.spawnThing(rChar);
+          }
         }
         break;
       case 'parasite':
-        if (Math.random() < 0.0067) {
+        // Lua: 15s cooldown timer, always spawns (no random gate)
+        if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
+          tMalady.nNextSpawnAttempt = nElapsedTime + 15;
           Malady.spawnMonster(rChar);
         }
         break;
       case 'death':
-        rChar.kill(CAUSE_OF_DEATH.DISEASE);
+        // MD-12: Lua passes friendly disease name to killCharacter (Malady.lua:662)
+        rChar.kill(CAUSE_OF_DEATH.DISEASE, {
+          sDiseaseName: Malady.getFriendlyName(tMalady.sMaladyName),
+        });
         break;
       case 'fire':
-        // 50% chance to catch fire on timer (60-300s intervals)
-        if (nElapsedTime >= tMalady.nNextSneeze) {
-          if (Math.random() < 0.5) {
-            // Fire integration: would start fire at rChar's tile
-            // Stub: deal damage until Fire system is wired
-            rChar.damage(5, CAUSE_OF_DEATH.FIRE);
+        // Lua: 60-300s cooldown timer, 50% chance to catch fire
+        // MD-13: Lua uses math.random(0,100) < 50 — integer random (0-100 inclusive = 101 values, 49.5%)
+        if (tMalady.nNextSpawnAttempt == null || nElapsedTime >= tMalady.nNextSpawnAttempt) {
+          tMalady.nNextSpawnAttempt = nElapsedTime + randRange(60, 300);
+          if (Math.floor(Math.random() * 101) < 50) {
+            rChar.catchFire();
           }
-          tMalady.nNextSneeze = nElapsedTime + randRange(60, 300);
         }
         break;
     }
@@ -684,32 +740,48 @@ export const Malady = {
 
   // ── Contagion / Spread ──────────────────────────────────────
 
-  /** Get sneeze animation name if it's time to sneeze. */
-  getSymptomAnim(rChar: CharacterLike): string | null {
+  /** Get sneeze animation name if it's time to sneeze.
+   *  Lua: requires bSymptomatic AND bSpreadSneeze (Malady.lua:681).
+   *  MD-7: Returns the specific malady instance (Lua returns tMalady alongside anim name). */
+  getSymptomAnim(rChar: CharacterLike): { anim: string; malady: MaladyInstance } | null {
     for (const m of rChar.maladies) {
-      if (m.bContagious && m.bSpreadSneeze && nElapsedTime >= m.nNextSneeze) {
-        return 'sneeze';
+      if (m.bSymptomatic && m.bSpreadSneeze && nElapsedTime >= m.nNextSneeze) {
+        // Reset sneeze timer here (Lua parity: timer reset in getSymptomAnim, not playedSymptomAnim)
+        m.nNextSneeze = nElapsedTime + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX);
+        return { anim: 'sneeze', malady: m };
       }
     }
     return null;
   },
 
-  /** After sneeze animation, spread to nearby characters in same room. */
-  playedSymptomAnim(rChar: CharacterLike, allChars: CharacterLike[]): void {
-    for (const m of rChar.maladies) {
-      if (!m.bContagious || !m.bSpreadSneeze) continue;
+  /** After sneeze animation, spread the specific malady to nearby characters in same room.
+   *  MD-7: Lua passes tMalady from getSymptomAnim — only that one malady is spread, not all.
+   *  Lua: 5-tile horizontal strip (X +-2) at sneezer's Y, same room only. */
+  playedSymptomAnim(rChar: CharacterLike, allChars: CharacterLike[], tMalady: MaladyInstance): void {
+    // Only spread if this malady is contagious and sneeze-capable
+    if (!tMalady.bContagious || !tMalady.bSpreadSneeze) return;
 
-      m.nNextSneeze = nElapsedTime + randRange(SNEEZE_RANGE_MIN, SNEEZE_RANGE_MAX);
+    // Get sneezer's room (Lua: rChar:getRoom())
+    const srcRoomId = Malady.getRoomIdAtTile
+      ? Malady.getRoomIdAtTile(rChar.tileX, rChar.tileY)
+      : null;
 
-      for (const target of allChars) {
-        if (target === rChar) continue;
-        if (target.tStats.nStatus === STATUS_DEAD) continue;
-        const dx = Math.abs(target.tileX - rChar.tileX);
-        const dy = Math.abs(target.tileY - rChar.tileY);
-        if (dx <= SPREAD_RANGE && dy <= SPREAD_RANGE) {
-          Malady._testSpread(m, rChar, target);
-        }
+    // Skip spreading if sneezer is not in a room
+    if (srcRoomId == null) return;
+
+    for (const target of allChars) {
+      if (target === rChar) continue;
+      if (target.tStats.nStatus === STATUS_DEAD) continue;
+      // Lua: 5-tile horizontal strip at sneezer's Y coordinate (x-2 to x+2)
+      const dx = Math.abs(target.tileX - rChar.tileX);
+      if (dx > 2) continue;
+      if (target.tileY !== rChar.tileY) continue;
+      // Same room check (Lua: rSpreadRoom == rRoom)
+      if (Malady.getRoomIdAtTile) {
+        const targetRoomId = Malady.getRoomIdAtTile(target.tileX, target.tileY);
+        if (targetRoomId !== srcRoomId) continue;
       }
+      Malady._testSpread(tMalady, rChar, target);
     }
   },
 
@@ -727,7 +799,10 @@ export const Malady = {
     }
   },
 
-  /** Core spread logic — matches Lua _testSpread. */
+  /** Core spread logic — matches Lua _testSpread.
+   *  Lua Malady.lua:756-796: gates by type (Disease vs WormParisite),
+   *  checks isImmuneTo (immune races + per-character immunity + already infected),
+   *  doctor half-chance + zero during treatment, environment scrubber mod. */
   _testSpread(
     tMalady: MaladyInstance,
     _rSource: CharacterLike,
@@ -738,6 +813,15 @@ export const Malady = {
 
     // Spacesuit blocks
     if (rTarget.bSpacesuit) return;
+
+    // M-12: tImmuneRaces check — if target's race is in the disease's immune list, skip
+    const def = MALADY_DEFS[tMalady.sMaladyType];
+    if (def?.tImmuneRaces && def.tImmuneRaces.length > 0) {
+      if (def.tImmuneRaces.includes(rTarget.tStats.nRace)) return;
+    }
+
+    // Already infected with the same disease type (different strain)
+    if (rTarget.maladies.some(m => m.sMaladyType === tMalady.sMaladyType)) return;
 
     // Immunity check
     if (Math.random() < tMalady.nImmuneChance) return;
@@ -753,13 +837,17 @@ export const Malady = {
       // Doctors get 50% reduced chance (for Disease type)
       if (rTarget.tStats.nJob === DOCTOR) {
         chance *= 0.5;
+        // M-11: Zero infection chance if doctor is performing treatment (Lua Malady.lua:767-768)
+        if (rTarget.currentTask?.name === 'FieldScanAndHeal' || rTarget.currentTask?.name === 'BedHeal') {
+          chance = 0;
+        }
       }
     }
 
     // Air scrubber environment mod (Lua Malady._getEnvironmentSpreadMod)
     // Each powered air scrubber in range halves chance, floor = MIN_SPREAD_CHANCE
     if (Malady.getAirScrubberCount) {
-      const nScrubbers = Malady.getAirScrubberCount(rTarget.tileX, rTarget.tileY, 12);
+      const nScrubbers = Malady.getAirScrubberCount(_rSource.tileX, _rSource.tileY, 12);
       for (let i = 0; i < nScrubbers; i++) {
         chance *= 0.5;
       }
@@ -850,11 +938,33 @@ export const Malady = {
     }
   },
 
-  /** Infect a character with a random spawnable disease (Lua: immigration pre-roll). */
+  /** Infect a character with a random spawnable disease (Lua: immigration pre-roll).
+   *  Uses nChanceOfAffliction as weighted probability (Lua parity). */
   infectWithRandom(rChar: CharacterLike): MaladyInstance | null {
     const diseases = getSpawnableDiseases();
     if (diseases.length === 0) return null;
-    const pick = diseases[Math.floor(Math.random() * diseases.length)];
+    // Weighted random selection using nChanceOfAffliction
+    let totalWeight = 0;
+    const weights: number[] = [];
+    for (const name of diseases) {
+      const w = MALADY_DEFS[name].nChanceOfAffliction ?? 0;
+      weights.push(w);
+      totalWeight += w;
+    }
+    if (totalWeight <= 0) {
+      // Fallback: uniform if all weights are zero
+      const pick = diseases[Math.floor(Math.random() * diseases.length)];
+      return Malady.infectCharacter(rChar, pick);
+    }
+    let roll = Math.random() * totalWeight;
+    let pick = diseases[diseases.length - 1];
+    for (let i = 0; i < diseases.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) {
+        pick = diseases[i];
+        break;
+      }
+    }
     return Malady.infectCharacter(rChar, pick);
   },
 

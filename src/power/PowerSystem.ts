@@ -10,6 +10,7 @@ import { EnvObjectManager } from '../envobjects/EnvObjectManager';
 import { TileType } from '../world/TileTypes';
 import type { TileGrid } from '../world/TileGrid';
 import { GameRules } from '../core/GameRules';
+import { SoundManager } from '../audio/SoundManager';
 
 /** Power draw per tile of floor (from Lua: POWER_DRAW_PER_TILE=1) */
 export const POWER_DRAW_PER_TILE = 1;
@@ -17,6 +18,8 @@ export const POWER_DRAW_PER_TILE = 1;
 export class PowerSystem {
   private grid: TileGrid;
   private roomManager: RoomManager;
+  /** Track previous powered state per room for A-11 PowerUp/PowerDown sounds. */
+  private prevPowered = new Map<number, boolean>();
 
   constructor(grid: TileGrid, roomManager: RoomManager) {
     this.grid = grid;
@@ -119,7 +122,17 @@ export class PowerSystem {
         r.nPowerDraw = nTotalPowerDraw;
         r.nPowerSupply = nTotalPowerSupplied;
 
-        let nRemainingForConsumers = nTotalPowerSupplied;
+        // A-11: Play PowerUp/PowerDown when a room's power state changes
+        const bPowered = nTotalPowerDraw === 0 || nTotalPowerSupplied >= nTotalPowerDraw;
+        const bWasPowered = this.prevPowered.get(r.id);
+        if (bWasPowered !== undefined && bPowered !== bWasPowered) {
+          SoundManager.playSfx(bPowered ? 'PowerUp' : 'PowerDown');
+        }
+        this.prevPowered.set(r.id, bPowered);
+
+        // Lua includes the room itself in tPowerConsumers, so its per-tile
+        // draw consumes supply before that same supply can power props.
+        let nRemainingForConsumers = Math.max(0, nTotalPowerSupplied - nRoomDraw);
         for (const consumer of objectConsumers) {
           if (consumer.draw <= nRemainingForConsumers) {
             consumer.obj.bHasPower = true;

@@ -9,6 +9,7 @@ import { CHARACTER_SAFETY_TOLERANCE } from '../config';
 export class BuildCursor {
   private scene: THREE.Scene;
   private grid: TileGrid;
+  private wallPlacementValidator: ((x: number, y: number) => boolean) | null;
   private ghosts: THREE.Mesh[] = [];
   private _hoveredTile: { x: number; y: number } | null = null;
 
@@ -16,9 +17,10 @@ export class BuildCursor {
   private dragStartTile: { x: number; y: number } | null = null;
   private dragTiles: { x: number; y: number }[] = [];
 
-  constructor(scene: THREE.Scene, grid: TileGrid) {
+  constructor(scene: THREE.Scene, grid: TileGrid, wallPlacementValidator?: (x: number, y: number) => boolean) {
     this.scene = scene;
     this.grid = grid;
+    this.wallPlacementValidator = wallPlacementValidator ?? null;
   }
 
   get hoveredTile() {
@@ -103,9 +105,15 @@ export class BuildCursor {
       case 'room':
         return current === TileType.SPACE || current === TileType.WALL || current === TileType.WALL_DESTROYED;
       case 'floor':
-        return current === TileType.SPACE;
+        return current === TileType.SPACE || current === TileType.WALL_DESTROYED;
       case 'wall':
-        return current === TileType.SPACE;
+        if (this.wallPlacementValidator) {
+          return this.wallPlacementValidator(x, y);
+        }
+        return current === TileType.SPACE ||
+          current === TileType.FLOOR ||
+          current === TileType.FLOOR_PENDING ||
+          current === TileType.WALL_DESTROYED;
       case 'door':
         return current === TileType.WALL;
       case 'demolish':

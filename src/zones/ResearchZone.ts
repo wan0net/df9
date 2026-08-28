@@ -6,6 +6,8 @@
 import { Zone } from './Zone';
 import { ZoneType } from '../world/ZoneType';
 import { researchSystem } from '../research/ResearchSystem';
+import { RESEARCH_DEFS } from '../research/ResearchData';
+import { Malady } from '../malady/Malady';
 
 export class ResearchZone extends Zone {
   private activeResearch: string | null = null;
@@ -38,8 +40,11 @@ export class ResearchZone extends Zone {
    * Matches: if sCurrentResearch and not Base.canResearch(sCurrentResearch) → nil */
   override onTick(dt: number) {
     super.onTick(dt);
-    if (this.activeResearch && researchSystem.isCompleted(this.activeResearch)) {
-      this.activeResearch = null;
+    if (this.activeResearch) {
+      const isAvailable = RESEARCH_DEFS[this.activeResearch]
+        ? researchSystem.canResearch(this.activeResearch)
+        : Malady.getAvailableResearch().some(entry => entry.sMaladyName === this.activeResearch);
+      if (!isAvailable) this.activeResearch = null;
     }
   }
 }

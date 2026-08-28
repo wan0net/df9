@@ -13,7 +13,7 @@ import { getWallDirection, WallDirection } from '../world/WallDirection';
 import { getDiamondFootprint } from '../world/IsometricUtils';
 import type { TileGrid } from '../world/TileGrid';
 import type { RoomManager } from '../rooms/RoomManager';
-import type { Room } from '../rooms/Room';
+import type { Room, PropPlacement } from '../rooms/Room';
 import { ZoneType } from '../world/ZoneType';
 import { researchSystem } from '../research/ResearchSystem';
 import { VISIBILITY_HIDDEN } from '../rooms/Room';
@@ -251,7 +251,25 @@ export class ObjectPlacement {
     // Queue a build command for the AI.
     // Use the actual placement tile (floor for againstWall, wall for doors/floor objects)
     // so CharacterManager's object lookup matches obj.tileX/tileY.
-    CommandQueue.addCommand('build_object', placeTileX, placeTileY, sName);
+    const commandId = CommandQueue.addCommand('build_object', placeTileX, placeTileY, sName);
+
+    const ownerRoom = this.roomManager.getRoomAt(placeTileX, placeTileY) ??
+      (data.bCanBuildInSpace ? this.roomManager.getSpaceRoom() : null);
+    if (ownerRoom) {
+      const placement: PropPlacement = {
+        addr: `${placeTileX},${placeTileY}`,
+        sName,
+        tx: placeTileX,
+        ty: placeTileY,
+        bFlipX,
+        bFlipY,
+        nCost: data.matterCost,
+        commandId,
+        buildGhost: obj,
+        bCanBuildInSpace: data.bCanBuildInSpace,
+      };
+      ownerRoom.addPropPlacement(placement);
+    }
 
     GameRules.nMatter -= data.matterCost;
     return data.matterCost;
