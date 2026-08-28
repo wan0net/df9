@@ -6063,14 +6063,9 @@ test.describe('Spacebase DF-9 E2E', () => {
 
       await expect.poll(async () => page.evaluate(({ human, chicken }) => {
         const renderer = (window as any).__df9._characterRenderer as any;
-        return renderer.handles.get(human)?.is3D && renderer.handles.get(chicken)?.is3D;
-      }, ids), { timeout: 15_000 }).toBe(true);
-      await page.waitForTimeout(500);
-
-      const result = await page.evaluate(({ human, chicken }) => {
-        const renderer = (window as any).__df9._characterRenderer as any;
         const inspectHead = (id: number, subset: number) => {
           const handle = renderer.handles.get(id);
+          if (!handle?.is3D) return null;
           let result: any = null;
           handle.object.traverse((child: any) => {
             if (child.userData?.sourceSubsetIndex === subset && child.visible) {
@@ -6083,15 +6078,15 @@ test.describe('Spacebase DF-9 E2E', () => {
           return result;
         };
         return { human: inspectHead(human, 7), chicken: inspectHead(chicken, 5) };
-      }, ids);
-
-      expect(result.human).toEqual({
-        layers: { bottom: 'Human_Head_Male01_bottom_03_Color_03' },
-        programKey: 'df9-face--bottom',
-      });
-      expect(result.chicken).toEqual({
-        layers: { top: 'Chicken_Head01_top_01', bottom: 'Chicken_Head01_bottom_01' },
-        programKey: 'df9-face-top-bottom',
+      }, ids), { timeout: 15_000 }).toEqual({
+        human: {
+          layers: { bottom: 'Human_Head_Male01_bottom_03_Color_03' },
+          programKey: 'df9-face--bottom',
+        },
+        chicken: {
+          layers: { top: 'Chicken_Head01_top_01', bottom: 'Chicken_Head01_bottom_01' },
+          programKey: 'df9-face-top-bottom',
+        },
       });
       expect(shaderErrors).toEqual([]);
     } finally {
