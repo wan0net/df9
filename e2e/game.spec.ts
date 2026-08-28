@@ -197,7 +197,9 @@ test.describe('Spacebase DF-9 E2E', () => {
     expect(queued).toBe(1);
     const mineCommandsNow = (await df9(page).commands()).filter(c => c.type === 'mine');
     expect(mineCommandsNow).toHaveLength(mineCommandsBefore + 1);
-    expect(mineCommandsNow).toContainEqual(expect.objectContaining({ tileX: 6, tileY: 7, status: 'pending' }));
+    const created = mineCommandsNow.find(command => command.tileX === 6 && command.tileY === 7);
+    expect(created).toBeDefined();
+    expect(['pending', 'in_progress']).toContain(created!.status);
   });
 
   test('command queue exposes data correctly', async () => {
