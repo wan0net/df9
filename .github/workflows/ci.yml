@@ -31,9 +31,10 @@ jobs:
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}/6
     runs-on: [self-hosted, linux, x64, wan0-ci, df9]
-    # Six shards cover the full WebGL suite. Keep enough margin for a cold
-    # runner and the real-time Lua deployment animation exercised by shard 1.
-    timeout-minutes: 15
+    # Six shards cover the full WebGL suite. The navigation- and graphics-heavy
+    # final shard takes longer than 15 minutes on a cold self-hosted runner;
+    # retain a hard ceiling while leaving enough room for the complete shard.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
